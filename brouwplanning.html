@@ -647,9 +647,26 @@
     // "De Werf"-recepten hebben nog geen locatie ingevuld (bekend, nog niet
     // opgelost datagat) -- die blijven bewust in beide filters zichtbaar i.p.v.
     // helemaal onvindbaar te worden totdat dat rechtgezet is.
+    // BELANGRIJK: het locatie-invulscript uit Fase Geel staat nog steeds als
+    // "niet bevestigd gedraaid" (zie sessie-samenvattingen) -- recipes.locatie
+    // is dus voor een groot deel van de recepten nog leeg, ook al staat het
+    // WP/JK-onderscheid al wél in de naam/short_name. Daarom hier dezelfde
+    // WP/JK-uit-naam-fallback als generate-batchrapport.js/batchrapport-vullen.js
+    // (vestigingsBron/isWP), zodat het filter ook werkt zolang dat script niet
+    // gedraaid is.
+    function receptLocatieGroep(recept) {
+      if (recept.locatie === 'Jopen Kerk') return 'jk';
+      if (recept.locatie === 'Waarderpolder') return 'wp';
+      const bron = (recept.short_name || recept.naam || '').trim().toUpperCase();
+      if (bron.startsWith('JK')) return 'jk';
+      if (bron.startsWith('WP')) return 'wp';
+      return null; // onbekend -> in beide filters tonen, niet onvindbaar maken
+    }
+
     function receptPastBijLocatieGroep(recept, locatieGroep) {
-      if (!locatieGroep || !recept.locatie) return true;
-      return locatieGroep === 'jk' ? recept.locatie === 'Jopen Kerk' : recept.locatie === 'Waarderpolder';
+      if (!locatieGroep) return true;
+      const groep = receptLocatieGroep(recept);
+      return groep === null || groep === locatieGroep;
     }
 
     function openModal(mode, item, weken, group) {
