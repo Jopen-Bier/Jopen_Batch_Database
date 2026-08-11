@@ -242,7 +242,8 @@
     // Status
     // ------------------------------------------------------------------
     let huidigJaar = new Date().getFullYear();
-    let alleRecepten = [];               // { id, naam, short_name, brouwsel_hl, kleur }
+    let alleRecepten = [];               // { id, naam, short_name, brouwsel_hl, kleur, status, locatie, recipe_group_id, versie_major, versie_minor }
+    let nieuwsteVersiePerGroep = {};      // recipe_group_id -> recept-rij met hoogste versie_major.versie_minor (ongeacht status)
     let capaciteitMap = {};              // `${group}_${week}` -> max_brouwsels
     let planningPerWeek = {};            // week -> { jk:[], wp_60hl:[], wp_120hl:[], wp_320hl:[] }
     let huidigeGebruikerId = null;
@@ -328,13 +329,27 @@
     // Laden
     // ------------------------------------------------------------------
     async function laadRecepten() {
+      // Bewust GEEN .neq('status', 'gearchiveerd') meer: we hebben ook
+      // gearchiveerde/concept-versies nodig om elk gepland brouwsel via
+      // recipe_group_id naar zijn nieuwste versie te kunnen resolven (zie
+      // nieuwsteVersiePerGroep hieronder). Het bestaande "alleen actief"-filter
+      // voor het receptzoekveld zelf (bij het toevoegen van een nieuw brouwsel)
+      // staat los hiervan en blijft ongewijzigd verderop in de code.
       const { data, error } = await supabaseClient
         .from('recipes')
-        .select('id, naam, short_name, brouwsel_hl, status, kleur, locatie')
-        .neq('status', 'gearchiveerd')
+        .select('id, naam, short_name, brouwsel_hl, status, kleur, locatie, recipe_group_id, versie_major, versie_minor')
         .order('naam');
       if (error) { console.error('Kon recepten niet laden:', error); return; }
       alleRecepten = data || [];
+
+      nieuwsteVersiePerGroep = {};
+      alleRecepten.forEach(r => {
+        if (!r.recipe_group_id) return;
+        const huidig = nieuwsteVersiePerGroep[r.recipe_group_id];
+        const versie = (r.versie_major ?? 1) * 1000 + (r.versie_minor ?? 0);
+        const huidigeVersie = huidig ? (huidig.versie_major ?? 1) * 1000 + (huidig.versie_minor ?? 0) : -1;
+        if (versie > huidigeVersie) nieuwsteVersiePerGroep[r.recipe_group_id] = r;
+      });
     }
 
     async function laadCapaciteit(jaar) {
@@ -353,7 +368,7 @@
     async function laadPlanning(jaar) {
       const { data, error } = await supabaseClient
         .from('brew_planning')
-        .select('id, plan_group, week_number, recipe_id, aantal_brouwsels, hl, prio, sort_order, notities')
+        .select('id, plan_group, week_number, recipe_id, recipe_group_id, aantal_brouwsels, hl, prio, sort_order, notities')
         .eq('iso_year', jaar).order('sort_order');
       if (error) { console.error('Kon brouwplanning niet laden:', error); return; }
       planningPerWeek = {};
@@ -366,6 +381,24 @@
     }
 
     function receptById(recipeId) { return alleRecepten.find(x => String(x.id) === String(recipeId)); }
+
+    // Een gepland brouwsel toont altijd de NIEUWSTE versie van zijn
+    // recipe_group_id, ongeacht status -- ook als die versie inmiddels
+    // gearchiveerd of nog concept is. Zo blijft de planning correct zonder
+    // dat elke recept-wijziging losse migratie-acties op brew_planning
+    // vereist. Alleen als recipe_group_id om wat voor reden dan ook ontbreekt
+    // (zou na de backfill-migratie niet meer moeten voorkomen) valt dit terug
+    // op het rechtstreeks opgeslagen recipe_id.
+    function receptVoorItem(item) {
+      if (item.recipe_group_id && nieuwsteVersiePerGroep[item.recipe_group_id]) {
+        return nieuwsteVersiePerGroep[item.recipe_group_id];
+      }
+      return receptById(item.recipe_id);
+    }
+    function receptNaamVoorItem(item) {
+      const r = receptVoorItem(item);
+      return r ? (r.short_name || r.naam) : '(unknown recipe)';
+    }
     function receptNaam(recipeId) {
       const r = receptById(recipeId);
       return r ? (r.short_name || r.naam) : '(unknown recipe)';
@@ -390,8 +423,8 @@
     }
 
     function renderItem(item) {
-      const recept = receptById(item.recipe_id);
-      const naam = escapeHtml(receptNaam(item.recipe_id));
+      const recept = receptVoorItem(item);
+      const naam = escapeHtml(receptNaamVoorItem(item));
       const hl = item.hl != null ? Number(item.hl).toFixed(0) : '—';
       const kleur = recept ? recept.kleur : null;
       const stijl = kleur ? `background:${kleur}; border-color:${kleur}; color:${contrastKleur(kleur)};` : '';
@@ -687,8 +720,14 @@
 
         bierenContainer.innerHTML = bierRijHtml();
         const rij = bierenContainer.querySelector('.bp-bier-rij');
-        rij.dataset.recipeId = item.recipe_id;
-        rij.querySelector('.bp-bier-zoek').value = escapeHtml(receptNaam(item.recipe_id));
+        // Prefill met de NIEUWSTE versie van dit bier (via recipe_group_id),
+        // niet met het letterlijk opgeslagen recipe_id -- als het item al
+        // achterhaald was, klopt het zoekveld dan meteen weer, en een Save
+        // zonder de beer-regel aan te raken schrijft direct de actuele
+        // recipe_id + recipe_group_id terug.
+        const receptNu = receptVoorItem(item);
+        rij.dataset.recipeId = receptNu ? receptNu.id : (item.recipe_id ?? '');
+        rij.querySelector('.bp-bier-zoek').value = escapeHtml(receptNu ? (receptNu.short_name || receptNu.naam) : '(unknown recipe)');
         rij.querySelector('.bp-bier-brouwsels').value = item.aantal_brouwsels;
         werkBierRijHlBij(rij);
         rij.querySelector('.bp-bier-hl-vrij').value = item.hl ?? '';
@@ -716,7 +755,8 @@
     document.getElementById('bp-modal-create-batch').addEventListener('click', () => {
       if (!modalContext || modalContext.mode !== 'edit' || !modalContext.item) return;
       const rij = bierenContainer.querySelector('.bp-bier-rij');
-      const recipeId = rij?.dataset.recipeId || modalContext.item.recipe_id;
+      const opgelosteRecept = receptVoorItem(modalContext.item);
+      const recipeId = rij?.dataset.recipeId || (opgelosteRecept ? opgelosteRecept.id : modalContext.item.recipe_id);
       const brouwsels = Number(rij?.querySelector('.bp-bier-brouwsels')?.value) || modalContext.item.aantal_brouwsels || '';
       const params = new URLSearchParams();
       if (recipeId) params.set('recipe_id', recipeId);
@@ -768,7 +808,7 @@
 
         melding.textContent = 'Saving…'; melding.className = 'bp-modal-melding';
         const { error } = await supabaseClient.from('brew_planning').update({
-          recipe_id: recept.id, aantal_brouwsels: brouwsels, hl, prio,
+          recipe_id: recept.id, recipe_group_id: recept.recipe_group_id, aantal_brouwsels: brouwsels, hl, prio,
           week_number: week, plan_group: planGroup, notities: comment,
           bijgewerkt_op: new Date().toISOString(),
         }).eq('id', modalContext.item.id);
@@ -809,7 +849,7 @@
           const planGroup = modalContext.group === 'jk' ? 'jk' : bepaalWpGroep(hl);
           rijenOmInTeVoegen.push({
             plan_group: planGroup, iso_year: huidigJaar, week_number: week,
-            recipe_id: recept.id, aantal_brouwsels: brouwsels, hl, prio,
+            recipe_id: recept.id, recipe_group_id: recept.recipe_group_id, aantal_brouwsels: brouwsels, hl, prio,
             aangemaakt_door: huidigeGebruikerId,
           });
         });
