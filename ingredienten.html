@@ -359,7 +359,11 @@ async function laadIngredienten() {
       .select('id, naam, categorie, category_id, eenheid, prijs, extract_pct, alpha_pct, gistfactor, leverancier, status, versie_major, versie_minor, ingredient_group_id, versie_status, aangemaakt_op, gewijzigd_op, ingredient_categories(name, uses_alpha_pct, uses_extract_pct, uses_gistfactor)')
       .eq('versie_status', 'huidig')
       .order('naam'),
-    haalAlleRijenOp(supabaseClient.from('recipe_ingredients').select('ingredient_id, recipe_id')),
+    // Server-side geaggregeerd (ingredient_gebruik_counts-view) i.p.v. alle
+    // 8000+ recipe_ingredients-rijen client-side op te halen en te tellen --
+    // dat laatste kostte alleen al een stuk of 9 gepagineerde requests en was
+    // de belangrijkste reden dat deze pagina bijna 10s duurde om te laden.
+    supabaseClient.from('ingredient_gebruik_counts').select('ingredient_id, aantal_recepten'),
     haalAlleRijenOp(supabaseClient.from('ingredient_revisies').select('ingredient_id, datum')),
   ]);
 
@@ -369,11 +373,14 @@ async function laadIngredienten() {
   }
 
   const receptenPerIngredient = {};
-  (usageResult.data || []).forEach(rij => {
-    if (rij.ingredient_id == null) return;
-    if (!receptenPerIngredient[rij.ingredient_id]) receptenPerIngredient[rij.ingredient_id] = new Set();
-    receptenPerIngredient[rij.ingredient_id].add(rij.recipe_id);
-  });
+  if (!usageResult.error) {
+    (usageResult.data || []).forEach(rij => {
+      if (rij.ingredient_id == null) return;
+      receptenPerIngredient[rij.ingredient_id] = rij.aantal_recepten;
+    });
+  } else {
+    console.error('Could not load ingredient usage counts:', usageResult.error);
+  }
 
   // "Laatst gewijzigd": meest recente revisie-datum indien beschikbaar,
   // anders terugvallen op gewijzigd_op/aangemaakt_op (bv. voor de bulk-
@@ -391,7 +398,7 @@ async function laadIngredienten() {
 
   alleIngredienten = (ingResult.data || []).map(i => ({
     ...i,
-    gebruikt_in_aantal: receptenPerIngredient[i.id] ? receptenPerIngredient[i.id].size : 0,
+    gebruikt_in_aantal: receptenPerIngredient[i.id] || 0,
   }));
 
   const opgeslagen = laadOpgeslagenIngFilters();
