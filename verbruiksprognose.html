@@ -249,13 +249,13 @@
 
       // 3. Namen van recepten en ingrediënten erbij (voor weergave)
       const [{ data: recepten }, { data: ingredienten }] = await Promise.all([
-        supabaseClient.from('recipes').select('id, naam, short_name').in('id', receptIds),
+        supabaseClient.from('recipes').select('id, naam').in('id', receptIds),
         supabaseClient.from('ingredients').select('id, naam').in(
           'id', [...new Set((ingredientRegels || []).map(r => r.ingredient_id).filter(x => x != null))]
         ),
       ]);
       const receptNaamMap = {};
-      (recepten || []).forEach(r => { receptNaamMap[r.id] = r.short_name || r.naam; });
+      (recepten || []).forEach(r => { receptNaamMap[r.id] = r.naam; });
       const ingredientNaamMap = {};
       (ingredienten || []).forEach(i => { ingredientNaamMap[i.id] = i.naam; });
 

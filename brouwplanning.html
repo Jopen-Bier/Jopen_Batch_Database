@@ -242,7 +242,7 @@
     // Status
     // ------------------------------------------------------------------
     let huidigJaar = new Date().getFullYear();
-    let alleRecepten = [];               // { id, naam, short_name, brouwsel_hl, kleur, status, locatie, recipe_group_id, versie_major, versie_minor }
+    let alleRecepten = [];               // { id, naam, brouwsel_hl, kleur, status, locatie, recipe_group_id, versie_major, versie_minor }
     let nieuwsteVersiePerGroep = {};      // recipe_group_id -> recept-rij met hoogste versie_major.versie_minor (ongeacht status)
     let capaciteitMap = {};              // `${group}_${week}` -> max_brouwsels
     let planningPerWeek = {};            // week -> { jk:[], wp_60hl:[], wp_120hl:[], wp_320hl:[] }
@@ -337,7 +337,7 @@
       // staat los hiervan en blijft ongewijzigd verderop in de code.
       const { data, error } = await supabaseClient
         .from('recipes')
-        .select('id, naam, short_name, brouwsel_hl, status, kleur, locatie, recipe_group_id, versie_major, versie_minor')
+        .select('id, naam, brouwsel_hl, status, kleur, locatie, recipe_group_id, versie_major, versie_minor')
         .order('naam');
       if (error) { console.error('Kon recepten niet laden:', error); return; }
       alleRecepten = data || [];
@@ -397,11 +397,11 @@
     }
     function receptNaamVoorItem(item) {
       const r = receptVoorItem(item);
-      return r ? (r.short_name || r.naam) : '(unknown recipe)';
+      return r ? r.naam : '(unknown recipe)';
     }
     function receptNaam(recipeId) {
       const r = receptById(recipeId);
-      return r ? (r.short_name || r.naam) : '(unknown recipe)';
+      return r ? r.naam : '(unknown recipe)';
     }
 
     // ------------------------------------------------------------------
@@ -580,10 +580,10 @@
         const matches = alleRecepten.filter(r =>
           r.status === 'actief' &&
           receptPastBijLocatieGroep(r, locatieGroep) &&
-          (r.naam.toLowerCase().includes(term) || (r.short_name || '').toLowerCase().includes(term))
+          r.naam.toLowerCase().includes(term)
         ).slice(0, 20);
         resultaten.innerHTML = matches.length
-          ? matches.map(r => `<div data-id="${r.id}">${escapeHtml(r.short_name || r.naam)} <span style="color:#999;">(${escapeHtml(r.naam)})</span></div>`).join('')
+          ? matches.map(r => `<div data-id="${r.id}">${escapeHtml(r.naam)}</div>`).join('')
           : '<div style="color:#999;">No matching recipes.</div>';
         resultaten.style.display = 'block';
       } else if (e.target.classList.contains('bp-bier-brouwsels')) {
@@ -677,22 +677,11 @@
       return modalContext.group === 'jk' ? 'jk' : 'wp';
     }
 
-    // "De Werf"-recepten hebben nog geen locatie ingevuld (bekend, nog niet
-    // opgelost datagat) -- die blijven bewust in beide filters zichtbaar i.p.v.
-    // helemaal onvindbaar te worden totdat dat rechtgezet is.
-    // BELANGRIJK: het locatie-invulscript uit Fase Geel staat nog steeds als
-    // "niet bevestigd gedraaid" (zie sessie-samenvattingen) -- recipes.locatie
-    // is dus voor een groot deel van de recepten nog leeg, ook al staat het
-    // WP/JK-onderscheid al wél in de naam/short_name. Daarom hier dezelfde
-    // WP/JK-uit-naam-fallback als generate-batchrapport.js/batchrapport-vullen.js
-    // (vestigingsBron/isWP), zodat het filter ook werkt zolang dat script niet
-    // gedraaid is.
+    // recipes.locatie is nu altijd gevuld (short_name-fallback is niet meer
+    // nodig en is verwijderd samen met de short_name-kolom zelf).
     function receptLocatieGroep(recept) {
       if (recept.locatie === 'Jopen Kerk') return 'jk';
       if (recept.locatie === 'Waarderpolder') return 'wp';
-      const bron = (recept.short_name || recept.naam || '').trim().toUpperCase();
-      if (bron.startsWith('JK')) return 'jk';
-      if (bron.startsWith('WP')) return 'wp';
       return null; // onbekend -> in beide filters tonen, niet onvindbaar maken
     }
 
@@ -727,7 +716,7 @@
         // recipe_id + recipe_group_id terug.
         const receptNu = receptVoorItem(item);
         rij.dataset.recipeId = receptNu ? receptNu.id : (item.recipe_id ?? '');
-        rij.querySelector('.bp-bier-zoek').value = escapeHtml(receptNu ? (receptNu.short_name || receptNu.naam) : '(unknown recipe)');
+        rij.querySelector('.bp-bier-zoek').value = escapeHtml(receptNu ? receptNu.naam : '(unknown recipe)');
         rij.querySelector('.bp-bier-brouwsels').value = item.aantal_brouwsels;
         werkBierRijHlBij(rij);
         rij.querySelector('.bp-bier-hl-vrij').value = item.hl ?? '';

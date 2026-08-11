@@ -8,7 +8,7 @@ const {
 
 async function test() {
   const bundel = {
-    recipes: { naam: 'Testbier IPA', short_name: 'WP Testbier IPA', bierstijl: 'IPA', locatie: 'Waarderpolder', brouwsel_hl: 60, status: 'actief' },
+    recipes: { naam: 'Testbier IPA', bierstijl: 'IPA', locatie: 'Waarderpolder', brouwsel_hl: 60, status: 'actief' },
     recipe_specificaties: { origineel_extract: 16, origineel_extract_tol: '0.5', alcohol: 6.5, alcohol_tol: 0.3, kleur: 20, kleur_tol: 2, ph: 4.2 },
     recipe_fermentatie: { pitching_temp: 18, main_ferm_temp: 20, bier_risico: 'Standaard', bier_status: 'Standaard' },
     recipe_brouwspecificaties: {
@@ -62,7 +62,7 @@ async function test() {
   await zetHopGroepRanden(writer, stylesManager, bundel, overloop);
 
   await writer.setCelWaarde('Recept-voorblad!K3', bundel.batch.batchnummer);
-  await writer.setCelWaarde('Recept-voorblad!Q1', bundel.recipes.short_name);
+  await writer.setCelWaarde('Recept-voorblad!Q1', 'WP ' + bundel.recipes.naam);
 
   stylesManager.finalize();
   await writer.finalize();

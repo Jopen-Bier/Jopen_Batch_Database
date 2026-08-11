@@ -514,8 +514,8 @@ async function zetHopGroepRanden(writer, stylesManager, bundel, overloop) {
 async function genereerBatchrapportBuffer(bundel) {
   const naam = bundel.recipes.naam || '';
   const locatie = (bundel.recipes.locatie || '').toLowerCase();
-  const vestigingsBron = bundel.recipes.short_name || naam;
-  const isWP = locatie.includes('waarderpolder') || vestigingsBron.toUpperCase().startsWith('WP');
+  const isWP = locatie.includes('waarderpolder');
+  const vestigingsPrefix = isWP ? 'WP' : 'JK';
 
   const templateBuffer = fs.readFileSync(TEMPLATE_PATH);
   const zip = await JSZip.loadAsync(templateBuffer);
@@ -542,7 +542,7 @@ async function genereerBatchrapportBuffer(bundel) {
   // is E-kolom * G7, dus een lege G7 zet stilzwijgend ALLE hoptotalen op 0
   // i.p.v. gewoon de waarde van 1 brouwsel te tonen. Zie ook batchrapport-vullen.js.
   await writer.setCelWaarde('Recept-voorblad!G7', bundel.batch.aantal_brouwsels ?? 1);
-  await writer.setCelWaarde('Recept-voorblad!Q1', vestigingsBron);
+  await writer.setCelWaarde('Recept-voorblad!Q1', `${vestigingsPrefix} ${naam}`);
 
   stylesManager.finalize();
   await writer.finalize();
@@ -552,7 +552,6 @@ async function genereerBatchrapportBuffer(bundel) {
   const versienummer = laatsteRevisie
     ? `${laatsteRevisie.versie_major}.${laatsteRevisie.versie_minor}`
     : `${bundel.recipes.versie_major ?? 1}.${bundel.recipes.versie_minor ?? 0}`;
-  const vestigingsPrefix = vestigingsBron.slice(0, 2);
   const bestandsnaam = `${bundel.batch.batchnummer} ${naam} v${versienummer} ${vestigingsPrefix}.xlsx`;
 
   return { buffer, bestandsnaam };

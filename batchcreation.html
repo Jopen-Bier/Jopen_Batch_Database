@@ -100,7 +100,6 @@
         <div class="bc-geselecteerd" id="bc-geselecteerd">
           <div class="bc-naam" id="bc-preview-naam"></div>
           <div class="bc-preview-grid">
-            <div><span class="lbl">Short name</span><span id="bc-preview-short"></span></div>
             <div><span class="lbl">Beer style</span><span id="bc-preview-stijl"></span></div>
             <div><span class="lbl">Location</span><span id="bc-preview-locatie"></span></div>
             <div><span class="lbl">Brouwsel (hl)</span><span id="bc-preview-hl"></span></div>
@@ -164,7 +163,7 @@
     async function laadRecepten() {
       const { data, error } = await supabaseClient
         .from('recipes')
-        .select('id, naam, short_name, bierstijl, locatie, brouwsel_hl, status, versie_major, versie_minor')
+        .select('id, naam, bierstijl, locatie, brouwsel_hl, status, versie_major, versie_minor')
         .neq('status', 'gearchiveerd')
         .order('naam');
       if (error) {
@@ -180,13 +179,13 @@
       if (term === '') { container.style.display = 'none'; container.innerHTML = ''; return; }
 
       const matches = alleRecepten.filter(r =>
-        r.naam.toLowerCase().includes(term) || (r.short_name || '').toLowerCase().includes(term)
+        r.naam.toLowerCase().includes(term)
       ).slice(0, 20);
       if (matches.length === 0) {
         container.innerHTML = '<div class="bc-geen">No matching recipes.</div>';
       } else {
         container.innerHTML = matches.map(r => `
-          <div data-id="${r.id}">${escapeHtml(r.naam)}${r.short_name ? ' <span style="color:#999;">(' + escapeHtml(r.short_name) + ')</span>' : ''}
+          <div data-id="${r.id}">${escapeHtml(r.naam)}
             <span style="color:#999;"> — v${r.versie_major}.${r.versie_minor}${r.bierstijl ? ' · ' + escapeHtml(r.bierstijl) : ''}</span>
           </div>`).join('');
       }
@@ -206,7 +205,6 @@
         .from('recipe_fermentatie').select('bier_risico, bier_status').eq('recipe_id', recept.id).maybeSingle();
 
       document.getElementById('bc-preview-naam').textContent = recept.naam;
-      document.getElementById('bc-preview-short').textContent = recept.short_name || '—';
       document.getElementById('bc-preview-stijl').textContent = recept.bierstijl || '—';
       document.getElementById('bc-preview-locatie').textContent = recept.locatie || '—';
       document.getElementById('bc-preview-hl').textContent = recept.brouwsel_hl ?? '—';

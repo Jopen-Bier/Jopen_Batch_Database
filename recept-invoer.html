@@ -216,10 +216,6 @@
             <input type="text" id="veld-naam" required />
           </div>
           <div class="re-field">
-            <label for="veld-short_name">Short name</label>
-            <input type="text" id="veld-short_name" />
-          </div>
-          <div class="re-field">
             <label for="veld-bierstijl">Beer style</label>
             <input type="text" id="veld-bierstijl" />
           </div>
@@ -1204,7 +1200,6 @@ function leesBasisgegevens() {
   const brouwselVal = document.getElementById('veld-brouwsel_hl').value;
   return {
     naam: document.getElementById('veld-naam').value.trim(),
-    short_name: document.getElementById('veld-short_name').value.trim() || null,
     bierstijl: document.getElementById('veld-bierstijl').value.trim() || null,
     locatie: document.getElementById('veld-locatie').value.trim() || null,
     brouwsel_hl: brouwselVal === '' ? null : Number(brouwselVal),
@@ -1519,7 +1514,6 @@ document.getElementById('re-kopieer-btn').addEventListener('click', async () => 
 
   if (blokken.has('algemeen')) {
     document.getElementById('veld-naam').value = `Copy of ${bron.naam}`;
-    document.getElementById('veld-short_name').value = bron.short_name || '';
     document.getElementById('veld-bierstijl').value = bron.bierstijl || '';
     document.getElementById('veld-locatie').value = bron.locatie || '';
     document.getElementById('veld-brouwsel_hl').value = bron.brouwsel_hl ?? '';
@@ -1604,7 +1598,6 @@ async function laadBestaandRecept(id) {
     `Current version v${bestaandRecept.versie_major}.${bestaandRecept.versie_minor} · ${bestaandRecept.status}`;
 
   document.getElementById('veld-naam').value = bestaandRecept.naam || '';
-  document.getElementById('veld-short_name').value = bestaandRecept.short_name || '';
   document.getElementById('veld-bierstijl').value = bestaandRecept.bierstijl || '';
   document.getElementById('veld-locatie').value = bestaandRecept.locatie || '';
   document.getElementById('veld-brouwsel_hl').value = bestaandRecept.brouwsel_hl ?? '';

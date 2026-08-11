@@ -975,8 +975,8 @@ async function genereerEnDownloadBatchrapport(supabase, batchnummer) {
 
   const naam = bundel.recipes.naam || '';
   const locatie = (bundel.recipes.locatie || '').toLowerCase();
-  const vestigingsBron = bundel.recipes.short_name || naam;
-  const isWP = locatie.includes('waarderpolder') || vestigingsBron.toUpperCase().startsWith('WP');
+  const isWP = locatie.includes('waarderpolder');
+  const vestigingsPrefix = isWP ? 'WP' : 'JK';
 
   const zip = await JSZip.loadAsync(templateBuffer);
   const writer = new XlsxDirectWriter(zip);
@@ -1005,7 +1005,7 @@ async function genereerEnDownloadBatchrapport(supabase, batchnummer) {
   // is E-kolom * G7, dus een lege G7 zet stilzwijgend ALLE hoptotalen op 0
   // i.p.v. gewoon de waarde van 1 brouwsel te tonen. Zie ook generate-batchrapport.js.
   await writer.setCelWaarde('Recept-voorblad!G7', bundel.batch.aantal_brouwsels ?? 1);
-  await writer.setCelWaarde('Recept-voorblad!Q1', vestigingsBron);
+  await writer.setCelWaarde('Recept-voorblad!Q1', `${vestigingsPrefix} ${naam}`);
 
   stylesManager.finalize();
   await writer.finalize();
@@ -1015,7 +1015,6 @@ async function genereerEnDownloadBatchrapport(supabase, batchnummer) {
   const versienummer = laatsteRevisie
     ? `${laatsteRevisie.versie_major}.${laatsteRevisie.versie_minor}`
     : `${bundel.recipes.versie_major ?? 1}.${bundel.recipes.versie_minor ?? 0}`;
-  const vestigingsPrefix = vestigingsBron.slice(0, 2);
   const bestandsnaam = `${bundel.batch.batchnummer} ${naam} v${versienummer} ${vestigingsPrefix}.xlsx`;
 
   await slaBatchrapportOp(blob, bestandsnaam);

@@ -1120,7 +1120,6 @@ async function openDetail(id) {
   ].filter(([,v]) => v !== null && v !== undefined && v !== '');
 
   const generalRows = [
-    ['Short name', r.short_name, ''],
     ['Beer style', r.bierstijl, ''],
     ['Brouwsel', r.brouwsel_hl, 'hl'],
     ...(laatsteRevisie ? [
