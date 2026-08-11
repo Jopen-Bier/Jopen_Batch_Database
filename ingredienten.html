@@ -88,10 +88,15 @@
   .ing-meta { font-family: var(--mono); font-size: 13px; color: #6b6355; margin-bottom: 24px; }
 
   .ing-card { background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 20px 24px; max-width: 560px; }
+  .ing-card + .ing-card { margin-top: 18px; }
+  .ing-card-titel {
+    font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--amber); margin: 0 0 10px;
+  }
   .ing-kv { display: flex; justify-content: space-between; font-size: 14px; padding: 6px 0; border-bottom: 1px solid #ece8dc; }
   .ing-kv:last-child { border-bottom: none; }
   .ing-kv span:first-child { color: #6b6355; }
-  .ing-kv span:last-child { font-family: var(--mono); }
+  .ing-kv span:last-child { font-family: var(--mono); text-align: right; }
 
   .ing-opslaan-btn {
     margin-top: 18px; background: var(--hop-dark); color: #fff; border: none; padding: 10px 18px;
@@ -115,10 +120,28 @@
 
   .ing-edit-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; gap: 10px; }
   .ing-edit-row label { color: #6b6355; font-size: 14px; }
-  .ing-edit-row input, .ing-edit-row select {
+  .ing-edit-row input, .ing-edit-row select, .ing-edit-row textarea {
     font-family: var(--mono); font-size: 14px; padding: 5px 8px; border: 1px solid var(--line);
     border-radius: 4px; width: 160px; text-align: right;
   }
+  .ing-edit-row textarea { text-align: left; resize: vertical; min-height: 44px; }
+  .ing-edit-row.wide input, .ing-edit-row.wide textarea { width: 280px; text-align: left; }
+  .ing-edit-subrow { display: flex; align-items: center; gap: 6px; }
+  .ing-edit-subrow input { width: 100px; }
+  .ing-edit-subrow .ing-per-eenheid { width: 90px; }
+  .ing-edit-subrow .ing-per-eenheid-lbl { color: #6b6355; font-size: 12px; }
+
+  .ing-allergenen-btn {
+    font-family: var(--mono); font-size: 13px; padding: 5px 10px; border: 1px solid var(--line);
+    border-radius: 4px; background: #fff; color: var(--ink); cursor: pointer; width: 160px; text-align: right;
+  }
+  .ing-allergenen-btn:hover { border-color: var(--hop-dark); }
+  .ing-allergenen-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; margin: 16px 0; }
+  .ing-allergeen-optie {
+    display: flex; align-items: center; gap: 8px; padding: 7px 4px; font-size: 14px; cursor: pointer;
+    border-bottom: 1px solid #ece8dc;
+  }
+  .ing-allergeen-optie input { cursor: pointer; }
 
   .ing-melding { margin-top: 12px; font-size: 13px; }
   .ing-melding.fout { color: #a33f2c; }
@@ -262,6 +285,17 @@
   </div>
 </div>
 
+<div class="ing-modal-overlay" id="ing-allergenen-modal-overlay" style="display:none;">
+  <div class="ing-modal">
+    <h2>Allergens</h2>
+    <div class="ing-allergenen-grid" id="ing-allergenen-grid"></div>
+    <div class="ing-modal-actions">
+      <button type="button" class="ing-annuleer-btn" id="ing-allergenen-cancel-btn">Cancel</button>
+      <button type="button" class="ing-opslaan-btn" id="ing-allergenen-ok-btn">Done</button>
+    </div>
+  </div>
+</div>
+
 <script src="config.js"></script>
 <script src="nav.js"></script>
 <script>
@@ -272,6 +306,67 @@ let huidigeGebruiker = null;
 let magIngBewerken = false;   // rechten voor module 'ingredients', geladen in initIngredientenPagina
 let magIngVerwijderen = false;
 let laatsteWijzigingPerIngredient = {};
+
+// De 14 EU-gereguleerde allergenen (Verordening (EU) 1169/2011, bijlage II).
+// Sleutel wordt opgeslagen in ingredients.allergenen (jsonb array); label is
+// puur voor weergave.
+const EU_ALLERGENEN = [
+  ['gluten', 'Cereals containing gluten'],
+  ['crustaceans', 'Crustaceans'],
+  ['eggs', 'Eggs'],
+  ['fish', 'Fish'],
+  ['peanuts', 'Peanuts'],
+  ['soybeans', 'Soybeans'],
+  ['milk', 'Milk (incl. lactose)'],
+  ['nuts', 'Tree nuts'],
+  ['celery', 'Celery'],
+  ['mustard', 'Mustard'],
+  ['sesame', 'Sesame seeds'],
+  ['sulphites', 'Sulphur dioxide & sulphites'],
+  ['lupin', 'Lupin'],
+  ['molluscs', 'Molluscs'],
+];
+
+function allergenenLabel(keys) {
+  const set = new Set(keys || []);
+  if (set.size === 0) return 'None';
+  return EU_ALLERGENEN.filter(([k]) => set.has(k)).map(([, label]) => label).join(', ');
+}
+
+// Eén gedeelde popup (in de DOM aanwezig, zie onder de kaart-HTML) voor
+// zowel het bewerk- als het nieuw-ingredient-formulier. onOpslaan krijgt de
+// nieuw gekozen array van sleutels terug zodra "Done" wordt geklikt.
+function openAllergenenPicker(huidigeKeys, onOpslaan) {
+  const gekozen = new Set(huidigeKeys || []);
+  const grid = document.getElementById('ing-allergenen-grid');
+  grid.innerHTML = EU_ALLERGENEN.map(([key, label]) => `
+    <label class="ing-allergeen-optie">
+      <input type="checkbox" value="${key}" ${gekozen.has(key) ? 'checked' : ''} />
+      ${escapeHtml(label)}
+    </label>`).join('');
+
+  const overlay = document.getElementById('ing-allergenen-modal-overlay');
+  overlay.style.display = 'flex';
+
+  const okBtn = document.getElementById('ing-allergenen-ok-btn');
+  const cancelBtn = document.getElementById('ing-allergenen-cancel-btn');
+  const sluit = () => { overlay.style.display = 'none'; };
+
+  // Oude listeners eerst opruimen door de knoppen te vervangen door een kloon
+  // (voorkomt dat een vorige openAllergenenPicker-aanroep dubbel blijft
+  // meeluisteren als de popup meerdere keren wordt geopend).
+  const nieuweOk = okBtn.cloneNode(true);
+  okBtn.replaceWith(nieuweOk);
+  const nieuweCancel = cancelBtn.cloneNode(true);
+  cancelBtn.replaceWith(nieuweCancel);
+
+  nieuweOk.addEventListener('click', () => {
+    const geselecteerd = Array.from(grid.querySelectorAll('input[type="checkbox"]:checked')).map(el => el.value);
+    sluit();
+    onOpslaan(geselecteerd);
+  });
+  nieuweCancel.addEventListener('click', sluit);
+}
 
 // Display-only translation of the status values as stored in the database
 // (Dutch: actief/inactief/uitgefaseerd) — the stored value itself is left
@@ -356,7 +451,7 @@ async function laadIngredienten() {
   const [ingResult, usageResult, revisieResult] = await Promise.all([
     supabaseClient
       .from('ingredients')
-      .select('id, naam, categorie, category_id, eenheid, prijs, extract_pct, alpha_pct, gistfactor, leverancier, status, versie_major, versie_minor, ingredient_group_id, versie_status, aangemaakt_op, gewijzigd_op, ingredient_categories(name, uses_alpha_pct, uses_extract_pct, uses_gistfactor)')
+      .select('id, naam, categorie, category_id, eenheid, prijs, prijs_2, eenheid_prijs_1, eenheid_prijs_2, extract_pct, alpha_pct, gistfactor, leverancier, leverancier_2, kleur_ebc, allergenen, ingredient_declaratie, bewaartemperatuur, houdbaarheid, houdbaarheid_na_openen, dichtheid, alcohol_pct, status, versie_major, versie_minor, ingredient_group_id, versie_status, aangemaakt_op, gewijzigd_op, ingredient_categories(name, uses_alpha_pct, uses_extract_pct, uses_gistfactor)')
       .eq('versie_status', 'huidig')
       .order('naam'),
     // Server-side geaggregeerd (ingredient_gebruik_counts-view) i.p.v. alle
@@ -518,7 +613,8 @@ function pasFiltersToe() {
   const gefilterd = alleIngredienten.filter(i => {
     const matchtZoek = !zoek ||
       (i.naam || '').toLowerCase().includes(zoek) ||
-      (i.leverancier || '').toLowerCase().includes(zoek);
+      (i.leverancier || '').toLowerCase().includes(zoek) ||
+      (i.leverancier_2 || '').toLowerCase().includes(zoek);
     const matchtCategorie = !i.category_id || geselecteerdeIngCategorieen.has(String(i.category_id));
     const matchtStatus = !i.status || geselecteerdeIngStatussen.has(i.status);
     return matchtZoek && matchtCategorie && matchtStatus;
@@ -686,31 +782,62 @@ function renderDetailAlleen(id) {
   const cat = i.ingredient_categories || null;
   const categorieNaam = cat?.name || i.categorie || 'unknown category';
 
-  const rows = [
+  const kvRij = ([label, val, unit]) => `
+    <div class="ing-kv">
+      <span>${label}</span>
+      <span>${val !== null && val !== undefined && val !== '' ? escapeHtml(String(val)) + (unit ? ' ' + unit : '') : '—'}</span>
+    </div>`;
+
+  const generalRows = [
     ['Category', categorieNaam, ''],
     ['Unit', i.eenheid, ''],
-    ['Price', i.prijs, '€'],
+    ['Version', `v${i.versie_major ?? 1}.${i.versie_minor ?? 0}`, ''],
+    ['Status', statusLabel(i.status), ''],
   ];
+
+  const prijsMetEenheid = (prijs, eenheid) => {
+    if (prijs === null || prijs === undefined || prijs === '') return '—';
+    return `€${prijs}${eenheid ? ' / ' + eenheid : ''}`;
+  };
+  const supplierRows = [
+    ['Supplier #1', i.leverancier, ''],
+    ['Price #1', prijsMetEenheid(i.prijs, i.eenheid_prijs_1), ''],
+    ['Supplier #2', i.leverancier_2, ''],
+    ['Price #2', prijsMetEenheid(i.prijs_2, i.eenheid_prijs_2), ''],
+  ];
+
+  const parameterRows = [];
   // Only show what's relevant for this category (for old, not-yet-mapped
   // ingredients without a category_id: show everything, since we don't know).
-  if (!cat || cat.uses_extract_pct) rows.push(['Extract %', i.extract_pct, '%']);
-  if (!cat || cat.uses_alpha_pct) rows.push(['Alpha %', i.alpha_pct, '%']);
-  if (!cat || cat.uses_gistfactor) rows.push(['Yeast factor', i.gistfactor, '']);
-  rows.push(['Supplier', i.leverancier, '']);
-  rows.push(['Status', statusLabel(i.status), '']);
+  if (!cat || cat.uses_alpha_pct) parameterRows.push(['Alpha %', i.alpha_pct, '%']);
+  if (!cat || cat.uses_gistfactor) parameterRows.push(['Yeast factor', i.gistfactor, '']);
+  if (!cat || cat.uses_extract_pct) parameterRows.push(['Extract %', i.extract_pct, '%']);
+  parameterRows.push(['Colour', i.kleur_ebc, 'EBC']);
+  parameterRows.push(['Allergens', allergenenLabel(i.allergenen), '']);
+  parameterRows.push(['Ingredient declaration', i.ingredient_declaratie, '']);
+  parameterRows.push(['Storage temperature', i.bewaartemperatuur, '']);
+  parameterRows.push(['Shelf life', i.houdbaarheid, '']);
+  parameterRows.push(['Shelf life after opening', i.houdbaarheid_na_openen, '']);
+  parameterRows.push(['Density', i.dichtheid, '']);
+  parameterRows.push(['Alcohol content', i.alcohol_pct, '%']);
 
   container.innerHTML = `
     <h2 class="ing-titel">${escapeHtml(i.naam)}</h2>
     <div class="ing-meta">${escapeHtml(categorieNaam)} · v${i.versie_major ?? 1}.${i.versie_minor ?? 0}</div>
     <div class="ing-card">
-      ${rows.map(([label, val, unit]) => `
-        <div class="ing-kv">
-          <span>${label}</span>
-          <span>${val !== null && val !== undefined && val !== '' ? escapeHtml(String(val)) + (unit ? ' ' + unit : '') : '—'}</span>
-        </div>`).join('')}
+      <div class="ing-card-titel">General</div>
+      ${generalRows.map(kvRij).join('')}
       <div class="ing-latest-revisie" id="ing-latest-revisie-houder" style="display:none;"></div>
       ${magIngBewerken ? `<button class="ing-bewerk-btn" id="ing-bewerk-btn">Edit</button>` : ''}
       ${magIngVerwijderen ? `<button class="ing-verwijder-knop" id="ing-verwijder-btn">Delete</button>` : ''}
+    </div>
+    <div class="ing-card">
+      <div class="ing-card-titel">Supplier information</div>
+      ${supplierRows.map(kvRij).join('')}
+    </div>
+    <div class="ing-card">
+      <div class="ing-card-titel">Parameters</div>
+      ${parameterRows.map(kvRij).join('')}
     </div>
   `;
 
@@ -756,12 +883,34 @@ async function verwijderIngredient(i) {
   pasFiltersToe();
 }
 
-function renderDetailBewerken(i) {  const container = document.getElementById('ing-detail-container');
+let bewerkAllergenenState = [];
 
-  const veld = (label, key, unit = '', type = 'text') => `
-    <div class="ing-edit-row">
+function renderDetailBewerken(i) {  const container = document.getElementById('ing-detail-container');
+  bewerkAllergenenState = i.allergenen || [];
+
+  const veld = (label, key, unit = '', type = 'text', wide = false) => {
+    if (type === 'textarea') {
+      return `
+    <div class="ing-edit-row wide">
+      <label for="veld-${key}">${label}</label>
+      <textarea id="veld-${key}">${escapeHtml(i[key] ?? '')}</textarea>
+    </div>`;
+    }
+    return `
+    <div class="ing-edit-row${wide ? ' wide' : ''}">
       <label for="veld-${key}">${label}</label>
       <input type="${type}" id="veld-${key}" value="${i[key] ?? ''}" ${unit ? `placeholder="${unit}"` : ''} />
+    </div>`;
+  };
+
+  const prijsMetEenheidVeld = (label, prijsKey, eenheidKey) => `
+    <div class="ing-edit-row">
+      <label for="veld-${prijsKey}">${label}</label>
+      <div class="ing-edit-subrow">
+        <input type="number" id="veld-${prijsKey}" value="${i[prijsKey] ?? ''}" placeholder="€" />
+        <span class="ing-per-eenheid-lbl">per</span>
+        <input type="text" id="veld-${eenheidKey}" class="ing-per-eenheid" value="${i[eenheidKey] ?? ''}" placeholder="unit" />
+      </div>
     </div>`;
 
   const categorieOpties = alleCategorieen.map(c =>
@@ -772,6 +921,7 @@ function renderDetailBewerken(i) {  const container = document.getElementById('i
     <h2 class="ing-titel">${escapeHtml(i.naam)}</h2>
     <div class="ing-meta">Editing</div>
     <div class="ing-card">
+      <div class="ing-card-titel">General</div>
       <div class="ing-edit-row">
         <label for="veld-category_id">Category</label>
         <select id="veld-category_id" style="width:160px;">
@@ -780,11 +930,7 @@ function renderDetailBewerken(i) {  const container = document.getElementById('i
         </select>
       </div>
       ${veld('Unit', 'eenheid')}
-      ${veld('Price', 'prijs', '€', 'number')}
-      <div id="veld-extract_pct-rij">${veld('Extract %', 'extract_pct', '%', 'number')}</div>
-      <div id="veld-alpha_pct-rij">${veld('Alpha %', 'alpha_pct', '%', 'number')}</div>
-      <div id="veld-gistfactor-rij">${veld('Yeast factor', 'gistfactor', '', 'number')}</div>
-      ${veld('Supplier', 'leverancier')}
+      <div class="ing-kv"><span>Version</span><span>v${i.versie_major ?? 1}.${i.versie_minor ?? 0}</span></div>
       <div class="ing-edit-row">
         <label for="veld-status">Status</label>
         <select id="veld-status" style="width:160px;">
@@ -793,11 +939,47 @@ function renderDetailBewerken(i) {  const container = document.getElementById('i
           <option value="uitgefaseerd" ${i.status === 'uitgefaseerd' ? 'selected' : ''}>Phased out</option>
         </select>
       </div>
-      <button class="ing-opslaan-btn" id="ing-opslaan-btn">Save</button>
-      <button class="ing-annuleer-btn" id="ing-annuleer-btn">Cancel</button>
-      <div id="ing-edit-melding" class="ing-melding"></div>
     </div>
+    <div class="ing-card">
+      <div class="ing-card-titel">Supplier information</div>
+      ${veld('Supplier #1', 'leverancier')}
+      ${prijsMetEenheidVeld('Price #1', 'prijs', 'eenheid_prijs_1')}
+      ${veld('Supplier #2', 'leverancier_2')}
+      ${prijsMetEenheidVeld('Price #2', 'prijs_2', 'eenheid_prijs_2')}
+    </div>
+    <div class="ing-card">
+      <div class="ing-card-titel">Parameters</div>
+      <div id="veld-alpha_pct-rij">${veld('Alpha %', 'alpha_pct', '%', 'number')}</div>
+      <div id="veld-gistfactor-rij">${veld('Yeast factor', 'gistfactor', '', 'number')}</div>
+      <div id="veld-extract_pct-rij">${veld('Extract %', 'extract_pct', '%', 'number')}</div>
+      ${veld('Colour', 'kleur_ebc', 'EBC', 'number')}
+      <div class="ing-edit-row">
+        <label>Allergens</label>
+        <button type="button" class="ing-allergenen-btn" id="veld-allergenen-btn"></button>
+      </div>
+      ${veld('Ingredient declaration', 'ingredient_declaratie', '', 'textarea')}
+      ${veld('Storage temperature', 'bewaartemperatuur')}
+      ${veld('Shelf life', 'houdbaarheid')}
+      ${veld('Shelf life after opening', 'houdbaarheid_na_openen')}
+      ${veld('Density', 'dichtheid', '', 'number')}
+      ${veld('Alcohol content', 'alcohol_pct', '%', 'number')}
+    </div>
+    <button class="ing-opslaan-btn" id="ing-opslaan-btn">Save</button>
+    <button class="ing-annuleer-btn" id="ing-annuleer-btn">Cancel</button>
+    <div id="ing-edit-melding" class="ing-melding"></div>
   `;
+
+  const werkAllergenenKnopBij = () => {
+    document.getElementById('veld-allergenen-btn').textContent =
+      bewerkAllergenenState.length ? `${bewerkAllergenenState.length} selected` : 'None selected';
+  };
+  werkAllergenenKnopBij();
+  document.getElementById('veld-allergenen-btn').addEventListener('click', () => {
+    openAllergenenPicker(bewerkAllergenenState, (geselecteerd) => {
+      bewerkAllergenenState = geselecteerd;
+      werkAllergenenKnopBij();
+    });
+  });
 
   const categorieSelect = document.getElementById('veld-category_id');
   const pasVeldZichtbaarheidToe = () => {
@@ -900,12 +1082,24 @@ async function slaIngredientOp(i, soort, wijziging) {
     category_id: categoryIdVeld ? Number(categoryIdVeld) : null,
     eenheid: tekst('veld-eenheid'),
     prijs: getal('veld-prijs'),
+    eenheid_prijs_1: tekst('veld-eenheid_prijs_1'),
+    leverancier_2: tekst('veld-leverancier_2'),
+    prijs_2: getal('veld-prijs_2'),
+    eenheid_prijs_2: tekst('veld-eenheid_prijs_2'),
     // Alleen het veld meesturen als het bij de gekozen categorie hoort;
     // anders expliciet leegmaken zodat er geen niet-relevante waarde blijft
     // hangen (bijv. een alpha % op een moutsoort).
     extract_pct: (!gekozenCategorie || gekozenCategorie.uses_extract_pct) ? getal('veld-extract_pct') : null,
     alpha_pct: (!gekozenCategorie || gekozenCategorie.uses_alpha_pct) ? getal('veld-alpha_pct') : null,
     gistfactor: (!gekozenCategorie || gekozenCategorie.uses_gistfactor) ? getal('veld-gistfactor') : null,
+    kleur_ebc: getal('veld-kleur_ebc'),
+    allergenen: bewerkAllergenenState,
+    ingredient_declaratie: tekst('veld-ingredient_declaratie'),
+    bewaartemperatuur: tekst('veld-bewaartemperatuur'),
+    houdbaarheid: tekst('veld-houdbaarheid'),
+    houdbaarheid_na_openen: tekst('veld-houdbaarheid_na_openen'),
+    dichtheid: getal('veld-dichtheid'),
+    alcohol_pct: getal('veld-alcohol_pct'),
     leverancier: tekst('veld-leverancier'),
     status: document.getElementById('veld-status').value,
   };
@@ -991,7 +1185,7 @@ async function slaIngredientOp(i, soort, wijziging) {
       aangemaakt_door: gebruikerId,
       gewijzigd_door: gebruikerId,
     })
-    .select('id, naam, categorie, category_id, eenheid, prijs, extract_pct, alpha_pct, gistfactor, leverancier, status, versie_major, versie_minor, ingredient_group_id, versie_status, aangemaakt_op, gewijzigd_op, ingredient_categories(name, uses_alpha_pct, uses_extract_pct, uses_gistfactor)')
+    .select('id, naam, categorie, category_id, eenheid, prijs, prijs_2, eenheid_prijs_1, eenheid_prijs_2, extract_pct, alpha_pct, gistfactor, leverancier, leverancier_2, kleur_ebc, allergenen, ingredient_declaratie, bewaartemperatuur, houdbaarheid, houdbaarheid_na_openen, dichtheid, alcohol_pct, status, versie_major, versie_minor, ingredient_group_id, versie_status, aangemaakt_op, gewijzigd_op, ingredient_categories(name, uses_alpha_pct, uses_extract_pct, uses_gistfactor)')
     .single();
 
   if (insertErr) {
@@ -1029,16 +1223,38 @@ async function slaIngredientOp(i, soort, wijziging) {
   }, 900);
 }
 
+let nieuwAllergenenState = [];
+
 function toonNieuwFormulier() {
   document.getElementById('ing-list-view').style.display = 'none';
   document.getElementById('ing-detail').classList.add('actief');
+  nieuwAllergenenState = [];
 
   const container = document.getElementById('ing-detail-container');
 
-  const veld = (label, id, unit = '', type = 'text') => `
-    <div class="ing-edit-row">
+  const veld = (label, id, unit = '', type = 'text', wide = false) => {
+    if (type === 'textarea') {
+      return `
+    <div class="ing-edit-row wide">
+      <label for="${id}">${label}</label>
+      <textarea id="${id}"></textarea>
+    </div>`;
+    }
+    return `
+    <div class="ing-edit-row${wide ? ' wide' : ''}">
       <label for="${id}">${label}</label>
       <input type="${type}" id="${id}" ${unit ? `placeholder="${unit}"` : ''} />
+    </div>`;
+  };
+
+  const prijsMetEenheidVeld = (label, prijsId, eenheidId) => `
+    <div class="ing-edit-row">
+      <label for="${prijsId}">${label}</label>
+      <div class="ing-edit-subrow">
+        <input type="number" id="${prijsId}" placeholder="€" />
+        <span class="ing-per-eenheid-lbl">per</span>
+        <input type="text" id="${eenheidId}" class="ing-per-eenheid" placeholder="unit" />
+      </div>
     </div>`;
 
   const categorieOpties = alleCategorieen.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
@@ -1047,7 +1263,8 @@ function toonNieuwFormulier() {
     <h2 class="ing-titel">New ingredient</h2>
     <div class="ing-meta">Required fields: name and category</div>
     <div class="ing-card">
-      <div class="ing-edit-row">
+      <div class="ing-card-titel">General</div>
+      <div class="ing-edit-row wide">
         <label for="nieuw-naam">Name *</label>
         <input type="text" id="nieuw-naam" required style="width:280px; text-align:left;" />
       </div>
@@ -1059,14 +1276,6 @@ function toonNieuwFormulier() {
         </select>
       </div>
       ${veld('Unit', 'nieuw-eenheid')}
-      ${veld('Price', 'nieuw-prijs', '€', 'number')}
-      <div id="nieuw-extract_pct-rij">${veld('Extract %', 'nieuw-extract_pct', '%', 'number')}</div>
-      <div id="nieuw-alpha_pct-rij">${veld('Alpha %', 'nieuw-alpha_pct', '%', 'number')}</div>
-      <div id="nieuw-gistfactor-rij">${veld('Yeast factor', 'nieuw-gistfactor', '', 'number')}</div>
-      <div class="ing-edit-row">
-        <label for="nieuw-leverancier">Supplier</label>
-        <input type="text" id="nieuw-leverancier" style="width:280px; text-align:left;" />
-      </div>
       <div class="ing-edit-row">
         <label for="nieuw-status">Status</label>
         <select id="nieuw-status" style="width:160px;">
@@ -1075,11 +1284,49 @@ function toonNieuwFormulier() {
           <option value="uitgefaseerd">Phased out</option>
         </select>
       </div>
-      <button class="ing-opslaan-btn" id="nieuw-opslaan-btn">Add</button>
-      <button class="ing-annuleer-btn" id="nieuw-annuleer-btn">Cancel</button>
-      <div id="nieuw-melding" class="ing-melding"></div>
     </div>
+    <div class="ing-card">
+      <div class="ing-card-titel">Supplier information</div>
+      <div class="ing-edit-row wide">
+        <label for="nieuw-leverancier">Supplier #1</label>
+        <input type="text" id="nieuw-leverancier" style="width:280px; text-align:left;" />
+      </div>
+      ${prijsMetEenheidVeld('Price #1', 'nieuw-prijs', 'nieuw-eenheid_prijs_1')}
+      <div class="ing-edit-row wide">
+        <label for="nieuw-leverancier_2">Supplier #2</label>
+        <input type="text" id="nieuw-leverancier_2" style="width:280px; text-align:left;" />
+      </div>
+      ${prijsMetEenheidVeld('Price #2', 'nieuw-prijs_2', 'nieuw-eenheid_prijs_2')}
+    </div>
+    <div class="ing-card">
+      <div class="ing-card-titel">Parameters</div>
+      <div id="nieuw-alpha_pct-rij">${veld('Alpha %', 'nieuw-alpha_pct', '%', 'number')}</div>
+      <div id="nieuw-gistfactor-rij">${veld('Yeast factor', 'nieuw-gistfactor', '', 'number')}</div>
+      <div id="nieuw-extract_pct-rij">${veld('Extract %', 'nieuw-extract_pct', '%', 'number')}</div>
+      ${veld('Colour', 'nieuw-kleur_ebc', 'EBC', 'number')}
+      <div class="ing-edit-row">
+        <label>Allergens</label>
+        <button type="button" class="ing-allergenen-btn" id="nieuw-allergenen-btn">None selected</button>
+      </div>
+      ${veld('Ingredient declaration', 'nieuw-ingredient_declaratie', '', 'textarea')}
+      ${veld('Storage temperature', 'nieuw-bewaartemperatuur')}
+      ${veld('Shelf life', 'nieuw-houdbaarheid')}
+      ${veld('Shelf life after opening', 'nieuw-houdbaarheid_na_openen')}
+      ${veld('Density', 'nieuw-dichtheid', '', 'number')}
+      ${veld('Alcohol content', 'nieuw-alcohol_pct', '%', 'number')}
+    </div>
+    <button class="ing-opslaan-btn" id="nieuw-opslaan-btn">Add</button>
+    <button class="ing-annuleer-btn" id="nieuw-annuleer-btn">Cancel</button>
+    <div id="nieuw-melding" class="ing-melding"></div>
   `;
+
+  document.getElementById('nieuw-allergenen-btn').addEventListener('click', () => {
+    openAllergenenPicker(nieuwAllergenenState, (geselecteerd) => {
+      nieuwAllergenenState = geselecteerd;
+      document.getElementById('nieuw-allergenen-btn').textContent =
+        nieuwAllergenenState.length ? `${nieuwAllergenenState.length} selected` : 'None selected';
+    });
+  });
 
   const categorieSelect = document.getElementById('nieuw-category_id');
   const pasVeldZichtbaarheidToe = () => {
@@ -1131,9 +1378,21 @@ async function slaNieuwIngredientOp() {
     category_id: Number(categoryIdVeld),
     eenheid: tekst('nieuw-eenheid'),
     prijs: getal('nieuw-prijs'),
+    eenheid_prijs_1: tekst('nieuw-eenheid_prijs_1'),
+    leverancier_2: tekst('nieuw-leverancier_2'),
+    prijs_2: getal('nieuw-prijs_2'),
+    eenheid_prijs_2: tekst('nieuw-eenheid_prijs_2'),
     extract_pct: gekozenCategorie?.uses_extract_pct ? getal('nieuw-extract_pct') : null,
     alpha_pct: gekozenCategorie?.uses_alpha_pct ? getal('nieuw-alpha_pct') : null,
     gistfactor: gekozenCategorie?.uses_gistfactor ? getal('nieuw-gistfactor') : null,
+    kleur_ebc: getal('nieuw-kleur_ebc'),
+    allergenen: nieuwAllergenenState,
+    ingredient_declaratie: tekst('nieuw-ingredient_declaratie'),
+    bewaartemperatuur: tekst('nieuw-bewaartemperatuur'),
+    houdbaarheid: tekst('nieuw-houdbaarheid'),
+    houdbaarheid_na_openen: tekst('nieuw-houdbaarheid_na_openen'),
+    dichtheid: getal('nieuw-dichtheid'),
+    alcohol_pct: getal('nieuw-alcohol_pct'),
     leverancier: tekst('nieuw-leverancier'),
     status: document.getElementById('nieuw-status').value,
     versie_major: 1,
@@ -1146,7 +1405,7 @@ async function slaNieuwIngredientOp() {
   const { data, error } = await supabaseClient
     .from('ingredients')
     .insert(nieuw)
-    .select('id, naam, categorie, category_id, eenheid, prijs, extract_pct, alpha_pct, gistfactor, leverancier, status, versie_major, versie_minor, ingredient_group_id, versie_status, aangemaakt_op, gewijzigd_op, ingredient_categories(name, uses_alpha_pct, uses_extract_pct, uses_gistfactor)')
+    .select('id, naam, categorie, category_id, eenheid, prijs, prijs_2, eenheid_prijs_1, eenheid_prijs_2, extract_pct, alpha_pct, gistfactor, leverancier, leverancier_2, kleur_ebc, allergenen, ingredient_declaratie, bewaartemperatuur, houdbaarheid, houdbaarheid_na_openen, dichtheid, alcohol_pct, status, versie_major, versie_minor, ingredient_group_id, versie_status, aangemaakt_op, gewijzigd_op, ingredient_categories(name, uses_alpha_pct, uses_extract_pct, uses_gistfactor)')
     .single();
 
   if (error) {
