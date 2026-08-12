@@ -115,6 +115,16 @@
   table.re-ing-table th { text-align: left; font-family: var(--mono); font-size: 10px; text-transform: uppercase; color: #6b6355; padding: 6px 8px; border-bottom: 1px solid var(--line); }
   table.re-ing-table td { padding: 6px 8px; border-bottom: 1px solid #ece8dc; }
   table.re-ing-table select, table.re-ing-table input { width: 100%; padding: 5px 6px; border: 1px solid var(--line); border-radius: 4px; font-family: var(--serif); font-size: 13px; }
+  td.re-ing-ingredient-cell { position: relative; }
+  .re-ing-ingredient-resultaten {
+    position: absolute; z-index: 20; top: 100%; left: 0; right: 0; min-width: 220px;
+    background: #fff; border: 1px solid var(--line); border-top: none; border-radius: 0 0 4px 4px;
+    max-height: 240px; overflow-y: auto; display: none; box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+  }
+  .re-ing-ingredient-resultaten div { padding: 6px 8px; font-size: 13px; cursor: pointer; }
+  .re-ing-ingredient-resultaten div:hover, .re-ing-ingredient-resultaten div.re-ing-actief { background: #f4f2ea; }
+  .re-ing-ingredient-resultaten .re-ing-geen { color: #999; cursor: default; }
+  .re-ing-ingredient-resultaten .re-ing-geen:hover { background: none; }
   .re-verwijder-regel { background: transparent; border: 1px solid var(--line); border-radius: 4px; color: #a33f2c; cursor: pointer; padding: 4px 8px; }
 
   table.re-som-table { width: 100%; border-collapse: collapse; }
@@ -817,12 +827,89 @@ function leesParamGrid(fields) {
   return result;
 }
 
-function ingredientOpties(geselecteerdId) {
-  const leegGeselecteerd = geselecteerdId === null || geselecteerdId === undefined || geselecteerdId === '';
-  const placeholder = `<option value="" ${leegGeselecteerd ? 'selected' : ''}>[empty — not matched]</option>`;
-  return placeholder + alleIngredientenLijst.map(i =>
-    `<option value="${i.id}" ${String(i.id) === String(geselecteerdId) ? 'selected' : ''}>${escapeHtml(i.naam)}${i.categorie_naam ? ' — ' + escapeHtml(i.categorie_naam) : ''}</option>`
-  ).join('');
+// Weergavetekst voor een ingrediënt-id, zelfde format als de oude
+// <option>-labels ("naam — categorie"). Gebruikt door de zoekbare
+// ingrediënt-combobox hieronder (initieel invullen + na een keuze).
+function ingredientWeergaveNaam(id) {
+  const i = alleIngredientenLijst.find(x => String(x.id) === String(id));
+  if (!i) return '';
+  return i.naam + (i.categorie_naam ? ' — ' + i.categorie_naam : '');
+}
+
+// Zoekbare ingrediënt-combobox (i.p.v. een native <select>): een native
+// <select> matcht bij typen alleen vanaf de EERSTE letter van de
+// optietekst. Bij namen als "WHC Einstein" moet je dan letterlijk "WHC"
+// typen voor "Einstein" naar voren komt -- onhandig met een lijst van
+// honderden ingrediënten. Deze combobox filtert op elke intypte term
+// overal in de naam (net als de receptzoekfunctie op Batch Creation).
+// Markup: tekst-invoerveld (zoekterm/weergave) + verborgen <input
+// class="re-ing-ingredient"> die de echte id bevat -- alle bestaande code
+// die .re-ing-ingredient uitleest/beluistert (change/input) blijft zo
+// ongewijzigd werken, we simuleren alleen die events bij een keuze.
+function koppelIngredientCombobox(tr) {
+  const cel = tr.querySelector('.re-ing-ingredient-cell');
+  if (!cel) return;
+  const zoekInput = cel.querySelector('.re-ing-ingredient-zoek');
+  const hiddenInput = cel.querySelector('.re-ing-ingredient');
+  const resultaten = cel.querySelector('.re-ing-ingredient-resultaten');
+
+  function kiesIngredient(id, weergaveNaam) {
+    hiddenInput.value = id ?? '';
+    zoekInput.value = weergaveNaam ?? '';
+    hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
+    hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+  // Alleen de verborgen id-waarde wissen (zonder de getypte zoektekst aan
+  // te raken) zodra de gebruiker verder typt na een eerdere keuze -- een
+  // halfweg getypte zoekterm mag nooit meetellen als geldige selectie.
+  function wisSelectie() {
+    if (hiddenInput.value === '') return;
+    hiddenInput.value = '';
+    hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
+    hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  function toonResultaten(zoekterm) {
+    const term = zoekterm.trim().toLowerCase();
+    if (term === '') { resultaten.style.display = 'none'; resultaten.innerHTML = ''; return; }
+    const matches = alleIngredientenLijst.filter(i => i.naam.toLowerCase().includes(term)).slice(0, 30);
+    if (matches.length === 0) {
+      resultaten.innerHTML = '<div class="re-ing-geen">No matching ingredients.</div>';
+    } else {
+      resultaten.innerHTML = matches.map(i => `
+        <div data-id="${i.id}">${escapeHtml(i.naam)}${i.categorie_naam ? ` <span style="color:#999;">— ${escapeHtml(i.categorie_naam)}</span>` : ''}</div>
+      `).join('');
+    }
+    resultaten.style.display = 'block';
+  }
+
+  zoekInput.addEventListener('input', () => {
+    wisSelectie();
+    toonResultaten(zoekInput.value);
+  });
+  zoekInput.addEventListener('focus', () => {
+    if (zoekInput.value.trim() !== '') toonResultaten(zoekInput.value);
+  });
+  zoekInput.addEventListener('blur', () => {
+    // Kleine vertraging zodat een klik op een resultaat (blur vuurt eerder
+    // dan click) nog verwerkt kan worden vóórdat we opruimen.
+    setTimeout(() => {
+      resultaten.style.display = 'none';
+      // Geen geldige keuze gemaakt: invoerveld leegmaken i.p.v. een
+      // getypte-maar-niet-gekozen tekst te laten staan.
+      if (hiddenInput.value === '') zoekInput.value = '';
+    }, 150);
+  });
+  resultaten.addEventListener('mousedown', (e) => {
+    // mousedown i.p.v. click: voorkomt dat de blur-handler hierboven al
+    // de resultatenlijst verbergt vóórdat de klik zelf verwerkt wordt.
+    const rij = e.target.closest('[data-id]');
+    if (!rij) return;
+    e.preventDefault();
+    const id = rij.dataset.id;
+    kiesIngredient(id, ingredientWeergaveNaam(id));
+    resultaten.style.display = 'none';
+  });
 }
 
 function rolOptiesVoor(rollenLijst, geselecteerd) {
@@ -886,7 +973,12 @@ function voegIngredientRegelToe(tbodyId, rollenLijst, regel = {}) {
       </svg>
     </td>
     ${rolKolomHtml}
-    <td><select class="re-ing-ingredient">${ingredientOpties(regel.ingredient_id)}</select></td>
+    <td class="re-ing-ingredient-cell">
+      <input type="text" class="re-ing-ingredient-zoek" autocomplete="off" placeholder="Search ingredient…"
+             value="${regel.ingredient_id ? escapeHtml(ingredientWeergaveNaam(regel.ingredient_id)) : ''}" />
+      <input type="hidden" class="re-ing-ingredient" value="${regel.ingredient_id ?? ''}" />
+      <div class="re-ing-ingredient-resultaten"></div>
+    </td>
     ${alphaKolomHtml}
     <td><input type="number" class="re-ing-hoeveelheid" value="${regel.hoeveelheid ?? ''}" /></td>
     <td><input type="text" class="re-ing-eenheid" value="${regel.eenheid ?? ''}" /></td>
@@ -909,6 +1001,7 @@ function voegIngredientRegelToe(tbodyId, rollenLijst, regel = {}) {
 
   tbody.appendChild(tr);
   herNummerVolgorde(tbody);
+  koppelIngredientCombobox(tr);
   tr.querySelector('.re-verwijder-regel').addEventListener('click', () => {
     tr.remove();
     herNummerVolgorde(tbody);
