@@ -201,7 +201,10 @@
             <select id="re-kopieer-select"><option value="">— start blank —</option></select>
           </div>
         </div>
-        <div class="re-subkop" style="margin-top:14px;">Blocks to copy</div>
+        <div class="re-subkop" style="margin-top:14px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
+          <span>Blocks to copy</span>
+          <button type="button" id="re-kopieer-blokken-toggle" style="font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; background: none; border: none; color: var(--hop-dark); text-decoration: underline; cursor: pointer; padding: 0;">Select none</button>
+        </div>
         <p class="re-versie-uitleg" style="margin-top:-4px;">All blocks are copied by default — untick anything you'd rather fill in yourself.</p>
         <div id="re-kopieer-blokken" class="re-grid"></div>
         <button type="button" class="re-btn secundair" id="re-kopieer-btn" style="margin-top:14px;">Copy into this form</button>
@@ -1417,10 +1420,33 @@ function renderKopieerBlokken() {
   const container = document.getElementById('re-kopieer-blokken');
   container.innerHTML = KOPIEER_BLOKKEN.map(b => `
     <label style="display:flex; align-items:center; gap:6px; font-family: var(--serif); font-size: 14px;">
-      <input type="checkbox" id="re-kopieer-blok-${b.id}" checked />
+      <input type="checkbox" id="re-kopieer-blok-${b.id}" class="re-kopieer-blok-checkbox" checked />
       ${b.label}
     </label>`).join('');
+  container.querySelectorAll('.re-kopieer-blok-checkbox').forEach(cb => {
+    cb.addEventListener('change', bijwerkKopieerBlokkenToggleLabel);
+  });
+  bijwerkKopieerBlokkenToggleLabel();
 }
+
+// Label van de toggle-knop volgt de huidige staat: staat alles al aan, dan
+// biedt de knop aan om alles uit te zetten (en andersom). Zo blijft het
+// altijd een zinvolle actie i.p.v. een label dat losraakt van de werkelijke
+// staat van de checkboxes.
+function bijwerkKopieerBlokkenToggleLabel() {
+  const knop = document.getElementById('re-kopieer-blokken-toggle');
+  if (!knop) return;
+  const checkboxes = document.querySelectorAll('.re-kopieer-blok-checkbox');
+  const alleAan = checkboxes.length > 0 && [...checkboxes].every(cb => cb.checked);
+  knop.textContent = alleAan ? 'Select none' : 'Select all';
+}
+
+document.getElementById('re-kopieer-blokken-toggle').addEventListener('click', () => {
+  const checkboxes = document.querySelectorAll('.re-kopieer-blok-checkbox');
+  const alleAan = [...checkboxes].every(cb => cb.checked);
+  checkboxes.forEach(cb => { cb.checked = !alleAan; });
+  bijwerkKopieerBlokkenToggleLabel();
+});
 
 function leesGekozenKopieerBlokken() {
   const gekozen = new Set();
