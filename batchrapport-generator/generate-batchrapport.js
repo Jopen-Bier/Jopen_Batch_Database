@@ -169,9 +169,29 @@ const RIJ_KELDER_EERSTE = 91;
 const RIJ_KELDER_LAATSTE = 95;
 const RIJ_KELDER_SJABLOON = 92;
 
+// Bouwt de fysieke rij-indeling van de Hop boil-tabel: de gesorteerde
+// hopgiften met een extra `null` (= lege, witte scheidingsrij) ingevoegd
+// tussen twee opeenvolgende regels met een ANDER toevoegmoment (tijdstip).
+// Deze witregel maakt de vroegere dikke-lijn-per-groep overbodig binnen
+// Hop boil (zie zetHopGroepRanden) en telt mee als extra fysieke rij voor
+// de rij-overloop-berekening hieronder. Nooit een scheidingsrij ná de
+// laatste groep (dat is de overgang naar Dry hop, ongewijzigd).
+function bouwHopKookLayout(bundel) {
+  const hopRijen = sorteerHopgiften(bundel.recipe_ingredients.filter(r => r.rol === 'hopgift_kook'), 'hopgift_kook');
+  const layout = [];
+  for (let i = 0; i < hopRijen.length; i++) {
+    layout.push(hopRijen[i]);
+    const volgende = hopRijen[i + 1];
+    if (volgende && String(volgende.tijdstip) !== String(hopRijen[i].tijdstip)) {
+      layout.push(null);
+    }
+  }
+  return layout;
+}
+
 async function voegOverloopRijenToe(writer, bundel) {
   const moutAantal = bundel.recipe_ingredients.filter(r => r.rol === 'hoofdmout').length;
-  const hopAantal = bundel.recipe_ingredients.filter(r => r.rol === 'hopgift_kook').length;
+  const hopAantal = bouwHopKookLayout(bundel).length;
   const dryHopAantal = bundel.recipe_ingredients.filter(r => r.rol === 'dry_hop').length;
   const brouwhuisAantal = bundel.recipe_ingredients.filter(r => r.rol === 'toegift_brouwerij').length;
   const kelderAantal = bundel.recipe_ingredients.filter(r => r.rol === 'toegift_kelder').length;
@@ -312,9 +332,11 @@ async function vulIngredientRijen(writer, bundel, overloop) {
   const rollen = ['hopgift_kook', 'dry_hop', 'hoofdmout', 'toegift_brouwerij', 'toegift_kelder', 'gist'];
   for (const rol of rollen) {
     const ongesorteerd = bundel.recipe_ingredients.filter(r => r.rol === rol);
-    const rijen = (rol === 'hopgift_kook' || rol === 'dry_hop')
-      ? sorteerHopgiften(ongesorteerd, rol)
-      : ongesorteerd.sort((a, b) => (a.volgorde ?? 0) - (b.volgorde ?? 0));
+    const rijen = rol === 'hopgift_kook'
+      ? bouwHopKookLayout(bundel)
+      : (rol === 'dry_hop'
+        ? sorteerHopgiften(ongesorteerd, rol)
+        : ongesorteerd.sort((a, b) => (a.volgorde ?? 0) - (b.volgorde ?? 0)));
 
     if (dynamischeBlokken[rol]) {
       const { eersteRij, vasteSloten, kolommen } = dynamischeBlokken[rol];
@@ -389,7 +411,7 @@ async function vulHopRendementEnEbu(writer, bundel, overloop) {
   const { n0, verschuifCel } = overloop;
   const og = bundel.recipe_specificaties.origineel_extract;
 
-  const hopRijen = sorteerHopgiften(bundel.recipe_ingredients.filter(r => r.rol === 'hopgift_kook'), 'hopgift_kook');
+  const hopRijen = bouwHopKookLayout(bundel);
 
   const eersteRij = RIJ_HOP_EERSTE + n0;
   const vasteSloten = RIJ_HOP_LAATSTE - RIJ_HOP_EERSTE + 1;
@@ -436,8 +458,12 @@ function kolomNummerNaarLetter(num) {
 // - Standaard een stippellijn onder elke rij (ook de nog ongebruikte
 //   hopslots), zodat losse toevoegingen binnen hetzelfde moment duidelijk
 //   maar licht gescheiden zijn.
-// - Een dikke lijn onder de laatste rij van elk daadwerkelijk toevoegmoment
-//   (overschrijft de stippellijn op die ene rij).
+// - Hop boil: tussen twee verschillende toevoegmomenten zit sinds deze
+//   wijziging een echte lege, witte rij (zie bouwHopKookLayout) i.p.v. een
+//   dikke lijn -- alleen de laatste rij van de hele Hop boil-tabel (overgang
+//   naar Dry hop) krijgt nog een dikke lijn.
+// - Dry hop: ongewijzigd, een dikke lijn onder de laatste rij van elk
+//   daadwerkelijk toevoegmoment (overschrijft de stippellijn op die ene rij).
 // Kolommen 1-16 (A t/m P, de Print Area-breedte). Veel cellen in deze tabel
 // zijn samengevoegd (bv. A43:C43) -- alleen de ankercel bestaat echt als
 // element, dus we lossen elke kolompositie eerst op naar zijn ankercel en
@@ -501,10 +527,17 @@ async function zetHopGroepRanden(writer, stylesManager, bundel, overloop) {
     }
   }
 
-  const hopRijen = sorteerHopgiften(bundel.recipe_ingredients.filter(r => r.rol === 'hopgift_kook'), 'hopgift_kook');
-  const dryHopRijen = sorteerHopgiften(bundel.recipe_ingredients.filter(r => r.rol === 'dry_hop'), 'dry_hop');
+  // Hop boil: geen dikke lijn meer per intern groepgrens -- dat is nu een
+  // echte witte scheidingsrij (bouwHopKookLayout). Alleen de laatste rij
+  // van de hele Hop boil-tabel (overgang naar Dry hop) krijgt nog een
+  // dikke lijn, net als voorheen.
+  const hopLayout = bouwHopKookLayout(bundel);
+  if (hopLayout.length > 0) {
+    await zetRandOpRij(hopEersteRij + hopLayout.length - 1, 1, 16, 'medium');
+  }
 
-  await dikkeRandenVoorBlok(hopRijen, hopEersteRij);
+  // Dry hop: ongewijzigd, dikke lijn per toevoegmoment.
+  const dryHopRijen = sorteerHopgiften(bundel.recipe_ingredients.filter(r => r.rol === 'dry_hop'), 'dry_hop');
   await dikkeRandenVoorBlok(dryHopRijen, dryHopEersteRij);
 }
 

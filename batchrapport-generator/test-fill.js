@@ -93,9 +93,16 @@ async function test() {
   console.log('Brouwen!F11 (altijd naam_special_bin):', wsB.getCell('F11').value);
   console.log('Brouwen!M36 (Automatic dosing):', wsB.getCell('M36').value);
   console.log('Brouwen!N8 (Gewenste stamwort, moet 16 zijn):', wsB.getCell('N8').value);
+  // Nieuw: witregel tussen Hop boil-toevoegmomenten (i.p.v. dikke lijn per
+  // groep). Testrecept: Magnum(45)+Saaz(45) -> witregel -> Citra CRYO(0).
+  console.log('A43 (Magnum, 45 min):', ws.getCell('A43').value);
+  console.log('A44 (Saaz, 45 min):', ws.getCell('A44').value);
+  console.log('A45 (moet LEEG zijn -- witregel):', ws.getCell('A45').value);
+  console.log('A46 (Citra CRYO, 0 min):', ws.getCell('A46').value);
   console.log('A43 border (moet GEEN dikke rand):', JSON.stringify(ws.getCell('A43').border));
-  console.log('A44 border (moet WEL dikke rand, laatste 45min):', JSON.stringify(ws.getCell('A44').border));
-  console.log('A45 border (moet WEL dikke rand, 0min):', JSON.stringify(ws.getCell('A45').border));
+  console.log('A44 border (moet GEEN dikke rand meer, nu witregel i.p.v. lijn):', JSON.stringify(ws.getCell('A44').border));
+  console.log('A45 border (witregel, geen dikke rand):', JSON.stringify(ws.getCell('A45').border));
+  console.log('A46 border (moet WEL dikke rand -- laatste rij Hop boil):', JSON.stringify(ws.getCell('A46').border));
 }
 
 test().catch(e => { console.error(e); process.exit(1); });
