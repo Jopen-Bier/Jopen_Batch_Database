@@ -201,13 +201,13 @@
             <select id="re-kopieer-select"><option value="">— start blank —</option></select>
           </div>
         </div>
-        <div class="re-subkop" style="margin-top:14px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
-          <span>Blocks to copy</span>
-          <button type="button" id="re-kopieer-blokken-toggle" style="font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; background: none; border: none; color: var(--hop-dark); text-decoration: underline; cursor: pointer; padding: 0;">Select none</button>
-        </div>
+        <div class="re-subkop" style="margin-top:14px;">Blocks to copy</div>
         <p class="re-versie-uitleg" style="margin-top:-4px;">All blocks are copied by default — untick anything you'd rather fill in yourself.</p>
         <div id="re-kopieer-blokken" class="re-grid"></div>
-        <button type="button" class="re-btn secundair" id="re-kopieer-btn" style="margin-top:14px;">Copy into this form</button>
+        <div style="display:flex; align-items:center; margin-top:14px;">
+          <button type="button" class="re-btn secundair" id="re-kopieer-btn">Copy into this form</button>
+          <button type="button" class="re-btn secundair" id="re-kopieer-blokken-toggle" style="margin-left:auto;">Select none</button>
+        </div>
         <span id="re-kopieer-melding" class="re-melding"></span>
       </div>
 
