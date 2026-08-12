@@ -101,10 +101,11 @@
         return;
       }
 
-      // Bewust niet blokkerend op een eventuele fout hier: het bijwerken van
-      // het laatst-ingelogd-tijdstip mag nooit de login zelf laten mislukken.
-      try { await supabaseClient.rpc('zet_laatst_ingelogd'); } catch (e) { /* stil negeren */ }
-
+      // "Last login" wordt sinds de admin_haal_laatste_logins-migratie recht-
+      // streeks uit auth.users.last_sign_in_at gelezen (altijd actueel, ook
+      // bij een hersteld/onthouden sessie i.p.v. alleen een verse
+      // wachtwoord-login) -- deze pagina hoeft dat dus zelf niet meer bij te
+      // houden.
       window.location.href = nieuweRedirectDoel();
     });
 

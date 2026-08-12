@@ -212,14 +212,27 @@
     }
 
     async function laadGebruikersLijst() {      const container = document.getElementById('gebruikers-lijst');
-      const { data, error } = await supabaseClient
-        .from('gebruikers')
-        .select('id, naam, rol, actief, aangemaakt_op, laatst_ingelogd')
-        .order('naam');
+      const [{ data, error }, loginsResult] = await Promise.all([
+        supabaseClient
+          .from('gebruikers')
+          .select('id, naam, rol, actief, aangemaakt_op')
+          .order('naam'),
+        // auth.users.last_sign_in_at is Supabase's eigen, altijd-actuele bron
+        // (zie migratie admin_haal_laatste_logins voor waarom niet meer op
+        // gebruikers.laatst_ingelogd wordt vertrouwd).
+        supabaseClient.rpc('admin_haal_laatste_logins'),
+      ]);
 
       if (error) {
         container.innerHTML = `<p class="jopen-form-melding fout">Could not load users: ${error.message}</p>`;
         return;
+      }
+
+      const laatsteLoginPerGebruiker = {};
+      if (!loginsResult.error) {
+        (loginsResult.data || []).forEach(r => { laatsteLoginPerGebruiker[r.id] = r.laatst_ingelogd; });
+      } else {
+        console.error('Could not load last-login timestamps:', loginsResult.error);
       }
 
       if (!data || data.length === 0) {
@@ -238,7 +251,7 @@
               : `<select class="gebr-rol-select">${rolOptiesHtml(g.rol)}</select>`}
           </td>
           <td>${g.actief ? 'Yes' : '<span class="actief-nee">No</span>'}</td>
-          <td>${formatLaatstIngelogd(g.laatst_ingelogd)}</td>
+          <td>${formatLaatstIngelogd(laatsteLoginPerGebruiker[g.id])}</td>
           <td>
             ${isZelf
               ? `<span class="gebr-zelf">(you)</span>`
