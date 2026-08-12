@@ -970,13 +970,15 @@ async function brZetHopGroepRanden(writer, stylesManager, bundel, overloop) {
     }
   }
 
-  // Hop boil: geen dikke lijn meer per intern groepgrens -- dat is nu een
-  // echte witte scheidingsrij (bouwHopKookLayout). Alleen de laatste rij
-  // van de hele Hop boil-tabel (overgang naar Dry hop) krijgt nog een
-  // dikke lijn.
+  // Hop boil: dikke lijn op de laatste rij van elk toevoegmoment (vlak boven
+  // elke witte scheidingsrij uit bouwHopKookLayout), plus op de allerlaatste
+  // rij van de hele Hop boil-tabel (overgang naar Dry hop).
   const hopLayout = bouwHopKookLayout(bundel);
-  if (hopLayout.length > 0) {
-    await zetRandOpRij(hopEersteRij + hopLayout.length - 1, 1, 16, 'medium');
+  for (let i = 0; i < hopLayout.length; i++) {
+    if (hopLayout[i] === null) continue;
+    const laatsteVanGroep = i === hopLayout.length - 1 || hopLayout[i + 1] === null;
+    if (!laatsteVanGroep) continue;
+    await zetRandOpRij(hopEersteRij + i, 1, 16, 'medium');
   }
 
   const dryHopRijen = sorteerHopgiften(bundel.recipe_ingredients.filter(r => r.rol === 'dry_hop'), 'dry_hop');

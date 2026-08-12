@@ -458,10 +458,11 @@ function kolomNummerNaarLetter(num) {
 // - Standaard een stippellijn onder elke rij (ook de nog ongebruikte
 //   hopslots), zodat losse toevoegingen binnen hetzelfde moment duidelijk
 //   maar licht gescheiden zijn.
-// - Hop boil: tussen twee verschillende toevoegmomenten zit sinds deze
-//   wijziging een echte lege, witte rij (zie bouwHopKookLayout) i.p.v. een
-//   dikke lijn -- alleen de laatste rij van de hele Hop boil-tabel (overgang
-//   naar Dry hop) krijgt nog een dikke lijn.
+// - Hop boil: tussen twee verschillende toevoegmomenten zit een echte lege,
+//   witte rij (zie bouwHopKookLayout) EN een dikke lijn op de laatste rij
+//   van elk toevoegmoment (dus vlak boven elke witregel, plus op de allerlaatste
+//   rij van de hele Hop boil-tabel, de overgang naar Dry hop) -- witregel en
+//   dikke lijn samen maken een ander toevoegmoment extra duidelijk.
 // - Dry hop: ongewijzigd, een dikke lijn onder de laatste rij van elk
 //   daadwerkelijk toevoegmoment (overschrijft de stippellijn op die ene rij).
 // Kolommen 1-16 (A t/m P, de Print Area-breedte). Veel cellen in deze tabel
@@ -527,13 +528,17 @@ async function zetHopGroepRanden(writer, stylesManager, bundel, overloop) {
     }
   }
 
-  // Hop boil: geen dikke lijn meer per intern groepgrens -- dat is nu een
-  // echte witte scheidingsrij (bouwHopKookLayout). Alleen de laatste rij
-  // van de hele Hop boil-tabel (overgang naar Dry hop) krijgt nog een
-  // dikke lijn, net als voorheen.
+  // Hop boil: dikke lijn op de laatste rij van elk toevoegmoment (dus vlak
+  // boven elke witte scheidingsrij uit bouwHopKookLayout), plus op de
+  // allerlaatste rij van de hele Hop boil-tabel (overgang naar Dry hop).
+  // Loopt over de fysieke layout (incl. de null-scheidingsrijen) zodat de
+  // rijnummers kloppen ook als er al eerder scheidingsrijen zijn geweest.
   const hopLayout = bouwHopKookLayout(bundel);
-  if (hopLayout.length > 0) {
-    await zetRandOpRij(hopEersteRij + hopLayout.length - 1, 1, 16, 'medium');
+  for (let i = 0; i < hopLayout.length; i++) {
+    if (hopLayout[i] === null) continue;
+    const laatsteVanGroep = i === hopLayout.length - 1 || hopLayout[i + 1] === null;
+    if (!laatsteVanGroep) continue;
+    await zetRandOpRij(hopEersteRij + i, 1, 16, 'medium');
   }
 
   // Dry hop: ongewijzigd, dikke lijn per toevoegmoment.

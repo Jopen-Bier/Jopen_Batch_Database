@@ -100,7 +100,7 @@ async function test() {
   console.log('A45 (moet LEEG zijn -- witregel):', ws.getCell('A45').value);
   console.log('A46 (Citra CRYO, 0 min):', ws.getCell('A46').value);
   console.log('A43 border (moet GEEN dikke rand):', JSON.stringify(ws.getCell('A43').border));
-  console.log('A44 border (moet GEEN dikke rand meer, nu witregel i.p.v. lijn):', JSON.stringify(ws.getCell('A44').border));
+  console.log('A44 border (moet WEL dikke rand -- laatste van groep 45min, vlak boven witregel):', JSON.stringify(ws.getCell('A44').border));
   console.log('A45 border (witregel, geen dikke rand):', JSON.stringify(ws.getCell('A45').border));
   console.log('A46 border (moet WEL dikke rand -- laatste rij Hop boil):', JSON.stringify(ws.getCell('A46').border));
 }
