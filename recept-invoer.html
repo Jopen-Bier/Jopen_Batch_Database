@@ -714,6 +714,7 @@ const KOSTEN_FIELDS = [
 
 let huidigeGebruiker = null;
 let alleIngredientenLijst = [];
+let alleEenhedenLijst = [];
 let bestaandRecept = null;
 let ingredientRegelTeller = 0;
 let receptModus = null; // 'nieuw' | 'bestaand'
@@ -830,6 +831,24 @@ function leesParamGrid(fields) {
 // Weergavetekst voor een ingrediënt-id, zelfde format als de oude
 // <option>-labels ("naam — categorie"). Gebruikt door de zoekbare
 // ingrediënt-combobox hieronder (initieel invullen + na een keuze).
+// Optielijst voor de Unit-select op receptregels, gevoed uit Settings ->
+// Units (alleEenhedenLijst) -- zelfde bron/format ("code — label") als de
+// ingrediëntkaart. Een bestaande, opgeslagen waarde die niet (meer) in de
+// lijst voorkomt (legacy vrije tekst van vóór deze wijziging) blijft als
+// losse optie zichtbaar zodat openen/opslaan van een oud recept die
+// waarde niet stilzwijgend wist -- wel duidelijk gemarkeerd als "not in
+// list" zodat het opvalt en op termijn recht te trekken is.
+function eenhedenOptiesVoorRegel(geselecteerdeCode) {
+  const bekend = alleEenhedenLijst.some(e => e.code === geselecteerdeCode);
+  const extra = (geselecteerdeCode && !bekend)
+    ? `<option value="${escapeHtml(geselecteerdeCode)}" selected>${escapeHtml(geselecteerdeCode)} (not in list)</option>`
+    : '';
+  const opties = alleEenhedenLijst.map(e =>
+    `<option value="${escapeHtml(e.code)}" ${e.code === geselecteerdeCode ? 'selected' : ''}>${escapeHtml(e.code)} — ${escapeHtml(e.label)}</option>`
+  ).join('');
+  return `<option value="" ${!geselecteerdeCode ? 'selected' : ''}>—</option>${opties}${extra}`;
+}
+
 function ingredientWeergaveNaam(id) {
   const i = alleIngredientenLijst.find(x => String(x.id) === String(id));
   if (!i) return '';
@@ -981,7 +1000,7 @@ function voegIngredientRegelToe(tbodyId, rollenLijst, regel = {}) {
     </td>
     ${alphaKolomHtml}
     <td><input type="number" class="re-ing-hoeveelheid" value="${regel.hoeveelheid ?? ''}" /></td>
-    <td><input type="text" class="re-ing-eenheid" value="${regel.eenheid ?? ''}" /></td>
+    <td><select class="re-ing-eenheid">${eenhedenOptiesVoorRegel(regel.eenheid ?? '')}</select></td>
     ${ebcKolomHtml}
     ${percentageKolomHtml}
     ${tijdstipKolomHtml}
@@ -1034,6 +1053,24 @@ function voegIngredientRegelToe(tbodyId, rollenLijst, regel = {}) {
         const gekozen = alleIngredientenLijst.find(i => String(i.id) === ingredientSelect.value);
         if (gekozen && gekozen.alpha_pct !== undefined && gekozen.alpha_pct !== null && alphaInput.value === '') {
           alphaInput.value = gekozen.alpha_pct;
+        }
+      });
+    }
+  }
+
+  // Unit automatisch voorstellen vanuit de standaardwaarde op het
+  // ingrediënt zelf, zodra een ingrediënt gekozen wordt in een nog lege
+  // Unit-select (blijft aanpasbaar, en overschrijft nooit een reeds
+  // gekozen/opgeslagen waarde).
+  {
+    const ingredientSelect = tr.querySelector('.re-ing-ingredient');
+    const eenheidSelect = tr.querySelector('.re-ing-eenheid');
+    if (ingredientSelect && eenheidSelect && !regel.eenheid) {
+      ingredientSelect.addEventListener('change', () => {
+        const gekozen = alleIngredientenLijst.find(i => String(i.id) === ingredientSelect.value);
+        if (gekozen && gekozen.eenheid && eenheidSelect.value === '') {
+          const optieBestaat = [...eenheidSelect.options].some(o => o.value === gekozen.eenheid);
+          if (optieBestaat) eenheidSelect.value = gekozen.eenheid;
         }
       });
     }
@@ -1454,11 +1491,22 @@ async function initReceptInvoer() {
 
   const { data: ingData, error: ingError } = await supabaseClient
     .from('ingredients')
-    .select('id, naam, ingredient_categories(name)')
+    .select('id, naam, eenheid, ingredient_categories(name)')
     .order('naam');
   if (!ingError) {
-    alleIngredientenLijst = (ingData || []).map(i => ({ id: i.id, naam: i.naam, categorie_naam: i.ingredient_categories?.name }));
+    alleIngredientenLijst = (ingData || []).map(i => ({ id: i.id, naam: i.naam, eenheid: i.eenheid, categorie_naam: i.ingredient_categories?.name }));
   }
+
+  // Vaste eenhedenlijst uit Settings -> Units. De Unit-kolom op receptregels
+  // was vrije tekst -- dat gaf inconsistente waarden (zie ook Consumption
+  // Forecast, die per ingrediënt+eenheid groepeert en dus fragmenteert bij
+  // afwijkende schrijfwijzen). Nu een vaste keuzelijst, net als bij de
+  // ingrediëntkaart.
+  const { data: eenhedenData, error: eenhedenError } = await supabaseClient
+    .from('eenheden')
+    .select('id, code, label, sort_order')
+    .order('sort_order');
+  if (!eenhedenError) alleEenhedenLijst = eenhedenData || [];
 
   renderParamGrid('re-specs-grid', SPECS_FIELDS, null);
   renderParamGrid('re-ferm-grid', FERM_FIELDS, null);

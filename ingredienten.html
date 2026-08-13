@@ -301,6 +301,7 @@
 <script>
 let alleIngredienten = [];
 let alleCategorieen = [];
+let alleEenheden = [];
 let huidigeGebruikerRol = null; // filled with the role name, or null (not logged in)
 let huidigeGebruiker = null;
 let magIngBewerken = false;   // rechten voor module 'ingredients', geladen in initIngredientenPagina
@@ -344,6 +345,23 @@ const HOUDBAARHEID_EENHEDEN = [
 function houdbaarheidLabel(waarde, eenheid) {
   if (waarde === null || waarde === undefined || waarde === '') return '—';
   return `${waarde} ${eenheid || ''}`.trim();
+}
+
+// Optielijst voor de Unit-select op de ingrediëntkaart, gevoed uit
+// Settings -> Units (alleEenheden). Toont "code — label" zodat meteen
+// duidelijk is wat elke code betekent. Een bestaande, opgeslagen waarde
+// die niet (meer) in de eenhedenlijst voorkomt (bv. handmatig in de
+// database gezet) blijft als losse optie zichtbaar zodat opslaan die
+// waarde niet stilzwijgend wist.
+function eenhedenOpties(geselecteerdeCode) {
+  const bekend = alleEenheden.some(e => e.code === geselecteerdeCode);
+  const extra = (geselecteerdeCode && !bekend)
+    ? `<option value="${escapeHtml(geselecteerdeCode)}" selected>${escapeHtml(geselecteerdeCode)} (not in list)</option>`
+    : '';
+  const opties = alleEenheden.map(e =>
+    `<option value="${escapeHtml(e.code)}" ${e.code === geselecteerdeCode ? 'selected' : ''}>${escapeHtml(e.code)} — ${escapeHtml(e.label)}</option>`
+  ).join('');
+  return `<option value="" ${!geselecteerdeCode ? 'selected' : ''}>— select —</option>${opties}${extra}`;
 }
 
 // Eén gedeelde popup (in de DOM aanwezig, zie onder de kaart-HTML) voor
@@ -439,6 +457,16 @@ async function initIngredientenPagina() {
     .select('id, name, uses_alpha_pct, uses_extract_pct, uses_gistfactor')
     .order('sort_order');
   if (!categorieError) alleCategorieen = categorieData || [];
+
+  // Vaste eenhedenlijst uit Settings -> Units (zelfde bron als straks de
+  // recipe-regels) -- de Unit-selectie op de ingrediëntkaart komt hieruit
+  // i.p.v. vrije tekst, zodat nieuwe ingrediënten meteen een consistente
+  // code krijgen.
+  const { data: eenhedenData, error: eenhedenError } = await supabaseClient
+    .from('eenheden')
+    .select('id, code, label, sort_order')
+    .order('sort_order');
+  if (!eenhedenError) alleEenheden = eenhedenData || [];
 
   laadIngredienten();
 }
@@ -965,7 +993,12 @@ function renderDetailBewerken(i) {  const container = document.getElementById('i
           ${categorieOpties}
         </select>
       </div>
-      ${veld('Unit', 'eenheid')}
+      <div class="ing-edit-row">
+        <label for="veld-eenheid">Unit</label>
+        <select id="veld-eenheid" style="width:200px;">
+          ${eenhedenOpties(i.eenheid ?? '')}
+        </select>
+      </div>
       <div class="ing-kv"><span>Version</span><span>v${i.versie_major ?? 1}.${i.versie_minor ?? 0}</span></div>
       <div class="ing-edit-row">
         <label for="veld-status">Status</label>
@@ -1334,7 +1367,12 @@ function toonNieuwFormulier() {
           ${categorieOpties}
         </select>
       </div>
-      ${veld('Unit', 'nieuw-eenheid')}
+      <div class="ing-edit-row">
+        <label for="nieuw-eenheid">Unit</label>
+        <select id="nieuw-eenheid" style="width:200px;">
+          ${eenhedenOpties('')}
+        </select>
+      </div>
       <div class="ing-edit-row">
         <label for="nieuw-status">Status</label>
         <select id="nieuw-status" style="width:160px;">

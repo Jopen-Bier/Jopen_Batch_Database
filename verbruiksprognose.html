@@ -42,6 +42,10 @@
   .vp-detail-rij { display: none; background: #fafafa; }
   .vp-detail-rij td { padding: 6px 14px 10px 30px; font-size: 0.88em; color: #555; }
   .vp-detail-rij ul { margin: 4px 0 0 0; padding-left: 18px; }
+  .vp-mixed-badge {
+    display: inline-block; font-size: 0.78em; font-weight: 600; color: #8a5a1e;
+    background: #f3e3c9; border-radius: 10px; padding: 2px 8px; margin-left: 6px; cursor: help;
+  }
   .vp-leeg { padding: 24px; text-align: center; color: #999; }
   .vp-skeleton { color: #bbb; padding: 20px; }
 
@@ -159,6 +163,22 @@
       return null;
     }
 
+    // Genormaliseerde eenheid voor GROEPERING (niet voor weergave): spatie/
+    // hoofdletter-ongevoelig, plus een kleine synoniemenlijst voor de
+    // varianten die in de praktijk voorkomen. Onbekende eenheden komen
+    // gewoon (getrimd/lowercase) terug -- die vormen dan hun eigen groep,
+    // in plaats van dat we onterecht gaan gokken dat ze hetzelfde zijn.
+    const EENHEID_SYNONIEMEN = {
+      kilogram: 'kg', kilo: 'kg',
+      gr: 'g', gram: 'g', grams: 'g',
+      liter: 'l', litre: 'l',
+      milliliter: 'ml', millilitre: 'ml',
+    };
+    function canoniekeEenheid(waarde) {
+      const e = (waarde || '').trim().toLowerCase();
+      return EENHEID_SYNONIEMEN[e] || e;
+    }
+
     let huidigJaar = new Date().getFullYear();
     let actieveRolFilter = 'alle';
     let laatsteResultaat = null; // { perRol: { rol: [{ingredientId, naam, eenheid, totaal, perRecept:[{naam,brouwsels,hoeveelheid}]}] }, aantalBrouwsels, aantalRecepten }
@@ -247,19 +267,36 @@
         return;
       }
 
-      // 3. Namen van recepten en ingrediënten erbij (voor weergave)
+      // 3. Namen van recepten en ingrediënten erbij (voor weergave), plus de
+      // eigen standaard-eenheid van elk ingrediënt -- gebruikt hieronder als
+      // terugvaloptie wanneer een receptregel zelf geen eenheid heeft.
       const [{ data: recepten }, { data: ingredienten }] = await Promise.all([
         supabaseClient.from('recipes').select('id, naam').in('id', receptIds),
-        supabaseClient.from('ingredients').select('id, naam').in(
+        supabaseClient.from('ingredients').select('id, naam, eenheid').in(
           'id', [...new Set((ingredientRegels || []).map(r => r.ingredient_id).filter(x => x != null))]
         ),
       ]);
       const receptNaamMap = {};
       (recepten || []).forEach(r => { receptNaamMap[r.id] = r.naam; });
       const ingredientNaamMap = {};
-      (ingredienten || []).forEach(i => { ingredientNaamMap[i.id] = i.naam; });
+      const ingredientEenheidMap = {};
+      (ingredienten || []).forEach(i => {
+        ingredientNaamMap[i.id] = i.naam;
+        ingredientEenheidMap[i.id] = i.eenheid || '';
+      });
 
-      // 4. Optellen: per rol -> per ingredient -> totaal + per-recept-detail
+      // 4. Optellen: per rol -> per ingredient -> totaal + per-recept-detail.
+      // Groepering gebeurt op een GENORMALISEERDE eenheid (spatie/hoofdletter-
+      // ongevoelig, met een kleine synoniemenlijst) zodat bv. "Gram" en "g "
+      // gewoon samengevoegd worden i.p.v. losse regels op te leveren. Heeft
+      // een receptregel zelf geen eenheid, dan valt hij terug op de eigen
+      // standaard-eenheid van het ingrediënt (indien bekend) -- pas als ook
+      // dat leeg is, blijft de regel in de "geen eenheid bekend"-groep
+      // hangen. Twee genormaliseerd ECHT verschillende eenheden voor
+      // hetzelfde ingrediënt worden bewust NIET bij elkaar opgeteld (dat zou
+      // rekenkundig fout zijn, bv. kg + g), maar wel gemarkeerd als
+      // "mixedUnits" zodat het in de UI opvalt in plaats van stilzwijgend
+      // als twee onverklaarde regels te verschijnen.
       const perRol = {};
       (ingredientRegels || []).forEach(regel => {
         if (regel.ingredient_id == null || regel.hoeveelheid == null) return;
@@ -268,12 +305,15 @@
 
         const rol = naarWeergaveRol(regel.rol);
         if (!perRol[rol]) perRol[rol] = {};
-        const key = `${regel.ingredient_id}|${regel.eenheid || ''}`;
+        const effectieveEenheid = (regel.eenheid && regel.eenheid.trim() !== '')
+          ? regel.eenheid
+          : (ingredientEenheidMap[regel.ingredient_id] || '');
+        const key = `${regel.ingredient_id}|${canoniekeEenheid(effectieveEenheid)}`;
         if (!perRol[rol][key]) {
           perRol[rol][key] = {
             ingredientId: regel.ingredient_id,
             naam: ingredientNaamMap[regel.ingredient_id] || `#${regel.ingredient_id}`,
-            eenheid: regel.eenheid || '',
+            eenheid: effectieveEenheid,
             totaal: 0,
             perRecept: {},
           };
@@ -284,6 +324,19 @@
         const receptNaam = receptNaamMap[regel.recipe_id] || `#${regel.recipe_id}`;
         if (!perRol[rol][key].perRecept[receptNaam]) perRol[rol][key].perRecept[receptNaam] = 0;
         perRol[rol][key].perRecept[receptNaam] += bijdrage;
+      });
+
+      // Markeer ingrediënten die (na normalisatie/terugval) alsnog met
+      // meerdere verschillende eenheden in dezelfde rol voorkomen -- puur
+      // ter signalering in de UI, verandert niets aan de totalen zelf.
+      Object.values(perRol).forEach(ingredientenVanRol => {
+        const perIngredient = {};
+        Object.values(ingredientenVanRol).forEach(r => {
+          (perIngredient[r.ingredientId] = perIngredient[r.ingredientId] || []).push(r);
+        });
+        Object.values(perIngredient).forEach(rijen => {
+          if (rijen.length > 1) rijen.forEach(r => { r.mixedUnits = true; });
+        });
       });
 
       laatsteResultaat = {
@@ -326,9 +379,12 @@
               <tbody>
                 ${rijen.map((r, i) => {
                   const kg = isHopsGroep ? naarKg(r.eenheid, r.totaal) : null;
+                  const mixedBadge = r.mixedUnits
+                    ? ` <span class="vp-mixed-badge" title="This ingredient has quantities recorded under more than one unit (check the ingredient card and recipe lines) — these are shown as separate rows and NOT added together, since that could combine incompatible units.">⚠ mixed units</span>`
+                    : '';
                   return `
                   <tr class="vp-rij-ingredient" data-detail="detail-${rol}-${i}">
-                    <td>${escapeHtml(r.naam)}</td>
+                    <td>${escapeHtml(r.naam)}${mixedBadge}</td>
                     <td>${formatGetal(r.totaal)}${r.eenheid ? ' ' + escapeHtml(r.eenheid) : ''}</td>
                     ${isHopsGroep ? `<td>${kg !== null ? formatGetal(kg) + ' kg' : `<span title="Unit '${escapeHtml(r.eenheid || '')}' not recognized — check manually">—</span>`}</td>` : ''}
                   </tr>
