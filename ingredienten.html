@@ -118,6 +118,24 @@
     padding: 10px 18px; border-radius: 4px; font-family: var(--mono); font-size: 12px; cursor: pointer;
   }
 
+  /* Save/Cancel bij het bewerken van een ingrediënt: altijd in beeld
+     onderaan, zelfde patroon als de savebar op de receptenpagina, i.p.v.
+     onderaan een (mogelijk lange) kaart-lijst waar je eerst naartoe moet
+     scrollen. */
+  .ing-savebar {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 40;
+    background: #fff; border-top: 3px solid var(--amber);
+    box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+    padding: 12px 24px; display: flex; align-items: center; justify-content: flex-end; gap: 10px;
+  }
+  .ing-savebar-info { font-family: var(--mono); font-size: 12px; color: #6b6355; margin-right: auto; }
+  .ing-savebar .ing-opslaan-btn, .ing-savebar .ing-annuleer-btn { margin: 0; }
+  .ing-savebar .ing-opslaan-btn {
+    background: var(--amber); padding: 12px 24px; font-size: 13px; box-shadow: 0 2px 6px rgba(180,119,44,0.35);
+  }
+  .ing-savebar .ing-opslaan-btn:hover { background: #a3651f; }
+  .ing-main { padding-bottom: 90px; }
+
   .ing-edit-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; gap: 10px; }
   .ing-edit-row label { color: #6b6355; font-size: 14px; }
   .ing-edit-row input, .ing-edit-row select, .ing-edit-row textarea {
@@ -269,6 +287,12 @@
     </div>
   </div>
 </main>
+
+<div class="ing-savebar" id="ing-savebar" style="display:none;">
+  <span class="ing-savebar-info" id="ing-savebar-info"></span>
+  <button type="button" class="ing-annuleer-btn" id="ing-savebar-cancel-btn">Cancel</button>
+  <button type="button" class="ing-opslaan-btn" id="ing-savebar-save-btn"></button>
+</div>
 
 <div class="ing-modal-overlay" id="ing-save-modal-overlay" style="display:none;">
   <div class="ing-modal">
@@ -812,7 +836,29 @@ document.getElementById('ing-used-in-search').addEventListener('input', (e) => {
   renderGebruiktInRecepten(gefilterd);
 });
 
+// Eén vaste, altijd-in-beeld Save/Cancel-balk onderaan het scherm tijdens
+// het bewerken van een ingrediënt of het aanmaken van een nieuwe -- zelfde
+// patroon als de savebar op de receptenpagina, i.p.v. onderaan een
+// (mogelijk lange) kaart-lijst waar je eerst naartoe moet scrollen. Eén
+// vast DOM-element (i.p.v. steeds opnieuw aanmaken bij elke render) om te
+// voorkomen dat er dubbele balken ontstaan bij herhaaldelijk bewerken.
+function toonIngSavebar(infoTekst, opslaanLabel, onOpslaan, onAnnuleren) {
+  document.getElementById('ing-savebar-info').textContent = infoTekst;
+  const opslaanBtn = document.getElementById('ing-savebar-save-btn');
+  opslaanBtn.textContent = opslaanLabel;
+  // .onclick i.p.v. addEventListener: overschrijft de vorige handler
+  // automatisch, zodat handlers van een eerdere bewerksessie niet blijven
+  // opstapelen op dit permanente element.
+  opslaanBtn.onclick = onOpslaan;
+  document.getElementById('ing-savebar-cancel-btn').onclick = onAnnuleren;
+  document.getElementById('ing-savebar').style.display = 'flex';
+}
+function verbergIngSavebar() {
+  document.getElementById('ing-savebar').style.display = 'none';
+}
+
 function renderDetailAlleen(id) {
+  verbergIngSavebar();
   const i = alleIngredienten.find(x => String(x.id) === String(id));
   const container = document.getElementById('ing-detail-container');
   if (!i) {
@@ -1033,8 +1079,6 @@ function renderDetailBewerken(i) {  const container = document.getElementById('i
       ${veld('Density', 'dichtheid', '', 'number')}
       ${veld('Alcohol content', 'alcohol_pct', '%', 'number')}
     </div>
-    <button class="ing-opslaan-btn" id="ing-opslaan-btn">Save</button>
-    <button class="ing-annuleer-btn" id="ing-annuleer-btn">Cancel</button>
     <div id="ing-edit-melding" class="ing-melding"></div>
   `;
 
@@ -1060,8 +1104,12 @@ function renderDetailBewerken(i) {  const container = document.getElementById('i
   categorieSelect.addEventListener('change', pasVeldZichtbaarheidToe);
   pasVeldZichtbaarheidToe();
 
-  document.getElementById('ing-annuleer-btn').addEventListener('click', () => renderDetailAlleen(i.id));
-  document.getElementById('ing-opslaan-btn').addEventListener('click', () => openIngSaveModal(i));
+  toonIngSavebar(
+    `Editing: ${i.naam} · v${i.versie_major ?? 1}.${i.versie_minor ?? 0}`,
+    'Save',
+    () => openIngSaveModal(i),
+    () => renderDetailAlleen(i.id)
+  );
 }
 
 // -- Versiebeheer opslaan-popup, zelfde patroon als recept-invoer.html --
@@ -1288,6 +1336,7 @@ async function slaIngredientOp(i, soort, wijziging) {
   renderFilterToggles();
 
   setTimeout(() => {
+    verbergIngSavebar();
     document.getElementById('ing-detail').classList.remove('actief');
     document.getElementById('ing-list-view').style.display = 'block';
     pasFiltersToe();
@@ -1412,8 +1461,6 @@ function toonNieuwFormulier() {
       ${veld('Density', 'nieuw-dichtheid', '', 'number')}
       ${veld('Alcohol content', 'nieuw-alcohol_pct', '%', 'number')}
     </div>
-    <button class="ing-opslaan-btn" id="nieuw-opslaan-btn">Add</button>
-    <button class="ing-annuleer-btn" id="nieuw-annuleer-btn">Cancel</button>
     <div id="nieuw-melding" class="ing-melding"></div>
   `;
 
@@ -1435,11 +1482,11 @@ function toonNieuwFormulier() {
   categorieSelect.addEventListener('change', pasVeldZichtbaarheidToe);
   pasVeldZichtbaarheidToe(); // nothing visible until a category is chosen
 
-  document.getElementById('nieuw-annuleer-btn').addEventListener('click', () => {
+  toonIngSavebar('New ingredient', 'Add', slaNieuwIngredientOp, () => {
+    verbergIngSavebar();
     document.getElementById('ing-detail').classList.remove('actief');
     document.getElementById('ing-list-view').style.display = 'block';
   });
-  document.getElementById('nieuw-opslaan-btn').addEventListener('click', slaNieuwIngredientOp);
 }
 
 async function slaNieuwIngredientOp() {
@@ -1533,6 +1580,7 @@ async function slaNieuwIngredientOp() {
   melding.className = 'ing-melding ok';
 
   setTimeout(() => {
+    verbergIngSavebar();
     document.getElementById('ing-detail').classList.remove('actief');
     document.getElementById('ing-list-view').style.display = 'block';
     pasFiltersToe();
@@ -1540,6 +1588,7 @@ async function slaNieuwIngredientOp() {
 }
 
 document.getElementById('ing-back-btn').addEventListener('click', () => {
+  verbergIngSavebar();
   document.getElementById('ing-detail').classList.remove('actief');
   document.getElementById('ing-list-view').style.display = 'block';
 });
