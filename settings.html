@@ -45,6 +45,9 @@
     .cat-nieuw-rij input[type="text"] { min-width: 140px; }
     .rij-verwijder-btn { background: #fff; border: 1px solid #a33f2c; color: #a33f2c; border-radius: 4px; padding: 3px 10px; cursor: pointer; font-size: 0.85em; }
     .rij-verwijder-btn:hover { background: #fbeae6; }
+    .eenheid-drag-handle { width: 22px; cursor: grab; color: #999; text-align: center; }
+    .eenheid-drag-handle:active { cursor: grabbing; }
+    tr.eenheid-slepend { opacity: 0.4; }
     .geen-toegang { padding: 40px 0; color: #555; }
   </style>
 </head>
@@ -90,7 +93,7 @@
         <!-- Sectie: Units -->
         <div class="settings-sectie" id="sectie-eenheden" data-titel="Units">
           <h2>Units</h2>
-          <p class="uitleg">Fixed list of units. Not yet enforced on recipe lines (still a free text field there) — this is a first step toward that, so it's worth keeping this list clean and complete.</p>
+          <p class="uitleg">Fixed list of units, used on the ingredient card and on recipe lines. Drag rows by the handle to reorder them.</p>
 
           <div id="eenheden-lijst"><p class="jopen-subtitel">Loading…</p></div>
 
@@ -260,6 +263,13 @@
       }
       const rijen = alleEenheden.map(e => `
         <tr data-id="${e.id}">
+          <td class="eenheid-drag-handle" draggable="true" title="Drag to reorder">
+            <svg width="12" height="18" viewBox="0 0 12 18" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="3" cy="3" r="1.6"/><circle cx="9" cy="3" r="1.6"/>
+              <circle cx="3" cy="9" r="1.6"/><circle cx="9" cy="9" r="1.6"/>
+              <circle cx="3" cy="15" r="1.6"/><circle cx="9" cy="15" r="1.6"/>
+            </svg>
+          </td>
           <td><input type="text" class="eenheid-code-veld" value="${escapeHtml(e.code)}" style="max-width:140px;" /></td>
           <td><input type="text" class="eenheid-label-veld" value="${escapeHtml(e.label || '')}" /></td>
           <td style="display:flex; gap:6px;">
@@ -270,14 +280,79 @@
 
       container.innerHTML = `
         <table class="cat-tabel">
-          <thead><tr><th>Code</th><th>Label</th><th></th></tr></thead>
-          <tbody>${rijen}</tbody>
+          <thead><tr><th></th><th>Code</th><th>Label</th><th></th></tr></thead>
+          <tbody id="eenheden-tbody">${rijen}</tbody>
         </table>`;
 
       container.querySelectorAll('tr[data-id]').forEach(tr => {
         tr.querySelector('.eenheid-opslaan-rij-btn').addEventListener('click', () => slaEenheidOp(tr));
         tr.querySelector('.eenheid-verwijder-btn').addEventListener('click', () => verwijderEenheid(tr));
       });
+      maakEenhedenTabelSorteerbaar();
+    }
+
+    // ------------------------------------------------------------------
+    // Drag-and-drop volgorde: zelfde patroon als de ingrediëntregels in
+    // recept-invoer.html -- sleep aan het handvat (eerste kolom), na
+    // loslaten wordt de nieuwe volgorde meteen als sort_order opgeslagen
+    // (deze lijst heeft geen aparte "form opslaan"-stap zoals een recept,
+    // elke rij/actie hier is al direct-op-de-database).
+    // ------------------------------------------------------------------
+    function maakEenhedenTabelSorteerbaar() {
+      const tbody = document.getElementById('eenheden-tbody');
+      if (!tbody) return;
+      let dragSrcRow = null;
+
+      tbody.addEventListener('dragstart', (e) => {
+        const handle = e.target.closest('.eenheid-drag-handle');
+        if (!handle) { e.preventDefault(); return; }
+        dragSrcRow = handle.closest('tr');
+        dragSrcRow.classList.add('eenheid-slepend');
+        e.dataTransfer.effectAllowed = 'move';
+        try { e.dataTransfer.setData('text/plain', dragSrcRow.dataset.id); } catch (err) { /* Firefox vereist setData, verder genegeerd */ }
+        try { e.dataTransfer.setDragImage(dragSrcRow, 10, 10); } catch (err) { /* niet kritisch als dit faalt */ }
+      });
+
+      tbody.addEventListener('dragover', (e) => {
+        if (!dragSrcRow) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const overRow = e.target.closest('tr');
+        if (!overRow || overRow === dragSrcRow || !tbody.contains(overRow)) return;
+        const rect = overRow.getBoundingClientRect();
+        const naHelft = (e.clientY - rect.top) / rect.height > 0.5;
+        tbody.insertBefore(dragSrcRow, naHelft ? overRow.nextSibling : overRow);
+      });
+
+      tbody.addEventListener('drop', (e) => { e.preventDefault(); });
+
+      tbody.addEventListener('dragend', async () => {
+        if (dragSrcRow) dragSrcRow.classList.remove('eenheid-slepend');
+        dragSrcRow = null;
+        await slaEenhedenVolgordeOp(tbody);
+      });
+    }
+
+    async function slaEenhedenVolgordeOp(tbody) {
+      const melding = document.getElementById('eenheid-melding');
+      const nieuweVolgorde = Array.from(tbody.children).map((tr, i) => ({ id: tr.dataset.id, sort_order: i + 1 }));
+      // Alleen opslaan als de volgorde daadwerkelijk veranderd is.
+      const ongewijzigd = nieuweVolgorde.every((v, i) => String(alleEenheden[i]?.id) === String(v.id));
+      if (ongewijzigd) return;
+
+      melding.textContent = 'Saving order…'; melding.className = 'jopen-form-melding';
+      const resultaten = await Promise.all(nieuweVolgorde.map(({ id, sort_order }) =>
+        supabaseClient.from('eenheden').update({ sort_order }).eq('id', id)
+      ));
+      const fout = resultaten.find(r => r.error);
+      if (fout) {
+        melding.textContent = 'Could not save order: ' + fout.error.message;
+        melding.className = 'jopen-form-melding fout';
+        laadEenhedenSectie();
+        return;
+      }
+      melding.textContent = 'Order saved.'; melding.className = 'jopen-form-melding ok';
+      laadEenhedenSectie();
     }
 
     function escapeHtml(str) {
