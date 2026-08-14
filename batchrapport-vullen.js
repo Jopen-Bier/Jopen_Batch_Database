@@ -780,20 +780,27 @@ function sorteerHopgiften(rijen, rol) {
 // Additives staan sinds de eenheden-conversie op een X/hl- of X/l-tarief,
 // geen absoluut gewicht meer. Zelfde rekenlogica als de Node-versie /
 // herberekenAfweegHoeveelheden() in recept-invoer.html -- moet in sync
-// blijven.
-function berekenAfweegWaarde(regel, brouwselHl) {
+// blijven. Cellar-toevoegingen gaan op de samengevoegde batch (kan uit
+// meerdere brouwsels bestaan), Brewing-toevoegingen per individueel
+// brouwsel -- vandaar de aparte aantalBrouwsels-parameter.
+function berekenAfweegWaarde(regel, brouwselHl, aantalBrouwsels = 1) {
   const eenheid = regel.eenheid;
   const hoeveelheid = regel.hoeveelheid;
   if (hoeveelheid === null || hoeveelheid === undefined || !eenheid) return hoeveelheid;
   let factor = null;
-  if (eenheid.endsWith('/hl')) factor = brouwselHl;
-  else if (eenheid.endsWith('/l')) factor = brouwselHl !== null && brouwselHl !== undefined ? brouwselHl * 100 : null;
+  if (eenheid.endsWith('/hl')) factor = brouwselHl !== null && brouwselHl !== undefined ? brouwselHl * aantalBrouwsels : null;
+  else if (eenheid.endsWith('/l')) factor = brouwselHl !== null && brouwselHl !== undefined ? brouwselHl * aantalBrouwsels * 100 : null;
   else return hoeveelheid;
   if (factor === null || factor === undefined) return hoeveelheid;
   const basisEenheid = eenheid.split('/')[0];
   const totaal = Number(hoeveelheid) * Number(factor);
   const afgerond = totaal >= 100 ? totaal.toFixed(1) : totaal.toFixed(totaal >= 10 ? 2 : 3);
   return `${afgerond} ${basisEenheid}`;
+}
+
+function formatRatio(regel) {
+  if (regel.hoeveelheid === null || regel.hoeveelheid === undefined) return null;
+  return regel.eenheid ? `${regel.hoeveelheid} ${regel.eenheid}` : regel.hoeveelheid;
 }
 
 async function brVulIngredientRijen(writer, bundel, ingredientMap, overloop) {
@@ -819,11 +826,11 @@ async function brVulIngredientRijen(writer, bundel, ingredientMap, overloop) {
     },
     toegift_brouwerij: {
       eersteRij: RIJ_BROUWHUIS_EERSTE + n0 + nHop + nDryHop, vasteSloten: RIJ_BROUWHUIS_LAATSTE - RIJ_BROUWHUIS_EERSTE + 1,
-      kolommen: { naam: 'A', hoeveelheid: 'E', tijdstip: 'I' },
+      kolommen: { naam: 'A', ratio: 'E', hoeveelheid: 'G', tijdstip: 'I' },
     },
     toegift_kelder: {
       eersteRij: RIJ_KELDER_EERSTE + n0 + nHop + nDryHop + n1, vasteSloten: RIJ_KELDER_LAATSTE - RIJ_KELDER_EERSTE + 1,
-      kolommen: { naam: 'A', hoeveelheid: 'E', tijdstip: 'I' },
+      kolommen: { naam: 'A', ratio: 'E', hoeveelheid: 'G', tijdstip: 'I' },
     },
   };
 
@@ -838,9 +845,9 @@ async function brVulIngredientRijen(writer, bundel, ingredientMap, overloop) {
 
     if (dynamischeBlokken[rol]) {
       const { eersteRij, vasteSloten, kolommen } = dynamischeBlokken[rol];
-      const isAdditiveBlok = rol === 'toegift_brouwerij' || rol === 'toegift_kelder';
       const brouwselHl = bundel.recipes.brouwsel_hl !== null && bundel.recipes.brouwsel_hl !== undefined
         ? Number(bundel.recipes.brouwsel_hl) : null;
+      const aantalBrouwselsVanDezeBatch = rol === 'toegift_kelder' ? (Number(bundel.batch.aantal_brouwsels) || 1) : 1;
       // Ook als er minder regels zijn dan het oorspronkelijke aantal sloten,
       // blijven we tot dat oorspronkelijke aantal doorlopen om eventuele
       // restjes van een vorige generatie/sjabloonwaarde leeg te maken.
@@ -854,8 +861,10 @@ async function brVulIngredientRijen(writer, bundel, ingredientMap, overloop) {
           let waarde;
           if (attr === 'naam') {
             waarde = bundel.ingredientNaam.get(regel.ingredient_id) || regel.notitie || null;
-          } else if (attr === 'hoeveelheid' && isAdditiveBlok) {
-            waarde = berekenAfweegWaarde(regel, brouwselHl);
+          } else if (attr === 'ratio') {
+            waarde = formatRatio(regel);
+          } else if (attr === 'hoeveelheid' && (rol === 'toegift_brouwerij' || rol === 'toegift_kelder')) {
+            waarde = berekenAfweegWaarde(regel, brouwselHl, aantalBrouwselsVanDezeBatch);
           } else {
             waarde = regel[attr];
           }

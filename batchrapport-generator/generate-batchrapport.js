@@ -306,26 +306,41 @@ function sorteerHopgiften(rijen, rol) {
 
 // Additives staan sinds de eenheden-conversie op een X/hl- of X/l-tarief,
 // geen absoluut gewicht meer. Voor het batchrapport (het praktische
-// weegdocument tijdens het brouwen) tonen we daarom niet het kale tarief,
-// maar de daadwerkelijk af te wegen hoeveelheid voor DIT specifieke
-// brouwsel: tarief x brouwsel_hl (of x brouwsel_hl x 100 voor een
-// per-liter-eenheid, 1 hl = 100 l). Zelfde rekenlogica als
-// herberekenAfweegHoeveelheden() in recept-invoer.html -- moet in sync
-// blijven. Bij een al-absolute eenheid (kg, g, stuks, leeg) blijft het
-// kale getal gewoon staan, zoals voorheen.
-function berekenAfweegWaarde(regel, brouwselHl) {
+// weegdocument tijdens het brouwen) tonen we daarom TWEE dingen naast
+// elkaar: de kale Ratio (het tarief zoals opgeslagen) en de daadwerkelijk
+// af te wegen hoeveelheid. Dat laatste verschilt per blok:
+// - Additions Brewing (kettle/maischwater) wordt PER BROUWSEL gedaan --
+//   elk brouwsel van deze batch krijgt zijn eigen dosis, dus
+//   Per brew = tarief x brouwsel_hl (van het recept, één brouwsel).
+// - Additions Cellar wordt PER BATCH gedaan (op de samengevoegde tank,
+//   ongeacht uit hoeveel brouwsels die batch bestaat) -- dus
+//   Per batch = tarief x brouwsel_hl x aantal brouwsels VAN DEZE BATCH
+//   (batches.aantal_brouwsels, niet het recept).
+// Zelfde onderliggende rekenlogica als herberekenAfweegHoeveelheden() in
+// recept-invoer.html, alleen daar bestaat het aantal-brouwsels-van-de-
+// batch-concept niet (dat is pas bekend bij een echte batch) -- daar wordt
+// dus alsnog x1 aangehouden voor Cellar-regels, ter info in de app.
+function berekenAfweegWaarde(regel, brouwselHl, aantalBrouwsels = 1) {
   const eenheid = regel.eenheid;
   const hoeveelheid = regel.hoeveelheid;
   if (hoeveelheid === null || hoeveelheid === undefined || !eenheid) return hoeveelheid;
   let factor = null;
-  if (eenheid.endsWith('/hl')) factor = brouwselHl;
-  else if (eenheid.endsWith('/l')) factor = brouwselHl !== null && brouwselHl !== undefined ? brouwselHl * 100 : null;
+  if (eenheid.endsWith('/hl')) factor = brouwselHl !== null && brouwselHl !== undefined ? brouwselHl * aantalBrouwsels : null;
+  else if (eenheid.endsWith('/l')) factor = brouwselHl !== null && brouwselHl !== undefined ? brouwselHl * aantalBrouwsels * 100 : null;
   else return hoeveelheid; // al absoluut, geen omrekening nodig
   if (factor === null || factor === undefined) return hoeveelheid; // geen brouwsel_hl bekend -- val terug op het tarief
   const basisEenheid = eenheid.split('/')[0];
   const totaal = Number(hoeveelheid) * Number(factor);
   const afgerond = totaal >= 100 ? totaal.toFixed(1) : totaal.toFixed(totaal >= 10 ? 2 : 3);
   return `${afgerond} ${basisEenheid}`;
+}
+
+// De Ratio-kolom toont gewoon het opgeslagen tarief/getal + eenheid zoals
+// het in de database staat (ongeacht of dat een X/hl-tarief of een
+// absolute hoeveelheid als kg/g is).
+function formatRatio(regel) {
+  if (regel.hoeveelheid === null || regel.hoeveelheid === undefined) return null;
+  return regel.eenheid ? `${regel.hoeveelheid} ${regel.eenheid}` : regel.hoeveelheid;
 }
 
 async function vulIngredientRijen(writer, bundel, overloop) {
@@ -345,11 +360,11 @@ async function vulIngredientRijen(writer, bundel, overloop) {
     },
     toegift_brouwerij: {
       eersteRij: RIJ_BROUWHUIS_EERSTE + n0 + nHop + nDryHop, vasteSloten: RIJ_BROUWHUIS_LAATSTE - RIJ_BROUWHUIS_EERSTE + 1,
-      kolommen: { naam: 'A', hoeveelheid: 'E', tijdstip: 'I' },
+      kolommen: { naam: 'A', ratio: 'E', hoeveelheid: 'G', tijdstip: 'I' },
     },
     toegift_kelder: {
       eersteRij: RIJ_KELDER_EERSTE + n0 + nHop + nDryHop + n1, vasteSloten: RIJ_KELDER_LAATSTE - RIJ_KELDER_EERSTE + 1,
-      kolommen: { naam: 'A', hoeveelheid: 'E', tijdstip: 'I' },
+      kolommen: { naam: 'A', ratio: 'E', hoeveelheid: 'G', tijdstip: 'I' },
     },
   };
 
@@ -364,9 +379,12 @@ async function vulIngredientRijen(writer, bundel, overloop) {
 
     if (dynamischeBlokken[rol]) {
       const { eersteRij, vasteSloten, kolommen } = dynamischeBlokken[rol];
-      const isAdditiveBlok = rol === 'toegift_brouwerij' || rol === 'toegift_kelder';
       const brouwselHl = bundel.recipes.brouwsel_hl !== null && bundel.recipes.brouwsel_hl !== undefined
         ? Number(bundel.recipes.brouwsel_hl) : null;
+      // Cellar-toevoegingen gaan op de samengevoegde batch (kan uit
+      // meerdere brouwsels bestaan) -- Brewing-toevoegingen worden per
+      // individueel brouwsel gedaan, dus altijd x1 hier.
+      const aantalBrouwselsVanDezeBatch = rol === 'toegift_kelder' ? (Number(bundel.batch.aantal_brouwsels) || 1) : 1;
       const totaalRijen = Math.max(rijen.length, vasteSloten);
       for (let i = 0; i < totaalRijen; i++) {
         const rij = eersteRij + i;
@@ -377,8 +395,10 @@ async function vulIngredientRijen(writer, bundel, overloop) {
           let waarde;
           if (attr === 'naam') {
             waarde = bundel.ingredientNaam.get(regel.ingredient_id) || regel.notitie || null;
-          } else if (attr === 'hoeveelheid' && isAdditiveBlok) {
-            waarde = berekenAfweegWaarde(regel, brouwselHl);
+          } else if (attr === 'ratio') {
+            waarde = formatRatio(regel);
+          } else if (attr === 'hoeveelheid' && (rol === 'toegift_brouwerij' || rol === 'toegift_kelder')) {
+            waarde = berekenAfweegWaarde(regel, brouwselHl, aantalBrouwselsVanDezeBatch);
           } else {
             waarde = regel[attr];
           }
