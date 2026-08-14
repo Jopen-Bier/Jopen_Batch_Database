@@ -267,17 +267,23 @@
         return;
       }
 
-      // 3. Namen van recepten en ingrediënten erbij (voor weergave), plus de
-      // eigen standaard-eenheid van elk ingrediënt -- gebruikt hieronder als
-      // terugvaloptie wanneer een receptregel zelf geen eenheid heeft.
+      // 3. Namen van recepten (+ brouwsel_hl, nodig om X/hl- en X/l-tarieven
+      // om te rekenen naar een absoluut totaal) en ingrediënten erbij (voor
+      // weergave), plus de eigen standaard-eenheid van elk ingrediënt --
+      // gebruikt hieronder als terugvaloptie wanneer een receptregel zelf
+      // geen eenheid heeft.
       const [{ data: recepten }, { data: ingredienten }] = await Promise.all([
-        supabaseClient.from('recipes').select('id, naam').in('id', receptIds),
+        supabaseClient.from('recipes').select('id, naam, brouwsel_hl').in('id', receptIds),
         supabaseClient.from('ingredients').select('id, naam, eenheid').in(
           'id', [...new Set((ingredientRegels || []).map(r => r.ingredient_id).filter(x => x != null))]
         ),
       ]);
       const receptNaamMap = {};
-      (recepten || []).forEach(r => { receptNaamMap[r.id] = r.naam; });
+      const receptBrouwselHlMap = {};
+      (recepten || []).forEach(r => {
+        receptNaamMap[r.id] = r.naam;
+        receptBrouwselHlMap[r.id] = r.brouwsel_hl !== null && r.brouwsel_hl !== undefined ? Number(r.brouwsel_hl) : null;
+      });
       const ingredientNaamMap = {};
       const ingredientEenheidMap = {};
       (ingredienten || []).forEach(i => {
@@ -286,17 +292,20 @@
       });
 
       // 4. Optellen: per rol -> per ingredient -> totaal + per-recept-detail.
-      // Groepering gebeurt op een GENORMALISEERDE eenheid (spatie/hoofdletter-
-      // ongevoelig, met een kleine synoniemenlijst) zodat bv. "Gram" en "g "
-      // gewoon samengevoegd worden i.p.v. losse regels op te leveren. Heeft
-      // een receptregel zelf geen eenheid, dan valt hij terug op de eigen
-      // standaard-eenheid van het ingrediënt (indien bekend) -- pas als ook
-      // dat leeg is, blijft de regel in de "geen eenheid bekend"-groep
-      // hangen. Twee genormaliseerd ECHT verschillende eenheden voor
-      // hetzelfde ingrediënt worden bewust NIET bij elkaar opgeteld (dat zou
-      // rekenkundig fout zijn, bv. kg + g), maar wel gemarkeerd als
-      // "mixedUnits" zodat het in de UI opvalt in plaats van stilzwijgend
-      // als twee onverklaarde regels te verschijnen.
+      // Additives staan sinds de eenheden-conversie op een X/hl- of X/l-
+      // tarief (geen absoluut gewicht meer) -- die worden hier eerst
+      // omgerekend naar een absoluut totaal (tarief x brouwsel_hl van dat
+      // recept, x 100 extra voor een per-liter-eenheid) vóórdat ze bij
+      // elkaar opgeteld worden. Mout/Hop/Gist en losse legacy-regels zonder
+      // eenheid blijven een simpele hoeveelheid x aantal brouwsels, zoals
+      // voorheen. Groepering gebeurt op ingredient + de GENORMALISEERDE
+      // BASISEENHEID (dus "g/hl" en een oude losse "g"-regel voor hetzelfde
+      // ingredient horen na omrekening terecht bij elkaar; "kg" en "g"
+      // blijven correct gescheiden). Kan een tarief niet omgerekend worden
+      // omdat brouwsel_hl van dat recept ontbreekt, dan telt die regel niet
+      // mee in het totaal maar wordt hij wel apart genoteerd en gemarkeerd
+      // ("missingBrouwselHl") zodat dat opvalt in plaats van een stille
+      // onderschatting te geven.
       const perRol = {};
       (ingredientRegels || []).forEach(regel => {
         if (regel.ingredient_id == null || regel.hoeveelheid == null) return;
@@ -308,17 +317,37 @@
         const effectieveEenheid = (regel.eenheid && regel.eenheid.trim() !== '')
           ? regel.eenheid
           : (ingredientEenheidMap[regel.ingredient_id] || '');
-        const key = `${regel.ingredient_id}|${canoniekeEenheid(effectieveEenheid)}`;
+
+        let bijdrage = null;
+        let weergaveEenheid = effectieveEenheid;
+        if (effectieveEenheid.endsWith('/hl') || effectieveEenheid.endsWith('/l')) {
+          const brouwselHl = receptBrouwselHlMap[regel.recipe_id];
+          weergaveEenheid = effectieveEenheid.split('/')[0];
+          if (brouwselHl === null || brouwselHl === undefined) {
+            bijdrage = null; // brouwsel_hl onbekend -- kan niet omgerekend worden
+          } else {
+            const factor = effectieveEenheid.endsWith('/hl') ? brouwselHl : brouwselHl * 100;
+            bijdrage = Number(regel.hoeveelheid) * factor * brouwsels;
+          }
+        } else {
+          bijdrage = Number(regel.hoeveelheid) * brouwsels;
+        }
+
+        const key = `${regel.ingredient_id}|${canoniekeEenheid(weergaveEenheid)}`;
         if (!perRol[rol][key]) {
           perRol[rol][key] = {
             ingredientId: regel.ingredient_id,
             naam: ingredientNaamMap[regel.ingredient_id] || `#${regel.ingredient_id}`,
-            eenheid: effectieveEenheid,
+            eenheid: weergaveEenheid,
             totaal: 0,
             perRecept: {},
+            missingBrouwselHl: false,
           };
         }
-        const bijdrage = Number(regel.hoeveelheid) * brouwsels;
+        if (bijdrage === null) {
+          perRol[rol][key].missingBrouwselHl = true;
+          return;
+        }
         perRol[rol][key].totaal += bijdrage;
 
         const receptNaam = receptNaamMap[regel.recipe_id] || `#${regel.recipe_id}`;
@@ -382,9 +411,12 @@
                   const mixedBadge = r.mixedUnits
                     ? ` <span class="vp-mixed-badge" title="This ingredient has quantities recorded under more than one unit (check the ingredient card and recipe lines) — these are shown as separate rows and NOT added together, since that could combine incompatible units.">⚠ mixed units</span>`
                     : '';
+                  const missingHlBadge = r.missingBrouwselHl
+                    ? ` <span class="vp-mixed-badge" title="One or more recipe lines for this ingredient use a rate (X/hl or X/l) but the recipe's Brouwsel (hl) is not filled in, so that amount could not be converted and is NOT included in the total below.">⚠ missing Brouwsel (hl)</span>`
+                    : '';
                   return `
                   <tr class="vp-rij-ingredient" data-detail="detail-${rol}-${i}">
-                    <td>${escapeHtml(r.naam)}${mixedBadge}</td>
+                    <td>${escapeHtml(r.naam)}${mixedBadge}${missingHlBadge}</td>
                     <td>${formatGetal(r.totaal)}${r.eenheid ? ' ' + escapeHtml(r.eenheid) : ''}</td>
                     ${isHopsGroep ? `<td>${kg !== null ? formatGetal(kg) + ' kg' : `<span title="Unit '${escapeHtml(r.eenheid || '')}' not recognized — check manually">—</span>`}</td>` : ''}
                   </tr>
