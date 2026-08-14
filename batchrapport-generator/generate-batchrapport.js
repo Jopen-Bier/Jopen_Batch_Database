@@ -304,6 +304,30 @@ function sorteerHopgiften(rijen, rol) {
   return rijen;
 }
 
+// Additives staan sinds de eenheden-conversie op een X/hl- of X/l-tarief,
+// geen absoluut gewicht meer. Voor het batchrapport (het praktische
+// weegdocument tijdens het brouwen) tonen we daarom niet het kale tarief,
+// maar de daadwerkelijk af te wegen hoeveelheid voor DIT specifieke
+// brouwsel: tarief x brouwsel_hl (of x brouwsel_hl x 100 voor een
+// per-liter-eenheid, 1 hl = 100 l). Zelfde rekenlogica als
+// herberekenAfweegHoeveelheden() in recept-invoer.html -- moet in sync
+// blijven. Bij een al-absolute eenheid (kg, g, stuks, leeg) blijft het
+// kale getal gewoon staan, zoals voorheen.
+function berekenAfweegWaarde(regel, brouwselHl) {
+  const eenheid = regel.eenheid;
+  const hoeveelheid = regel.hoeveelheid;
+  if (hoeveelheid === null || hoeveelheid === undefined || !eenheid) return hoeveelheid;
+  let factor = null;
+  if (eenheid.endsWith('/hl')) factor = brouwselHl;
+  else if (eenheid.endsWith('/l')) factor = brouwselHl !== null && brouwselHl !== undefined ? brouwselHl * 100 : null;
+  else return hoeveelheid; // al absoluut, geen omrekening nodig
+  if (factor === null || factor === undefined) return hoeveelheid; // geen brouwsel_hl bekend -- val terug op het tarief
+  const basisEenheid = eenheid.split('/')[0];
+  const totaal = Number(hoeveelheid) * Number(factor);
+  const afgerond = totaal >= 100 ? totaal.toFixed(1) : totaal.toFixed(totaal >= 10 ? 2 : 3);
+  return `${afgerond} ${basisEenheid}`;
+}
+
 async function vulIngredientRijen(writer, bundel, overloop) {
   const { n0, nHop, nDryHop, n1, verschuifCel } = overloop;
   const dynamischeBlokken = {
@@ -340,6 +364,9 @@ async function vulIngredientRijen(writer, bundel, overloop) {
 
     if (dynamischeBlokken[rol]) {
       const { eersteRij, vasteSloten, kolommen } = dynamischeBlokken[rol];
+      const isAdditiveBlok = rol === 'toegift_brouwerij' || rol === 'toegift_kelder';
+      const brouwselHl = bundel.recipes.brouwsel_hl !== null && bundel.recipes.brouwsel_hl !== undefined
+        ? Number(bundel.recipes.brouwsel_hl) : null;
       const totaalRijen = Math.max(rijen.length, vasteSloten);
       for (let i = 0; i < totaalRijen; i++) {
         const rij = eersteRij + i;
@@ -347,9 +374,14 @@ async function vulIngredientRijen(writer, bundel, overloop) {
         for (const attr in kolommen) {
           const cel = `Recept-voorblad!${kolommen[attr]}${rij}`;
           if (!regel) { await writer.setCelWaarde(cel, null); continue; }
-          const waarde = attr === 'naam'
-            ? (bundel.ingredientNaam.get(regel.ingredient_id) || regel.notitie || null)
-            : regel[attr];
+          let waarde;
+          if (attr === 'naam') {
+            waarde = bundel.ingredientNaam.get(regel.ingredient_id) || regel.notitie || null;
+          } else if (attr === 'hoeveelheid' && isAdditiveBlok) {
+            waarde = berekenAfweegWaarde(regel, brouwselHl);
+          } else {
+            waarde = regel[attr];
+          }
           await writer.setCelWaarde(cel, waarde);
         }
       }
