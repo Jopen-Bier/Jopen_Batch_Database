@@ -997,12 +997,33 @@ async function openDetail(id) {
     return i.tijdstip || '—';
   }
 
-  function ingTabelHtml(rollenFilter, kolomRol, toonHdt = false, toonAlpha = false, toonMout = false, toonHopEbu = false) {
+  function ingTabelHtml(rollenFilter, kolomRol, toonHdt = false, toonAlpha = false, toonMout = false, toonHopEbu = false, toonAfweeg = false) {
     let subset = ings.filter(i => rollenFilter.includes(i.rol));
     if (subset.length === 0) return '<div class="empty">None added.</div>';
     if (toonHdt) subset = sorteerHopHerbsRegels(subset);
 
     const totaalKg = toonMout ? subset.reduce((sum, i) => sum + (i.hoeveelheid || 0), 0) : 0;
+    const brouwselHl = r.brouwsel_hl !== null && r.brouwsel_hl !== undefined ? Number(r.brouwsel_hl) : null;
+
+    // Additives staan op een X/hl- of X/l-tarief -- "Amount" is dan geen
+    // weegbaar gewicht. Deze kolom laat zien hoeveel er voor DIT specifieke
+    // brouwsel afgewogen moet worden (tarief x brouwsel_hl, x 100 extra voor
+    // per-liter). Zelfde rekenlogica als recept-invoer.html
+    // (herberekenAfweegHoeveelheden) en het batchrapport (berekenAfweegWaarde)
+    // -- moet in sync blijven.
+    const afweegWeergave = (i) => {
+      const eenheid = i.eenheid;
+      if (i.hoeveelheid === null || i.hoeveelheid === undefined || !eenheid) return '—';
+      let factor = null;
+      if (eenheid.endsWith('/hl')) factor = brouwselHl;
+      else if (eenheid.endsWith('/l')) factor = brouwselHl !== null ? brouwselHl * 100 : null;
+      else return '—'; // al absoluut, geen omrekening nodig
+      if (factor === null) return 'need Brouwsel (hl)';
+      const basisEenheid = eenheid.split('/')[0];
+      const totaal = Number(i.hoeveelheid) * factor;
+      const afgerond = totaal >= 100 ? totaal.toFixed(1) : totaal.toFixed(totaal >= 10 ? 2 : 3);
+      return `${afgerond} ${basisEenheid}`;
+    };
 
     let totaalEbu = 0;
     const rows = subset.map(i => {
@@ -1027,6 +1048,7 @@ async function openDetail(id) {
         <td>${escapeHtml(i.ingredients?.naam || '—')}</td>
         ${toonAlpha ? `<td>${i.alpha_pct ?? '—'}</td>` : ''}
         <td>${i.hoeveelheid ?? '—'} ${i.eenheid || ''}</td>
+        ${toonAfweeg ? `<td>${afweegWeergave(i)}</td>` : ''}
         ${toonMout ? `<td>${i.kleur_ebc ?? '—'}</td><td>${totaalKg > 0 ? ((i.hoeveelheid || 0) / totaalKg * 100).toFixed(1) + '%' : '—'}</td>` : ''}
         <td>${escapeHtml(timingWeergave(i))}</td>
         ${toonHopEbu ? rendementCel + ebuCel : ''}
@@ -1049,6 +1071,7 @@ async function openDetail(id) {
       <table class="ing-table">
         <thead><tr>
           ${kolomRol ? '<th>Role</th>' : ''}<th>Name</th>${toonAlpha ? '<th>Alpha %</th>' : ''}<th>Amount</th>
+          ${toonAfweeg ? '<th>Weigh for this brew</th>' : ''}
           ${toonMout ? '<th>EBC</th><th>%</th>' : ''}<th>Timing</th>
           ${toonHopEbu ? '<th>Rendement %</th><th>EBU</th>' : ''}${toonHdt ? '<th>HDT</th>' : ''}<th>Note</th>
         </tr></thead>
@@ -1189,13 +1212,13 @@ async function openDetail(id) {
     ${hopSomHtml()}
 
     <div class="section-title">Additions Brewing</div>
-    ${ingTabelHtml(['toegift_brouwerij'], false)}
+    ${ingTabelHtml(['toegift_brouwerij'], false, false, false, false, false, true)}
 
     <div class="section-title">Yeasts</div>
     ${ingTabelHtml(['gist'], false)}
 
     <div class="section-title">Additions Cellar</div>
-    ${ingTabelHtml(['toegift_kelder'], false)}
+    ${ingTabelHtml(['toegift_kelder'], false, false, false, false, false, true)}
     ${paramColumnsHtml(cellarNotesRows)}
 
     <div class="section-title">Target water profile</div>
