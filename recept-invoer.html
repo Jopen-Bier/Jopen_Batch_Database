@@ -115,6 +115,7 @@
   table.re-ing-table th { text-align: left; font-family: var(--mono); font-size: 10px; text-transform: uppercase; color: #6b6355; padding: 6px 8px; border-bottom: 1px solid var(--line); }
   table.re-ing-table td { padding: 6px 8px; border-bottom: 1px solid #ece8dc; }
   table.re-ing-table select, table.re-ing-table input { width: 100%; padding: 5px 6px; border: 1px solid var(--line); border-radius: 4px; font-family: var(--serif); font-size: 13px; }
+  td.re-ing-afweeg { font-family: var(--mono); font-size: 12px; color: #6b6355; white-space: nowrap; }
   td.re-ing-ingredient-cell { position: relative; }
   .re-ing-ingredient-resultaten {
     position: absolute; z-index: 20; top: 100%; left: 0; right: 0; min-width: 220px;
@@ -371,7 +372,7 @@
       <div class="re-section">
         <h2>Additions Brewing</h2>
         <table class="re-ing-table">
-          <thead><tr><th></th><th>Ingredient</th><th>Amount</th><th>Unit</th><th>Timing</th><th>Note</th><th></th></tr></thead>
+          <thead><tr><th></th><th>Ingredient</th><th>Amount</th><th>Unit</th><th>Weigh for this brew</th><th>Timing</th><th>Note</th><th></th></tr></thead>
           <tbody id="re-ing-brouwtoegift-tbody"></tbody>
         </table>
         <button type="button" class="re-btn secundair" data-tbody="re-ing-brouwtoegift-tbody" data-roles="toegift_brouwerij" data-add-btn>+ Add brewing addition</button>
@@ -389,7 +390,7 @@
       <div class="re-section">
         <h2>Additions Cellar</h2>
         <table class="re-ing-table">
-          <thead><tr><th></th><th>Ingredient</th><th>Amount</th><th>Unit</th><th>Timing</th><th>Note</th><th></th></tr></thead>
+          <thead><tr><th></th><th>Ingredient</th><th>Amount</th><th>Unit</th><th>Weigh for this brew</th><th>Timing</th><th>Note</th><th></th></tr></thead>
           <tbody id="re-ing-keldertoegift-tbody"></tbody>
         </table>
         <button type="button" class="re-btn secundair" data-tbody="re-ing-keldertoegift-tbody" data-roles="toegift_kelder" data-add-btn>+ Add cellar addition</button>
@@ -945,6 +946,7 @@ function voegIngredientRegelToe(tbodyId, rollenLijst, regel = {}) {
   const meerdereRollen = rollenLijst.length > 1;
   const isHopSectie = tbodyId === 're-ing-hop-tbody';
   const isMoutSectie = tbodyId === 're-ing-mout-tbody';
+  const isAdditiveSectie = tbodyId === 're-ing-brouwtoegift-tbody' || tbodyId === 're-ing-keldertoegift-tbody';
   const rolKolomHtml = meerdereRollen
     ? `<td><select class="re-ing-rol">${rolOptiesVoor(rollenLijst, regel.rol || rollenLijst[0])}</select></td>`
     : '';
@@ -963,6 +965,11 @@ function voegIngredientRegelToe(tbodyId, rollenLijst, regel = {}) {
   const alphaKolomHtml = isHopSectie ? `<td><input type="number" class="re-ing-alpha" value="${regel.alpha_pct ?? ''}" /></td>` : '';
   const ebcKolomHtml = isMoutSectie ? `<td><input type="number" class="re-ing-ebc" value="${regel.kleur_ebc ?? ''}" /></td>` : '';
   const percentageKolomHtml = isMoutSectie ? `<td class="re-ing-percentage">—</td>` : '';
+  // Af te wegen hoeveelheid voor DIT brouwsel: alleen relevant bij additives
+  // met een ratio-eenheid (X/hl of X/l) -- daar is de ingevoerde "Amount"
+  // een tarief, geen absoluut gewicht. Berekend/bijgewerkt door
+  // herberekenAfweegHoeveelheden(), dit is puur de lege container.
+  const afweegKolomHtml = isAdditiveSectie ? `<td class="re-ing-afweeg" title="Amount to weigh for this brew, calculated from the rate and the recipe's Brouwsel (hl)">—</td>` : '';
   // Rendement/EBU: alleen inhoud voor Hop (boil), dry hop toont altijd "—"
   // (geen kooktijd-in-minuten beschikbaar). Waardes worden hierna berekend
   // door herberekenHopRendementEnEbu(), dit zijn puur de lege containers.
@@ -1001,6 +1008,7 @@ function voegIngredientRegelToe(tbodyId, rollenLijst, regel = {}) {
     ${alphaKolomHtml}
     <td><input type="number" class="re-ing-hoeveelheid" value="${regel.hoeveelheid ?? ''}" /></td>
     <td><select class="re-ing-eenheid">${eenhedenOptiesVoorRegel(regel.eenheid ?? '')}</select></td>
+    ${afweegKolomHtml}
     ${ebcKolomHtml}
     ${percentageKolomHtml}
     ${tijdstipKolomHtml}
@@ -1021,12 +1029,17 @@ function voegIngredientRegelToe(tbodyId, rollenLijst, regel = {}) {
   tbody.appendChild(tr);
   herNummerVolgorde(tbody);
   koppelIngredientCombobox(tr);
+  if (isAdditiveSectie) {
+    tr.querySelector('.re-ing-hoeveelheid').addEventListener('input', herberekenAfweegHoeveelheden);
+    tr.querySelector('.re-ing-eenheid').addEventListener('change', herberekenAfweegHoeveelheden);
+  }
   tr.querySelector('.re-verwijder-regel').addEventListener('click', () => {
     tr.remove();
     herNummerVolgorde(tbody);
     herberekenHopgewichten();
     if (isHopSectie) herberekenHopRendementEnEbu();
     if (isMoutSectie) herberekenMoutTotalen();
+    if (isAdditiveSectie) herberekenAfweegHoeveelheden();
   });
   tr.querySelectorAll('.re-ing-hoeveelheid, .re-ing-ingredient, .re-ing-rol').forEach(el => {
     el.addEventListener('input', herberekenHopgewichten);
@@ -1237,8 +1250,43 @@ function herberekenMoutTotalen() {
 // Brouwsel (hl) bepaalt mee de Calculated color, dus bij wijziging daar
 // meteen de moutkleur herberekenen.
 document.addEventListener('input', (e) => {
-  if (e.target && e.target.id === 'veld-brouwsel_hl') herberekenMoutTotalen();
+  if (e.target && e.target.id === 'veld-brouwsel_hl') { herberekenMoutTotalen(); herberekenAfweegHoeveelheden(); }
 });
+
+// Additives met een ratio-eenheid (X/hl of X/l) hebben een tarief als
+// "Amount", geen absoluut gewicht -- dit rekent dat terug naar de
+// daadwerkelijk af te wegen hoeveelheid voor DIT brouwsel (tarief x
+// brouwsel_hl, of x brouwsel_hl x 100 voor een per-liter-eenheid), zodat
+// degene die de ingrediënten klaarzet niet zelf hoeft te rekenen.
+function herberekenAfweegHoeveelheden() {
+  const brouwselHlEl = document.getElementById('veld-brouwsel_hl');
+  const brouwselHl = brouwselHlEl && brouwselHlEl.value !== '' ? Number(brouwselHlEl.value) : null;
+
+  ['re-ing-brouwtoegift-tbody', 're-ing-keldertoegift-tbody'].forEach(tbodyId => {
+    const tbody = document.getElementById(tbodyId);
+    if (!tbody) return;
+    tbody.querySelectorAll('tr').forEach(tr => {
+      const cel = tr.querySelector('.re-ing-afweeg');
+      if (!cel) return;
+      const hoeveelheidEl = tr.querySelector('.re-ing-hoeveelheid');
+      const eenheidEl = tr.querySelector('.re-ing-eenheid');
+      const hoeveelheid = hoeveelheidEl && hoeveelheidEl.value !== '' ? Number(hoeveelheidEl.value) : null;
+      const eenheid = eenheidEl ? eenheidEl.value : '';
+
+      if (hoeveelheid === null || !eenheid) { cel.textContent = '—'; return; }
+      let factor = null;
+      if (eenheid.endsWith('/hl')) factor = brouwselHl;
+      else if (eenheid.endsWith('/l')) factor = brouwselHl !== null ? brouwselHl * 100 : null;
+      else { cel.textContent = '—'; return; } // al een absolute eenheid (kg, g, stuks, ...)
+
+      if (factor === null) { cel.textContent = 'need Brouwsel (hl)'; return; }
+      const basisEenheid = eenheid.split('/')[0];
+      const totaal = hoeveelheid * factor;
+      const afgerond = totaal >= 100 ? totaal.toFixed(1) : totaal.toFixed(totaal >= 10 ? 2 : 3);
+      cel.textContent = `= ${afgerond} ${basisEenheid}`;
+    });
+  });
+}
 
 function herberekenHopgewichten() {
   const rijen = leesIngredientRegelsUit('re-ing-hop-tbody');
@@ -1642,6 +1690,7 @@ function vulIngredientSectiesUit(ingredients) {
   herberekenHopgewichten();
   herberekenHopRendementEnEbu();
   herberekenMoutTotalen();
+  herberekenAfweegHoeveelheden();
 }
 
 document.getElementById('re-kopieer-btn').addEventListener('click', async () => {
