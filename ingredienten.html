@@ -89,6 +89,9 @@
 
   .ing-card { background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 20px 24px; max-width: 560px; }
   .ing-card + .ing-card { margin-top: 18px; }
+  table.ing-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.ing-table th, table.ing-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  table.ing-table th { font-family: var(--mono); font-size: 11px; color: #6b6355; font-weight: normal; }
   .ing-card-titel {
     font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--amber); margin: 0 0 10px;
@@ -768,6 +771,24 @@ async function laadIngredientRevisies(ingredientId) {
 
   revisiesVoorHuidigIngredient = error ? [] : (data || []);
   const houderLatest = document.getElementById('ing-latest-revisie-houder');
+  const houderHistorie = document.getElementById('ing-revisie-historie-houder');
+
+  if (houderHistorie) {
+    houderHistorie.innerHTML = revisiesVoorHuidigIngredient.length > 0 ? `
+      <table class="ing-table">
+        <thead><tr><th>Version</th><th>Date</th><th>By</th><th>Comment</th></tr></thead>
+        <tbody>
+          ${revisiesVoorHuidigIngredient.map(rv => `
+            <tr>
+              <td>v${rv.versie_major}.${rv.versie_minor}</td>
+              <td>${formatDatum(rv.datum)}</td>
+              <td>${escapeHtml(rv.door || '—')}</td>
+              <td>${escapeHtml(rv.wijziging || '—')}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>` : '<p class="jopen-subtitel">No revision history yet.</p>';
+  }
+
   if (!houderLatest) return; // detailscherm inmiddels weer verlaten
   if (revisiesVoorHuidigIngredient.length === 0) {
     houderLatest.style.display = 'none';
@@ -925,6 +946,10 @@ function renderDetailAlleen(id) {
     <div class="ing-card">
       <div class="ing-card-titel">Parameters</div>
       ${parameterRows.map(kvRij).join('')}
+    </div>
+    <div class="ing-card">
+      <div class="ing-card-titel">Version history</div>
+      <div id="ing-revisie-historie-houder">Loading…</div>
     </div>
   `;
 
