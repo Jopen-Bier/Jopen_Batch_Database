@@ -200,6 +200,18 @@
     font-size: 0.85em; cursor: pointer; color: #444;
   }
   #bp-history-btn:hover { background: #f5f5f5; }
+  .bp-hist-filter-item { display: flex; flex-direction: column; gap: 4px; }
+  .bp-hist-filter-item > span {
+    font-size: 0.78em; text-transform: uppercase; letter-spacing: 0.03em; color: #6b6b6b;
+  }
+  .bp-hist-recept-wrap { position: relative; width: 220px; }
+  .bp-hist-recept-wrap input { width: 100%; box-sizing: border-box; }
+  .bp-hist-recept-clear {
+    position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+    border: none; background: none; color: #999; cursor: pointer; font-size: 1em; line-height: 1; padding: 2px;
+    display: none;
+  }
+  .bp-hist-recept-clear:hover { color: #a33f2c; }
 </style>
 </head>
 <body>
@@ -290,6 +302,14 @@
     <div class="bp-modal bp-hist-modal">
       <h3>Planning history</h3>
       <div class="bp-hist-filters">
+        <label class="bp-hist-filter-item" for="bp-hist-recept-zoek">
+          <span>Recipe</span>
+          <div class="bp-bier-zoekwrap bp-hist-recept-wrap">
+            <input type="text" id="bp-hist-recept-zoek" autocomplete="off" placeholder="all recipes" />
+            <button type="button" class="bp-hist-recept-clear" id="bp-hist-recept-clear" title="Clear">&times;</button>
+            <div class="bp-bier-resultaten" id="bp-hist-recept-resultaten"></div>
+          </div>
+        </label>
         <label for="bp-hist-jaar-filter">Year
           <select id="bp-hist-jaar-filter"></select>
         </label>
@@ -495,6 +515,7 @@
     let histOffset = 0;
     let histHeeftMeer = true;
     let histGebruikers = [];
+    let histGekozenRecept = null; // { id, groupId, naam } of null (= alle recepten)
 
     function planGroupLabel(pg) {
       return { jk: 'JK', wp_60hl: 'WP 60HL', wp_120hl: 'WP 120HL', wp_320hl: 'WP 320HL' }[pg] || (pg || '—');
@@ -535,6 +556,75 @@
         select.appendChild(opt);
       }
     }
+
+    // ------------------------------------------------------------------
+    // History panel — recipe autocomplete
+    // ------------------------------------------------------------------
+    // Eén regel per recipe_group_id (nieuwste versie, ongeacht status), zodat
+    // een recept dat inmiddels is hernoemd/geüpgraded maar één keer in de
+    // suggestielijst voorkomt. Recepten zonder recipe_group_id (zou niet meer
+    // moeten voorkomen na de backfill) worden los toegevoegd.
+    function alleReceptenUniekePerGroep() {
+      const resultaat = [];
+      const gezienGroepen = new Set();
+      alleRecepten.forEach(r => {
+        if (r.recipe_group_id) {
+          if (gezienGroepen.has(r.recipe_group_id)) return;
+          gezienGroepen.add(r.recipe_group_id);
+          resultaat.push(nieuwsteVersiePerGroep[r.recipe_group_id] || r);
+        } else {
+          resultaat.push(r);
+        }
+      });
+      return resultaat;
+    }
+
+    function toonHistReceptSuggesties(term) {
+      const resultaten = document.getElementById('bp-hist-recept-resultaten');
+      if (!term) { resultaten.style.display = 'none'; return; }
+      const matches = alleReceptenUniekePerGroep()
+        .filter(r => r.naam.toLowerCase().includes(term))
+        .slice(0, 20);
+      resultaten.innerHTML = matches.length
+        ? matches.map(r => `<div data-id="${r.id}" data-group-id="${r.recipe_group_id || ''}">${escapeHtml(r.naam)}</div>`).join('')
+        : '<div style="color:#999;">No matching recipes.</div>';
+      resultaten.style.display = 'block';
+    }
+
+    function kiesHistRecept(id, groupId, naam) {
+      histGekozenRecept = { id, groupId: groupId || null, naam };
+      document.getElementById('bp-hist-recept-zoek').value = naam;
+      document.getElementById('bp-hist-recept-resultaten').style.display = 'none';
+      document.getElementById('bp-hist-recept-clear').style.display = 'block';
+      laadHistPagina(true);
+    }
+    function wisHistReceptFilter() {
+      histGekozenRecept = null;
+      document.getElementById('bp-hist-recept-zoek').value = '';
+      document.getElementById('bp-hist-recept-clear').style.display = 'none';
+      laadHistPagina(true);
+    }
+
+    document.getElementById('bp-hist-recept-zoek').addEventListener('input', (e) => {
+      // Vrij typen ontkoppelt een eerder gekozen recept weer -- pas bij het
+      // echt aanklikken van een suggestie wordt er weer gefilterd.
+      if (histGekozenRecept) {
+        histGekozenRecept = null;
+        document.getElementById('bp-hist-recept-clear').style.display = 'none';
+        laadHistPagina(true);
+      }
+      toonHistReceptSuggesties(e.target.value.trim().toLowerCase());
+    });
+    document.getElementById('bp-hist-recept-resultaten').addEventListener('click', (e) => {
+      const regel = e.target.closest('[data-id]');
+      if (!regel) return;
+      kiesHistRecept(regel.dataset.id, regel.dataset.groupId, regel.textContent);
+    });
+    document.getElementById('bp-hist-recept-clear').addEventListener('click', wisHistReceptFilter);
+    document.addEventListener('click', (e) => {
+      const resultaten = document.getElementById('bp-hist-recept-resultaten');
+      if (!resultaten.parentElement.contains(e.target)) resultaten.style.display = 'none';
+    });
 
     function bouwDiffHtml(voor, na) {
       const regels = [];
@@ -604,6 +694,19 @@
       if (actieFilter) query = query.eq('actie', actieFilter);
       if (jaarFilter) query = query.or(`na->>iso_year.eq.${jaarFilter},voor->>iso_year.eq.${jaarFilter}`);
       if (weekFilter) query = query.or(`na->>week_number.eq.${weekFilter},voor->>week_number.eq.${weekFilter}`);
+      if (histGekozenRecept) {
+        if (histGekozenRecept.groupId) {
+          // Alle recept-id's die ooit tot deze recipe_group behoorden erbij
+          // pakken, want oudere geschiedenis-rijen (van vóór de
+          // recipe_group_id-backfill) hebben soms alleen recipe_id gevuld.
+          const ids = alleRecepten.filter(r => r.recipe_group_id === histGekozenRecept.groupId).map(r => r.id);
+          let expr = `na->>recipe_group_id.eq.${histGekozenRecept.groupId},voor->>recipe_group_id.eq.${histGekozenRecept.groupId}`;
+          if (ids.length) expr += `,na->>recipe_id.in.(${ids.join(',')}),voor->>recipe_id.in.(${ids.join(',')})`;
+          query = query.or(expr);
+        } else {
+          query = query.or(`na->>recipe_id.eq.${histGekozenRecept.id},voor->>recipe_id.eq.${histGekozenRecept.id}`);
+        }
+      }
 
       const { data, error } = await query;
       const lijst = document.getElementById('bp-hist-list');
@@ -633,6 +736,9 @@
       document.getElementById('bp-hist-week-filter').value = '';
       document.getElementById('bp-hist-gebruiker-filter').value = '';
       document.getElementById('bp-hist-actie-filter').value = '';
+      histGekozenRecept = null;
+      document.getElementById('bp-hist-recept-zoek').value = '';
+      document.getElementById('bp-hist-recept-clear').style.display = 'none';
       await laadHistPagina(true);
     }
     function sluitHistoryPanel() {
