@@ -150,6 +150,56 @@
   .bp-btn-delete:hover { background: #fbeae6; }
   .bp-modal-melding { font-size: 0.85em; margin-top: 8px; }
   .bp-modal-melding.fout { color: #a33f2c; }
+
+  /* --- History panel --- */
+  .bp-hist-modal { width: 720px; max-width: 96vw; display: flex; flex-direction: column; max-height: 88vh; }
+  .bp-hist-filters {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 10px 0 14px 0;
+    padding-bottom: 12px; border-bottom: 1px solid #eee;
+  }
+  .bp-hist-filters label {
+    font-size: 0.78em; text-transform: uppercase; letter-spacing: 0.03em; color: #6b6b6b; margin: 0;
+    display: flex; align-items: center; gap: 5px;
+  }
+  .bp-hist-filters select, .bp-hist-filters input {
+    padding: 6px 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 0.9em;
+  }
+  .bp-hist-filters input[type="number"] { width: 70px; }
+  .bp-hist-list { overflow-y: auto; flex: 1 1 auto; padding-right: 4px; }
+  .bp-hist-empty { color: #999; padding: 20px 0; text-align: center; }
+  .bp-hist-entry {
+    border-left: 3px solid #ccc; padding: 6px 0 6px 12px; margin-bottom: 10px;
+  }
+  .bp-hist-entry.created { border-left-color: #3a8f4c; }
+  .bp-hist-entry.updated { border-left-color: #3a6f9f; }
+  .bp-hist-entry.deleted { border-left-color: #a33f2c; }
+  .bp-hist-entry-top {
+    display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  }
+  .bp-hist-recept { font-weight: 600; color: #1f1f1f; }
+  .bp-hist-meta { font-size: 0.78em; color: #999; white-space: nowrap; }
+  .bp-hist-action {
+    font-size: 0.7em; text-transform: uppercase; letter-spacing: 0.03em; font-weight: 700; margin-right: 6px;
+  }
+  .bp-hist-entry.created .bp-hist-action { color: #3a8f4c; }
+  .bp-hist-entry.updated .bp-hist-action { color: #3a6f9f; }
+  .bp-hist-entry.deleted .bp-hist-action { color: #a33f2c; }
+  .bp-hist-diffs { margin-top: 4px; font-size: 0.85em; color: #444; }
+  .bp-hist-diffs div { padding: 1px 0; }
+  .bp-hist-diffs .veld { color: #6b6b6b; }
+  .bp-hist-diffs .oud { text-decoration: line-through; color: #a33f2c; }
+  .bp-hist-diffs .nieuw { color: #3a8f4c; }
+  .bp-hist-loadmore {
+    display: block; margin: 10px auto 4px auto; padding: 8px 18px; border-radius: 6px;
+    border: 1px solid #ccc; background: #fff; cursor: pointer; font-size: 0.85em;
+  }
+  .bp-hist-loadmore:hover { background: #f5f5f5; }
+  .bp-hist-loadmore[disabled] { opacity: 0.5; cursor: default; }
+  #bp-history-btn {
+    padding: 6px 12px; border-radius: 6px; border: 1px solid #ccc; background: #fff;
+    font-size: 0.85em; cursor: pointer; color: #444;
+  }
+  #bp-history-btn:hover { background: #f5f5f5; }
 </style>
 </head>
 <body>
@@ -169,6 +219,7 @@
         <span><i class="dot prio"></i> Prio</span>
         <span><i class="dot over"></i> Over capacity</span>
       </div>
+      <button type="button" id="bp-history-btn">History</button>
     </div>
 
     <div class="bp-scroll" id="bp-scroll">
@@ -231,6 +282,39 @@
         <button type="button" class="bp-btn-save" id="bp-modal-save">Save</button>
       </div>
       <div class="bp-modal-melding" id="bp-modal-melding"></div>
+    </div>
+  </div>
+
+  <!-- ============================== HISTORY PANEL ============================== -->
+  <div class="bp-modal-overlay" id="bp-history-overlay">
+    <div class="bp-modal bp-hist-modal">
+      <h3>Planning history</h3>
+      <div class="bp-hist-filters">
+        <label for="bp-hist-jaar-filter">Year
+          <select id="bp-hist-jaar-filter"></select>
+        </label>
+        <label for="bp-hist-week-filter">Week
+          <input type="number" id="bp-hist-week-filter" min="1" max="53" placeholder="all" />
+        </label>
+        <label for="bp-hist-gebruiker-filter">User
+          <select id="bp-hist-gebruiker-filter"><option value="">all</option></select>
+        </label>
+        <label for="bp-hist-actie-filter">Action
+          <select id="bp-hist-actie-filter">
+            <option value="">all</option>
+            <option value="created">created</option>
+            <option value="updated">updated</option>
+            <option value="deleted">deleted</option>
+          </select>
+        </label>
+      </div>
+      <div class="bp-hist-list" id="bp-hist-list">
+        <div class="bp-hist-empty">Loading…</div>
+      </div>
+      <button type="button" class="bp-hist-loadmore" id="bp-hist-loadmore" style="display:none;">Load more</button>
+      <div class="bp-modal-knoppen" style="margin-top:14px;">
+        <button type="button" class="bp-btn-cancel" id="bp-hist-sluiten" style="margin-left:auto;">Close</button>
+      </div>
     </div>
   </div>
 
@@ -403,6 +487,167 @@
       const r = receptById(recipeId);
       return r ? r.naam : '(unknown recipe)';
     }
+
+    // ------------------------------------------------------------------
+    // History panel
+    // ------------------------------------------------------------------
+    const HIST_PAGE_SIZE = 50;
+    let histOffset = 0;
+    let histHeeftMeer = true;
+    let histGebruikers = [];
+
+    function planGroupLabel(pg) {
+      return { jk: 'JK', wp_60hl: 'WP 60HL', wp_120hl: 'WP 120HL', wp_320hl: 'WP 320HL' }[pg] || (pg || '—');
+    }
+    function formatVeldWaarde(key, obj) {
+      if (!obj) return '—';
+      if (key === 'prio') return obj.prio ? 'yes' : 'no';
+      if (key === 'plan_group') return planGroupLabel(obj.plan_group);
+      if (key === 'hl') return formatHl(obj.hl);
+      if (key === 'notities') return obj.notities || '(empty)';
+      const v = obj[key];
+      return (v === null || v === undefined) ? '—' : String(v);
+    }
+    // recept-naam voor een voor/na-snapshot uit de geschiedenis, resolvend
+    // via dezelfde recipe_group_id-logica als de rest van het scherm
+    function histReceptNaam(snapshot) {
+      if (!snapshot) return '—';
+      return receptNaamVoorItem(snapshot);
+    }
+
+    async function laadHistGebruikers() {
+      const { data, error } = await supabaseClient.from('gebruikers').select('id, naam').order('naam');
+      if (error) { console.error('Kon gebruikers voor history-filter niet laden:', error); return; }
+      histGebruikers = data || [];
+      const select = document.getElementById('bp-hist-gebruiker-filter');
+      select.innerHTML = '<option value="">all</option>' +
+        histGebruikers.map(g => `<option value="${g.id}">${escapeHtml(g.naam)}</option>`).join('');
+    }
+
+    function vulHistJaarFilter() {
+      const select = document.getElementById('bp-hist-jaar-filter');
+      const dit = new Date().getFullYear();
+      select.innerHTML = '<option value="">all</option>';
+      for (let j = dit - 1; j <= dit + 2; j++) {
+        const opt = document.createElement('option');
+        opt.value = j; opt.textContent = j;
+        if (j === huidigJaar) opt.selected = true;
+        select.appendChild(opt);
+      }
+    }
+
+    function bouwDiffHtml(voor, na) {
+      const regels = [];
+      const naamVoor = histReceptNaam(voor);
+      const naamNa = histReceptNaam(na);
+      if (naamVoor !== naamNa) {
+        regels.push(`<div><span class="veld">Recipe:</span> <span class="oud">${escapeHtml(naamVoor)}</span> &rarr; <span class="nieuw">${escapeHtml(naamNa)}</span></div>`);
+      }
+      const LABELS = { week_number: 'Week', iso_year: 'Year', aantal_brouwsels: 'Brews', hl: 'Volume (hl)', prio: 'Priority', notities: 'Comment', plan_group: 'Group' };
+      Object.keys(LABELS).forEach(key => {
+        const vOud = voor ? voor[key] : undefined;
+        const vNieuw = na ? na[key] : undefined;
+        if (JSON.stringify(vOud ?? null) === JSON.stringify(vNieuw ?? null)) return;
+        regels.push(`<div><span class="veld">${LABELS[key]}:</span> <span class="oud">${escapeHtml(formatVeldWaarde(key, voor))}</span> &rarr; <span class="nieuw">${escapeHtml(formatVeldWaarde(key, na))}</span></div>`);
+      });
+      return regels.join('');
+    }
+
+    function bouwSamenvattingHtml(snapshot) {
+      const naam = histReceptNaam(snapshot);
+      return `${escapeHtml(naam)} — week ${snapshot.week_number ?? '—'}, ${planGroupLabel(snapshot.plan_group)}, `
+        + `${snapshot.aantal_brouwsels ?? '—'} brew(s)${snapshot.prio ? ', prio' : ''}`
+        + `${snapshot.notities ? `<br><span style="color:#999;">"${escapeHtml(snapshot.notities)}"</span>` : ''}`;
+    }
+
+    function renderHistEntry(entry) {
+      const wanneer = new Date(entry.gewijzigd_op).toLocaleString('en-GB', {
+        day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+      });
+      const wie = entry.gewijzigd_door_naam || 'unknown user';
+      let inhoud;
+      if (entry.actie === 'created') {
+        inhoud = `<div class="bp-hist-recept">${bouwSamenvattingHtml(entry.na)}</div>`;
+      } else if (entry.actie === 'deleted') {
+        inhoud = `<div class="bp-hist-recept">${bouwSamenvattingHtml(entry.voor)}</div>`;
+      } else {
+        const diff = bouwDiffHtml(entry.voor, entry.na);
+        inhoud = `<div class="bp-hist-recept">${escapeHtml(histReceptNaam(entry.na))}</div>`
+          + (diff ? `<div class="bp-hist-diffs">${diff}</div>` : `<div class="bp-hist-diffs" style="color:#999;">(no visible field changes)</div>`);
+      }
+      return `
+        <div class="bp-hist-entry ${entry.actie}">
+          <div class="bp-hist-entry-top">
+            <div><span class="bp-hist-action">${entry.actie}</span></div>
+            <div class="bp-hist-meta">${wie} · ${wanneer}</div>
+          </div>
+          ${inhoud}
+        </div>`;
+    }
+
+    async function laadHistPagina(reset) {
+      if (reset) { histOffset = 0; histHeeftMeer = true; document.getElementById('bp-hist-list').innerHTML = ''; }
+      if (!histHeeftMeer) return;
+
+      const jaarFilter = document.getElementById('bp-hist-jaar-filter').value;
+      const weekFilter = document.getElementById('bp-hist-week-filter').value;
+      const gebruikerFilter = document.getElementById('bp-hist-gebruiker-filter').value;
+      const actieFilter = document.getElementById('bp-hist-actie-filter').value;
+
+      let query = supabaseClient
+        .from('brew_planning_geschiedenis_verrijkt')
+        .select('*')
+        .order('gewijzigd_op', { ascending: false })
+        .range(histOffset, histOffset + HIST_PAGE_SIZE - 1);
+
+      if (gebruikerFilter) query = query.eq('gewijzigd_door', gebruikerFilter);
+      if (actieFilter) query = query.eq('actie', actieFilter);
+      if (jaarFilter) query = query.or(`na->>iso_year.eq.${jaarFilter},voor->>iso_year.eq.${jaarFilter}`);
+      if (weekFilter) query = query.or(`na->>week_number.eq.${weekFilter},voor->>week_number.eq.${weekFilter}`);
+
+      const { data, error } = await query;
+      const lijst = document.getElementById('bp-hist-list');
+      if (error) {
+        console.error('Kon planning history niet laden:', error);
+        if (reset) lijst.innerHTML = '<div class="bp-hist-empty">Could not load history.</div>';
+        return;
+      }
+
+      const rijen = data || [];
+      if (reset && rijen.length === 0) {
+        lijst.innerHTML = '<div class="bp-hist-empty">No history found for this filter.</div>';
+      } else {
+        if (reset) lijst.innerHTML = '';
+        lijst.insertAdjacentHTML('beforeend', rijen.map(renderHistEntry).join(''));
+      }
+
+      histOffset += rijen.length;
+      histHeeftMeer = rijen.length === HIST_PAGE_SIZE;
+      document.getElementById('bp-hist-loadmore').style.display = histHeeftMeer ? 'block' : 'none';
+    }
+
+    async function openHistoryPanel() {
+      document.getElementById('bp-history-overlay').classList.add('open');
+      if (histGebruikers.length === 0) await laadHistGebruikers();
+      vulHistJaarFilter();
+      document.getElementById('bp-hist-week-filter').value = '';
+      document.getElementById('bp-hist-gebruiker-filter').value = '';
+      document.getElementById('bp-hist-actie-filter').value = '';
+      await laadHistPagina(true);
+    }
+    function sluitHistoryPanel() {
+      document.getElementById('bp-history-overlay').classList.remove('open');
+    }
+
+    document.getElementById('bp-history-btn').addEventListener('click', openHistoryPanel);
+    document.getElementById('bp-hist-sluiten').addEventListener('click', sluitHistoryPanel);
+    document.getElementById('bp-hist-loadmore').addEventListener('click', () => laadHistPagina(false));
+    ['bp-hist-jaar-filter', 'bp-hist-week-filter', 'bp-hist-gebruiker-filter', 'bp-hist-actie-filter'].forEach(id => {
+      document.getElementById(id).addEventListener('change', () => laadHistPagina(true));
+    });
+    document.getElementById('bp-history-overlay').addEventListener('mousedown', (e) => {
+      if (e.target.id === 'bp-history-overlay') sluitHistoryPanel();
+    });
 
     // ------------------------------------------------------------------
     // Renderen
