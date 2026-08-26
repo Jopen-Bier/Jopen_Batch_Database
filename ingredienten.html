@@ -239,6 +239,41 @@
   }
   .ing-latest-revisie-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
   .ing-latest-revisie-grid .label { font-family: var(--mono); font-size: 11px; color: #6b6355; display: block; }
+
+  /* -- Documents-blok op de ingredient-kaart -- */
+  .ing-doc-lijst { margin: 4px 0 14px; }
+  .ing-doc-rij {
+    display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid #ece8dc;
+    font-size: 14px;
+  }
+  .ing-doc-rij:last-child { border-bottom: none; }
+  .ing-doc-naam { flex: 1; min-width: 0; }
+  .ing-doc-naam-link { color: #2c4a3e; text-decoration: underline; cursor: pointer; word-break: break-word; }
+  .ing-doc-meta { font-family: var(--mono); font-size: 11px; color: #6b6355; margin-top: 2px; }
+  .ing-doc-acties { display: flex; gap: 8px; flex-shrink: 0; }
+  .ing-doc-verwijder-btn {
+    background: none; border: none; color: #a33; font-size: 12px; cursor: pointer; padding: 4px 6px;
+    font-family: var(--mono);
+  }
+  .ing-doc-verwijder-btn:hover { text-decoration: underline; }
+  .ing-doc-upload-btn {
+    margin-top: 4px; background: none; border: 1px solid var(--line); border-radius: 4px;
+    padding: 7px 14px; font-family: var(--serif); font-size: 13px; cursor: pointer; color: #2c4a3e;
+  }
+  .ing-doc-upload-btn:hover { background: #f4f2ea; }
+  .ing-doc-empty { font-size: 13px; color: #6b6355; margin: 0 0 10px; }
+  .ing-modal label.ing-doc-veld-label {
+    display: block; font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.08em; color: #6b6355; margin: 14px 0 6px;
+  }
+  .ing-modal label.ing-doc-veld-label:first-of-type { margin-top: 4px; }
+  .ing-modal .ing-doc-bestandsnaam {
+    font-size: 13px; padding: 8px 10px; background: #f4f2ea; border-radius: 4px; word-break: break-word;
+  }
+  .ing-modal input[type="date"], .ing-modal input[type="text"] {
+    width: 100%; font-family: var(--serif); font-size: 14px; padding: 8px; border: 1px solid var(--line);
+    border-radius: 4px; box-sizing: border-box;
+  }
 </style>
 </head>
 <body>
@@ -319,6 +354,21 @@
     <div class="ing-modal-actions">
       <button type="button" class="ing-annuleer-btn" id="ing-allergenen-cancel-btn">Cancel</button>
       <button type="button" class="ing-opslaan-btn" id="ing-allergenen-ok-btn">Done</button>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="ing-doc-file-input" style="display:none;" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png">
+
+<div class="ing-modal-overlay" id="ing-doc-modal-overlay" style="display:none;">
+  <div class="ing-modal">
+    <h2>Upload document</h2>
+    <div class="ing-doc-bestandsnaam" id="ing-doc-modal-bestandsnaam"></div>
+    <label class="ing-doc-veld-label" for="ing-doc-veld-revisiedatum">Revision date of the document *</label>
+    <input type="date" id="ing-doc-veld-revisiedatum" required>
+    <div class="ing-modal-actions">
+      <button type="button" class="ing-annuleer-btn" id="ing-doc-modal-cancel-btn">Cancel</button>
+      <button type="button" class="ing-opslaan-btn" id="ing-doc-modal-confirm-btn">Upload</button>
     </div>
   </div>
 </div>
@@ -755,10 +805,167 @@ function toonDetail(id) {
   renderDetailAlleen(id);
   laadGebruiktInRecepten(id);
   laadIngredientRevisies(id);
+  laadIngredientDocumenten(id);
 }
 
 let gebruiktInRecepten = [];
 let revisiesVoorHuidigIngredient = [];
+let documentenVoorHuidigIngredient = [];
+
+async function laadIngredientDocumenten(ingredientId) {
+  const { data, error } = await supabaseClient
+    .from('ingredient_documenten')
+    .select('*')
+    .eq('ingredient_id', ingredientId)
+    .order('revisiedatum', { ascending: false })
+    .order('id', { ascending: false });
+
+  documentenVoorHuidigIngredient = error ? [] : (data || []);
+  if (error) console.error('Kon documenten niet ophalen:', error);
+  renderDocumentenLijst();
+}
+
+function renderDocumentenLijst() {
+  const houder = document.getElementById('ing-doc-lijst-houder');
+  if (!houder) return; // detailscherm inmiddels weer verlaten
+
+  if (documentenVoorHuidigIngredient.length === 0) {
+    houder.innerHTML = `<p class="ing-doc-empty">No documents uploaded yet.</p>`;
+    return;
+  }
+
+  houder.innerHTML = documentenVoorHuidigIngredient.map(doc => `
+    <div class="ing-doc-rij" data-doc-id="${doc.id}">
+      <div class="ing-doc-naam">
+        <span class="ing-doc-naam-link" data-actie="bekijk">${escapeHtml(doc.bestandsnaam)}</span>
+        <div class="ing-doc-meta">Revision date: ${formatDatum(doc.revisiedatum)} &middot; uploaded ${formatDatum(doc.geupload_op)}</div>
+      </div>
+      <div class="ing-doc-acties">
+        ${magIngVerwijderen ? `<button type="button" class="ing-doc-verwijder-btn" data-actie="verwijder">Delete</button>` : ''}
+      </div>
+    </div>`).join('');
+
+  houder.querySelectorAll('[data-actie="bekijk"]').forEach(el => {
+    const doc = documentenVoorHuidigIngredient.find(d => String(d.id) === el.closest('.ing-doc-rij').dataset.docId);
+    el.addEventListener('click', () => bekijkDocument(doc));
+  });
+  houder.querySelectorAll('[data-actie="verwijder"]').forEach(el => {
+    const doc = documentenVoorHuidigIngredient.find(d => String(d.id) === el.closest('.ing-doc-rij').dataset.docId);
+    el.addEventListener('click', () => verwijderDocument(doc));
+  });
+}
+
+async function bekijkDocument(doc) {
+  if (!doc) return;
+  const { data, error } = await supabaseClient.storage
+    .from('ingredient-documents')
+    .createSignedUrl(doc.storage_path, 60); // 60s geldig, alleen om meteen te openen
+
+  if (error || !data) {
+    alert('Could not open document: ' + (error?.message || 'unknown error'));
+    return;
+  }
+  window.open(data.signedUrl, '_blank');
+}
+
+async function verwijderDocument(doc) {
+  if (!doc) return;
+  if (!confirm(`Delete "${doc.bestandsnaam}"? This cannot be undone.`)) return;
+
+  const { error: storageError } = await supabaseClient.storage
+    .from('ingredient-documents')
+    .remove([doc.storage_path]);
+  if (storageError) {
+    alert('Could not delete file from storage: ' + storageError.message);
+    return;
+  }
+
+  const { error } = await supabaseClient.from('ingredient_documenten').delete().eq('id', doc.id);
+  if (error) {
+    alert('File was removed from storage, but could not remove the record: ' + error.message);
+    return;
+  }
+
+  documentenVoorHuidigIngredient = documentenVoorHuidigIngredient.filter(d => d.id !== doc.id);
+  renderDocumentenLijst();
+}
+
+// -- Upload-flow: bestand kiezen -> revisiedatum invoeren (modal) -> uploaden --
+let docUploadIngredientId = null;
+let docUploadGekozenBestand = null;
+
+function startDocumentUpload(ingredientId) {
+  docUploadIngredientId = ingredientId;
+  const input = document.getElementById('ing-doc-file-input');
+  input.value = ''; // zelfde bestand tweemaal achter elkaar kunnen kiezen
+  input.click();
+}
+
+document.getElementById('ing-doc-file-input').addEventListener('change', (e) => {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  docUploadGekozenBestand = file;
+
+  document.getElementById('ing-doc-modal-bestandsnaam').textContent = file.name;
+  document.getElementById('ing-doc-veld-revisiedatum').value = '';
+  document.getElementById('ing-doc-modal-overlay').style.display = 'flex';
+  document.getElementById('ing-doc-veld-revisiedatum').focus();
+});
+
+document.getElementById('ing-doc-modal-cancel-btn').addEventListener('click', () => {
+  document.getElementById('ing-doc-modal-overlay').style.display = 'none';
+  docUploadGekozenBestand = null;
+});
+
+document.getElementById('ing-doc-modal-confirm-btn').addEventListener('click', async () => {
+  const revisiedatum = document.getElementById('ing-doc-veld-revisiedatum').value;
+  if (!revisiedatum) {
+    alert('Please enter the revision date of the document.');
+    return;
+  }
+  const file = docUploadGekozenBestand;
+  const ingredientId = docUploadIngredientId;
+  if (!file || !ingredientId) return;
+
+  const confirmBtn = document.getElementById('ing-doc-modal-confirm-btn');
+  confirmBtn.disabled = true;
+  confirmBtn.textContent = 'Uploading…';
+
+  try {
+    // Bestandsnaam saniteren voor de storage-key; originele naam blijft bewaard
+    // in ingredient_documenten.bestandsnaam voor weergave/download.
+    const veiligeNaam = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const storagePath = `${ingredientId}/${Date.now()}_${veiligeNaam}`;
+
+    const { error: uploadError } = await supabaseClient.storage
+      .from('ingredient-documents')
+      .upload(storagePath, file);
+    if (uploadError) throw uploadError;
+
+    const { error: insertError } = await supabaseClient.from('ingredient_documenten').insert({
+      ingredient_id: ingredientId,
+      bestandsnaam: file.name,
+      storage_path: storagePath,
+      grootte_bytes: file.size,
+      revisiedatum: revisiedatum,
+      geupload_door: huidigeGebruiker ? huidigeGebruiker.id : null,
+    });
+    if (insertError) {
+      // Opruimen: geen wees-bestand achterlaten in storage als de metadata-insert faalt.
+      await supabaseClient.storage.from('ingredient-documents').remove([storagePath]);
+      throw insertError;
+    }
+
+    document.getElementById('ing-doc-modal-overlay').style.display = 'none';
+    docUploadGekozenBestand = null;
+    await laadIngredientDocumenten(ingredientId);
+  } catch (err) {
+    alert('Upload failed: ' + (err.message || err));
+  } finally {
+    confirmBtn.disabled = false;
+    confirmBtn.textContent = 'Upload';
+  }
+});
 
 async function laadIngredientRevisies(ingredientId) {
   const { data, error } = await supabaseClient
@@ -948,6 +1155,11 @@ function renderDetailAlleen(id) {
       ${parameterRows.map(kvRij).join('')}
     </div>
     <div class="ing-card">
+      <div class="ing-card-titel">Documents</div>
+      <div class="ing-doc-lijst" id="ing-doc-lijst-houder">Loading…</div>
+      ${magIngBewerken ? `<button type="button" class="ing-doc-upload-btn" id="ing-doc-upload-btn">+ Upload document</button>` : ''}
+    </div>
+    <div class="ing-card">
       <div class="ing-card-titel">Version history</div>
       <div id="ing-revisie-historie-houder">Loading…</div>
     </div>
@@ -959,11 +1171,18 @@ function renderDetailAlleen(id) {
   if (magIngVerwijderen) {
     document.getElementById('ing-verwijder-btn').addEventListener('click', () => verwijderIngredient(i));
   }
+  if (magIngBewerken) {
+    document.getElementById('ing-doc-upload-btn').addEventListener('click', () => startDocumentUpload(i.id));
+  }
 
-  // Als de revisies voor dit ingrediënt al eerder geladen zijn (bv. terug
-  // van het bewerkscherm), meteen tonen zonder opnieuw te hoeven wachten.
+  // Als de revisies/documenten voor dit ingrediënt al eerder geladen zijn (bv.
+  // terug van het bewerkscherm), meteen opnieuw renderen zonder op toonDetail
+  // te wachten (die wordt bij terugkeer van Edit niet opnieuw aangeroepen).
   if (revisiesVoorHuidigIngredient.length > 0 && String(revisiesVoorHuidigIngredient[0].ingredient_id) === String(id)) {
     laadIngredientRevisies(id);
+  }
+  if (documentenVoorHuidigIngredient.length > 0 && String(documentenVoorHuidigIngredient[0].ingredient_id) === String(id)) {
+    renderDocumentenLijst();
   }
 }
 
