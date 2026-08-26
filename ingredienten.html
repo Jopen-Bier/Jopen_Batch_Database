@@ -48,7 +48,28 @@
     padding: 3px 9px; border-radius: 20px; display: inline-block;
   }
   .status-actief { background: #e1ead9; color: var(--hop-dark); }
-  .status-inactief, .status-uitgefaseerd { background: #e6e2d8; color: #7a7266; }
+  .status-inactief, .status-uitgefaseerd, .status-uitfaserend { background: #e6e2d8; color: #7a7266; }
+
+  /* Row-level quick actions (Edit / Archive / Delete) on the overview table --
+     additive next to the existing detail-view Edit/Delete, for fast bulk
+     cleanup passes without opening each ingredient. */
+  .row-actions { display: flex; gap: 6px; align-items: center; white-space: nowrap; }
+  .row-action-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: 6px; border: 1.5px solid var(--line);
+    background: #fff; cursor: pointer; padding: 0; text-decoration: none;
+    transition: background 0.12s, border-color 0.12s;
+  }
+  .row-action-btn svg { width: 14px; height: 14px; display: block; }
+  .row-action-btn.edit { color: var(--amber); border-color: var(--amber); }
+  .row-action-btn.edit:hover { background: var(--amber); color: #fff; }
+  .row-action-btn.archive { color: #8a6d1e; border-color: #c9a94a; }
+  .row-action-btn.archive:hover { background: #c9a94a; color: #fff; }
+  .row-action-btn.delete { color: #a33f2c; border-color: #a33f2c; }
+  .row-action-btn.delete:hover { background: #a33f2c; color: #fff; }
+  .row-action-btn:disabled, .row-action-btn.disabled {
+    opacity: 0.35; cursor: not-allowed; pointer-events: none;
+  }
 
   #ing-detail { display: none; }
   #ing-detail.actief { display: block; }
@@ -480,7 +501,7 @@ function openAllergenenPicker(huidigeKeys, onOpslaan) {
 // (Dutch: actief/inactief/uitgefaseerd) — the stored value itself is left
 // unchanged, only what's shown to the user is translated.
 function statusLabel(status) {
-  const labels = { actief: 'Active', inactief: 'Inactive', uitgefaseerd: 'Phased out' };
+  const labels = { concept: 'Draft', actief: 'Active', inactief: 'Inactive', uitgefaseerd: 'Phased out', uitfaserend: 'Phased out' };
   return labels[status] || status || 'Unknown';
 }
 
@@ -767,6 +788,8 @@ function renderIngLijst(ingredienten) {
     return;
   }
 
+  const toonActiesKolom = magIngBewerken || magIngVerwijderen;
+
   const rijen = ingredienten.map(i => `
     <tr data-id="${i.id}">
       <td>${escapeHtml(i.naam)}</td>
@@ -776,6 +799,7 @@ function renderIngLijst(ingredienten) {
       <td><span class="status-pill status-${i.status || 'onbekend'}">${escapeHtml(statusLabel(i.status))}</span></td>
       <td>${formatDatum(laatsteWijzigingPerIngredient[i.id] || i.gewijzigd_op || i.aangemaakt_op)}</td>
       <td class="ing-tabel-getal">${i.gebruikt_in_aantal}</td>
+      ${toonActiesKolom ? `<td>${ingRijActiesHtml(i)}</td>` : ''}
     </tr>`).join('');
 
   const kolommen = [
@@ -787,25 +811,96 @@ function renderIngLijst(ingredienten) {
   container.innerHTML = `
     <table class="ing-tabel">
       <thead><tr>${kolommen.map(([kolom, label]) =>
-        `<th class="ing-sorteerbaar${kolom === 'gebruikt_in_aantal' ? ' ing-tabel-getal' : ''}" data-kolom="${kolom}">${label}${sorteerPijl(kolom)}</th>`).join('')}</tr></thead>
+        `<th class="ing-sorteerbaar${kolom === 'gebruikt_in_aantal' ? ' ing-tabel-getal' : ''}" data-kolom="${kolom}">${label}${sorteerPijl(kolom)}</th>`).join('')}${toonActiesKolom ? '<th>Actions</th>' : ''}</tr></thead>
       <tbody>${rijen}</tbody>
     </table>`;
 
-  container.querySelectorAll('thead th').forEach(th => {
+  container.querySelectorAll('thead th[data-kolom]').forEach(th => {
     th.addEventListener('click', () => zetSortering(th.dataset.kolom));
   });
   container.querySelectorAll('tbody tr').forEach(tr => {
     tr.addEventListener('click', () => toonDetail(tr.dataset.id));
   });
+  container.querySelectorAll('.row-action-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (btn.classList.contains('disabled')) return;
+      const id = btn.dataset.id;
+      const naam = btn.dataset.naam;
+      if (btn.classList.contains('archive')) ingRijArchiveer(id, naam, btn);
+      else if (btn.classList.contains('delete')) ingRijVerwijder(id, naam, btn);
+    });
+  });
 }
 
-function toonDetail(id) {
+// Icon-only quick actions for the overview table row (Edit/Archive/Delete).
+// Additive next to the existing Edit/Delete inside the detail view -- that
+// flow (verwijderIngredient(), the Edit button in toonDetail()) stays
+// exactly as it was; these are a faster alternative for going through many
+// ingredients during a cleanup pass.
+function ingRijActiesHtml(i) {
+  const alGearchiveerd = i.status === 'uitfaserend';
+  const editIcon = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M13.5 3.5l3 3L6 17H3v-3L13.5 3.5z"/></svg>`;
+  const archiveIcon = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="14" height="3.2" rx="0.8"/><path d="M4.5 7.2V16a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1V7.2"/><path d="M8.2 10.8h3.6"/></svg>`;
+  const deleteIcon = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 5.5h12"/><path d="M8 5.5V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5"/><path d="M5.5 5.5 6.2 16a1 1 0 0 0 1 1h5.6a1 1 0 0 0 1-1l0.7-10.5"/></svg>`;
+
+  const editBtn = magIngBewerken
+    ? `<button type="button" class="row-action-btn edit" data-id="${i.id}" title="Edit" onclick="event.stopPropagation(); toonDetail('${i.id}', true)">${editIcon}</button>`
+    : '';
+  const archiveBtn = magIngBewerken
+    ? `<button type="button" class="row-action-btn archive${alGearchiveerd ? ' disabled' : ''}" data-id="${i.id}" data-naam="${escapeHtml(i.naam)}" title="${alGearchiveerd ? 'Already phased out' : 'Archive (phase out)'}">${archiveIcon}</button>`
+    : '';
+  const deleteBtn = magIngVerwijderen
+    ? `<button type="button" class="row-action-btn delete" data-id="${i.id}" data-naam="${escapeHtml(i.naam)}" title="Delete">${deleteIcon}</button>`
+    : '';
+  return `<span class="row-actions">${editBtn}${archiveBtn}${deleteBtn}</span>`;
+}
+
+// Quick archive: directly sets status to 'uitfaserend' (Phased out) --
+// ingredients have no direct 'gearchiveerd' status value (that's reserved
+// for versie_status, a separate version-history concept). This leaves
+// versie_status untouched.
+async function ingRijArchiveer(id, naam, btn) {
+  if (!confirm(`Archive "${naam}"?\n\nThis sets status to "Phased out". It does not affect version history.`)) return;
+  btn.disabled = true;
+  const { error } = await supabaseClient.from('ingredients').update({ status: 'uitfaserend' }).eq('id', id);
+  if (error) {
+    alert('Could not archive: ' + error.message);
+    btn.disabled = false;
+    return;
+  }
+  await laadIngredienten();
+}
+
+async function ingRijVerwijder(id, naam, btn) {
+  if (!confirm(`Are you sure you want to delete ${naam}? This cannot be undone.`)) return;
+  btn.disabled = true;
+  const { error } = await supabaseClient.from('ingredients').delete().eq('id', id);
+  if (error) {
+    const inGebruik = error.code === '23503';
+    alert(inGebruik
+      ? `Could not delete ${naam}: it is still used in one or more recipes or batches. Remove those references first.`
+      : 'Could not delete: ' + error.message);
+    btn.disabled = false;
+    return;
+  }
+  await laadIngredienten();
+}
+
+function toonDetail(id, directBewerken) {
   document.getElementById('ing-list-view').style.display = 'none';
   document.getElementById('ing-detail').classList.add('actief');
   renderDetailAlleen(id);
   laadGebruiktInRecepten(id);
   laadIngredientRevisies(id);
   laadIngredientDocumenten(id);
+  // Shortcut for the row-level Edit icon: jumps straight to the existing
+  // edit form (renderDetailBewerken) instead of the view-only detail first.
+  // The edit form itself is completely unchanged.
+  if (directBewerken && magIngBewerken) {
+    const i = alleIngredienten.find(x => String(x.id) === String(id));
+    if (i) renderDetailBewerken(i);
+  }
 }
 
 let gebruiktInRecepten = [];

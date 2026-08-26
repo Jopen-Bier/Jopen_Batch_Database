@@ -211,6 +211,27 @@
   }
   .edit-pill:hover { background: #96601f; }
 
+  /* Row-level quick actions (Edit / Archive / Delete) on the overview table --
+     separate, additive UI next to the existing detail-view Edit/Delete, meant
+     for fast bulk cleanup passes without opening each recipe. */
+  .row-actions { display: flex; gap: 6px; align-items: center; white-space: nowrap; }
+  .row-action-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: 6px; border: 1.5px solid var(--line);
+    background: #fff; cursor: pointer; padding: 0; text-decoration: none;
+    transition: background 0.12s, border-color 0.12s;
+  }
+  .row-action-btn svg { width: 14px; height: 14px; display: block; }
+  .row-action-btn.edit { color: var(--amber); border-color: var(--amber); }
+  .row-action-btn.edit:hover { background: var(--amber); color: #fff; }
+  .row-action-btn.archive { color: #8a6d1e; border-color: #c9a94a; }
+  .row-action-btn.archive:hover { background: #c9a94a; color: #fff; }
+  .row-action-btn.delete { color: #a33f2c; border-color: #a33f2c; }
+  .row-action-btn.delete:hover { background: #a33f2c; color: #fff; }
+  .row-action-btn:disabled, .row-action-btn.disabled {
+    opacity: 0.35; cursor: not-allowed; pointer-events: none;
+  }
+
   .recipe-title { font-size: 32px; margin: 0 0 4px; }
   .recipe-meta { font-family: var(--mono); font-size: 13px; color: #6b6355; margin-bottom: 24px; }
   .recipe-meta b { color: var(--ink); }
@@ -566,6 +587,8 @@ function renderList(recipes) {
     container.innerHTML = `<div class="empty">No recipes found.</div>`;
     return;
   }
+  const toonActiesKolom = magReceptBewerken || magReceptVerwijderen;
+
   const rows = recipes.map(r => `
     <tr data-id="${r.id}">
       <td>${escapeHtml(r.naam)}</td>
@@ -576,6 +599,7 @@ function renderList(recipes) {
       <td>${formatDatum(laatsteWijzigingPerRecept[r.id])}</td>
       <td>${escapeHtml(laatsteWijzigingDoorPerRecept[r.id] || '—')}</td>
       <td>${formatDatum(laatsteBatchPerRecept[r.id])}</td>
+      ${toonActiesKolom ? `<td>${rijActiesHtml(r)}</td>` : ''}
     </tr>`).join('');
 
   const kolommen = [
@@ -593,7 +617,7 @@ function renderList(recipes) {
     const actief = huidigSorteerVeld === k.veld;
     const pijl = actief ? (sorteerRichting === 'asc' ? ' &#9650;' : ' &#9660;') : '';
     return `<th class="sorteerbaar${actief ? ' sorteer-actief' : ''}" data-sort="${k.veld}">${k.label}${pijl}</th>`;
-  }).join('');
+  }).join('') + (toonActiesKolom ? '<th>Actions</th>' : '');
 
   container.innerHTML = `
     <table>
@@ -602,6 +626,16 @@ function renderList(recipes) {
     </table>`;
   container.querySelectorAll('tbody tr').forEach(tr => {
     tr.addEventListener('click', () => openDetail(tr.dataset.id));
+  });
+  container.querySelectorAll('.row-action-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (btn.classList.contains('disabled')) return;
+      const id = btn.dataset.id;
+      const naam = btn.dataset.naam;
+      if (btn.classList.contains('archive')) rijArchiveerRecept(id, naam, btn);
+      else if (btn.classList.contains('delete')) rijVerwijderRecept(id, naam, btn);
+    });
   });
   container.querySelectorAll('th.sorteerbaar').forEach(th => {
     th.addEventListener('click', () => {
@@ -615,6 +649,57 @@ function renderList(recipes) {
       pasFiltersToe();
     });
   });
+}
+
+// Icon-only quick actions for the overview table row (Edit/Archive/Delete).
+// Additive next to the existing Edit/Delete inside the detail view -- that
+// flow stays exactly as it was; these are a faster alternative for going
+// through many recipes during a cleanup pass.
+function rijActiesHtml(r) {
+  const alGearchiveerd = r.status === 'gearchiveerd';
+  const editIcon = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M13.5 3.5l3 3L6 17H3v-3L13.5 3.5z"/></svg>`;
+  const archiveIcon = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="14" height="3.2" rx="0.8"/><path d="M4.5 7.2V16a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1V7.2"/><path d="M8.2 10.8h3.6"/></svg>`;
+  const deleteIcon = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 5.5h12"/><path d="M8 5.5V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5"/><path d="M5.5 5.5 6.2 16a1 1 0 0 0 1 1h5.6a1 1 0 0 0 1-1l0.7-10.5"/></svg>`;
+
+  const editBtn = magReceptBewerken
+    ? `<a class="row-action-btn edit" href="recept-invoer.html?id=${r.id}" title="Edit" onclick="event.stopPropagation()">${editIcon}</a>`
+    : '';
+  const archiveBtn = magReceptBewerken
+    ? `<button type="button" class="row-action-btn archive${alGearchiveerd ? ' disabled' : ''}" data-id="${r.id}" data-naam="${escapeHtml(r.naam)}" title="${alGearchiveerd ? 'Already archived' : 'Archive'}">${archiveIcon}</button>`
+    : '';
+  const deleteBtn = magReceptVerwijderen
+    ? `<button type="button" class="row-action-btn delete" data-id="${r.id}" data-naam="${escapeHtml(r.naam)}" title="Delete">${deleteIcon}</button>`
+    : '';
+  return `<span class="row-actions">${editBtn}${archiveBtn}${deleteBtn}</span>`;
+}
+
+// Quick archive: a direct status flip to 'gearchiveerd', deliberately NOT the
+// same as the major-version-save archive flow in recept-invoer.html (which
+// archives the old row and creates a new active version). Meant for fast
+// bulk cleanup; a versioned archive is still available via "Save as new
+// version" in the full editor if that's what's needed instead.
+async function rijArchiveerRecept(id, naam, btn) {
+  if (!confirm(`Archive "${naam}"?\n\nThis directly sets status to Archived. It does NOT create a new version -- use "Save as new version" in the recipe editor instead if you need a versioned archive.`)) return;
+  btn.disabled = true;
+  const { error } = await supabaseClient.from('recipes').update({ status: 'gearchiveerd' }).eq('id', id);
+  if (error) {
+    alert('Could not archive: ' + error.message);
+    btn.disabled = false;
+    return;
+  }
+  await loadRecipes();
+}
+
+async function rijVerwijderRecept(id, naam, btn) {
+  if (!confirm(`Are you sure you want to delete ${naam}?`)) return;
+  btn.disabled = true;
+  const { error } = await supabaseClient.from('recipes').delete().eq('id', id);
+  if (error) {
+    alert('Could not delete: ' + error.message);
+    btn.disabled = false;
+    return;
+  }
+  await loadRecipes();
 }
 
 let sorteerRichting = 'asc';
