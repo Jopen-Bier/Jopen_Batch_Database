@@ -1371,6 +1371,10 @@ function renderDetailBewerken(i) {  const container = document.getElementById('i
     <div class="ing-meta">Editing</div>
     <div class="ing-card">
       <div class="ing-card-titel">General</div>
+      <div class="ing-edit-row wide">
+        <label for="veld-naam">Name *</label>
+        <input type="text" id="veld-naam" value="${escapeHtml(i.naam ?? '')}" required />
+      </div>
       <div class="ing-edit-row">
         <label for="veld-category_id">Category</label>
         <select id="veld-category_id" style="width:160px;">
@@ -1388,9 +1392,9 @@ function renderDetailBewerken(i) {  const container = document.getElementById('i
       <div class="ing-edit-row">
         <label for="veld-status">Status</label>
         <select id="veld-status" style="width:160px;">
+          <option value="concept" ${i.status === 'concept' ? 'selected' : ''}>Draft</option>
           <option value="actief" ${i.status === 'actief' ? 'selected' : ''}>Active</option>
-          <option value="inactief" ${i.status === 'inactief' ? 'selected' : ''}>Inactive</option>
-          <option value="uitgefaseerd" ${i.status === 'uitgefaseerd' ? 'selected' : ''}>Phased out</option>
+          <option value="uitfaserend" ${i.status === 'uitfaserend' ? 'selected' : ''}>Phased out</option>
         </select>
       </div>
     </div>
@@ -1534,7 +1538,7 @@ async function slaIngredientOp(i, soort, wijziging) {
   const gekozenCategorie = alleCategorieen.find(c => String(c.id) === categoryIdVeld);
 
   const basis = {
-    naam: i.naam,
+    naam: document.getElementById('veld-naam').value.trim(),
     category_id: categoryIdVeld ? Number(categoryIdVeld) : null,
     eenheid: tekst('veld-eenheid'),
     prijs: getal('veld-prijs'),
@@ -1561,6 +1565,12 @@ async function slaIngredientOp(i, soort, wijziging) {
     leverancier: tekst('veld-leverancier'),
     status: document.getElementById('veld-status').value,
   };
+
+  if (!basis.naam) {
+    melding.textContent = 'Name is required.';
+    melding.className = 'ing-melding fout';
+    return;
+  }
 
   if (soort === 'overwrite') {
     // Ongeregistreerde correctie: alleen de data zelf bijwerken. Geen
