@@ -246,10 +246,11 @@
       resultaatEl.innerHTML = '<div class="vp-skeleton">Calculating…</div>';
       huidigJaar = jaar;
 
-      // 1. Geplande brouwsels in het gekozen bereik
+      // 1. Geplande brouwsels in het gekozen bereik (incl. id, nodig om de
+      // bijbehorende splits op te zoeken)
       const { data: planning, error: planErr } = await supabaseClient
         .from('brew_planning')
-        .select('recipe_id, aantal_brouwsels')
+        .select('id, recipe_id, aantal_brouwsels')
         .eq('iso_year', jaar)
         .gte('week_number', van)
         .lte('week_number', tot);
@@ -274,7 +275,30 @@
       planning.forEach(p => {
         brouwselsPerRecept[p.recipe_id] = (brouwselsPerRecept[p.recipe_id] || 0) + Number(p.aantal_brouwsels);
       });
-      const receptIds = Object.keys(brouwselsPerRecept).map(Number);
+
+      // 1b. Splits binnen dit bereik: het DOELrecept van een split (bv. Non
+      // Alcohol IPA) heeft vaak eigen extra ingrediënten (ontalcoholiserings-
+      // middel, aromahop, e.d.) die nergens anders in de prognose voorkomen
+      // omdat dat recept zelf nooit direct gebrouwen wordt. Die tellen we
+      // hier apart mee, geschaald op het daadwerkelijke split-volume.
+      const { data: splits, error: splitErr } = await haalAlleRijenOp(
+        supabaseClient.from('brew_planning_splits').select('brew_planning_id, recipe_id, hl').in('brew_planning_id', planning.map(p => p.id))
+      );
+      if (splitErr) {
+        resultaatEl.innerHTML = `<div class="vp-leeg">Could not load splits: ${escapeHtml(splitErr.message)}</div>`;
+        laatsteResultaat = null;
+        document.getElementById('vp-export-btn').disabled = true;
+        return;
+      }
+      const splitHlPerRecept = {};
+      (splits || []).forEach(s => {
+        splitHlPerRecept[s.recipe_id] = (splitHlPerRecept[s.recipe_id] || 0) + Number(s.hl || 0);
+      });
+
+      const receptIds = [...new Set([
+        ...Object.keys(brouwselsPerRecept).map(Number),
+        ...Object.keys(splitHlPerRecept).map(Number),
+      ])];
 
       // 2. Receptregels (ingrediënten) van al die recepten in één keer ophalen.
       // Gepagineerd (zie haalAlleRijenOp hierboven) -- bij een groot
@@ -330,53 +354,67 @@
       // mee in het totaal maar wordt hij wel apart genoteerd en gemarkeerd
       // ("missingBrouwselHl") zodat dat opvalt in plaats van een stille
       // onderschatting te geven.
+      //
+      // Een recept kan op twee manieren aan het totaal bijdragen: direct
+      // gebrouwen (brouwsels > 0, zoals voorheen) en/of als DOEL van een
+      // split (splitHl > 0). Voor split-bijdragen wordt alleen naar
+      // tarief-ingrediënten (X/hl, X/l) gekeken -- dat zijn de extra
+      // additieven die specifiek bij het split-product horen; mout/hop/gist
+      // met een vast bedrag per brouwsel worden bewust NIET meegenomen
+      // vanuit een split, want er is geen zinnig "aantal brouwsels" voor een
+      // deel-volume. Komt in de praktijk (nog) niet voor op split-recepten.
       const perRol = {};
-      (ingredientRegels || []).forEach(regel => {
-        if (regel.ingredient_id == null || regel.hoeveelheid == null) return;
-        const brouwsels = brouwselsPerRecept[regel.recipe_id] || 0;
-        if (brouwsels === 0) return;
-
-        const rol = naarWeergaveRol(regel.rol);
+      function voegBijdrageToe(rol, ingredientId, eenheid, bijdrage, receptLabel, missing) {
         if (!perRol[rol]) perRol[rol] = {};
-        const effectieveEenheid = (regel.eenheid && regel.eenheid.trim() !== '')
-          ? regel.eenheid
-          : (ingredientEenheidMap[regel.ingredient_id] || '');
-
-        let bijdrage = null;
-        let weergaveEenheid = effectieveEenheid;
-        if (effectieveEenheid.endsWith('/hl') || effectieveEenheid.endsWith('/l')) {
-          const brouwselHl = receptBrouwselHlMap[regel.recipe_id];
-          weergaveEenheid = effectieveEenheid.split('/')[0];
-          if (brouwselHl === null || brouwselHl === undefined) {
-            bijdrage = null; // brouwsel_hl onbekend -- kan niet omgerekend worden
-          } else {
-            const factor = effectieveEenheid.endsWith('/hl') ? brouwselHl : brouwselHl * 100;
-            bijdrage = Number(regel.hoeveelheid) * factor * brouwsels;
-          }
-        } else {
-          bijdrage = Number(regel.hoeveelheid) * brouwsels;
-        }
-
-        const key = `${regel.ingredient_id}|${canoniekeEenheid(weergaveEenheid)}`;
+        const key = `${ingredientId}|${canoniekeEenheid(eenheid)}`;
         if (!perRol[rol][key]) {
           perRol[rol][key] = {
-            ingredientId: regel.ingredient_id,
-            naam: ingredientNaamMap[regel.ingredient_id] || `#${regel.ingredient_id}`,
-            eenheid: weergaveEenheid,
+            ingredientId,
+            naam: ingredientNaamMap[ingredientId] || `#${ingredientId}`,
+            eenheid,
             totaal: 0,
             perRecept: {},
             missingBrouwselHl: false,
           };
         }
-        if (bijdrage === null) {
-          perRol[rol][key].missingBrouwselHl = true;
-          return;
-        }
+        if (missing) { perRol[rol][key].missingBrouwselHl = true; return; }
         perRol[rol][key].totaal += bijdrage;
+        if (!perRol[rol][key].perRecept[receptLabel]) perRol[rol][key].perRecept[receptLabel] = 0;
+        perRol[rol][key].perRecept[receptLabel] += bijdrage;
+      }
 
+      (ingredientRegels || []).forEach(regel => {
+        if (regel.ingredient_id == null || regel.hoeveelheid == null) return;
+        const brouwsels = brouwselsPerRecept[regel.recipe_id] || 0;
+        const splitHl = splitHlPerRecept[regel.recipe_id] || 0;
+        if (brouwsels === 0 && splitHl === 0) return;
+
+        const rol = naarWeergaveRol(regel.rol);
+        const effectieveEenheid = (regel.eenheid && regel.eenheid.trim() !== '')
+          ? regel.eenheid
+          : (ingredientEenheidMap[regel.ingredient_id] || '');
+        const isTarief = effectieveEenheid.endsWith('/hl') || effectieveEenheid.endsWith('/l');
+        const weergaveEenheid = isTarief ? effectieveEenheid.split('/')[0] : effectieveEenheid;
         const receptNaam = receptNaamMap[regel.recipe_id] || `#${regel.recipe_id}`;
-        if (!perRol[rol][key].perRecept[receptNaam]) perRol[rol][key].perRecept[receptNaam] = 0;
-        perRol[rol][key].perRecept[receptNaam] += bijdrage;
+
+        if (brouwsels > 0) {
+          if (isTarief) {
+            const brouwselHl = receptBrouwselHlMap[regel.recipe_id];
+            if (brouwselHl === null || brouwselHl === undefined) {
+              voegBijdrageToe(rol, regel.ingredient_id, weergaveEenheid, 0, receptNaam, true);
+            } else {
+              const factor = effectieveEenheid.endsWith('/hl') ? brouwselHl : brouwselHl * 100;
+              voegBijdrageToe(rol, regel.ingredient_id, weergaveEenheid, Number(regel.hoeveelheid) * factor * brouwsels, receptNaam);
+            }
+          } else {
+            voegBijdrageToe(rol, regel.ingredient_id, weergaveEenheid, Number(regel.hoeveelheid) * brouwsels, receptNaam);
+          }
+        }
+
+        if (splitHl > 0 && isTarief) {
+          const factor = effectieveEenheid.endsWith('/hl') ? splitHl : splitHl * 100;
+          voegBijdrageToe(rol, regel.ingredient_id, weergaveEenheid, Number(regel.hoeveelheid) * factor, `${receptNaam} (via split)`);
+        }
       });
 
       // Markeer ingrediënten die (na normalisatie/terugval) alsnog met
@@ -395,7 +433,7 @@
       laatsteResultaat = {
         perRol,
         aantalBrouwsels: Object.values(brouwselsPerRecept).reduce((a, b) => a + b, 0),
-        aantalRecepten: receptIds.length,
+        aantalRecepten: Object.keys(brouwselsPerRecept).length,
       };
 
       document.getElementById('vp-samenvatting').textContent =
