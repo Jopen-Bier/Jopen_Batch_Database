@@ -86,6 +86,12 @@
     font-size: 0.58em; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
     color: #1f1f1f; margin-top: 1px; line-height: 1;
   }
+  .bp-split-marker { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; margin-left: 2px; }
+  .bp-split-marker .bp-split-icon { display: block; filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 1px #000); }
+  .bp-split-marker .bp-split-label {
+    font-size: 0.58em; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+    color: #1f1f1f; margin-top: 1px; line-height: 1;
+  }
 
   /* --- Modal (add / edit) --- */
   .bp-modal-overlay {
@@ -151,6 +157,13 @@
   .bp-modal-melding { font-size: 0.85em; margin-top: 8px; }
   .bp-modal-melding.fout { color: #a33f2c; }
 
+  /* --- Split rows --- */
+  .bp-modal-split-row { display: flex; align-items: center; gap: 8px; margin-top: 16px; font-size: 0.9em; }
+  .bp-split-rij { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+  .bp-split-zoekwrap { flex: 1 1 auto; min-width: 0; position: relative; }
+  .bp-split-zoekwrap input { width: 100%; box-sizing: border-box; }
+  .bp-split-hl { width: 80px !important; padding: 7px 9px; border: 1px solid #ccc; border-radius: 6px; font-size: 0.95em; }
+
   /* --- History panel --- */
   .bp-hist-modal { width: 720px; max-width: 96vw; display: flex; flex-direction: column; max-height: 88vh; }
   .bp-hist-filters {
@@ -212,6 +225,41 @@
     display: none;
   }
   .bp-hist-recept-clear:hover { color: #a33f2c; }
+
+  /* --- Total planned --- */
+  #bp-totaal-btn {
+    padding: 6px 12px; border-radius: 6px; border: 1px solid #ccc; background: #fff;
+    font-size: 0.85em; cursor: pointer; color: #444;
+  }
+  #bp-totaal-btn:hover { background: #f5f5f5; }
+  .bp-totaal-modal { width: 900px; max-width: 96vw; display: flex; flex-direction: column; max-height: 90vh; }
+  .bp-totaal-samenvatting { font-size: 0.85em; color: #6b6b6b; margin: 2px 0 14px 0; }
+  .bp-totaal-zoekwrap { position: relative; }
+  .bp-totaal-zoekwrap input { width: 100%; box-sizing: border-box; }
+  .bp-totaal-chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0 6px 0; min-height: 10px; }
+  .bp-totaal-chip {
+    background: var(--jopen-red-tint); color: var(--jopen-red-dark); font-size: 0.8em;
+    padding: 4px 10px; border-radius: 20px; display: inline-flex; align-items: center; gap: 6px;
+  }
+  .bp-totaal-chip span.x { cursor: pointer; font-weight: 700; line-height: 1; }
+  .bp-totaal-chart-sectie { margin: 14px 0 18px 0; }
+  .bp-totaal-toggle { display: flex; gap: 6px; margin-bottom: 10px; }
+  .bp-totaal-toggle button {
+    font-size: 0.8em; padding: 4px 12px; border-radius: 6px; border: 1px solid #ccc;
+    background: #fff; color: #444; cursor: pointer;
+  }
+  .bp-totaal-toggle button.actief { background: var(--jopen-red); border-color: var(--jopen-red); color: #fff; }
+  #bp-totaal-canvas { width: 100%; display: block; }
+  .bp-totaal-legenda { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 8px; font-size: 0.78em; color: #444; }
+  .bp-totaal-legenda i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+  .bp-totaal-tabel-wrap { max-height: 260px; overflow-y: auto; border-top: 1px solid #eee; flex: 1 1 auto; }
+  .bp-totaal-tabel-wrap table { width: 100%; border-collapse: collapse; font-size: 0.85em; }
+  .bp-totaal-tabel-wrap th {
+    text-align: left; color: #6b6b6b; text-transform: uppercase; font-size: 0.7em; letter-spacing: 0.03em;
+    padding: 6px 4px; position: sticky; top: 0; background: #fff;
+  }
+  .bp-totaal-tabel-wrap td { padding: 6px 4px; border-top: 1px solid #eee; }
+  .bp-totaal-tabel-wrap tr.geselecteerd { background: var(--jopen-red-tint); }
 </style>
 </head>
 <body>
@@ -227,6 +275,7 @@
       <select id="bp-jaar"></select>
       <span style="font-size:0.9em; color:#6b6b6b;">Current week: <b id="bp-huidige-week" style="color:#1f1f1f;">—</b></span>
       <span style="font-size:0.9em; color:#6b6b6b;">Total volume planned: <b id="bp-totaal-volume" style="color:#1f1f1f;">—</b></span>
+      <button type="button" id="bp-totaal-btn">Total planned</button>
       <div class="bp-legenda">
         <span><i class="dot prio"></i> Prio</span>
         <span><i class="dot over"></i> Over capacity</span>
@@ -278,6 +327,17 @@
       <div class="bp-modal-prio-row">
         <input type="checkbox" id="bp-modal-prio" style="width:auto;" />
         <label for="bp-modal-prio" style="margin:0; text-transform:none; letter-spacing:normal; color:#1f1f1f;">Prio</label>
+      </div>
+
+      <!-- Split: alleen relevant bij het bewerken van een al gepland brouwsel,
+           zelfde reden als Comment hieronder. -->
+      <div class="bp-modal-split-row" id="bp-modal-split-row" style="display:none;">
+        <input type="checkbox" id="bp-modal-split-check" style="width:auto;" />
+        <label for="bp-modal-split-check" style="margin:0; text-transform:none; letter-spacing:normal; color:#1f1f1f;">Split (brewed into other product(s))</label>
+      </div>
+      <div id="bp-modal-split-sectie" style="display:none;">
+        <label>Splits into</label>
+        <div id="bp-modal-split-rijen"></div>
       </div>
 
       <!-- Comment: alleen relevant bij het bewerken van een al gepland brouwsel,
@@ -338,6 +398,40 @@
     </div>
   </div>
 
+  <!-- ============================== TOTAL PLANNED PANEL ============================== -->
+  <div class="bp-modal-overlay" id="bp-totaal-overlay">
+    <div class="bp-modal bp-totaal-modal">
+      <h3>Total planned — <span id="bp-totaal-jaar-label"></span></h3>
+      <div class="bp-totaal-samenvatting" id="bp-totaal-samenvatting">—</div>
+
+      <div class="bp-bier-zoekwrap bp-totaal-zoekwrap">
+        <input type="text" id="bp-totaal-zoek" autocomplete="off" placeholder="Search recipe to add to graph…" />
+        <div class="bp-bier-resultaten" id="bp-totaal-resultaten"></div>
+      </div>
+      <div class="bp-totaal-chips" id="bp-totaal-chips"></div>
+
+      <div class="bp-totaal-chart-sectie">
+        <div class="bp-totaal-toggle">
+          <button type="button" class="actief" data-modus="week" id="bp-totaal-modus-week">Weekly</button>
+          <button type="button" data-modus="month" id="bp-totaal-modus-month">Monthly</button>
+        </div>
+        <canvas id="bp-totaal-canvas" height="220"></canvas>
+        <div class="bp-totaal-legenda" id="bp-totaal-legenda"></div>
+      </div>
+
+      <div class="bp-totaal-tabel-wrap">
+        <table>
+          <thead><tr><th></th><th>Recipe</th><th style="text-align:right;">Brews</th><th style="text-align:right;">Total hl</th></tr></thead>
+          <tbody id="bp-totaal-tabel-body"></tbody>
+        </table>
+      </div>
+
+      <div class="bp-modal-knoppen" style="margin-top:14px;">
+        <button type="button" class="bp-btn-cancel" id="bp-totaal-sluiten" style="margin-left:auto;">Close</button>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="nav.js"></script>
@@ -350,6 +444,7 @@
     let nieuwsteVersiePerGroep = {};      // recipe_group_id -> recept-rij met hoogste versie_major.versie_minor (ongeacht status)
     let capaciteitMap = {};              // `${group}_${week}` -> max_brouwsels
     let planningPerWeek = {};            // week -> { jk:[], wp_60hl:[], wp_120hl:[], wp_320hl:[] }
+    let splitsPerItem = {};              // brew_planning_id -> [{ id, recipe_id, recipe_group_id, hl }]
     let huidigeGebruikerId = null;
     let magBpBewerken = false;
     let magBpVerwijderen = false;
@@ -481,6 +576,27 @@
           planningPerWeek[r.week_number] = { jk: [], wp_60hl: [], wp_120hl: [], wp_320hl: [] };
         }
         planningPerWeek[r.week_number][r.plan_group].push(r);
+      });
+      await laadSplits((data || []).map(r => r.id));
+    }
+
+    // Splits (een gepland brouwsel dat versneden/geblend wordt tot een ander
+    // product) horen bij een specifiek brew_planning-item. In één keer
+    // opgehaald voor alle items van het jaar, i.p.v. per item apart -- zodat
+    // het split-icoontje in de weekkaarten zonder extra round trips getoond
+    // kan worden.
+    async function laadSplits(brewPlanningIds) {
+      splitsPerItem = {};
+      if (!brewPlanningIds.length) return;
+      const { data, error } = await supabaseClient
+        .from('brew_planning_splits')
+        .select('id, brew_planning_id, recipe_id, recipe_group_id, hl, sort_order')
+        .in('brew_planning_id', brewPlanningIds)
+        .order('sort_order');
+      if (error) { console.error('Kon splits niet laden:', error); return; }
+      (data || []).forEach(s => {
+        if (!splitsPerItem[s.brew_planning_id]) splitsPerItem[s.brew_planning_id] = [];
+        splitsPerItem[s.brew_planning_id].push(s);
       });
     }
 
@@ -779,10 +895,15 @@
       const hl = item.hl != null ? Number(item.hl).toFixed(0) : '—';
       const kleur = recept ? recept.kleur : null;
       const stijl = kleur ? `background:${kleur}; border-color:${kleur}; color:${contrastKleur(kleur)};` : '';
+      const splits = splitsPerItem[item.id] || [];
+      const splitTitel = splits.length
+        ? splits.map(s => `\u2192 ${receptNaamVoorItem(s)}: ${formatHl(s.hl)} hl`).join('\n')
+        : '';
       return `
         <div class="bp-item" data-id="${item.id}" style="${stijl}">
           <span class="bp-item-tekst">${naam} · ${item.aantal_brouwsels}br · ${hl}hl</span>
           ${item.prio ? '<span class="bp-prio-marker" title="Prio"><span class="bp-prio-ster">&#9733;</span><span class="bp-prio-label">prio</span></span>' : ''}
+          ${splits.length ? `<span class="bp-split-marker" title="${escapeHtml(splitTitel)}"><svg class="bp-split-icon" width="15" height="14" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M14 4l2.29 2.29-2.88 2.88 1.42 1.42 2.88-2.88L20 10V4zm-4 0H4v6l2.29-2.29 4.71 4.7V18h2v-6.41l-5.29-5.3z" fill="#1d9e75"/></svg><span class="bp-split-label">split</span></span>` : ''}
           ${item.notities ? `<span class="bp-comment-marker" title="${escapeHtml(item.notities)}"><svg class="bp-comment-icon" width="15" height="14" viewBox="0 0 20 18" xmlns="http://www.w3.org/2000/svg"><path d="M2 2h16v10H8.5L4 16v-4H2z" fill="#2a5db0"/></svg><span class="bp-comment-label">Comment</span></span>` : ''}
         </div>`;
     }
@@ -978,6 +1099,103 @@
     });
 
     // ------------------------------------------------------------------
+    // Modal — split-rijen (een gepland brouwsel dat wordt versneden/geblend
+    // tot een of meer andere producten). Alleen relevant in edit-mode, zelfde
+    // patroon als het Comment-veld. Elke rij: recept-zoekbox + hl. Zodra een
+    // rij een geldig recept heeft EN het de laatste rij is, verschijnt er
+    // automatisch een nieuwe lege rij eronder.
+    // ------------------------------------------------------------------
+    const splitContainer = document.getElementById('bp-modal-split-rijen');
+
+    function splitRijHtml() {
+      return `
+        <div class="bp-split-rij" data-recipe-id="">
+          <div class="bp-bier-zoekwrap bp-split-zoekwrap">
+            <input type="text" class="bp-split-zoek" autocomplete="off" placeholder="Search recipe…" />
+            <div class="bp-bier-resultaten"></div>
+          </div>
+          <input type="number" class="bp-split-hl" min="0" step="0.1" placeholder="hl" />
+          <button type="button" class="bp-split-verwijder" title="Remove">&times;</button>
+        </div>`;
+    }
+
+    function vulSplitSectie(splits) {
+      splitContainer.innerHTML = '';
+      (splits || []).forEach(s => {
+        splitContainer.insertAdjacentHTML('beforeend', splitRijHtml());
+        const rij = splitContainer.lastElementChild;
+        rij.dataset.recipeId = s.recipe_id ?? '';
+        const recept = receptVoorItem(s);
+        rij.querySelector('.bp-split-zoek').value = recept ? recept.naam : '';
+        rij.querySelector('.bp-split-hl').value = s.hl ?? '';
+      });
+      splitContainer.insertAdjacentHTML('beforeend', splitRijHtml());
+    }
+
+    splitContainer.addEventListener('input', (e) => {
+      const rij = e.target.closest('.bp-split-rij');
+      if (!rij) return;
+      if (e.target.classList.contains('bp-split-zoek')) {
+        rij.dataset.recipeId = '';
+        const term = e.target.value.trim().toLowerCase();
+        const resultaten = rij.querySelector('.bp-bier-resultaten');
+        if (term === '') { resultaten.style.display = 'none'; return; }
+        const matches = alleRecepten.filter(r => r.status === 'actief' && r.naam.toLowerCase().includes(term)).slice(0, 20);
+        resultaten.innerHTML = matches.length
+          ? matches.map(r => `<div data-id="${r.id}">${escapeHtml(r.naam)}</div>`).join('')
+          : '<div style="color:#999;">No matching recipes.</div>';
+        resultaten.style.display = 'block';
+      }
+    });
+
+    splitContainer.addEventListener('click', (e) => {
+      const resultaatRegel = e.target.closest('.bp-bier-resultaten [data-id]');
+      if (resultaatRegel) {
+        const rij = resultaatRegel.closest('.bp-split-rij');
+        rij.dataset.recipeId = resultaatRegel.dataset.id;
+        rij.querySelector('.bp-split-zoek').value = escapeHtml(receptNaam(resultaatRegel.dataset.id));
+        rij.querySelector('.bp-bier-resultaten').style.display = 'none';
+        // Automatisch een nieuwe lege rij toevoegen als dit de laatste rij was.
+        if (rij === splitContainer.lastElementChild) {
+          splitContainer.insertAdjacentHTML('beforeend', splitRijHtml());
+        }
+        return;
+      }
+      const verwijderBtn = e.target.closest('.bp-split-verwijder');
+      if (verwijderBtn) {
+        const alleRijen = splitContainer.querySelectorAll('.bp-split-rij');
+        if (alleRijen.length > 1) {
+          verwijderBtn.closest('.bp-split-rij').remove();
+        } else {
+          const rij = verwijderBtn.closest('.bp-split-rij');
+          rij.dataset.recipeId = '';
+          rij.querySelector('.bp-split-zoek').value = '';
+          rij.querySelector('.bp-split-hl').value = '';
+        }
+      }
+    });
+
+    document.getElementById('bp-modal-split-check').addEventListener('change', (e) => {
+      document.getElementById('bp-modal-split-sectie').style.display = e.target.checked ? 'block' : 'none';
+    });
+
+    // Verzamelt de ingevulde, geldige split-rijen (recept gekozen + hl > 0)
+    // uit de huidige modal-state. Lege/onvolledige rijen (zoals de altijd
+    // aanwezige laatste lege rij) worden genegeerd, niet als fout getoond.
+    function verzamelSplitRijen() {
+      const resultaat = [];
+      splitContainer.querySelectorAll('.bp-split-rij').forEach((rij, idx) => {
+        const recipeId = rij.dataset.recipeId;
+        const hl = Number(rij.querySelector('.bp-split-hl').value);
+        if (!recipeId || !hl || hl <= 0) return;
+        const recept = receptById(recipeId);
+        if (!recept) return;
+        resultaat.push({ recipe_id: recept.id, recipe_group_id: recept.recipe_group_id, hl, sort_order: idx });
+      });
+      return resultaat;
+    }
+
+    // ------------------------------------------------------------------
     // Modal — weekkeuze (add-mode: meerdere weken)
     // ------------------------------------------------------------------
     function renderWekenGrid() {
@@ -1058,6 +1276,12 @@
         document.getElementById('bp-modal-comment-sectie').style.display = 'block';
         document.getElementById('bp-modal-comment').value = item.notities || '';
 
+        document.getElementById('bp-modal-split-row').style.display = 'flex';
+        const bestaandeSplits = splitsPerItem[item.id] || [];
+        document.getElementById('bp-modal-split-check').checked = bestaandeSplits.length > 0;
+        document.getElementById('bp-modal-split-sectie').style.display = bestaandeSplits.length > 0 ? 'block' : 'none';
+        vulSplitSectie(bestaandeSplits);
+
         bierenContainer.innerHTML = bierRijHtml();
         const rij = bierenContainer.querySelector('.bp-bier-rij');
         // Prefill met de NIEUWSTE versie van dit bier (via recipe_group_id),
@@ -1078,6 +1302,10 @@
         document.getElementById('bp-modal-nog-een-bier').style.display = 'inline-block';
         document.getElementById('bp-modal-comment-sectie').style.display = 'none';
         document.getElementById('bp-modal-comment').value = '';
+        document.getElementById('bp-modal-split-row').style.display = 'none';
+        document.getElementById('bp-modal-split-sectie').style.display = 'none';
+        document.getElementById('bp-modal-split-check').checked = false;
+        splitContainer.innerHTML = '';
 
         gekozenWeken = new Set(weken);
         document.getElementById('bp-weken-start').value = weken[0] || '';
@@ -1154,6 +1382,29 @@
         }).eq('id', modalContext.item.id);
         if (error) { melding.textContent = 'Could not save: ' + error.message; melding.className = 'bp-modal-melding fout'; return; }
 
+        // Splits synchroniseren: eenvoudigweg de bestaande rijen voor dit
+        // brouwsel vervangen door de huidige staat van de sectie. Aantal
+        // rijen is altijd klein (meestal 1-3), dus delete+reinsert is hier
+        // eenvoudiger en betrouwbaarder dan diffen.
+        const { error: deleteSplitsError } = await supabaseClient
+          .from('brew_planning_splits').delete().eq('brew_planning_id', modalContext.item.id);
+        if (deleteSplitsError) {
+          melding.textContent = 'Could not save splits: ' + deleteSplitsError.message;
+          melding.className = 'bp-modal-melding fout'; return;
+        }
+        if (document.getElementById('bp-modal-split-check').checked) {
+          const splitRijen = verzamelSplitRijen();
+          if (splitRijen.length > 0) {
+            const { error: insertSplitsError } = await supabaseClient
+              .from('brew_planning_splits')
+              .insert(splitRijen.map(s => ({ ...s, brew_planning_id: modalContext.item.id })));
+            if (insertSplitsError) {
+              melding.textContent = 'Could not save splits: ' + insertSplitsError.message;
+              melding.className = 'bp-modal-melding fout'; return;
+            }
+          }
+        }
+
         sluitModal();
         await laadEnRenderAlles();
         return;
@@ -1210,6 +1461,260 @@
       if (error) { alert('Could not delete: ' + error.message); return; }
       sluitModal();
       await laadEnRenderAlles();
+    });
+
+    // ------------------------------------------------------------------
+    // Total planned — jaartotaal per recept + seizoensgrafiek
+    // ------------------------------------------------------------------
+    const MAAND_NAMEN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    let totaalPerRecept = {};   // key (recipe_group_id of `id_<recipe_id>`) -> { naam, kleur, totaalHl, totaalBrouwsels, perWeek[], perMaand[] }
+    let totaalGeselecteerd = new Set();
+    let totaalGrafiekModus = 'week';
+    let totaalHuidigJaar = null;
+
+    // Zelfde paginerings-patroon als ingredienten.html/receptoverzicht.html/
+    // verbruiksprognose.html -- brew_planning blijft voor nu ruim onder de
+    // 1000-rijen-standaardlimiet per jaar, maar dit voorkomt dat dezelfde
+    // stille-afkap-bug hier ooit terugkeert naarmate er meer jaren bijkomen.
+    async function haalAlleRijenOp(query) {
+      const PAGINA = 1000;
+      let vanaf = 0;
+      let alles = [];
+      while (true) {
+        const { data, error } = await query.range(vanaf, vanaf + PAGINA - 1);
+        if (error) return { data: null, error };
+        alles = alles.concat(data || []);
+        if (!data || data.length < PAGINA) break;
+        vanaf += PAGINA;
+      }
+      return { data: alles, error: null };
+    }
+
+    async function laadTotaalPlanning(jaar) {
+      const weken = isoWeeksInYear(jaar);
+      const maandVanWeek = [];
+      for (let w = 1; w <= weken; w++) maandVanWeek[w] = mondayOfIsoWeek(jaar, w).getUTCMonth();
+
+      const { data, error } = await haalAlleRijenOp(
+        supabaseClient.from('brew_planning').select('recipe_id, recipe_group_id, week_number, aantal_brouwsels, hl').eq('iso_year', jaar)
+      );
+      if (error) { console.error('Kon planning voor Total planned niet laden:', error); return {}; }
+
+      const perRecept = {};
+      (data || []).forEach(row => {
+        const recept = receptVoorItem(row);
+        const key = row.recipe_group_id || `id_${row.recipe_id}`;
+        if (!perRecept[key]) {
+          perRecept[key] = {
+            naam: recept ? recept.naam : `#${row.recipe_id}`,
+            kleur: (recept && recept.kleur) ? recept.kleur : null,
+            totaalHl: 0,
+            totaalBrouwsels: 0,
+            perWeek: Array(weken + 1).fill(0),
+            perMaand: Array(12).fill(0),
+          };
+        }
+        const item = perRecept[key];
+        const hl = Number(row.hl) || 0;
+        item.totaalHl += hl;
+        item.totaalBrouwsels += Number(row.aantal_brouwsels) || 0;
+        if (row.week_number >= 1 && row.week_number <= weken) {
+          item.perWeek[row.week_number] += hl;
+          item.perMaand[maandVanWeek[row.week_number]] += hl;
+        }
+      });
+      return perRecept;
+    }
+
+    function renderTotaalSamenvatting() {
+      const totaalBrouwsels = Object.values(totaalPerRecept).reduce((s, r) => s + r.totaalBrouwsels, 0);
+      document.getElementById('bp-totaal-samenvatting').textContent =
+        `${Object.keys(totaalPerRecept).length} recipe(s) · ${totaalBrouwsels} brew(s) planned in ${totaalHuidigJaar}`;
+    }
+
+    function renderTotaalTabel() {
+      const body = document.getElementById('bp-totaal-tabel-body');
+      const rijen = Object.entries(totaalPerRecept).sort((a, b) => b[1].totaalHl - a[1].totaalHl);
+      body.innerHTML = rijen.length ? rijen.map(([key, r]) => `
+        <tr class="${totaalGeselecteerd.has(key) ? 'geselecteerd' : ''}" data-key="${key}">
+          <td><input type="checkbox" class="bp-totaal-check" data-key="${key}" ${totaalGeselecteerd.has(key) ? 'checked' : ''} /></td>
+          <td>${escapeHtml(r.naam)}</td>
+          <td style="text-align:right;">${r.totaalBrouwsels}</td>
+          <td style="text-align:right;font-weight:600;">${formatHl(r.totaalHl)}</td>
+        </tr>`).join('') : '<tr><td colspan="4" style="color:#999; padding:12px 4px;">No brews planned this year.</td></tr>';
+    }
+
+    function renderTotaalChips() {
+      const el = document.getElementById('bp-totaal-chips');
+      el.innerHTML = [...totaalGeselecteerd].map(key => {
+        const r = totaalPerRecept[key];
+        if (!r) return '';
+        return `<span class="bp-totaal-chip" data-key="${key}">${escapeHtml(r.naam)}<span class="x" data-key="${key}">&times;</span></span>`;
+      }).join('');
+    }
+
+    function renderTotaalLegenda() {
+      const el = document.getElementById('bp-totaal-legenda');
+      el.innerHTML = [...totaalGeselecteerd].map(key => {
+        const r = totaalPerRecept[key];
+        if (!r) return '';
+        return `<span><i style="background:${r.kleur || '#999'};"></i>${escapeHtml(r.naam)}</span>`;
+      }).join('');
+    }
+
+    function tekenTotaalGrafiek() {
+      const canvas = document.getElementById('bp-totaal-canvas');
+      const ctx = canvas.getContext('2d');
+      const dpr = window.devicePixelRatio || 1;
+      const cssWidth = canvas.clientWidth || 800;
+      const cssHeight = 220;
+      canvas.width = cssWidth * dpr;
+      canvas.height = cssHeight * dpr;
+      canvas.style.height = cssHeight + 'px';
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.scale(dpr, dpr);
+      ctx.clearRect(0, 0, cssWidth, cssHeight);
+
+      const geselecteerd = [...totaalGeselecteerd].map(k => ({ key: k, ...totaalPerRecept[k] })).filter(r => r.naam);
+      if (geselecteerd.length === 0) {
+        ctx.fillStyle = '#999'; ctx.font = '13px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('Select one or more recipes above to see their trend', cssWidth / 2, cssHeight / 2);
+        return;
+      }
+
+      const weken = isoWeeksInYear(totaalHuidigJaar);
+      let labels, reeksen;
+      if (totaalGrafiekModus === 'week') {
+        labels = Array.from({ length: weken }, (_, i) => `wk${i + 1}`);
+        reeksen = geselecteerd.map(r => ({ kleur: r.kleur || '#999', data: r.perWeek.slice(1, weken + 1) }));
+      } else {
+        labels = MAAND_NAMEN;
+        reeksen = geselecteerd.map(r => ({ kleur: r.kleur || '#999', data: r.perMaand.slice() }));
+      }
+
+      const padLeft = 50, padBottom = 24, padTop = 10, padRight = 14;
+      const plotW = cssWidth - padLeft - padRight;
+      const plotH = cssHeight - padTop - padBottom;
+      const maxVal = Math.max(1, ...reeksen.flatMap(r => r.data));
+      const gridLines = 4;
+      const ruweStap = maxVal / gridLines;
+      const magnitude = Math.pow(10, Math.floor(Math.log10(ruweStap || 1)));
+      const stapOpties = [1, 2, 5, 10];
+      let stap = magnitude;
+      for (const m of stapOpties) { if (magnitude * m >= ruweStap) { stap = magnitude * m; break; } }
+      const yMax = Math.ceil(maxVal / stap) * stap || stap;
+
+      ctx.strokeStyle = '#eee';
+      ctx.fillStyle = '#999';
+      ctx.font = '11px Arial';
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      for (let g = 0; g <= gridLines; g++) {
+        const val = (yMax / gridLines) * g;
+        const y = padTop + plotH - (val / yMax) * plotH;
+        ctx.beginPath(); ctx.moveTo(padLeft, y); ctx.lineTo(padLeft + plotW, y); ctx.stroke();
+        ctx.fillText(`${Math.round(val)} hl`, padLeft - 6, y);
+      }
+
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      const n = labels.length;
+      const labelStap = totaalGrafiekModus === 'week' ? Math.ceil(n / 13) : 1;
+      for (let i = 0; i < n; i++) {
+        if (i % labelStap !== 0 && i !== n - 1) continue;
+        const x = padLeft + (n === 1 ? 0 : (i / (n - 1)) * plotW);
+        ctx.fillText(labels[i], x, padTop + plotH + 6);
+      }
+
+      reeksen.forEach(r => {
+        ctx.beginPath();
+        r.data.forEach((v, i) => {
+          const x = padLeft + (n === 1 ? 0 : (i / (n - 1)) * plotW);
+          const y = padTop + plotH - (v / yMax) * plotH;
+          i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        });
+        ctx.strokeStyle = r.kleur; ctx.lineWidth = 2; ctx.stroke();
+      });
+    }
+
+    function verversTotaalWeergave() {
+      renderTotaalTabel();
+      renderTotaalChips();
+      renderTotaalLegenda();
+      tekenTotaalGrafiek();
+    }
+
+    function toggleTotaalSelectie(key) {
+      if (totaalGeselecteerd.has(key)) totaalGeselecteerd.delete(key); else totaalGeselecteerd.add(key);
+      verversTotaalWeergave();
+    }
+
+    function toonTotaalSuggesties(term) {
+      const resultaten = document.getElementById('bp-totaal-resultaten');
+      if (!term) { resultaten.style.display = 'none'; return; }
+      const matches = Object.entries(totaalPerRecept).filter(([, r]) => r.naam.toLowerCase().includes(term)).slice(0, 20);
+      resultaten.innerHTML = matches.length
+        ? matches.map(([key, r]) => `<div data-key="${key}">${escapeHtml(r.naam)}</div>`).join('')
+        : '<div style="color:#999;">No matching recipes.</div>';
+      resultaten.style.display = 'block';
+    }
+
+    document.getElementById('bp-totaal-zoek').addEventListener('input', (e) => {
+      toonTotaalSuggesties(e.target.value.trim().toLowerCase());
+    });
+    document.getElementById('bp-totaal-resultaten').addEventListener('click', (e) => {
+      const regel = e.target.closest('[data-key]');
+      if (!regel) return;
+      totaalGeselecteerd.add(regel.dataset.key);
+      document.getElementById('bp-totaal-zoek').value = '';
+      document.getElementById('bp-totaal-resultaten').style.display = 'none';
+      verversTotaalWeergave();
+    });
+    document.addEventListener('click', (e) => {
+      const resultaten = document.getElementById('bp-totaal-resultaten');
+      if (resultaten && !resultaten.parentElement.contains(e.target)) resultaten.style.display = 'none';
+    });
+    document.getElementById('bp-totaal-tabel-body').addEventListener('change', (e) => {
+      if (e.target.classList.contains('bp-totaal-check')) toggleTotaalSelectie(e.target.dataset.key);
+    });
+    document.getElementById('bp-totaal-chips').addEventListener('click', (e) => {
+      const x = e.target.closest('.x');
+      if (x) toggleTotaalSelectie(x.dataset.key);
+    });
+    document.getElementById('bp-totaal-modus-week').addEventListener('click', () => {
+      totaalGrafiekModus = 'week';
+      document.getElementById('bp-totaal-modus-week').classList.add('actief');
+      document.getElementById('bp-totaal-modus-month').classList.remove('actief');
+      tekenTotaalGrafiek();
+    });
+    document.getElementById('bp-totaal-modus-month').addEventListener('click', () => {
+      totaalGrafiekModus = 'month';
+      document.getElementById('bp-totaal-modus-month').classList.add('actief');
+      document.getElementById('bp-totaal-modus-week').classList.remove('actief');
+      tekenTotaalGrafiek();
+    });
+
+    async function openTotaalPlanning() {
+      totaalHuidigJaar = huidigJaar;
+      document.getElementById('bp-totaal-jaar-label').textContent = totaalHuidigJaar;
+      document.getElementById('bp-totaal-overlay').classList.add('open');
+      document.getElementById('bp-totaal-samenvatting').textContent = 'Loading…';
+      totaalGeselecteerd = new Set();
+      totaalGrafiekModus = 'week';
+      document.getElementById('bp-totaal-modus-week').classList.add('actief');
+      document.getElementById('bp-totaal-modus-month').classList.remove('actief');
+      document.getElementById('bp-totaal-zoek').value = '';
+      totaalPerRecept = await laadTotaalPlanning(totaalHuidigJaar);
+      renderTotaalSamenvatting();
+      verversTotaalWeergave();
+    }
+    function sluitTotaalPlanning() {
+      document.getElementById('bp-totaal-overlay').classList.remove('open');
+    }
+    document.getElementById('bp-totaal-btn').addEventListener('click', openTotaalPlanning);
+    document.getElementById('bp-totaal-sluiten').addEventListener('click', sluitTotaalPlanning);
+    document.getElementById('bp-totaal-overlay').addEventListener('mousedown', (e) => {
+      if (e.target.id === 'bp-totaal-overlay') sluitTotaalPlanning();
     });
 
     // ------------------------------------------------------------------
