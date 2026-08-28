@@ -260,6 +260,8 @@
   }
   .bp-totaal-tabel-wrap td { padding: 6px 4px; border-top: 1px solid #eee; }
   .bp-totaal-tabel-wrap tr.geselecteerd { background: var(--jopen-red-tint); }
+  .bp-totaal-tabel-wrap .bp-split-marker { display: inline-flex; flex-direction: row; align-items: center; gap: 3px; margin-left: 6px; vertical-align: middle; }
+  .bp-totaal-tabel-wrap .bp-split-marker .bp-split-label { display: none; }
 </style>
 </head>
 <body>
@@ -421,7 +423,7 @@
 
       <div class="bp-totaal-tabel-wrap">
         <table>
-          <thead><tr><th></th><th>Recipe</th><th style="text-align:right;">Brews</th><th style="text-align:right;">Total hl</th></tr></thead>
+          <thead><tr><th></th><th>Recipe</th><th style="text-align:right;">Brews</th><th style="text-align:right;">Brewed hl</th><th style="text-align:right;">From splits</th><th style="text-align:right;">Total hl</th></tr></thead>
           <tbody id="bp-totaal-tabel-body"></tbody>
         </table>
       </div>
@@ -889,6 +891,11 @@
       if (el) el.textContent = `${formatHl(totaal)} hl`;
     }
 
+    // Herbruikbare split-icoon-markup (weekkaart + Total planned-tabel).
+    function splitMarkerHtml(titel, klasse) {
+      return `<span class="bp-split-marker ${klasse || ''}" title="${escapeHtml(titel)}"><svg class="bp-split-icon" width="15" height="14" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M14 4l2.29 2.29-2.88 2.88 1.42 1.42 2.88-2.88L20 10V4zm-4 0H4v6l2.29-2.29 4.71 4.7V18h2v-6.41l-5.29-5.3z" fill="#1d9e75"/></svg><span class="bp-split-label">split</span></span>`;
+    }
+
     function renderItem(item) {
       const recept = receptVoorItem(item);
       const naam = escapeHtml(receptNaamVoorItem(item));
@@ -903,7 +910,7 @@
         <div class="bp-item" data-id="${item.id}" style="${stijl}">
           <span class="bp-item-tekst">${naam} · ${item.aantal_brouwsels}br · ${hl}hl</span>
           ${item.prio ? '<span class="bp-prio-marker" title="Prio"><span class="bp-prio-ster">&#9733;</span><span class="bp-prio-label">prio</span></span>' : ''}
-          ${splits.length ? `<span class="bp-split-marker" title="${escapeHtml(splitTitel)}"><svg class="bp-split-icon" width="15" height="14" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M14 4l2.29 2.29-2.88 2.88 1.42 1.42 2.88-2.88L20 10V4zm-4 0H4v6l2.29-2.29 4.71 4.7V18h2v-6.41l-5.29-5.3z" fill="#1d9e75"/></svg><span class="bp-split-label">split</span></span>` : ''}
+          ${splits.length ? splitMarkerHtml(splitTitel) : ''}
           ${item.notities ? `<span class="bp-comment-marker" title="${escapeHtml(item.notities)}"><svg class="bp-comment-icon" width="15" height="14" viewBox="0 0 20 18" xmlns="http://www.w3.org/2000/svg"><path d="M2 2h16v10H8.5L4 16v-4H2z" fill="#2a5db0"/></svg><span class="bp-comment-label">Comment</span></span>` : ''}
         </div>`;
     }
@@ -1496,33 +1503,67 @@
       for (let w = 1; w <= weken; w++) maandVanWeek[w] = mondayOfIsoWeek(jaar, w).getUTCMonth();
 
       const { data, error } = await haalAlleRijenOp(
-        supabaseClient.from('brew_planning').select('recipe_id, recipe_group_id, week_number, aantal_brouwsels, hl').eq('iso_year', jaar)
+        supabaseClient.from('brew_planning').select('id, recipe_id, recipe_group_id, week_number, aantal_brouwsels, hl').eq('iso_year', jaar)
       );
       if (error) { console.error('Kon planning voor Total planned niet laden:', error); return {}; }
 
       const perRecept = {};
-      (data || []).forEach(row => {
-        const recept = receptVoorItem(row);
-        const key = row.recipe_group_id || `id_${row.recipe_id}`;
+      function zorgRecord(key, receptLike) {
         if (!perRecept[key]) {
           perRecept[key] = {
-            naam: recept ? recept.naam : `#${row.recipe_id}`,
-            kleur: (recept && recept.kleur) ? recept.kleur : null,
-            totaalHl: 0,
+            naam: receptLike ? receptLike.naam : `#${key}`,
+            kleur: (receptLike && receptLike.kleur) ? receptLike.kleur : null,
+            brewedHl: 0,
+            vanuitSplitsHl: 0,
             totaalBrouwsels: 0,
             perWeek: Array(weken + 1).fill(0),
             perMaand: Array(12).fill(0),
+            uitgaandeSplits: {}, // doelKey -> som hl (alleen gevuld als dit recept zelf splitst)
           };
         }
-        const item = perRecept[key];
+        return perRecept[key];
+      }
+
+      // 1. Gebrouwen volume per recept (zoals voorheen) -- blijft ALTIJD het
+      // volume onder het oorspronkelijke recept, ook als het achteraf
+      // (deels) gesplitst wordt. Een split verandert niets aan wat er
+      // daadwerkelijk gebrouwen is.
+      (data || []).forEach(row => {
+        const recept = receptVoorItem(row);
+        const key = row.recipe_group_id || `id_${row.recipe_id}`;
+        const item = zorgRecord(key, recept);
         const hl = Number(row.hl) || 0;
-        item.totaalHl += hl;
+        item.brewedHl += hl;
         item.totaalBrouwsels += Number(row.aantal_brouwsels) || 0;
         if (row.week_number >= 1 && row.week_number <= weken) {
           item.perWeek[row.week_number] += hl;
           item.perMaand[maandVanWeek[row.week_number]] += hl;
         }
       });
+
+      // 2. Split-volume toekennen aan het DOELrecept -- in dezelfde week als
+      // het bronbrouwsel (dat is wanneer het product er daadwerkelijk komt).
+      // Dit is ook hoe split-only recepten (die zelf nooit direct gepland
+      // staan, zoals Non Alcohol IPA) alsnog een rij krijgen. Het bronrecept
+      // krijgt een verwijzing terug (uitgaandeSplits) voor het split-icoontje.
+      (data || []).forEach(row => {
+        const splits = splitsPerItem[row.id] || [];
+        if (!splits.length) return;
+        const bronKey = row.recipe_group_id || `id_${row.recipe_id}`;
+        const bronRecord = zorgRecord(bronKey, receptVoorItem(row));
+        splits.forEach(s => {
+          const doelKey = s.recipe_group_id || `id_${s.recipe_id}`;
+          const doelRecord = zorgRecord(doelKey, receptVoorItem(s));
+          const hl = Number(s.hl) || 0;
+          doelRecord.vanuitSplitsHl += hl;
+          if (row.week_number >= 1 && row.week_number <= weken) {
+            doelRecord.perWeek[row.week_number] += hl;
+            doelRecord.perMaand[maandVanWeek[row.week_number]] += hl;
+          }
+          bronRecord.uitgaandeSplits[doelKey] = (bronRecord.uitgaandeSplits[doelKey] || 0) + hl;
+        });
+      });
+
       return perRecept;
     }
 
@@ -1534,14 +1575,24 @@
 
     function renderTotaalTabel() {
       const body = document.getElementById('bp-totaal-tabel-body');
-      const rijen = Object.entries(totaalPerRecept).sort((a, b) => b[1].totaalHl - a[1].totaalHl);
-      body.innerHTML = rijen.length ? rijen.map(([key, r]) => `
+      const rijen = Object.entries(totaalPerRecept)
+        .map(([key, r]) => [key, r, r.brewedHl + r.vanuitSplitsHl])
+        .sort((a, b) => b[2] - a[2]);
+      body.innerHTML = rijen.length ? rijen.map(([key, r, totaal]) => {
+        const uitgaandeEntries = Object.entries(r.uitgaandeSplits || {});
+        const splitTitel = uitgaandeEntries
+          .map(([doelKey, hl]) => `\u2192 ${totaalPerRecept[doelKey] ? totaalPerRecept[doelKey].naam : doelKey}: ${formatHl(hl)} hl`)
+          .join('\n');
+        return `
         <tr class="${totaalGeselecteerd.has(key) ? 'geselecteerd' : ''}" data-key="${key}">
           <td><input type="checkbox" class="bp-totaal-check" data-key="${key}" ${totaalGeselecteerd.has(key) ? 'checked' : ''} /></td>
-          <td>${escapeHtml(r.naam)}</td>
+          <td>${escapeHtml(r.naam)}${uitgaandeEntries.length ? splitMarkerHtml(splitTitel) : ''}</td>
           <td style="text-align:right;">${r.totaalBrouwsels}</td>
-          <td style="text-align:right;font-weight:600;">${formatHl(r.totaalHl)}</td>
-        </tr>`).join('') : '<tr><td colspan="4" style="color:#999; padding:12px 4px;">No brews planned this year.</td></tr>';
+          <td style="text-align:right;">${formatHl(r.brewedHl)}</td>
+          <td style="text-align:right;">${r.vanuitSplitsHl ? formatHl(r.vanuitSplitsHl) : '—'}</td>
+          <td style="text-align:right;font-weight:600;">${formatHl(totaal)}</td>
+        </tr>`;
+      }).join('') : '<tr><td colspan="6" style="color:#999; padding:12px 4px;">No brews planned this year.</td></tr>';
     }
 
     function renderTotaalChips() {
