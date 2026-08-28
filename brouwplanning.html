@@ -249,7 +249,17 @@
     background: #fff; color: #444; cursor: pointer;
   }
   .bp-totaal-toggle button.actief { background: var(--jopen-red); border-color: var(--jopen-red); color: #fff; }
-  #bp-totaal-canvas { width: 100%; display: block; }
+  #bp-totaal-export-btn { margin-left: auto; }
+  #bp-totaal-export-btn[disabled] { opacity: 0.5; cursor: default; }
+  .bp-totaal-canvas-wrap { position: relative; }
+  #bp-totaal-canvas { width: 100%; display: block; cursor: crosshair; }
+  .bp-totaal-tooltip {
+    position: absolute; display: none; background: #1f1f1f; color: #fff; font-size: 0.78em;
+    padding: 6px 9px; border-radius: 6px; pointer-events: none; z-index: 10; white-space: nowrap;
+  }
+  .bp-totaal-tooltip-week { font-weight: 700; margin-bottom: 3px; }
+  .bp-totaal-tooltip-rij { display: flex; align-items: center; gap: 5px; }
+  .bp-totaal-tooltip-rij i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
   .bp-totaal-legenda { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 8px; font-size: 0.78em; color: #444; }
   .bp-totaal-legenda i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
   .bp-totaal-tabel-wrap { max-height: 260px; overflow-y: auto; border-top: 1px solid #eee; flex: 1 1 auto; }
@@ -421,8 +431,12 @@
         <div class="bp-totaal-toggle">
           <button type="button" class="actief" data-modus="week" id="bp-totaal-modus-week">Weekly</button>
           <button type="button" data-modus="month" id="bp-totaal-modus-month">Monthly</button>
+          <button type="button" id="bp-totaal-export-btn" disabled>Export to Excel</button>
         </div>
-        <canvas id="bp-totaal-canvas" height="220"></canvas>
+        <div class="bp-totaal-canvas-wrap">
+          <canvas id="bp-totaal-canvas" height="220"></canvas>
+          <div class="bp-totaal-tooltip" id="bp-totaal-tooltip"></div>
+        </div>
         <div class="bp-totaal-legenda" id="bp-totaal-legenda"></div>
       </div>
 
@@ -440,6 +454,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <script src="config.js"></script>
   <script src="nav.js"></script>
   <script>
@@ -1630,7 +1645,9 @@
       }).join('');
     }
 
-    function tekenTotaalGrafiek() {
+    let totaalGrafiekLayout = null; // laatst getekende assen/reeksen -- voor de hover-tooltip
+
+    function tekenTotaalGrafiek(hoverIndex) {
       const canvas = document.getElementById('bp-totaal-canvas');
       const ctx = canvas.getContext('2d');
       const dpr = window.devicePixelRatio || 1;
@@ -1645,6 +1662,7 @@
 
       const geselecteerd = [...totaalGeselecteerd].map(k => ({ key: k, ...totaalPerRecept[k] })).filter(r => r.naam);
       if (geselecteerd.length === 0) {
+        totaalGrafiekLayout = null;
         ctx.fillStyle = '#999'; ctx.font = '13px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText('Select one or more recipes above to see their trend', cssWidth / 2, cssHeight / 2);
         return;
@@ -1654,10 +1672,10 @@
       let labels, reeksen;
       if (totaalGrafiekModus === 'week') {
         labels = Array.from({ length: weken }, (_, i) => `wk${i + 1}`);
-        reeksen = geselecteerd.map(r => ({ kleur: r.kleur || '#999', data: r.perWeek.slice(1, weken + 1) }));
+        reeksen = geselecteerd.map(r => ({ naam: r.naam, kleur: r.kleur || '#999', data: r.perWeek.slice(1, weken + 1) }));
       } else {
         labels = MAAND_NAMEN;
-        reeksen = geselecteerd.map(r => ({ kleur: r.kleur || '#999', data: r.perMaand.slice() }));
+        reeksen = geselecteerd.map(r => ({ naam: r.naam, kleur: r.kleur || '#999', data: r.perMaand.slice() }));
       }
 
       const padLeft = 50, padBottom = 24, padTop = 10, padRight = 14;
@@ -1671,6 +1689,11 @@
       let stap = magnitude;
       for (const m of stapOpties) { if (magnitude * m >= ruweStap) { stap = magnitude * m; break; } }
       const yMax = Math.ceil(maxVal / stap) * stap || stap;
+      const n = labels.length;
+
+      // Layout opslaan zodat de mousemove-handler dezelfde coördinaten kan
+      // hergebruiken zonder alles opnieuw te berekenen.
+      totaalGrafiekLayout = { padLeft, padTop, plotW, plotH, n, labels, reeksen, yMax, cssWidth, cssHeight };
 
       ctx.strokeStyle = '#eee';
       ctx.fillStyle = '#999';
@@ -1686,7 +1709,6 @@
 
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
-      const n = labels.length;
       const labelStap = totaalGrafiekModus === 'week' ? Math.ceil(n / 13) : 1;
       for (let i = 0; i < n; i++) {
         if (i % labelStap !== 0 && i !== n - 1) continue;
@@ -1703,13 +1725,75 @@
         });
         ctx.strokeStyle = r.kleur; ctx.lineWidth = 2; ctx.stroke();
       });
+
+      // Hover: verticale stippellijn + gevulde puntjes op de waarde per reeks.
+      if (hoverIndex != null && hoverIndex >= 0 && hoverIndex < n) {
+        const x = padLeft + (n === 1 ? 0 : (hoverIndex / (n - 1)) * plotW);
+        ctx.save();
+        ctx.setLineDash([3, 3]);
+        ctx.strokeStyle = '#999'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(x, padTop); ctx.lineTo(x, padTop + plotH); ctx.stroke();
+        ctx.restore();
+        reeksen.forEach(r => {
+          const v = r.data[hoverIndex];
+          const y = padTop + plotH - (v / yMax) * plotH;
+          ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+          ctx.fillStyle = r.kleur; ctx.fill();
+          ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
+        });
+      }
     }
+
+    function bepaalHoverIndex(mouseX) {
+      if (!totaalGrafiekLayout) return null;
+      const { padLeft, plotW, n } = totaalGrafiekLayout;
+      if (n <= 1) return 0;
+      let idx = Math.round(((mouseX - padLeft) / plotW) * (n - 1));
+      return Math.max(0, Math.min(n - 1, idx));
+    }
+
+    function toonTotaalTooltip(idx, muisX, muisY) {
+      const layout = totaalGrafiekLayout;
+      const tooltip = document.getElementById('bp-totaal-tooltip');
+      if (!layout || idx == null) { tooltip.style.display = 'none'; return; }
+
+      const labelVolledig = totaalGrafiekModus === 'week' ? `Week ${idx + 1}` : layout.labels[idx];
+      let html = `<div class="bp-totaal-tooltip-week">${escapeHtml(labelVolledig)}</div>`;
+      layout.reeksen.forEach(r => {
+        html += `<div class="bp-totaal-tooltip-rij"><i style="background:${r.kleur};"></i>${escapeHtml(r.naam)}: <b>${formatHl(r.data[idx])} hl</b></div>`;
+      });
+      tooltip.innerHTML = html;
+      tooltip.style.display = 'block';
+
+      // Positioneren t.o.v. de canvas-wrap (position:relative), met een
+      // eenvoudige clamp zodat de tooltip niet buiten de popup uitsteekt.
+      const wrap = tooltip.parentElement;
+      const wrapWidth = wrap.clientWidth || layout.cssWidth;
+      let links = muisX + 14;
+      const tooltipBreedte = tooltip.offsetWidth || 160;
+      if (links + tooltipBreedte > wrapWidth) links = muisX - tooltipBreedte - 14;
+      if (links < 0) links = 4;
+      tooltip.style.left = `${links}px`;
+      tooltip.style.top = `${Math.max(0, muisY - 10)}px`;
+    }
+
+    document.getElementById('bp-totaal-canvas').addEventListener('mousemove', (e) => {
+      if (!totaalGrafiekLayout) return;
+      const idx = bepaalHoverIndex(e.offsetX);
+      tekenTotaalGrafiek(idx);
+      toonTotaalTooltip(idx, e.offsetX, e.offsetY);
+    });
+    document.getElementById('bp-totaal-canvas').addEventListener('mouseleave', () => {
+      tekenTotaalGrafiek();
+      document.getElementById('bp-totaal-tooltip').style.display = 'none';
+    });
 
     function verversTotaalWeergave() {
       renderTotaalTabel();
       renderTotaalChips();
       renderTotaalLegenda();
       tekenTotaalGrafiek();
+      document.getElementById('bp-totaal-export-btn').disabled = totaalGeselecteerd.size === 0;
     }
 
     function toggleTotaalSelectie(key) {
@@ -1762,6 +1846,56 @@
       document.getElementById('bp-totaal-modus-week').classList.remove('actief');
       tekenTotaalGrafiek();
     });
+
+    // ------------------------------------------------------------------
+    // Total planned — export naar Excel (van de huidige selectie, in de
+    // huidige Weekly/Monthly-weergave)
+    // ------------------------------------------------------------------
+    async function exporteerTotaalNaarExcel() {
+      if (totaalGeselecteerd.size === 0) return;
+      const modus = totaalGrafiekModus;
+      const weken = isoWeeksInYear(totaalHuidigJaar);
+      const labels = modus === 'week' ? Array.from({ length: weken }, (_, i) => `wk${i + 1}`) : MAAND_NAMEN;
+
+      const rijen = [...totaalGeselecteerd]
+        .map(key => totaalPerRecept[key])
+        .filter(Boolean)
+        .map(r => {
+          const data = modus === 'week' ? r.perWeek.slice(1, weken + 1) : r.perMaand.slice();
+          const totaal = data.reduce((a, b) => a + b, 0);
+          return [r.naam, ...data.map(v => Math.round(v * 100) / 100), Math.round(totaal * 100) / 100];
+        })
+        .sort((a, b) => b[b.length - 1] - a[a.length - 1]);
+
+      const workbook = new ExcelJS.Workbook();
+      const sheet = workbook.addWorksheet('Total planned');
+      sheet.getColumn(1).width = 30;
+
+      const kopCel = sheet.getCell('A1');
+      kopCel.value = `Total planned ${totaalHuidigJaar} — ${modus === 'week' ? 'weekly' : 'monthly'}`;
+      kopCel.font = { bold: true, size: 13 };
+
+      sheet.addTable({
+        name: 'TotaalGepland',
+        ref: 'A3',
+        headerRow: true,
+        style: { theme: 'TableStyleLight15', showRowStripes: true },
+        columns: [{ name: 'Recipe' }, ...labels.map(l => ({ name: l })), { name: 'Total hl' }],
+        rows: rijen,
+      });
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const bestandsnaam = `Total planned ${totaalHuidigJaar} (${modus === 'week' ? 'weekly' : 'monthly'}).xlsx`;
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = bestandsnaam;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(link.href);
+    }
+    document.getElementById('bp-totaal-export-btn').addEventListener('click', exporteerTotaalNaarExcel);
 
     async function openTotaalPlanning() {
       totaalHuidigJaar = huidigJaar;
