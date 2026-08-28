@@ -210,6 +210,26 @@
     // ------------------------------------------------------------------
     // Berekening
     // ------------------------------------------------------------------
+    // Supabase/PostgREST beperkt elk antwoord standaard tot 1000 rijen. Bij
+    // een klein weekbereik blijft recipe_ingredients daaronder, maar bij een
+    // vol jaar (112 recepten -> 2181 receptregels, gemeten) werd de rest
+    // stilzwijgend afgekapt -- vandaar de kloppende totalen bij een korte
+    // periode maar onjuiste (te lage) totalen bij bv. alle 52 weken. Zelfde
+    // paginerings-patroon als ingredienten.html/receptoverzicht.html.
+    async function haalAlleRijenOp(query) {
+      const PAGINA = 1000;
+      let vanaf = 0;
+      let alles = [];
+      while (true) {
+        const { data, error } = await query.range(vanaf, vanaf + PAGINA - 1);
+        if (error) return { data: null, error };
+        alles = alles.concat(data || []);
+        if (!data || data.length < PAGINA) break;
+        vanaf += PAGINA;
+      }
+      return { data: alles, error: null };
+    }
+
     async function berekenPrognose() {
       const jaar = Number(document.getElementById('vp-jaar').value);
       const van = Number(document.getElementById('vp-van').value);
@@ -256,11 +276,15 @@
       });
       const receptIds = Object.keys(brouwselsPerRecept).map(Number);
 
-      // 2. Receptregels (ingrediënten) van al die recepten in één keer ophalen
-      const { data: ingredientRegels, error: ingErr } = await supabaseClient
-        .from('recipe_ingredients')
-        .select('recipe_id, rol, ingredient_id, hoeveelheid, eenheid')
-        .in('recipe_id', receptIds);
+      // 2. Receptregels (ingrediënten) van al die recepten in één keer ophalen.
+      // Gepagineerd (zie haalAlleRijenOp hierboven) -- bij een groot
+      // weekbereik kan dit ruim boven de standaard 1000-rijen-limiet komen.
+      const { data: ingredientRegels, error: ingErr } = await haalAlleRijenOp(
+        supabaseClient
+          .from('recipe_ingredients')
+          .select('recipe_id, rol, ingredient_id, hoeveelheid, eenheid')
+          .in('recipe_id', receptIds)
+      );
 
       if (ingErr) {
         resultaatEl.innerHTML = `<div class="vp-leeg">Could not load recipe ingredients: ${escapeHtml(ingErr.message)}</div>`;
