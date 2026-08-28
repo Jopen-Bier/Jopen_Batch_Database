@@ -260,6 +260,11 @@
   }
   .bp-totaal-tabel-wrap td { padding: 6px 4px; border-top: 1px solid #eee; }
   .bp-totaal-tabel-wrap tr.geselecteerd { background: var(--jopen-red-tint); }
+  .bp-totaal-tabel-rij-verwijder {
+    border: none; background: none; color: #999; cursor: pointer; font-size: 1.1em; line-height: 1; padding: 0 4px;
+  }
+  .bp-totaal-tabel-rij-verwijder:hover { color: #a33f2c; }
+  .bp-totaal-tabel-leeg { color: #999; padding: 16px 4px; text-align: center; }
   .bp-totaal-tabel-wrap .bp-split-marker { display: inline-flex; flex-direction: row; align-items: center; gap: 3px; margin-left: 6px; vertical-align: middle; }
   .bp-totaal-tabel-wrap .bp-split-marker .bp-split-label { display: none; }
 </style>
@@ -1575,24 +1580,36 @@
 
     function renderTotaalTabel() {
       const body = document.getElementById('bp-totaal-tabel-body');
-      const rijen = Object.entries(totaalPerRecept)
+      // De tabel toont uitsluitend de geselecteerde recepten (zelfde
+      // selectie als de chips/grafiek) -- geen aparte "volledige lijst"-modus
+      // meer. Zo blijft het duidelijk een detailoverzicht van de selectie,
+      // met de Brewed/Split-hl-uitsplitsing die de grafiek zelf niet toont.
+      const rijen = [...totaalGeselecteerd]
+        .map(key => [key, totaalPerRecept[key]])
+        .filter(([, r]) => !!r)
         .map(([key, r]) => [key, r, r.brewedHl + r.vanuitSplitsHl])
         .sort((a, b) => b[2] - a[2]);
-      body.innerHTML = rijen.length ? rijen.map(([key, r, totaal]) => {
+
+      if (rijen.length === 0) {
+        body.innerHTML = `<tr><td colspan="6" class="bp-totaal-tabel-leeg">Search and select recipes above to see their brewed/split hl here.</td></tr>`;
+        return;
+      }
+
+      body.innerHTML = rijen.map(([key, r, totaal]) => {
         const uitgaandeEntries = Object.entries(r.uitgaandeSplits || {});
         const splitTitel = uitgaandeEntries
           .map(([doelKey, hl]) => `\u2192 ${totaalPerRecept[doelKey] ? totaalPerRecept[doelKey].naam : doelKey}: ${formatHl(hl)} hl`)
           .join('\n');
         return `
-        <tr class="${totaalGeselecteerd.has(key) ? 'geselecteerd' : ''}" data-key="${key}">
-          <td><input type="checkbox" class="bp-totaal-check" data-key="${key}" ${totaalGeselecteerd.has(key) ? 'checked' : ''} /></td>
+        <tr data-key="${key}">
+          <td><button type="button" class="bp-totaal-tabel-rij-verwijder" data-key="${key}" title="Remove">&times;</button></td>
           <td>${escapeHtml(r.naam)}${uitgaandeEntries.length ? splitMarkerHtml(splitTitel) : ''}</td>
           <td style="text-align:right;">${r.totaalBrouwsels}</td>
           <td style="text-align:right;">${formatHl(r.brewedHl)}</td>
           <td style="text-align:right;">${r.vanuitSplitsHl ? formatHl(r.vanuitSplitsHl) : '—'}</td>
           <td style="text-align:right;font-weight:600;">${formatHl(totaal)}</td>
         </tr>`;
-      }).join('') : '<tr><td colspan="6" style="color:#999; padding:12px 4px;">No brews planned this year.</td></tr>';
+      }).join('');
     }
 
     function renderTotaalChips() {
@@ -1725,8 +1742,9 @@
       const resultaten = document.getElementById('bp-totaal-resultaten');
       if (resultaten && !resultaten.parentElement.contains(e.target)) resultaten.style.display = 'none';
     });
-    document.getElementById('bp-totaal-tabel-body').addEventListener('change', (e) => {
-      if (e.target.classList.contains('bp-totaal-check')) toggleTotaalSelectie(e.target.dataset.key);
+    document.getElementById('bp-totaal-tabel-body').addEventListener('click', (e) => {
+      const verwijderBtn = e.target.closest('.bp-totaal-tabel-rij-verwijder');
+      if (verwijderBtn) toggleTotaalSelectie(verwijderBtn.dataset.key);
     });
     document.getElementById('bp-totaal-chips').addEventListener('click', (e) => {
       const x = e.target.closest('.x');
