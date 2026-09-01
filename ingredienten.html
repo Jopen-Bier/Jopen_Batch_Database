@@ -590,7 +590,7 @@ async function laadIngredienten() {
   const [ingResult, usageResult, revisieResult] = await Promise.all([
     supabaseClient
       .from('ingredients')
-      .select('id, naam, categorie, category_id, eenheid, prijs, prijs_per_kg, prijs_2, eenheid_prijs_1, eenheid_prijs_2, extract_pct, alpha_pct, gistfactor, leverancier, leverancier_2, kleur_ebc, allergenen, ingredient_declaratie, bewaartemperatuur, houdbaarheid, houdbaarheid_eenheid, houdbaarheid_na_openen, houdbaarheid_na_openen_eenheid, dichtheid, alcohol_pct, status, versie_major, versie_minor, ingredient_group_id, versie_status, aangemaakt_op, gewijzigd_op, ingredient_categories(name, uses_alpha_pct, uses_extract_pct, uses_gistfactor)')
+      .select('id, naam, categorie, category_id, eenheid, prijs, prijs_per_kg, prijs_2, prijs_per_kg_2, eenheid_prijs_1, eenheid_prijs_2, extract_pct, alpha_pct, gistfactor, leverancier, leverancier_2, leverancier_3, prijs_3, prijs_per_kg_3, eenheid_prijs_3, kleur_ebc, allergenen, ingredient_declaratie, bewaartemperatuur, houdbaarheid, houdbaarheid_eenheid, houdbaarheid_na_openen, houdbaarheid_na_openen_eenheid, dichtheid, alcohol_pct, status, versie_major, versie_minor, ingredient_group_id, versie_status, aangemaakt_op, gewijzigd_op, ingredient_categories(name, uses_alpha_pct, uses_extract_pct, uses_gistfactor)')
       .eq('versie_status', 'huidig')
       .order('naam'),
     // Server-side geaggregeerd (ingredient_gebruik_counts-view) i.p.v. alle
@@ -753,7 +753,8 @@ function pasFiltersToe() {
     const matchtZoek = !zoek ||
       (i.naam || '').toLowerCase().includes(zoek) ||
       (i.leverancier || '').toLowerCase().includes(zoek) ||
-      (i.leverancier_2 || '').toLowerCase().includes(zoek);
+      (i.leverancier_2 || '').toLowerCase().includes(zoek) ||
+      (i.leverancier_3 || '').toLowerCase().includes(zoek);
     const matchtCategorie = !i.category_id || geselecteerdeIngCategorieen.has(String(i.category_id));
     const matchtStatus = !i.status || geselecteerdeIngStatussen.has(i.status);
     return matchtZoek && matchtCategorie && matchtStatus;
@@ -1212,9 +1213,13 @@ function renderDetailAlleen(id) {
   const supplierRows = [
     ['Supplier #1', i.leverancier, ''],
     ['Price #1', prijsMetEenheid(i.prijs, i.eenheid_prijs_1), ''],
+    ['Price #1 per kg', prijsMetEenheid(i.prijs_per_kg, 'kg'), ''],
     ['Supplier #2', i.leverancier_2, ''],
     ['Price #2', prijsMetEenheid(i.prijs_2, i.eenheid_prijs_2), ''],
-    ['Price per kg', prijsMetEenheid(i.prijs_per_kg, 'kg'), ''],
+    ['Price #2 per kg', prijsMetEenheid(i.prijs_per_kg_2, 'kg'), ''],
+    ['Supplier #3', i.leverancier_3, ''],
+    ['Price #3', prijsMetEenheid(i.prijs_3, i.eenheid_prijs_3), ''],
+    ['Price #3 per kg', prijsMetEenheid(i.prijs_per_kg_3, 'kg'), ''],
   ];
 
   const parameterRows = [];
@@ -1336,9 +1341,19 @@ function renderDetailBewerken(i) {  const container = document.getElementById('i
       <div class="ing-edit-subrow">
         <input type="number" id="veld-${prijsKey}" value="${i[prijsKey] ?? ''}" placeholder="€" />
         <span class="ing-per-eenheid-lbl">per</span>
-        <input type="text" id="veld-${eenheidKey}" class="ing-per-eenheid" value="${i[eenheidKey] ?? ''}" placeholder="unit" />
+        <select id="veld-${eenheidKey}" class="ing-per-eenheid">${eenhedenOpties(i[eenheidKey] ?? '')}</select>
       </div>
     </div>`;
+
+  // Eén leverancier-groep (naam + prijs/eenheid + prijs per kg), zodat Supplier
+  // #1/#2/#3 dezelfde opbouw delen zonder de markup driemaal uit te schrijven.
+  const leverancierBlok = (nr, naamKey, prijsKey, eenheidKey, perKgKey) => `
+      <div class="ing-edit-row wide">
+        <label for="veld-${naamKey}">Supplier #${nr}</label>
+        <input type="text" id="veld-${naamKey}" style="width:280px; text-align:left;" value="${i[naamKey] ?? ''}" />
+      </div>
+      ${prijsMetEenheidVeld(`Price #${nr}`, prijsKey, eenheidKey)}
+      ${veld(`Price #${nr} per kg`, perKgKey, '€/kg', 'number')}`;
 
   const temperatuurVeld = (label, key) => `
     <div class="ing-edit-row">
@@ -1401,11 +1416,9 @@ function renderDetailBewerken(i) {  const container = document.getElementById('i
     </div>
     <div class="ing-card">
       <div class="ing-card-titel">Supplier information</div>
-      ${veld('Supplier #1', 'leverancier')}
-      ${prijsMetEenheidVeld('Price #1', 'prijs', 'eenheid_prijs_1')}
-      ${veld('Supplier #2', 'leverancier_2')}
-      ${prijsMetEenheidVeld('Price #2', 'prijs_2', 'eenheid_prijs_2')}
-      ${veld('Price per kg', 'prijs_per_kg', '€/kg', 'number')}
+      ${leverancierBlok(1, 'leverancier', 'prijs', 'eenheid_prijs_1', 'prijs_per_kg')}
+      ${leverancierBlok(2, 'leverancier_2', 'prijs_2', 'eenheid_prijs_2', 'prijs_per_kg_2')}
+      ${leverancierBlok(3, 'leverancier_3', 'prijs_3', 'eenheid_prijs_3', 'prijs_per_kg_3')}
     </div>
     <div class="ing-card">
       <div class="ing-card-titel">Parameters</div>
@@ -1549,6 +1562,11 @@ async function slaIngredientOp(i, soort, wijziging) {
     prijs_2: getal('veld-prijs_2'),
     eenheid_prijs_2: tekst('veld-eenheid_prijs_2'),
     prijs_per_kg: getal('veld-prijs_per_kg'),
+    leverancier_3: tekst('veld-leverancier_3'),
+    prijs_3: getal('veld-prijs_3'),
+    eenheid_prijs_3: tekst('veld-eenheid_prijs_3'),
+    prijs_per_kg_2: getal('veld-prijs_per_kg_2'),
+    prijs_per_kg_3: getal('veld-prijs_per_kg_3'),
     // Alleen het veld meesturen als het bij de gekozen categorie hoort;
     // anders expliciet leegmaken zodat er geen niet-relevante waarde blijft
     // hangen (bijv. een alpha % op een moutsoort).
@@ -1656,7 +1674,7 @@ async function slaIngredientOp(i, soort, wijziging) {
       aangemaakt_door: gebruikerId,
       gewijzigd_door: gebruikerId,
     })
-    .select('id, naam, categorie, category_id, eenheid, prijs, prijs_per_kg, prijs_2, eenheid_prijs_1, eenheid_prijs_2, extract_pct, alpha_pct, gistfactor, leverancier, leverancier_2, kleur_ebc, allergenen, ingredient_declaratie, bewaartemperatuur, houdbaarheid, houdbaarheid_eenheid, houdbaarheid_na_openen, houdbaarheid_na_openen_eenheid, dichtheid, alcohol_pct, status, versie_major, versie_minor, ingredient_group_id, versie_status, aangemaakt_op, gewijzigd_op, ingredient_categories(name, uses_alpha_pct, uses_extract_pct, uses_gistfactor)')
+    .select('id, naam, categorie, category_id, eenheid, prijs, prijs_per_kg, prijs_2, prijs_per_kg_2, eenheid_prijs_1, eenheid_prijs_2, extract_pct, alpha_pct, gistfactor, leverancier, leverancier_2, leverancier_3, prijs_3, prijs_per_kg_3, eenheid_prijs_3, kleur_ebc, allergenen, ingredient_declaratie, bewaartemperatuur, houdbaarheid, houdbaarheid_eenheid, houdbaarheid_na_openen, houdbaarheid_na_openen_eenheid, dichtheid, alcohol_pct, status, versie_major, versie_minor, ingredient_group_id, versie_status, aangemaakt_op, gewijzigd_op, ingredient_categories(name, uses_alpha_pct, uses_extract_pct, uses_gistfactor)')
     .single();
 
   if (insertErr) {
@@ -1725,9 +1743,17 @@ function toonNieuwFormulier() {
       <div class="ing-edit-subrow">
         <input type="number" id="${prijsId}" placeholder="€" />
         <span class="ing-per-eenheid-lbl">per</span>
-        <input type="text" id="${eenheidId}" class="ing-per-eenheid" placeholder="unit" />
+        <select id="${eenheidId}" class="ing-per-eenheid">${eenhedenOpties('')}</select>
       </div>
     </div>`;
+
+  const leverancierBlok = (nr, naamId, prijsId, eenheidId, perKgId) => `
+      <div class="ing-edit-row wide">
+        <label for="${naamId}">Supplier #${nr}</label>
+        <input type="text" id="${naamId}" style="width:280px; text-align:left;" />
+      </div>
+      ${prijsMetEenheidVeld(`Price #${nr}`, prijsId, eenheidId)}
+      ${veld(`Price #${nr} per kg`, perKgId, '€/kg', 'number')}`;
 
   const temperatuurVeld = (label, id) => `
     <div class="ing-edit-row">
@@ -1785,17 +1811,9 @@ function toonNieuwFormulier() {
     </div>
     <div class="ing-card">
       <div class="ing-card-titel">Supplier information</div>
-      <div class="ing-edit-row wide">
-        <label for="nieuw-leverancier">Supplier #1</label>
-        <input type="text" id="nieuw-leverancier" style="width:280px; text-align:left;" />
-      </div>
-      ${prijsMetEenheidVeld('Price #1', 'nieuw-prijs', 'nieuw-eenheid_prijs_1')}
-      <div class="ing-edit-row wide">
-        <label for="nieuw-leverancier_2">Supplier #2</label>
-        <input type="text" id="nieuw-leverancier_2" style="width:280px; text-align:left;" />
-      </div>
-      ${prijsMetEenheidVeld('Price #2', 'nieuw-prijs_2', 'nieuw-eenheid_prijs_2')}
-      ${veld('Price per kg', 'nieuw-prijs_per_kg', '€/kg', 'number')}
+      ${leverancierBlok(1, 'nieuw-leverancier', 'nieuw-prijs', 'nieuw-eenheid_prijs_1', 'nieuw-prijs_per_kg')}
+      ${leverancierBlok(2, 'nieuw-leverancier_2', 'nieuw-prijs_2', 'nieuw-eenheid_prijs_2', 'nieuw-prijs_per_kg_2')}
+      ${leverancierBlok(3, 'nieuw-leverancier_3', 'nieuw-prijs_3', 'nieuw-eenheid_prijs_3', 'nieuw-prijs_per_kg_3')}
     </div>
     <div class="ing-card">
       <div class="ing-card-titel">Parameters</div>
@@ -1880,6 +1898,11 @@ async function slaNieuwIngredientOp() {
     prijs_2: getal('nieuw-prijs_2'),
     eenheid_prijs_2: tekst('nieuw-eenheid_prijs_2'),
     prijs_per_kg: getal('nieuw-prijs_per_kg'),
+    leverancier_3: tekst('nieuw-leverancier_3'),
+    prijs_3: getal('nieuw-prijs_3'),
+    eenheid_prijs_3: tekst('nieuw-eenheid_prijs_3'),
+    prijs_per_kg_2: getal('nieuw-prijs_per_kg_2'),
+    prijs_per_kg_3: getal('nieuw-prijs_per_kg_3'),
     extract_pct: gekozenCategorie?.uses_extract_pct ? getal('nieuw-extract_pct') : null,
     alpha_pct: gekozenCategorie?.uses_alpha_pct ? getal('nieuw-alpha_pct') : null,
     gistfactor: gekozenCategorie?.uses_gistfactor ? getal('nieuw-gistfactor') : null,
@@ -1905,7 +1928,7 @@ async function slaNieuwIngredientOp() {
   const { data, error } = await supabaseClient
     .from('ingredients')
     .insert(nieuw)
-    .select('id, naam, categorie, category_id, eenheid, prijs, prijs_per_kg, prijs_2, eenheid_prijs_1, eenheid_prijs_2, extract_pct, alpha_pct, gistfactor, leverancier, leverancier_2, kleur_ebc, allergenen, ingredient_declaratie, bewaartemperatuur, houdbaarheid, houdbaarheid_eenheid, houdbaarheid_na_openen, houdbaarheid_na_openen_eenheid, dichtheid, alcohol_pct, status, versie_major, versie_minor, ingredient_group_id, versie_status, aangemaakt_op, gewijzigd_op, ingredient_categories(name, uses_alpha_pct, uses_extract_pct, uses_gistfactor)')
+    .select('id, naam, categorie, category_id, eenheid, prijs, prijs_per_kg, prijs_2, prijs_per_kg_2, eenheid_prijs_1, eenheid_prijs_2, extract_pct, alpha_pct, gistfactor, leverancier, leverancier_2, leverancier_3, prijs_3, prijs_per_kg_3, eenheid_prijs_3, kleur_ebc, allergenen, ingredient_declaratie, bewaartemperatuur, houdbaarheid, houdbaarheid_eenheid, houdbaarheid_na_openen, houdbaarheid_na_openen_eenheid, dichtheid, alcohol_pct, status, versie_major, versie_minor, ingredient_group_id, versie_status, aangemaakt_op, gewijzigd_op, ingredient_categories(name, uses_alpha_pct, uses_extract_pct, uses_gistfactor)')
     .single();
 
   if (error) {
