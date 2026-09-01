@@ -590,7 +590,7 @@ async function laadIngredienten() {
   const [ingResult, usageResult, revisieResult] = await Promise.all([
     supabaseClient
       .from('ingredients')
-      .select('id, naam, categorie, category_id, eenheid, prijs, prijs_2, eenheid_prijs_1, eenheid_prijs_2, extract_pct, alpha_pct, gistfactor, leverancier, leverancier_2, kleur_ebc, allergenen, ingredient_declaratie, bewaartemperatuur, houdbaarheid, houdbaarheid_eenheid, houdbaarheid_na_openen, houdbaarheid_na_openen_eenheid, dichtheid, alcohol_pct, status, versie_major, versie_minor, ingredient_group_id, versie_status, aangemaakt_op, gewijzigd_op, ingredient_categories(name, uses_alpha_pct, uses_extract_pct, uses_gistfactor)')
+      .select('id, naam, categorie, category_id, eenheid, prijs, prijs_per_kg, prijs_2, eenheid_prijs_1, eenheid_prijs_2, extract_pct, alpha_pct, gistfactor, leverancier, leverancier_2, kleur_ebc, allergenen, ingredient_declaratie, bewaartemperatuur, houdbaarheid, houdbaarheid_eenheid, houdbaarheid_na_openen, houdbaarheid_na_openen_eenheid, dichtheid, alcohol_pct, status, versie_major, versie_minor, ingredient_group_id, versie_status, aangemaakt_op, gewijzigd_op, ingredient_categories(name, uses_alpha_pct, uses_extract_pct, uses_gistfactor)')
       .eq('versie_status', 'huidig')
       .order('naam'),
     // Server-side geaggregeerd (ingredient_gebruik_counts-view) i.p.v. alle
@@ -1214,6 +1214,7 @@ function renderDetailAlleen(id) {
     ['Price #1', prijsMetEenheid(i.prijs, i.eenheid_prijs_1), ''],
     ['Supplier #2', i.leverancier_2, ''],
     ['Price #2', prijsMetEenheid(i.prijs_2, i.eenheid_prijs_2), ''],
+    ['Price per kg', prijsMetEenheid(i.prijs_per_kg, 'kg'), ''],
   ];
 
   const parameterRows = [];
@@ -1404,6 +1405,7 @@ function renderDetailBewerken(i) {  const container = document.getElementById('i
       ${prijsMetEenheidVeld('Price #1', 'prijs', 'eenheid_prijs_1')}
       ${veld('Supplier #2', 'leverancier_2')}
       ${prijsMetEenheidVeld('Price #2', 'prijs_2', 'eenheid_prijs_2')}
+      ${veld('Price per kg', 'prijs_per_kg', '€/kg', 'number')}
     </div>
     <div class="ing-card">
       <div class="ing-card-titel">Parameters</div>
@@ -1546,6 +1548,7 @@ async function slaIngredientOp(i, soort, wijziging) {
     leverancier_2: tekst('veld-leverancier_2'),
     prijs_2: getal('veld-prijs_2'),
     eenheid_prijs_2: tekst('veld-eenheid_prijs_2'),
+    prijs_per_kg: getal('veld-prijs_per_kg'),
     // Alleen het veld meesturen als het bij de gekozen categorie hoort;
     // anders expliciet leegmaken zodat er geen niet-relevante waarde blijft
     // hangen (bijv. een alpha % op een moutsoort).
@@ -1653,7 +1656,7 @@ async function slaIngredientOp(i, soort, wijziging) {
       aangemaakt_door: gebruikerId,
       gewijzigd_door: gebruikerId,
     })
-    .select('id, naam, categorie, category_id, eenheid, prijs, prijs_2, eenheid_prijs_1, eenheid_prijs_2, extract_pct, alpha_pct, gistfactor, leverancier, leverancier_2, kleur_ebc, allergenen, ingredient_declaratie, bewaartemperatuur, houdbaarheid, houdbaarheid_eenheid, houdbaarheid_na_openen, houdbaarheid_na_openen_eenheid, dichtheid, alcohol_pct, status, versie_major, versie_minor, ingredient_group_id, versie_status, aangemaakt_op, gewijzigd_op, ingredient_categories(name, uses_alpha_pct, uses_extract_pct, uses_gistfactor)')
+    .select('id, naam, categorie, category_id, eenheid, prijs, prijs_per_kg, prijs_2, eenheid_prijs_1, eenheid_prijs_2, extract_pct, alpha_pct, gistfactor, leverancier, leverancier_2, kleur_ebc, allergenen, ingredient_declaratie, bewaartemperatuur, houdbaarheid, houdbaarheid_eenheid, houdbaarheid_na_openen, houdbaarheid_na_openen_eenheid, dichtheid, alcohol_pct, status, versie_major, versie_minor, ingredient_group_id, versie_status, aangemaakt_op, gewijzigd_op, ingredient_categories(name, uses_alpha_pct, uses_extract_pct, uses_gistfactor)')
     .single();
 
   if (insertErr) {
@@ -1792,6 +1795,7 @@ function toonNieuwFormulier() {
         <input type="text" id="nieuw-leverancier_2" style="width:280px; text-align:left;" />
       </div>
       ${prijsMetEenheidVeld('Price #2', 'nieuw-prijs_2', 'nieuw-eenheid_prijs_2')}
+      ${veld('Price per kg', 'nieuw-prijs_per_kg', '€/kg', 'number')}
     </div>
     <div class="ing-card">
       <div class="ing-card-titel">Parameters</div>
@@ -1875,6 +1879,7 @@ async function slaNieuwIngredientOp() {
     leverancier_2: tekst('nieuw-leverancier_2'),
     prijs_2: getal('nieuw-prijs_2'),
     eenheid_prijs_2: tekst('nieuw-eenheid_prijs_2'),
+    prijs_per_kg: getal('nieuw-prijs_per_kg'),
     extract_pct: gekozenCategorie?.uses_extract_pct ? getal('nieuw-extract_pct') : null,
     alpha_pct: gekozenCategorie?.uses_alpha_pct ? getal('nieuw-alpha_pct') : null,
     gistfactor: gekozenCategorie?.uses_gistfactor ? getal('nieuw-gistfactor') : null,
@@ -1900,7 +1905,7 @@ async function slaNieuwIngredientOp() {
   const { data, error } = await supabaseClient
     .from('ingredients')
     .insert(nieuw)
-    .select('id, naam, categorie, category_id, eenheid, prijs, prijs_2, eenheid_prijs_1, eenheid_prijs_2, extract_pct, alpha_pct, gistfactor, leverancier, leverancier_2, kleur_ebc, allergenen, ingredient_declaratie, bewaartemperatuur, houdbaarheid, houdbaarheid_eenheid, houdbaarheid_na_openen, houdbaarheid_na_openen_eenheid, dichtheid, alcohol_pct, status, versie_major, versie_minor, ingredient_group_id, versie_status, aangemaakt_op, gewijzigd_op, ingredient_categories(name, uses_alpha_pct, uses_extract_pct, uses_gistfactor)')
+    .select('id, naam, categorie, category_id, eenheid, prijs, prijs_per_kg, prijs_2, eenheid_prijs_1, eenheid_prijs_2, extract_pct, alpha_pct, gistfactor, leverancier, leverancier_2, kleur_ebc, allergenen, ingredient_declaratie, bewaartemperatuur, houdbaarheid, houdbaarheid_eenheid, houdbaarheid_na_openen, houdbaarheid_na_openen_eenheid, dichtheid, alcohol_pct, status, versie_major, versie_minor, ingredient_group_id, versie_status, aangemaakt_op, gewijzigd_op, ingredient_categories(name, uses_alpha_pct, uses_extract_pct, uses_gistfactor)')
     .single();
 
   if (error) {
