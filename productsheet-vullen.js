@@ -140,10 +140,19 @@ async function psSchrijfXlsx(writer, live, productSheetRow, snapshot) {
 
   // Versieblok
   await set('E66', String(p.huidige_versie ?? 1));
-  await set('E67', `${live.recipe.versie_major ?? 1}.${live.recipe.versie_minor ?? 0}`);
+  await set('E67', { text: `${live.recipe.versie_major ?? 1}.${live.recipe.versie_minor ?? 0}` });
   await set('E69', p._writtenByNaam || '');
-  await set('E70', p._datum || new Date().toISOString().slice(0, 10));
+  await set('E70', psFormatteerDatumDDMMJJJJ(p._datum));
   await set('E72', p._changelog || '');
+}
+
+/** "2026-09-02" -> "02-09-2026". Geeft de invoer ongewijzigd terug als het geen (herkenbare) datum is. */
+function psFormatteerDatumDDMMJJJJ(isoDatum) {
+  if (!isoDatum) return '';
+  const m = String(isoDatum).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return isoDatum;
+  const [, jaar, maand, dag] = m;
+  return `${dag}-${maand}-${jaar}`;
 }
 
 /**
@@ -229,7 +238,7 @@ async function psDownload(recipeGroupId, gebruiker) {
     .order('versie', { ascending: false }).limit(1).maybeSingle();
 
   productSheetRow._writtenByNaam = laatsteRevisie ? laatsteRevisie.door : (gebruiker?.naam || '');
-  productSheetRow._datum = laatsteRevisie ? laatsteRevisie.datum : (productSheetRow.bijgewerkt_op || '').slice(0, 10);
+  productSheetRow._datum = laatsteRevisie ? laatsteRevisie.datum : ((productSheetRow.bijgewerkt_op || '').slice(0, 10) || new Date().toISOString().slice(0, 10));
   productSheetRow._changelog = laatsteRevisie ? laatsteRevisie.wijzigingen : '';
 
   await psGenereerEnDownload(live, productSheetRow);

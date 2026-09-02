@@ -91,6 +91,11 @@ class ProductSheetXlsxWriter {
       nieuweCel = `<c r="${cel}"${sAttr}/>`;
     } else if (typeof waarde === 'object' && waarde.formula) {
       nieuweCel = `<c r="${cel}"${sAttr}><f>${psXmlEscape(waarde.formula)}</f></c>`;
+    } else if (typeof waarde === 'object' && waarde.text !== undefined) {
+      // Altijd als letterlijke tekst wegschrijven, ook als de inhoud er
+      // numeriek uitziet (bv. "11.1" als receptversie) -- voorkomt dat zo'n
+      // waarde als getal/datum wordt geinterpreteerd door de cel-opmaak.
+      nieuweCel = `<c r="${cel}"${sAttr} t="inlineStr"><is><t xml:space="preserve">${psXmlEscape(waarde.text)}</t></is></c>`;
     } else if (typeof waarde === 'number') {
       nieuweCel = `<c r="${cel}"${sAttr}><v>${waarde}</v></c>`;
     } else {
