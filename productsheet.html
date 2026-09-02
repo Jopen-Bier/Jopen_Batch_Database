@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>Jopen — Product Sheet</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<link rel="stylesheet" href="jopen-shared.css">
+<style>
+  :root {
+    --ink: #1c2b26; --paper: #f6f4ee; --line: #d8d2c4;
+    --hop: #4c6b4f; --hop-dark: #33473a; --amber: #b4772c;
+    --mono: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, Helvetica, sans-serif;
+    --serif: Arial, Helvetica, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background: var(--paper); color: var(--ink); font-family: var(--serif); min-height:100vh; }
+  main { padding: 24px 32px 60px; max-width: 1100px; margin: 0 auto; }
+  .back-link { display:inline-block; margin-bottom:16px; padding:6px 14px; border:1px solid var(--line); border-radius:20px; text-decoration:none; color:var(--ink); font-family:var(--mono); font-size:12px; background:#fff; }
+  .back-link:hover { background: var(--hop-dark); color:#fff; }
+  .recipe-title { font-size: 32px; margin: 0 0 4px; }
+  .recipe-meta { font-family: var(--mono); font-size: 13px; color: #6b6355; margin-bottom: 18px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .edit-pill { background: var(--amber); color:#fff; border-radius:20px; padding:5px 14px; font-size:12px; text-decoration:none; font-family:var(--mono); border:none; cursor:pointer; }
+  .edit-pill:hover { background:#96601f; }
+  .edit-pill.update { background: var(--hop-dark); }
+  .edit-pill.update:hover { background: var(--hop); }
+  .edit-pill:disabled { opacity:0.5; cursor:default; }
+  .sync-dot { display:inline-block; width:12px; height:12px; border-radius:50%; margin-right:6px; vertical-align:middle; }
+  .sync-dot.groen { background:#4c6b4f; }
+  .sync-dot.rood { background:#a33f2c; }
+  .sync-label { font-weight:700; }
+  .sync-label.groen { color:#4c6b4f; }
+  .sync-label.rood { color:#a33f2c; }
+  .section-title { background: var(--hop-dark); color:#fff; font-size:13px; text-transform:uppercase; letter-spacing:0.06em; padding:8px 14px; border-radius:6px 6px 0 0; margin-top:22px; }
+  .param-columns { column-count: 3; column-gap: 24px; background: #fff; border: 1px solid var(--line); border-radius: 0 0 6px 6px; padding: 16px 20px; margin-bottom: 10px; }
+  .param-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 5px 0; border-bottom: 1px solid #ece8dc; font-size: 14px; break-inside: avoid; }
+  .param-row span:first-child { color: #6b6355; }
+  .param-row span:last-child { font-family: var(--mono); text-align:right; }
+  .param-row .tol { color: #a89f8e; font-size: 12px; margin-left: 4px; }
+  .full-span { column-span: all; margin-bottom: 10px; }
+  .full-span .param-row { grid-template-columns: 200px 1fr; }
+  .full-span .param-row span:last-child { white-space: normal; text-align:left; }
+  .ing-table { width: 100%; border-collapse: collapse; background: #fff; margin-bottom: 10px; }
+  .ing-table th { text-align:left; padding:8px 12px; font-size:11px; text-transform:uppercase; letter-spacing:0.05em; background:#efece2; }
+  .ing-table td { padding: 8px 12px; border-bottom: 1px solid #ece8dc; font-size: 14px; vertical-align:top; }
+  .empty, .loading, .error { padding: 30px; text-align:center; color:#7a7266; font-family: var(--mono); font-size:13px; }
+  .error { color:#a33f2c; }
+  .missing-note { background:#fff8e6; border:1px solid #e6cf8c; border-radius:6px; padding:16px 20px; margin-top:16px; }
+  .missing-note a.edit-pill { margin-top:10px; display:inline-block; }
+</style>
+</head>
+<body>
+<div id="jopen-nav"></div>
+<script src="config.js"></script>
+<script src="nav.js"></script>
+<script src="productsheet-xlsx-writer.js"></script>
+<script src="productsheet-shared.js"></script>
+<script src="productsheet-vullen.js"></script>
+
+<main>
+  <a class="back-link" id="terug-link" href="receptoverzicht.html">&larr; Back to recipes</a>
+  <div id="container"><div class="loading">Loading…</div></div>
+</main>
+
+<script>
+let huidigeGebruiker = null;
+let magBewerken = false;
+let recipeGroupId = null;
+
+window.addEventListener('DOMContentLoaded', async () => {
+  huidigeGebruiker = await getHuidigeGebruiker();
+  magBewerken = !!huidigeGebruiker && await magBewerkenModule('product_sheets');
+
+  const params = new URLSearchParams(window.location.search);
+  recipeGroupId = params.get('recipe_group_id');
+  const recipeId = params.get('recipe_id');
+
+  if (!recipeGroupId && recipeId) {
+    const { data } = await supabaseClient.from('recipes').select('recipe_group_id').eq('id', recipeId).maybeSingle();
+    recipeGroupId = data ? data.recipe_group_id : null;
+  }
+
+  if (!recipeGroupId) {
+    document.getElementById('container').innerHTML = `<div class="error">No recipe specified.</div>`;
+    return;
+  }
+
+  if (recipeId) document.getElementById('terug-link').href = `receptoverzicht.html?id=${recipeId}`;
+
+  await render();
+});
+
+async function render() {
+  const container = document.getElementById('container');
+  container.innerHTML = `<div class="loading">Loading…</div>`;
+  try {
+    const [live, status, revisies] = await Promise.all([
+      psLaadReceptData(recipeGroupId),
+      psLaadSyncStatus(recipeGroupId),
+      supabaseClient.from('product_sheet_revisies').select('*').order('versie', { ascending: false }),
+    ]);
+
+    if (!status) {
+      renderGeenSheet(live);
+      return;
+    }
+
+    const { data: productSheetRow } = await supabaseClient.from('product_sheets').select('*').eq('id', status.product_sheet_id).single();
+    const relevanteRevisies = (revisies.data || []).filter(r => r.product_sheet_id === status.product_sheet_id);
+
+    renderSheet(live, status, productSheetRow, relevanteRevisies);
+  } catch (e) {
+    container.innerHTML = `<div class="error">Error loading product sheet: ${e.message || e}</div>`;
+  }
+}
+
+function renderGeenSheet(live) {
+  document.getElementById('container').innerHTML = `
+    <h2 class="recipe-title">${escapeHtml(live.recipe.naam)}</h2>
+    <div class="recipe-meta"><b>${escapeHtml(live.recipe.bierstijl || '')}</b> · version ${live.recipe.versie_major}.${live.recipe.versie_minor}</div>
+    <div class="missing-note">
+      There is no product sheet for this recipe yet.
+      ${magBewerken ? `<div><button type="button" class="edit-pill update" id="maak-sheet-btn">Create Product Sheet</button></div>` : '<div>Ask an editor to create one.</div>'}
+    </div>`;
+  const btn = document.getElementById('maak-sheet-btn');
+  if (btn) btn.addEventListener('click', async () => {
+    btn.disabled = true; btn.textContent = 'Creating…';
+    try {
+      await supabaseClient.from('product_sheets').insert({ recipe_group_id: recipeGroupId, huidige_versie: 1, aangemaakt_door: huidigeGebruiker?.id });
+      await render();
+    } catch (e) {
+      alert('Could not create product sheet: ' + (e.message || e));
+      btn.disabled = false; btn.textContent = 'Create Product Sheet';
+    }
+  });
+}
+
+function paramRow(label, val, unit, tol) {
+  if (val === null || val === undefined || val === '') return '';
+  return `<div class="param-row"><span>${label}</span><span>${escapeHtml(String(val))}${unit ? ' ' + unit : ''}${tol ? `<span class="tol">±${escapeHtml(String(tol))}</span>` : ''}</span></div>`;
+}
+
+function renderSheet(live, status, p, revisies) {
+  const s = live.specs;
+  const blok = live.ingredientenBlok;
+
+  const specsHtml = `
+    <div class="param-columns">
+      ${paramRow('Original extract', s.origineel_extract, '°P', s.origineel_extract_tol)}
+      ${paramRow('Final extract', s.rest_extract, '°P', s.rest_extract_tol)}
+      ${paramRow('Alcohol', s.alcohol, '% v/v', s.alcohol_tol)}
+      ${paramRow('Bitterness', s.bitterheid, 'EBU', s.bitterheid_tol)}
+      ${paramRow('Color (calculated)', live.calcColor, 'EBC', s.kleur_tol)}
+      ${paramRow('pH', s.ph, '', s.ph_tol)}
+      ${paramRow('Turbidity (lab)', s.troebeling_lab, 'EBC', s.troebeling_lab_tol)}
+      ${paramRow('CO2 bottle', s.co2_fles, 'g/l', s.co2_fles_tol)}
+      ${paramRow('CO2 can', s.co2_can, 'g/l', s.co2_can_tol)}
+      ${paramRow('CO2 keg', s.co2_fust, 'g/l', s.co2_fust_tol)}
+      ${paramRow('Headspace O2', s.headspace_o2, 'ppb', s.headspace_o2_tol)}
+      ${paramRow('Dissolved O2', s.dissolved_o2, 'ppb', s.dissolved_o2_tol)}
+    </div>`;
+
+  const labelInfoHtml = `
+    <div class="param-columns">
+      ${paramRow('Alcohol percentage', s.alcohol, '%')}
+      ${paramRow('Original extract', s.origineel_extract, '°P')}
+      ${paramRow('Color', Math.round(live.calcColor), 'EBC')}
+      ${paramRow('Bitterness', s.bitterheid, 'EBU')}
+      ${paramRow('Colour description', live.recipe.kleur_vrije_tekst || '—')}
+      ${paramRow('Turbidity', live.turbidity || '—')}
+      ${paramRow('Recommended drinking temperature', live.recipe.aanbevolen_schenktemperatuur, '°C')}
+      <div class="full-span"><div class="param-row"><span>Allergies</span><span>${escapeHtml(live.allergenenTekst || '—')}</span></div></div>
+      ${live.recipe.smaakomschrijving ? `<div class="full-span"><div class="param-row"><span>Flavor description</span><span>${escapeHtml(live.recipe.smaakomschrijving)}</span></div></div>` : ''}
+      ${(live.recipe.smaak_keywords && live.recipe.smaak_keywords.length) ? `<div class="full-span"><div class="param-row"><span>Flavor keywords</span><span>${escapeHtml(live.recipe.smaak_keywords.join(', '))}</span></div></div>` : ''}
+    </div>`;
+
+  const ingredientenRows = [
+    ['Malt', blok.malt], ['Hop', blok.hop], ['Other ingredients/additives', blok.additief],
+    ['Water', blok.water], ['Yeast', blok.gist],
+  ].map(([label, b]) => `
+    <tr><td>${label}</td><td>${escapeHtml(b.ingredient || '—')}</td><td>${escapeHtml(b.label || '—')}</td><td>${escapeHtml(b.ranks || '—')}</td></tr>`).join('');
+
+  const barrelHtml = (p.vat_gerijpt_hl || p.vat_type || p.vat_dagen) ? `
+    <div class="param-columns">
+      ${paramRow('Amount barrel aged', p.vat_gerijpt_hl, 'HL')}
+      ${paramRow('In which barrels aged', p.vat_type)}
+      ${paramRow('Number of days on barrel', p.vat_dagen)}
+    </div>` : '';
+
+  const nutritionHtml = (p.energie_kj || p.energie_kcal) ? `
+    <div class="param-columns">
+      ${paramRow('Energy', p.energie_kj, 'kJ')}
+      ${paramRow('Energy', p.energie_kcal, 'kcal')}
+      ${paramRow('Fat', p.vet_g, 'g')}
+      ${paramRow('Carbohydrates', p.koolhydraten_g, 'g')}
+      ${paramRow('Protein', p.eiwit_g, 'g')}
+      ${paramRow('Salt', p.zout_g, 'g')}
+    </div>` : '';
+
+  const revisiesHtml = revisies.length > 0 ? `
+    <table class="ing-table">
+      <thead><tr><th>Version</th><th>Recipe version</th><th>Date</th><th>By</th><th>Changes</th></tr></thead>
+      <tbody>${revisies.map(rv => `
+        <tr>
+          <td>v${rv.versie}</td>
+          <td>${rv.recipe_versie_major ?? ''}.${rv.recipe_versie_minor ?? ''}</td>
+          <td>${rv.datum || ''}</td>
+          <td>${escapeHtml(rv.door || '')}</td>
+          <td>${escapeHtml(rv.wijzigingen || '')}</td>
+        </tr>`).join('')}</tbody>
+    </table>` : '<div class="empty">No revision history yet.</div>';
+
+  const inSync = status.in_sync;
+
+  document.getElementById('container').innerHTML = `
+    <h2 class="recipe-title">${escapeHtml(live.recipe.naam)}</h2>
+    <div class="recipe-meta">
+      <b>${escapeHtml(live.recipe.bierstijl || '')}</b> · recipe v${live.recipe.versie_major}.${live.recipe.versie_minor} · product sheet v${p.huidige_versie}
+      <span><span class="sync-dot ${inSync ? 'groen' : 'rood'}"></span><span class="sync-label ${inSync ? 'groen' : 'rood'}">${inSync ? 'In sync with recipe' : 'Out of sync with recipe'}</span></span>
+      ${magBewerken ? `<button type="button" class="edit-pill update" id="update-btn">${inSync ? 'Regenerate & download' : 'Update & download'}</button>` : ''}
+      ${magBewerken ? `<a class="edit-pill" href="productsheet-invoer.html?recipe_group_id=${recipeGroupId}">Edit &rarr;</a>` : ''}
+    </div>
+
+    <div class="section-title">Ingredients</div>
+    <table class="ing-table">
+      <thead><tr><th>Type of ingredient</th><th>Ingredient</th><th>Name on the label</th><th>Order by size</th></tr></thead>
+      <tbody>${ingredientenRows}</tbody>
+    </table>
+
+    <div class="section-title">End product specifications</div>
+    ${specsHtml}
+
+    <div class="section-title">Label and product information</div>
+    ${labelInfoHtml}
+
+    ${barrelHtml ? `<div class="section-title">Barrel aged beer</div>${barrelHtml}` : ''}
+    ${nutritionHtml ? `<div class="section-title">Nutritional values (per 100ml)</div>${nutritionHtml}` : ''}
+
+    <div class="section-title">Version history</div>
+    ${revisiesHtml}
+  `;
+
+  const updateBtn = document.getElementById('update-btn');
+  if (updateBtn) updateBtn.addEventListener('click', async () => {
+    updateBtn.disabled = true;
+    updateBtn.textContent = 'Working…';
+    try {
+      await psUpdateEnDownload(recipeGroupId, huidigeGebruiker);
+      await render();
+    } catch (e) {
+      alert('Could not update product sheet: ' + (e.message || e));
+      updateBtn.disabled = false;
+    }
+  });
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str ?? '';
+  return div.innerHTML;
+}
+</script>
+</body>
+</html>

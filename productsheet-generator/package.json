@@ -1,0 +1,10 @@
+{
+  "name": "productsheet-generator",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": { "test": "node test-fill.js" },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.110.9",
+    "jszip": "^3.10.1"
+  }
+}

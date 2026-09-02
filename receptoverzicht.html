@@ -290,6 +290,13 @@
   .badge-row { display:inline-block; border:2px solid var(--line); border-radius:6px; padding:6px 12px; margin:4px 10px 4px 0; }
   .badge-row span:first-child { display:block; font-weight:700; font-size:11px; text-transform:uppercase; letter-spacing:0.05em; opacity:0.85; }
   .badge-row span:last-child { font-family: var(--mono); font-weight:700; }
+  .ps-dot-link { display:inline-block; }
+  .ps-dot { display:inline-block; width:12px; height:12px; border-radius:50%; }
+  .ps-dot.groen { background:#4c6b4f; }
+  .ps-dot.rood { background:#a33f2c; }
+  .ps-dot.grijs { background:#c9c3b4; }
+  .productsheet-badge { display:inline-flex; align-items:center; gap:8px; border:2px solid var(--line); border-radius:6px; padding:6px 14px; margin:4px 0 4px 10px; text-decoration:none; color:var(--ink); font-family:var(--mono); font-weight:700; font-size:13px; float:right; }
+  .productsheet-badge:hover { background:#f4f2ea; }
 </style>
 </head>
 <body>
@@ -447,15 +454,18 @@ async function haalAlleRijenOp(query) {
   return { data: alles, error: null };
 }
 
+let productSheetStatusPerGroep = {};
+
 async function loadRecipes() {
   const container = document.getElementById('list-container');
-  const [{ data, error }, { data: batchData, error: batchErr }, { data: revisieData, error: revisieErr }] = await Promise.all([
+  const [{ data, error }, { data: batchData, error: batchErr }, { data: revisieData, error: revisieErr }, { data: psData, error: psErr }] = await Promise.all([
     supabaseClient
       .from('recipes')
       .select('id, naam, bierstijl, locatie, status, versie_major, versie_minor, recipe_group_id')
       .order('naam'),
     supabaseClient.from('batches').select('recipe_id, aangemaakt_op'),
     haalAlleRijenOp(supabaseClient.from('recipe_revisies').select('recipe_id, datum, door')),
+    supabaseClient.from('product_sheet_status').select('recipe_group_id, in_sync'),
   ]);
   if (error) {
     container.innerHTML = `<div class="error">Error loading: ${error.message}</div>`;
@@ -463,6 +473,10 @@ async function loadRecipes() {
   }
   if (batchErr) console.error('Could not load batch generation dates:', batchErr);
   if (revisieErr) console.error('Could not load revision dates:', revisieErr);
+  if (psErr) console.error('Could not load product sheet status:', psErr);
+
+  productSheetStatusPerGroep = {};
+  (psData || []).forEach(row => { productSheetStatusPerGroep[row.recipe_group_id] = row.in_sync; });
 
   laatsteBatchPerRecept = {};
   (batchData || []).forEach(b => {
@@ -599,6 +613,7 @@ function renderList(recipes) {
       <td>${formatDatum(laatsteWijzigingPerRecept[r.id])}</td>
       <td>${escapeHtml(laatsteWijzigingDoorPerRecept[r.id] || '—')}</td>
       <td>${formatDatum(laatsteBatchPerRecept[r.id])}</td>
+      <td>${productSheetDotHtml(r.recipe_group_id)}</td>
       ${toonActiesKolom ? `<td>${rijActiesHtml(r)}</td>` : ''}
     </tr>`).join('');
 
@@ -611,6 +626,7 @@ function renderList(recipes) {
     { veld: 'laatste_wijziging', label: 'Last modified' },
     { veld: 'laatste_wijziging_door', label: 'Modified by' },
     { veld: 'laatste_batch', label: 'Last batch generated' },
+    { veld: null, label: 'Product Sheet' },
   ];
   const headerHtml = kolommen.map(k => {
     if (!k.veld) return `<th>${k.label}</th>`;
@@ -649,6 +665,18 @@ function renderList(recipes) {
       pasFiltersToe();
     });
   });
+}
+
+// Kleine rood/groen-status voor de Product Sheet-kolom in de lijst. Geen
+// sheet aanwezig -> neutrale grijze stip (geen actie nodig/mogelijk vanaf
+// hier, dat gebeurt op de kaart zelf). Klik navigeert direct naar de
+// product sheet-pagina i.p.v. het recept te openen.
+function productSheetDotHtml(recipeGroupId) {
+  if (!(recipeGroupId in productSheetStatusPerGroep)) {
+    return `<a href="productsheet.html?recipe_group_id=${recipeGroupId}" class="ps-dot-link" onclick="event.stopPropagation()"><span class="ps-dot grijs" title="No product sheet yet"></span></a>`;
+  }
+  const inSync = productSheetStatusPerGroep[recipeGroupId];
+  return `<a href="productsheet.html?recipe_group_id=${recipeGroupId}" class="ps-dot-link" onclick="event.stopPropagation()"><span class="ps-dot ${inSync ? 'groen' : 'rood'}" title="${inSync ? 'In sync with recipe' : 'Out of sync with recipe'}"></span></a>`;
 }
 
 // Icon-only quick actions for the overview table row (Edit/Archive/Delete).
@@ -848,6 +876,12 @@ async function openDetail(id) {
     .order('versie_major', { ascending: false })
     .order('versie_minor', { ascending: false });
 
+  const { data: productSheetStatus } = await supabaseClient
+    .from('product_sheet_status')
+    .select('in_sync')
+    .eq('recipe_group_id', r.recipe_group_id)
+    .maybeSingle();
+
   const specRows = [
     ['Original extract', s.origineel_extract, '°P', s.origineel_extract_tol],
     ['Final extract', s.rest_extract, '°P', s.rest_extract_tol],
@@ -1020,6 +1054,17 @@ async function openDetail(id) {
     const match = schema.find(([regex]) => regex.test(String(waarde || '')));
     if (!match) return '';
     return ` style="background:${match[1]}; border-color:${match[1]}; color:${match[2]};"`;
+  }
+
+  // Knop naar de Product Sheet-pagina, met rood/groen-stip als er al een
+  // sheet bestaat. `status` is null als er nog geen product sheet is voor
+  // deze receptgroep -- dan wordt de knop zelf de aanmaak-ingang.
+  function productSheetBadgeHtml(recipeGroupId, status) {
+    const href = `productsheet.html?recipe_group_id=${recipeGroupId}`;
+    if (!status) {
+      return `<a class="productsheet-badge" href="${href}"><span class="ps-dot grijs"></span>Create Product Sheet</a>`;
+    }
+    return `<a class="productsheet-badge" href="${href}"><span class="ps-dot ${status.in_sync ? 'groen' : 'rood'}"></span>Product Sheet</a>`;
   }
 
   function badgeRowsHtml(rows) {
@@ -1318,6 +1363,8 @@ async function openDetail(id) {
     <div class="section-title">General</div>
     ${paramColumnsHtml(generalRows) || '<div class="empty">None entered.</div>'}
     ${badgeRowsHtml(generalBadgeRows)}
+    ${productSheetBadgeHtml(r.recipe_group_id, productSheetStatus)}
+    <div style="clear:both;"></div>
     ${r.kleur ? `
       <div class="param-columns">
         <div class="param-row">
