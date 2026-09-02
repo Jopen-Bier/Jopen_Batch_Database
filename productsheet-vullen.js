@@ -147,12 +147,12 @@ async function psSchrijfXlsx(writer, live, productSheetRow, snapshot) {
 }
 
 /**
- * Kernfunctie: laadt live data, vergelijkt met de opgeslagen snapshot, en --
+ * Update-knop: laadt live data, vergelijkt met de opgeslagen snapshot, en --
  * alleen als er daadwerkelijk iets label-relevants gewijzigd is -- bumpt de
- * versie, schrijft een revisie-rij en werkt product_sheets bij. Genereert
- * en downloadt in alle gevallen de xlsx met de actuele data.
+ * versie, schrijft een revisie-rij en werkt product_sheets bij. Raakt de
+ * download NIET aan; dat is de losse Download-knop (psDownload).
  */
-async function psUpdateEnDownload(recipeGroupId, gebruiker) {
+async function psUpdate(recipeGroupId, gebruiker) {
   const live = await psLaadReceptData(recipeGroupId);
   const hash = await psHuidigeHash(recipeGroupId);
   const nieuweSnapshot = psBouwSnapshot(live, hash);
@@ -175,45 +175,62 @@ async function psUpdateEnDownload(recipeGroupId, gebruiker) {
     productSheetRow = nieuw;
   }
 
-  if (wasNietInSync) {
-    const oudeSnapshot = productSheetRow.sync_snapshot;
-    const nieuweVersie = (productSheetRow.huidige_versie || 1) + (oudeSnapshot ? 1 : 0);
-    const changelog = psDiffSnapshots(oudeSnapshot, nieuweSnapshot);
-
-    const { data: bijgewerkt, error: updErr } = await supabaseClient
-      .from('product_sheets')
-      .update({
-        huidige_versie: nieuweVersie,
-        sync_snapshot: nieuweSnapshot,
-        bijgewerkt_obv_versie_major: live.recipe.versie_major,
-        bijgewerkt_obv_versie_minor: live.recipe.versie_minor,
-        bijgewerkt_op: new Date().toISOString(),
-        bijgewerkt_door: gebruiker?.id,
-      })
-      .eq('id', productSheetRow.id)
-      .select().single();
-    if (updErr) throw updErr;
-    productSheetRow = bijgewerkt;
-
-    const { error: revErr } = await supabaseClient.from('product_sheet_revisies').insert({
-      product_sheet_id: productSheetRow.id,
-      versie: nieuweVersie,
-      recipe_versie_major: live.recipe.versie_major,
-      recipe_versie_minor: live.recipe.versie_minor,
-      door: gebruiker?.naam || '',
-      wijzigingen: changelog,
-    });
-    if (revErr) throw revErr;
-
-    productSheetRow._writtenByNaam = gebruiker?.naam || '';
-    productSheetRow._datum = new Date().toISOString().slice(0, 10);
-    productSheetRow._changelog = changelog;
-  } else {
-    // Al in sync: gewoon opnieuw genereren/downloaden met de bestaande versie-info.
-    productSheetRow._writtenByNaam = gebruiker?.naam || '';
-    productSheetRow._datum = (productSheetRow.bijgewerkt_op || '').slice(0, 10);
-    productSheetRow._changelog = 'Geen wijzigingen -- herdownload van de huidige versie.';
+  if (!wasNietInSync) {
+    // Al in sync: niets te doen, geen nieuwe revisie/versie nodig.
+    return productSheetRow;
   }
+
+  const oudeSnapshot = productSheetRow.sync_snapshot;
+  const nieuweVersie = (productSheetRow.huidige_versie || 1) + (oudeSnapshot ? 1 : 0);
+  const changelog = psDiffSnapshots(oudeSnapshot, nieuweSnapshot);
+
+  const { data: bijgewerkt, error: updErr } = await supabaseClient
+    .from('product_sheets')
+    .update({
+      huidige_versie: nieuweVersie,
+      sync_snapshot: nieuweSnapshot,
+      bijgewerkt_obv_versie_major: live.recipe.versie_major,
+      bijgewerkt_obv_versie_minor: live.recipe.versie_minor,
+      bijgewerkt_op: new Date().toISOString(),
+      bijgewerkt_door: gebruiker?.id,
+    })
+    .eq('id', productSheetRow.id)
+    .select().single();
+  if (updErr) throw updErr;
+  productSheetRow = bijgewerkt;
+
+  const { error: revErr } = await supabaseClient.from('product_sheet_revisies').insert({
+    product_sheet_id: productSheetRow.id,
+    versie: nieuweVersie,
+    recipe_versie_major: live.recipe.versie_major,
+    recipe_versie_minor: live.recipe.versie_minor,
+    door: gebruiker?.naam || '',
+    wijzigingen: changelog,
+  });
+  if (revErr) throw revErr;
+
+  return productSheetRow;
+}
+
+/**
+ * Download-knop: haalt de actuele receptdata en de huidige product_sheets-rij
+ * op en genereert/downloadt de xlsx -- raakt de database NIET aan. Werkt dus
+ * ook gewoon als het al in sync is (gewoon een herdownload van de huidige versie).
+ */
+async function psDownload(recipeGroupId, gebruiker) {
+  const live = await psLaadReceptData(recipeGroupId);
+  const { data: productSheetRow, error } = await supabaseClient
+    .from('product_sheets').select('*').eq('recipe_group_id', recipeGroupId).single();
+  if (error) throw error;
+
+  const { data: laatsteRevisie } = await supabaseClient
+    .from('product_sheet_revisies').select('*')
+    .eq('product_sheet_id', productSheetRow.id)
+    .order('versie', { ascending: false }).limit(1).maybeSingle();
+
+  productSheetRow._writtenByNaam = laatsteRevisie ? laatsteRevisie.door : (gebruiker?.naam || '');
+  productSheetRow._datum = laatsteRevisie ? laatsteRevisie.datum : (productSheetRow.bijgewerkt_op || '').slice(0, 10);
+  productSheetRow._changelog = laatsteRevisie ? laatsteRevisie.wijzigingen : '';
 
   await psGenereerEnDownload(live, productSheetRow);
   return productSheetRow;

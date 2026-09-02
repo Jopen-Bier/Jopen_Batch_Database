@@ -88,7 +88,20 @@ window.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
-  if (recipeId) document.getElementById('terug-link').href = `receptoverzicht.html?id=${recipeId}`;
+  // Terug-link resolven naar de daadwerkelijke (nieuwste) receptversie van
+  // deze receptgroep -- ongeacht of we via ?recipe_id of ?recipe_group_id
+  // op deze pagina zijn beland.
+  const { data: nieuwsteRecept } = await supabaseClient
+    .from('recipes')
+    .select('id')
+    .eq('recipe_group_id', recipeGroupId)
+    .order('versie_major', { ascending: false })
+    .order('versie_minor', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (nieuwsteRecept) {
+    document.getElementById('terug-link').href = `receptoverzicht.html?id=${nieuwsteRecept.id}`;
+  }
 
   await render();
 });
@@ -220,7 +233,8 @@ function renderSheet(live, status, p, revisies) {
     <div class="recipe-meta">
       <b>${escapeHtml(live.recipe.bierstijl || '')}</b> · recipe v${live.recipe.versie_major}.${live.recipe.versie_minor} · product sheet v${p.huidige_versie}
       <span><span class="sync-dot ${inSync ? 'groen' : 'rood'}"></span><span class="sync-label ${inSync ? 'groen' : 'rood'}">${inSync ? 'In sync with recipe' : 'Out of sync with recipe'}</span></span>
-      ${magBewerken ? `<button type="button" class="edit-pill update" id="update-btn">${inSync ? 'Regenerate & download' : 'Update & download'}</button>` : ''}
+      ${magBewerken && !inSync ? `<button type="button" class="edit-pill update" id="update-btn">Update</button>` : ''}
+      ${magBewerken ? `<button type="button" class="edit-pill" id="download-btn">Download</button>` : ''}
       ${magBewerken ? `<a class="edit-pill" href="productsheet-invoer.html?recipe_group_id=${recipeGroupId}">Edit &rarr;</a>` : ''}
     </div>
 
@@ -246,14 +260,28 @@ function renderSheet(live, status, p, revisies) {
   const updateBtn = document.getElementById('update-btn');
   if (updateBtn) updateBtn.addEventListener('click', async () => {
     updateBtn.disabled = true;
-    updateBtn.textContent = 'Working…';
+    updateBtn.textContent = 'Updating…';
     try {
-      await psUpdateEnDownload(recipeGroupId, huidigeGebruiker);
+      await psUpdate(recipeGroupId, huidigeGebruiker);
       await render();
     } catch (e) {
       alert('Could not update product sheet: ' + (e.message || e));
       updateBtn.disabled = false;
+      updateBtn.textContent = 'Update';
     }
+  });
+
+  const downloadBtn = document.getElementById('download-btn');
+  if (downloadBtn) downloadBtn.addEventListener('click', async () => {
+    downloadBtn.disabled = true;
+    downloadBtn.textContent = 'Downloading…';
+    try {
+      await psDownload(recipeGroupId, huidigeGebruiker);
+    } catch (e) {
+      alert('Could not download product sheet: ' + (e.message || e));
+    }
+    downloadBtn.disabled = false;
+    downloadBtn.textContent = 'Download';
   });
 }
 

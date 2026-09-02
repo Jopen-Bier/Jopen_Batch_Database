@@ -65,9 +65,11 @@ async function main() {
 
   // -- Stap 3: de volledige Update-flow, incl. echte database-schrijfacties --
   const gebruiker = { id: null, naam: 'Claude (testscript)' };
-  const productSheetRow = await vm.runInContext('psUpdateEnDownload', sandbox)(recipe.recipe_group_id, gebruiker);
+  const productSheetRow = await vm.runInContext('psUpdate', sandbox)(recipe.recipe_group_id, gebruiker);
   console.log('\nProduct sheet weggeschreven: id', productSheetRow.id, '— versie', productSheetRow.huidige_versie);
-  console.log('Changelog:', productSheetRow._changelog);
+
+  // -- Stap 4: los downloaden (nieuwe, aparte Download-knop) --
+  await vm.runInContext('psDownload', sandbox)(recipe.recipe_group_id, gebruiker);
 
   // -- Stap 4: gegenereerde xlsx wegschrijven naar schijf en cellen controleren --
   if (!opgeslagenBlob) throw new Error('Geen blob opgeslagen -- psSlaOp niet aangeroepen?');
