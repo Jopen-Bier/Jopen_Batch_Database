@@ -202,6 +202,7 @@
   .re-btn { background: var(--hop-dark); color: #fff; border: none; padding: 10px 18px; border-radius: 4px; font-family: var(--mono); font-size: 12px; letter-spacing: 0.06em; cursor: pointer; }
   .re-btn:hover { background: var(--hop); }
   .re-btn.secundair { background: transparent; color: var(--hop-dark); border: 1px solid var(--line); }
+  .re-btn.secundair:disabled { color: #a89f8e; cursor: not-allowed; opacity: 0.7; }
   .re-btn.groot { background: var(--amber); }
   .re-btn.groot:hover { opacity: 0.9; }
 
@@ -353,6 +354,16 @@
             <label>Flavour description keywords</label>
             <div class="re-smaak-chips" id="re-smaak-chips"></div>
             <button type="button" class="re-btn secundair" id="re-smaak-keywords-btn" style="margin-top:8px;">Edit keywords</button>
+          </div>
+          <div class="re-field wide">
+            <label>Colour</label>
+            <div>
+              <button type="button" class="re-btn secundair" id="re-kleur-beoordeling-btn" disabled title="Coming soon">Select colour (coming soon)</button>
+            </div>
+          </div>
+          <div class="re-field">
+            <label for="veld-aanbevolen_schenktemperatuur">Recommended drinking temperature (°C)</label>
+            <input type="number" id="veld-aanbevolen_schenktemperatuur" />
           </div>
         </div>
         <div id="re-laatste-revisie" style="display:none; margin-top:14px; padding-top:14px; border-top:1px solid var(--line);">
@@ -1725,6 +1736,10 @@ function leesBasisgegevens() {
     kleur: document.getElementById('veld-kleur').value.trim() || null,
     smaakomschrijving: document.getElementById('veld-smaakomschrijving').value.trim() || null,
     smaak_keywords: smaakKeywords.length > 0 ? smaakKeywords : null,
+    aanbevolen_schenktemperatuur: (() => {
+      const v = document.getElementById('veld-aanbevolen_schenktemperatuur').value;
+      return v === '' ? null : Number(v);
+    })(),
   };
 }
 
@@ -2079,6 +2094,7 @@ document.getElementById('re-kopieer-btn').addEventListener('click', async () => 
     document.getElementById('veld-smaakomschrijving').value = bron.smaakomschrijving || '';
     smaakKeywords = (bron.smaak_keywords || []).slice();
     renderSmaakChipsSamenvatting();
+    document.getElementById('veld-aanbevolen_schenktemperatuur').value = bron.aanbevolen_schenktemperatuur ?? '';
     document.getElementById('veld-bier_risico').value = (ferm.data && ferm.data.bier_risico) || '';
     document.getElementById('veld-bier_status').value = (ferm.data && ferm.data.bier_status) || '';
     pasBadgeKleurToe(document.getElementById('veld-bier_risico'), BIER_RISICO_KLEUREN);
@@ -2166,6 +2182,7 @@ async function laadBestaandRecept(id) {
   document.getElementById('veld-smaakomschrijving').value = bestaandRecept.smaakomschrijving || '';
   smaakKeywords = (bestaandRecept.smaak_keywords || []).slice();
   renderSmaakChipsSamenvatting();
+  document.getElementById('veld-aanbevolen_schenktemperatuur').value = bestaandRecept.aanbevolen_schenktemperatuur ?? '';
 
   renderParamGrid('re-specs-grid', SPECS_FIELDS, specs.data || {});
   renderParamGrid('re-ferm-grid', FERM_FIELDS, ferm.data || {});

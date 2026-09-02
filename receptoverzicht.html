@@ -1295,6 +1295,13 @@ async function openDetail(id) {
           </div>
         </div>
       </div>` : ''}
+    ${r.aanbevolen_schenktemperatuur !== null && r.aanbevolen_schenktemperatuur !== undefined && r.aanbevolen_schenktemperatuur !== '' ? `
+      <div class="param-columns">
+        <div class="param-row">
+          <span>Recommended drinking temperature</span>
+          <span>${escapeHtml(String(r.aanbevolen_schenktemperatuur))} °C</span>
+        </div>
+      </div>` : ''}
 
     <div class="section-title">End product specifications</div>
     ${paramColumnsHtml(specRows) || '<div class="empty">None entered.</div>'}
