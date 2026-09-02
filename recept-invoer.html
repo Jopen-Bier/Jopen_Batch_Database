@@ -1611,6 +1611,26 @@ function smaakHuidigeItems() {
   return knoop ? (knoop.subs || []) : [];
 }
 
+// Recursively walks the whole tree (every branch and leaf, at every depth)
+// so a search for e.g. "Orange" finds it even though it's nested two
+// levels deep under Fruity > Citrus. Each result carries its own full
+// path so the "open subcategories" arrow can jump straight there.
+function smaakZoekHeleBoom(term) {
+  const termLower = term.toLowerCase();
+  const resultaten = [];
+  function loop(nodes, pad) {
+    nodes.forEach(node => {
+      const eigenPad = [...pad, node.name];
+      if (node.name.toLowerCase().includes(termLower)) {
+        resultaten.push({ node, pad: eigenPad });
+      }
+      if (node.subs) loop(node.subs, eigenPad);
+    });
+  }
+  loop(SMAAK_BOOM, []);
+  return resultaten;
+}
+
 function renderSmaakChipsSamenvatting() {
   const el = document.getElementById('re-smaak-chips');
   if (!el) return;
@@ -1655,8 +1675,11 @@ function smaakToggleSelect(naam) {
   renderSmaakwielModal();
 }
 
-function smaakOpenSub(naam) {
-  smaakPad.push(naam);
+function smaakOpenSub(pad) {
+  // Accepts either a single name (normal one-level-deeper navigation) or a
+  // full path array (jumping straight to a search result found elsewhere
+  // in the tree).
+  smaakPad = Array.isArray(pad) ? pad.slice() : [...smaakPad, pad];
   smaakZoekterm = '';
   document.getElementById('re-smaakwiel-search').value = '';
   renderSmaakwielModal();
@@ -1674,12 +1697,23 @@ function renderSmaakwielModal() {
   const backBtn = document.getElementById('re-smaakwiel-back');
   const title = document.getElementById('re-smaakwiel-title');
 
-  backBtn.classList.toggle('zichtbaar', smaakPad.length > 0);
-  title.textContent = smaakPad.length === 0 ? 'All categories' : smaakPad.join(' \u203a ');
+  const zoeken = smaakZoekterm.trim() !== '';
 
-  const items = smaakHuidigeItems().filter(n => n.name.toLowerCase().includes(smaakZoekterm.toLowerCase()));
+  let items; // each entry: { name, subs?, pad }
+  if (zoeken) {
+    backBtn.classList.remove('zichtbaar');
+    title.textContent = 'Search results';
+    items = smaakZoekHeleBoom(smaakZoekterm).map(r => ({ name: r.node.name, subs: r.node.subs, pad: r.pad }));
+  } else {
+    backBtn.classList.toggle('zichtbaar', smaakPad.length > 0);
+    title.textContent = smaakPad.length === 0 ? 'All categories' : smaakPad.join(' \u203a ');
+    items = smaakHuidigeItems().map(item => ({ name: item.name, subs: item.subs, pad: [...smaakPad, item.name] }));
+  }
 
   grid.innerHTML = '';
+  if (zoeken && items.length === 0) {
+    grid.innerHTML = '<p class="leeg" style="grid-column:1/-1;">No matching categories.</p>';
+  }
   items.forEach(item => {
     const naam = item.name;
     const heeftSubs = !!(item.subs && item.subs.length > 0);
@@ -1702,7 +1736,7 @@ function renderSmaakwielModal() {
       openBtn.className = 're-smaakwiel-open-sub';
       openBtn.setAttribute('aria-label', 'Show ' + naam + ' subcategories');
       openBtn.innerHTML = '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>';
-      openBtn.addEventListener('click', (e) => { e.stopPropagation(); smaakOpenSub(naam); });
+      openBtn.addEventListener('click', (e) => { e.stopPropagation(); smaakOpenSub(item.pad); });
       btn.appendChild(openBtn);
     }
 
