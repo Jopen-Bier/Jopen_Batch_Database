@@ -109,6 +109,25 @@
           <p id="eenheid-melding" class="jopen-form-melding"></p>
         </div>
 
+        <!-- Sectie: Ingredient declarations -->
+        <div class="settings-sectie" id="sectie-declaraties" data-titel="Ingredient declarations">
+          <h2>Ingredient declarations</h2>
+          <p class="uitleg">Fixed list to choose from on the ingredient card's "Ingredient declaration" field. Check "No declaration" for the one entry that means the ingredient should not appear on the product sheet. Drag rows by the handle to reorder them.</p>
+
+          <div id="declaraties-lijst"><p class="jopen-subtitel">Loading…</p></div>
+
+          <table class="cat-tabel">
+            <tbody>
+              <tr class="cat-nieuw-rij">
+                <td><input type="text" id="declaratie-nieuw-naam" placeholder="Name, e.g. 'Hops'…" /></td>
+                <td class="cat-check"><input type="checkbox" id="declaratie-nieuw-geen" title="No declaration" /></td>
+                <td><button id="declaratie-toevoegen-btn">Add</button></td>
+              </tr>
+            </tbody>
+          </table>
+          <p id="declaratie-melding" class="jopen-form-melding"></p>
+        </div>
+
       </div>
     </div>
   </main>
@@ -123,10 +142,12 @@
     const SETTINGS_SECTIES = [
       { id: 'categorieen', titel: 'Ingredient categories', laadFn: laadCategorieenSectie },
       { id: 'eenheden', titel: 'Units', laadFn: laadEenhedenSectie },
+      { id: 'declaraties', titel: 'Ingredient declarations', laadFn: laadDeclaratiesSectie },
     ];
 
     let alleCategorieen = [];
     let alleEenheden = [];
+    let alleDeclaraties = [];
 
     function toonSectie(id) {
       document.querySelectorAll('.settings-sectie').forEach(el => el.classList.toggle('actief', el.id === `sectie-${id}`));
@@ -402,6 +423,164 @@
       document.getElementById('eenheid-nieuw-label').value = '';
       melding.textContent = 'Unit added.'; melding.className = 'jopen-form-melding ok';
       laadEenhedenSectie();
+    });
+
+    // ----------------------------------------------------------------
+    // Sectie: Ingredient declarations
+    // Zelfde opbouw als Units hierboven (drag-herordenen, per-rij save/
+    // delete, nieuwe-rij-invoer) -- alleen "code" vervangen door "naam" en
+    // een extra checkbox voor "is dit de -no declaration- rij".
+    // ----------------------------------------------------------------
+    async function laadDeclaratiesSectie() {
+      const container = document.getElementById('declaraties-lijst');
+      const { data, error } = await supabaseClient
+        .from('ingredient_declaraties').select('id, naam, is_geen_declaratie, sort_order').order('sort_order');
+
+      if (error) {
+        container.innerHTML = `<p class="jopen-form-melding fout">Could not load declarations: ${error.message}</p>`;
+        return;
+      }
+      alleDeclaraties = data || [];
+      renderDeclaraties();
+    }
+
+    function renderDeclaraties() {
+      const container = document.getElementById('declaraties-lijst');
+      if (alleDeclaraties.length === 0) {
+        container.innerHTML = '<p class="jopen-subtitel">No declarations yet.</p>';
+        return;
+      }
+      const rijen = alleDeclaraties.map(d => `
+        <tr data-id="${d.id}">
+          <td class="eenheid-drag-handle" draggable="true" title="Drag to reorder">
+            <svg width="12" height="18" viewBox="0 0 12 18" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="3" cy="3" r="1.6"/><circle cx="9" cy="3" r="1.6"/>
+              <circle cx="3" cy="9" r="1.6"/><circle cx="9" cy="9" r="1.6"/>
+              <circle cx="3" cy="15" r="1.6"/><circle cx="9" cy="15" r="1.6"/>
+            </svg>
+          </td>
+          <td><input type="text" class="declaratie-naam-veld" value="${escapeHtml(d.naam)}" /></td>
+          <td class="cat-check"><input type="checkbox" class="declaratie-geen-veld" ${d.is_geen_declaratie ? 'checked' : ''} title="No declaration" /></td>
+          <td style="display:flex; gap:6px;">
+            <button class="declaratie-opslaan-rij-btn">Save</button>
+            <button class="rij-verwijder-btn declaratie-verwijder-btn">Delete</button>
+          </td>
+        </tr>`).join('');
+
+      container.innerHTML = `
+        <table class="cat-tabel">
+          <thead><tr><th></th><th>Name</th><th>No declaration</th><th></th></tr></thead>
+          <tbody id="declaraties-tbody">${rijen}</tbody>
+        </table>`;
+
+      container.querySelectorAll('tr[data-id]').forEach(tr => {
+        tr.querySelector('.declaratie-opslaan-rij-btn').addEventListener('click', () => slaDeclaratieOp(tr));
+        tr.querySelector('.declaratie-verwijder-btn').addEventListener('click', () => verwijderDeclaratie(tr));
+      });
+      maakDeclaratiesTabelSorteerbaar();
+    }
+
+    function maakDeclaratiesTabelSorteerbaar() {
+      const tbody = document.getElementById('declaraties-tbody');
+      if (!tbody) return;
+      let dragSrcRow = null;
+
+      tbody.addEventListener('dragstart', (e) => {
+        const handle = e.target.closest('.eenheid-drag-handle');
+        if (!handle) { e.preventDefault(); return; }
+        dragSrcRow = handle.closest('tr');
+        dragSrcRow.classList.add('eenheid-slepend');
+        e.dataTransfer.effectAllowed = 'move';
+        try { e.dataTransfer.setData('text/plain', dragSrcRow.dataset.id); } catch (err) { /* Firefox vereist setData, verder genegeerd */ }
+        try { e.dataTransfer.setDragImage(dragSrcRow, 10, 10); } catch (err) { /* niet kritisch als dit faalt */ }
+      });
+
+      tbody.addEventListener('dragover', (e) => {
+        if (!dragSrcRow) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const overRow = e.target.closest('tr');
+        if (!overRow || overRow === dragSrcRow || !tbody.contains(overRow)) return;
+        const rect = overRow.getBoundingClientRect();
+        const naHelft = (e.clientY - rect.top) / rect.height > 0.5;
+        tbody.insertBefore(dragSrcRow, naHelft ? overRow.nextSibling : overRow);
+      });
+
+      tbody.addEventListener('drop', (e) => { e.preventDefault(); });
+
+      tbody.addEventListener('dragend', async () => {
+        if (dragSrcRow) dragSrcRow.classList.remove('eenheid-slepend');
+        dragSrcRow = null;
+        await slaDeclaratiesVolgordeOp(tbody);
+      });
+    }
+
+    async function slaDeclaratiesVolgordeOp(tbody) {
+      const melding = document.getElementById('declaratie-melding');
+      const nieuweVolgorde = Array.from(tbody.children).map((tr, i) => ({ id: tr.dataset.id, sort_order: i + 1 }));
+      const ongewijzigd = nieuweVolgorde.every((v, i) => String(alleDeclaraties[i]?.id) === String(v.id));
+      if (ongewijzigd) return;
+
+      melding.textContent = 'Saving order…'; melding.className = 'jopen-form-melding';
+      const resultaten = await Promise.all(nieuweVolgorde.map(({ id, sort_order }) =>
+        supabaseClient.from('ingredient_declaraties').update({ sort_order }).eq('id', id)
+      ));
+      const fout = resultaten.find(r => r.error);
+      if (fout) {
+        melding.textContent = 'Could not save order: ' + fout.error.message;
+        melding.className = 'jopen-form-melding fout';
+        laadDeclaratiesSectie();
+        return;
+      }
+      melding.textContent = 'Order saved.'; melding.className = 'jopen-form-melding ok';
+      laadDeclaratiesSectie();
+    }
+
+    async function slaDeclaratieOp(tr) {
+      const id = tr.dataset.id;
+      const melding = document.getElementById('declaratie-melding');
+      const naam = tr.querySelector('.declaratie-naam-veld').value.trim();
+      const is_geen_declaratie = tr.querySelector('.declaratie-geen-veld').checked;
+      if (!naam) { melding.textContent = 'Name cannot be empty.'; melding.className = 'jopen-form-melding fout'; return; }
+
+      const { error } = await supabaseClient.from('ingredient_declaraties').update({ naam, is_geen_declaratie }).eq('id', id);
+      if (error) {
+        melding.textContent = error.code === '23505' ? 'That name already exists.' : 'Save failed: ' + error.message;
+        melding.className = 'jopen-form-melding fout';
+        return;
+      }
+      melding.textContent = 'Saved.'; melding.className = 'jopen-form-melding ok';
+      laadDeclaratiesSectie();
+    }
+
+    async function verwijderDeclaratie(tr) {
+      const id = tr.dataset.id;
+      const melding = document.getElementById('declaratie-melding');
+      if (!confirm('Delete this declaration? Ingredients currently using this text keep it as free text, they just lose the dropdown match.')) return;
+      const { error } = await supabaseClient.from('ingredient_declaraties').delete().eq('id', id);
+      if (error) { melding.textContent = 'Delete failed: ' + error.message; melding.className = 'jopen-form-melding fout'; return; }
+      melding.textContent = 'Deleted.'; melding.className = 'jopen-form-melding ok';
+      laadDeclaratiesSectie();
+    }
+
+    document.getElementById('declaratie-toevoegen-btn').addEventListener('click', async () => {
+      const melding = document.getElementById('declaratie-melding');
+      const naam = document.getElementById('declaratie-nieuw-naam').value.trim();
+      const is_geen_declaratie = document.getElementById('declaratie-nieuw-geen').checked;
+      if (!naam) { melding.textContent = 'Enter a name for the new declaration.'; melding.className = 'jopen-form-melding fout'; return; }
+
+      const { error } = await supabaseClient.from('ingredient_declaraties').insert({
+        naam, is_geen_declaratie, sort_order: alleDeclaraties.length + 1,
+      });
+      if (error) {
+        melding.textContent = error.code === '23505' ? 'That name already exists.' : 'Add failed: ' + error.message;
+        melding.className = 'jopen-form-melding fout';
+        return;
+      }
+      document.getElementById('declaratie-nieuw-naam').value = '';
+      document.getElementById('declaratie-nieuw-geen').checked = false;
+      melding.textContent = 'Declaration added.'; melding.className = 'jopen-form-melding ok';
+      laadDeclaratiesSectie();
     });
 
     document.addEventListener('DOMContentLoaded', initSettingsPagina);

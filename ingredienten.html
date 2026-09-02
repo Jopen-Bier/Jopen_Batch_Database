@@ -400,6 +400,7 @@
 let alleIngredienten = [];
 let alleCategorieen = [];
 let alleEenheden = [];
+let alleDeclaraties = [];
 let huidigeGebruikerRol = null; // filled with the role name, or null (not logged in)
 let huidigeGebruiker = null;
 let magIngBewerken = false;   // rechten voor module 'ingredients', geladen in initIngredientenPagina
@@ -460,6 +461,57 @@ function eenhedenOpties(geselecteerdeCode) {
     `<option value="${escapeHtml(e.code)}" ${e.code === geselecteerdeCode ? 'selected' : ''}>${escapeHtml(e.code)} — ${escapeHtml(e.label)}</option>`
   ).join('');
   return `<option value="" ${!geselecteerdeCode ? 'selected' : ''}>— select —</option>${opties}${extra}`;
+}
+
+// Optielijst voor Ingredient declaration, gevoed uit Settings -> Ingredient
+// declarations (alleDeclaraties). In tegenstelling tot Unit is dit géén
+// strikte lijst: de meeste declaraties komen maar bij één ingrediënt voor
+// (kruiden/fruit/extracten), dus er is een "Other"-optie die een los
+// tekstveld toont voor een eenmalige waarde die niet in de lijst hoeft.
+function declaratieOpties(geselecteerdeNaam) {
+  const bekend = alleDeclaraties.some(d => d.naam === geselecteerdeNaam);
+  const opties = alleDeclaraties.map(d =>
+    `<option value="${escapeHtml(d.naam)}" ${d.naam === geselecteerdeNaam ? 'selected' : ''}>${escapeHtml(d.naam)}</option>`
+  ).join('');
+  const isOther = !!geselecteerdeNaam && !bekend;
+  return `<option value="" ${!geselecteerdeNaam ? 'selected' : ''}>— select —</option>${opties}<option value="__other__" ${isOther ? 'selected' : ''}>Other (type your own)…</option>`;
+}
+
+// Gedeelde markup + gedrag voor het declaratieveld (select + verborgen
+// tekstveld voor "Other"), gebruikt in zowel het bewerk- als het
+// nieuw-ingredient-formulier. idPrefix bepaalt de element-id's zodat beide
+// formulieren onafhankelijk van elkaar kunnen bestaan in de DOM.
+function declaratieVeldHtml(idPrefix, huidigeWaarde) {
+  const bekend = alleDeclaraties.some(d => d.naam === huidigeWaarde);
+  const isOther = !!huidigeWaarde && !bekend;
+  return `
+    <div class="ing-edit-row">
+      <label for="${idPrefix}-declaratie-select">Ingredient declaration</label>
+      <select id="${idPrefix}-declaratie-select" style="width:200px;">${declaratieOpties(huidigeWaarde)}</select>
+    </div>
+    <div class="ing-edit-row wide" id="${idPrefix}-declaratie-other-rij" style="display:${isOther ? 'flex' : 'none'};">
+      <label for="${idPrefix}-declaratie-other">Custom declaration text</label>
+      <input type="text" id="${idPrefix}-declaratie-other" value="${isOther ? escapeHtml(huidigeWaarde) : ''}" />
+    </div>`;
+}
+
+function koppelDeclaratieVeldGedrag(idPrefix) {
+  const select = document.getElementById(`${idPrefix}-declaratie-select`);
+  const otherRij = document.getElementById(`${idPrefix}-declaratie-other-rij`);
+  if (!select || !otherRij) return;
+  select.addEventListener('change', () => {
+    otherRij.style.display = select.value === '__other__' ? 'flex' : 'none';
+  });
+}
+
+function leesDeclaratieWaarde(idPrefix) {
+  const select = document.getElementById(`${idPrefix}-declaratie-select`);
+  if (!select) return null;
+  if (select.value === '__other__') {
+    const v = (document.getElementById(`${idPrefix}-declaratie-other`).value || '').trim();
+    return v === '' ? null : v;
+  }
+  return select.value === '' ? null : select.value;
 }
 
 // Eén gedeelde popup (in de DOM aanwezig, zie onder de kaart-HTML) voor
@@ -565,6 +617,16 @@ async function initIngredientenPagina() {
     .select('id, code, label, sort_order')
     .order('sort_order');
   if (!eenhedenError) alleEenheden = eenhedenData || [];
+
+  // Vaste declaratielijst uit Settings -> Ingredient declarations -- zelfde
+  // dropdown+"Other"-patroon als Unit, alleen deze lijst heeft ook een
+  // ontsnapping voor eenmalige waarden (kruiden/fruit/extracten) via de
+  // "Other" optie in declaratieOpties().
+  const { data: declaratieData, error: declaratieError } = await supabaseClient
+    .from('ingredient_declaraties')
+    .select('id, naam, is_geen_declaratie, sort_order')
+    .order('sort_order');
+  if (!declaratieError) alleDeclaraties = declaratieData || [];
 
   laadIngredienten();
 }
@@ -1339,9 +1401,20 @@ function renderDetailBewerken(i) {  const container = document.getElementById('i
     <div class="ing-edit-row">
       <label for="veld-${prijsKey}">${label}</label>
       <div class="ing-edit-subrow">
-        <input type="number" id="veld-${prijsKey}" value="${i[prijsKey] ?? ''}" placeholder="€" />
+        <span class="ing-per-eenheid-lbl">€</span>
+        <input type="number" id="veld-${prijsKey}" value="${i[prijsKey] ?? ''}" />
         <span class="ing-per-eenheid-lbl">per</span>
         <select id="veld-${eenheidKey}" class="ing-per-eenheid">${eenhedenOpties(i[eenheidKey] ?? '')}</select>
+      </div>
+    </div>`;
+
+  const prijsPerKgVeld = (label, perKgKey) => `
+    <div class="ing-edit-row">
+      <label for="veld-${perKgKey}">${label}</label>
+      <div class="ing-edit-subrow">
+        <span class="ing-per-eenheid-lbl">€</span>
+        <input type="number" id="veld-${perKgKey}" value="${i[perKgKey] ?? ''}" />
+        <span class="ing-per-eenheid-lbl">/ kg</span>
       </div>
     </div>`;
 
@@ -1353,7 +1426,7 @@ function renderDetailBewerken(i) {  const container = document.getElementById('i
         <input type="text" id="veld-${naamKey}" style="width:280px; text-align:left;" value="${i[naamKey] ?? ''}" />
       </div>
       ${prijsMetEenheidVeld(`Price #${nr}`, prijsKey, eenheidKey)}
-      ${veld(`Price #${nr} per kg`, perKgKey, '€/kg', 'number')}`;
+      ${prijsPerKgVeld(`Price #${nr} per kg`, perKgKey)}`;
 
   const temperatuurVeld = (label, key) => `
     <div class="ing-edit-row">
@@ -1430,7 +1503,7 @@ function renderDetailBewerken(i) {  const container = document.getElementById('i
         <label>Allergens</label>
         <button type="button" class="ing-allergenen-btn" id="veld-allergenen-btn"></button>
       </div>
-      ${veld('Ingredient declaration', 'ingredient_declaratie', '', 'textarea')}
+      ${declaratieVeldHtml('veld', i.ingredient_declaratie)}
       ${temperatuurVeld('Storage temperature', 'bewaartemperatuur')}
       ${houdbaarheidVeld('Shelf life', 'houdbaarheid', 'houdbaarheid_eenheid')}
       ${houdbaarheidVeld('Shelf life after opening', 'houdbaarheid_na_openen', 'houdbaarheid_na_openen_eenheid')}
@@ -1451,13 +1524,14 @@ function renderDetailBewerken(i) {  const container = document.getElementById('i
       werkAllergenenKnopBij();
     });
   });
+  koppelDeclaratieVeldGedrag('veld');
 
   const categorieSelect = document.getElementById('veld-category_id');
   const pasVeldZichtbaarheidToe = () => {
     const gekozen = alleCategorieen.find(c => String(c.id) === categorieSelect.value);
-    document.getElementById('veld-extract_pct-rij').style.display = (!gekozen || gekozen.uses_extract_pct) ? 'flex' : 'none';
-    document.getElementById('veld-alpha_pct-rij').style.display = (!gekozen || gekozen.uses_alpha_pct) ? 'flex' : 'none';
-    document.getElementById('veld-gistfactor-rij').style.display = (!gekozen || gekozen.uses_gistfactor) ? 'flex' : 'none';
+    document.getElementById('veld-extract_pct-rij').style.display = (!gekozen || gekozen.uses_extract_pct) ? 'block' : 'none';
+    document.getElementById('veld-alpha_pct-rij').style.display = (!gekozen || gekozen.uses_alpha_pct) ? 'block' : 'none';
+    document.getElementById('veld-gistfactor-rij').style.display = (!gekozen || gekozen.uses_gistfactor) ? 'block' : 'none';
   };
   categorieSelect.addEventListener('change', pasVeldZichtbaarheidToe);
   pasVeldZichtbaarheidToe();
@@ -1575,7 +1649,7 @@ async function slaIngredientOp(i, soort, wijziging) {
     gistfactor: (!gekozenCategorie || gekozenCategorie.uses_gistfactor) ? getal('veld-gistfactor') : null,
     kleur_ebc: getal('veld-kleur_ebc'),
     allergenen: bewerkAllergenenState,
-    ingredient_declaratie: tekst('veld-ingredient_declaratie'),
+    ingredient_declaratie: leesDeclaratieWaarde('veld'),
     bewaartemperatuur: tekst('veld-bewaartemperatuur'),
     houdbaarheid: getal('veld-houdbaarheid'),
     houdbaarheid_eenheid: tekst('veld-houdbaarheid_eenheid'),
@@ -1741,9 +1815,20 @@ function toonNieuwFormulier() {
     <div class="ing-edit-row">
       <label for="${prijsId}">${label}</label>
       <div class="ing-edit-subrow">
-        <input type="number" id="${prijsId}" placeholder="€" />
+        <span class="ing-per-eenheid-lbl">€</span>
+        <input type="number" id="${prijsId}" />
         <span class="ing-per-eenheid-lbl">per</span>
         <select id="${eenheidId}" class="ing-per-eenheid">${eenhedenOpties('')}</select>
+      </div>
+    </div>`;
+
+  const prijsPerKgVeld = (label, perKgId) => `
+    <div class="ing-edit-row">
+      <label for="${perKgId}">${label}</label>
+      <div class="ing-edit-subrow">
+        <span class="ing-per-eenheid-lbl">€</span>
+        <input type="number" id="${perKgId}" />
+        <span class="ing-per-eenheid-lbl">/ kg</span>
       </div>
     </div>`;
 
@@ -1753,7 +1838,7 @@ function toonNieuwFormulier() {
         <input type="text" id="${naamId}" style="width:280px; text-align:left;" />
       </div>
       ${prijsMetEenheidVeld(`Price #${nr}`, prijsId, eenheidId)}
-      ${veld(`Price #${nr} per kg`, perKgId, '€/kg', 'number')}`;
+      ${prijsPerKgVeld(`Price #${nr} per kg`, perKgId)}`;
 
   const temperatuurVeld = (label, id) => `
     <div class="ing-edit-row">
@@ -1825,7 +1910,7 @@ function toonNieuwFormulier() {
         <label>Allergens</label>
         <button type="button" class="ing-allergenen-btn" id="nieuw-allergenen-btn">None selected</button>
       </div>
-      ${veld('Ingredient declaration', 'nieuw-ingredient_declaratie', '', 'textarea')}
+      ${declaratieVeldHtml('nieuw', '')}
       ${temperatuurVeld('Storage temperature', 'nieuw-bewaartemperatuur')}
       ${houdbaarheidVeld('Shelf life', 'nieuw-houdbaarheid', 'nieuw-houdbaarheid_eenheid')}
       ${houdbaarheidVeld('Shelf life after opening', 'nieuw-houdbaarheid_na_openen', 'nieuw-houdbaarheid_na_openen_eenheid')}
@@ -1842,13 +1927,14 @@ function toonNieuwFormulier() {
         nieuwAllergenenState.length ? `${nieuwAllergenenState.length} selected` : 'None selected';
     });
   });
+  koppelDeclaratieVeldGedrag('nieuw');
 
   const categorieSelect = document.getElementById('nieuw-category_id');
   const pasVeldZichtbaarheidToe = () => {
     const gekozen = alleCategorieen.find(c => String(c.id) === categorieSelect.value);
-    document.getElementById('nieuw-extract_pct-rij').style.display = gekozen?.uses_extract_pct ? 'flex' : 'none';
-    document.getElementById('nieuw-alpha_pct-rij').style.display = gekozen?.uses_alpha_pct ? 'flex' : 'none';
-    document.getElementById('nieuw-gistfactor-rij').style.display = gekozen?.uses_gistfactor ? 'flex' : 'none';
+    document.getElementById('nieuw-extract_pct-rij').style.display = gekozen?.uses_extract_pct ? 'block' : 'none';
+    document.getElementById('nieuw-alpha_pct-rij').style.display = gekozen?.uses_alpha_pct ? 'block' : 'none';
+    document.getElementById('nieuw-gistfactor-rij').style.display = gekozen?.uses_gistfactor ? 'block' : 'none';
   };
   categorieSelect.addEventListener('change', pasVeldZichtbaarheidToe);
   pasVeldZichtbaarheidToe(); // nothing visible until a category is chosen
@@ -1908,7 +1994,7 @@ async function slaNieuwIngredientOp() {
     gistfactor: gekozenCategorie?.uses_gistfactor ? getal('nieuw-gistfactor') : null,
     kleur_ebc: getal('nieuw-kleur_ebc'),
     allergenen: nieuwAllergenenState,
-    ingredient_declaratie: tekst('nieuw-ingredient_declaratie'),
+    ingredient_declaratie: leesDeclaratieWaarde('nieuw'),
     bewaartemperatuur: tekst('nieuw-bewaartemperatuur'),
     houdbaarheid: getal('nieuw-houdbaarheid'),
     houdbaarheid_eenheid: tekst('nieuw-houdbaarheid_eenheid'),
