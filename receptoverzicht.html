@@ -1289,7 +1289,7 @@ async function openDetail(id) {
         <div class="full-span">
           <div class="param-row">
             <span>Flavour description keywords</span>
-            <span style="display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end;">
+            <span style="display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-start;">
               ${r.smaak_keywords.map(k => `<span style="display:inline-block; font-family:var(--mono); font-size:13px; background:#eef0e6; color:var(--hop-dark); padding:6px 14px; border-radius:20px;">${escapeHtml(k)}</span>`).join('')}
             </span>
           </div>
