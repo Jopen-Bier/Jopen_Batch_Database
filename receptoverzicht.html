@@ -1277,18 +1277,24 @@ async function openDetail(id) {
       </div>` : ''}
     ${r.smaakomschrijving ? `
       <div class="param-columns">
-        <div class="param-row" style="grid-template-columns: 1fr;">
-          <span>Flavour description</span>
+        <div class="full-span">
+          <div class="param-row">
+            <span>Flavour description</span>
+            <span style="white-space:pre-wrap;">${escapeHtml(r.smaakomschrijving)}</span>
+          </div>
         </div>
-      </div>
-      <p style="margin-top:-4px; white-space:pre-wrap;">${escapeHtml(r.smaakomschrijving)}</p>` : ''}
+      </div>` : ''}
     ${(r.smaak_keywords && r.smaak_keywords.length > 0) ? `
       <div class="param-columns">
-        <div class="param-row" style="grid-template-columns: 1fr;">
-          <span>Flavour description keywords</span>
+        <div class="full-span">
+          <div class="param-row">
+            <span>Flavour description keywords</span>
+            <span style="display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end;">
+              ${r.smaak_keywords.map(k => `<span style="display:inline-block; font-family:var(--mono); font-size:13px; background:#eef0e6; color:var(--hop-dark); padding:6px 14px; border-radius:20px;">${escapeHtml(k)}</span>`).join('')}
+            </span>
+          </div>
         </div>
-      </div>
-      <p style="margin-top:-4px;">${r.smaak_keywords.map(k => `<span style="display:inline-block; font-family:var(--mono); font-size:11px; background:#eef0e6; color:var(--hop-dark); padding:4px 10px; border-radius:20px; margin:2px 6px 2px 0;">${escapeHtml(k)}</span>`).join('')}</p>` : ''}
+      </div>` : ''}
 
     <div class="section-title">End product specifications</div>
     ${paramColumnsHtml(specRows) || '<div class="empty">None entered.</div>'}
