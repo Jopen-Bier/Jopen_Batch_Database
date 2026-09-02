@@ -37,6 +37,10 @@
     font-family: var(--serif); font-size: 14px; background: #fff;
   }
   .re-field.wide { grid-column: 1 / -1; }
+  .re-smaak-tekst { resize: vertical; min-height: 68px; }
+  .re-smaak-keywords { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; }
+  .re-smaak-keywords input { width: 100%; }
+  @media (max-width: 720px) { .re-smaak-keywords { grid-template-columns: repeat(2, 1fr); } }
 
   .re-param-columns { column-count: 2; column-gap: 28px; }
   .re-paramrow {
@@ -277,6 +281,21 @@
             <div class="re-kleur-picker" id="re-kleur-picker"></div>
             <span class="re-kleur-huidig" id="re-kleur-huidig">No color selected</span>
             <input type="hidden" id="veld-kleur" />
+          </div>
+          <div class="re-field wide">
+            <label for="veld-smaakomschrijving">Flavour description</label>
+            <textarea id="veld-smaakomschrijving" class="re-smaak-tekst" rows="3"></textarea>
+          </div>
+          <div class="re-field wide">
+            <label>Flavour description keywords</label>
+            <div class="re-smaak-keywords" id="re-smaak-keywords">
+              <input type="text" class="re-smaak-keyword" id="veld-smaak-keyword-0" placeholder="Keyword 1" />
+              <input type="text" class="re-smaak-keyword" id="veld-smaak-keyword-1" placeholder="Keyword 2" />
+              <input type="text" class="re-smaak-keyword" id="veld-smaak-keyword-2" placeholder="Keyword 3" />
+              <input type="text" class="re-smaak-keyword" id="veld-smaak-keyword-3" placeholder="Keyword 4" />
+              <input type="text" class="re-smaak-keyword" id="veld-smaak-keyword-4" placeholder="Keyword 5" />
+              <input type="text" class="re-smaak-keyword" id="veld-smaak-keyword-5" placeholder="Keyword 6" />
+            </div>
           </div>
         </div>
         <div id="re-laatste-revisie" style="display:none; margin-top:14px; padding-top:14px; border-top:1px solid var(--line);">
@@ -1377,6 +1396,22 @@ document.addEventListener('input', (e) => {
   }
 });
 
+function leesSmaakKeywords() {
+  const waarden = [];
+  for (let i = 0; i < 6; i++) {
+    const v = document.getElementById(`veld-smaak-keyword-${i}`).value.trim();
+    if (v !== '') waarden.push(v);
+  }
+  return waarden.length > 0 ? waarden : null;
+}
+
+function zetSmaakKeywords(keywords) {
+  const lijst = keywords || [];
+  for (let i = 0; i < 6; i++) {
+    document.getElementById(`veld-smaak-keyword-${i}`).value = lijst[i] || '';
+  }
+}
+
 function leesBasisgegevens() {
   const brouwselVal = document.getElementById('veld-brouwsel_hl').value;
   return {
@@ -1386,6 +1421,8 @@ function leesBasisgegevens() {
     brouwsel_hl: brouwselVal === '' ? null : Number(brouwselVal),
     status: document.getElementById('veld-status').value,
     kleur: document.getElementById('veld-kleur').value.trim() || null,
+    smaakomschrijving: document.getElementById('veld-smaakomschrijving').value.trim() || null,
+    smaak_keywords: leesSmaakKeywords(),
   };
 }
 
@@ -1735,6 +1772,8 @@ document.getElementById('re-kopieer-btn').addEventListener('click', async () => 
     document.getElementById('veld-brouwsel_hl').value = bron.brouwsel_hl ?? '';
     document.getElementById('veld-status').value = 'concept';
     window.zetKleurPicker(bron.kleur || '');
+    document.getElementById('veld-smaakomschrijving').value = bron.smaakomschrijving || '';
+    zetSmaakKeywords(bron.smaak_keywords);
     document.getElementById('veld-bier_risico').value = (ferm.data && ferm.data.bier_risico) || '';
     document.getElementById('veld-bier_status').value = (ferm.data && ferm.data.bier_status) || '';
     pasBadgeKleurToe(document.getElementById('veld-bier_risico'), BIER_RISICO_KLEUREN);
@@ -1819,6 +1858,8 @@ async function laadBestaandRecept(id) {
   document.getElementById('veld-brouwsel_hl').value = bestaandRecept.brouwsel_hl ?? '';
   document.getElementById('veld-status').value = bestaandRecept.status || 'concept';
   window.zetKleurPicker(bestaandRecept.kleur || '');
+  document.getElementById('veld-smaakomschrijving').value = bestaandRecept.smaakomschrijving || '';
+  zetSmaakKeywords(bestaandRecept.smaak_keywords);
 
   renderParamGrid('re-specs-grid', SPECS_FIELDS, specs.data || {});
   renderParamGrid('re-ferm-grid', FERM_FIELDS, ferm.data || {});
