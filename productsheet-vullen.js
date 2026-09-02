@@ -124,7 +124,11 @@ async function psSchrijfXlsx(writer, live, productSheetRow, snapshot) {
   await set('E38', live.turbidity);
   await set('E41', live.allergenenTekst);
   await set('E42', live.recipe.aanbevolen_schenktemperatuur ?? '');
-  await set('E44', (live.recipe.smaak_keywords || []).join(', '));
+  const keywords = live.recipe.smaak_keywords || [];
+  const keywordCellen = ['E44', 'H44', 'M44', 'E45', 'H45', 'M45'];
+  for (let i = 0; i < keywordCellen.length; i++) {
+    await set(keywordCellen[i], keywords[i] || '');
+  }
 
   // Handmatige velden (product_sheets)
   const p = productSheetRow || {};
