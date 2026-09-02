@@ -749,6 +749,59 @@ function pasFiltersToe() {
 
 document.getElementById('search').addEventListener('input', pasFiltersToe);
 
+// Zelfde brontabel als recept-invoer.html (KLEUR_STOPS) -- alleen deze
+// twee opzoekfuncties zijn hier nodig, voor de read-only weergave van
+// recipes.kleur_srm.
+const KLEUR_STOPS = [
+  { srm: 2, hex: '#FEE69D', label: 'Light Straw' },
+  { srm: 3, hex: '#FED87C', label: 'Light Straw' },
+  { srm: 4, hex: '#FCC962', label: 'Dark Yellow' },
+  { srm: 5, hex: '#FBB034', label: 'Light Orange' },
+  { srm: 6, hex: '#F6A623', label: 'Light Orange' },
+  { srm: 7, hex: '#F19B21', label: 'Light Amber' },
+  { srm: 8, hex: '#E88E1E', label: 'Light Amber' },
+  { srm: 9, hex: '#E4841C', label: 'Amber' },
+  { srm: 10, hex: '#DC7A1A', label: 'Amber' },
+  { srm: 11, hex: '#D57018', label: 'Dark Amber' },
+  { srm: 12, hex: '#CE6817', label: 'Dark Amber' },
+  { srm: 13, hex: '#C86015', label: 'Light Brown' },
+  { srm: 14, hex: '#C15814', label: 'Light Brown' },
+  { srm: 15, hex: '#B94F13', label: 'Light Brown' },
+  { srm: 16, hex: '#B54B12', label: 'Light Brown' },
+  { srm: 17, hex: '#B04410', label: 'Brown' },
+  { srm: 18, hex: '#A53D0E', label: 'Brown' },
+  { srm: 19, hex: '#9F360D', label: 'Brown' },
+  { srm: 20, hex: '#9C300C', label: 'Brown' },
+  { srm: 21, hex: '#8F2909', label: 'Ruby Brown' },
+  { srm: 22, hex: '#8F2909', label: 'Ruby Brown' },
+  { srm: 23, hex: '#852208', label: 'Ruby Brown' },
+  { srm: 24, hex: '#801D08', label: 'Ruby Brown' },
+  { srm: 25, hex: '#7A1907', label: 'Ruby Brown' },
+  { srm: 26, hex: '#751806', label: 'Ruby Brown' },
+  { srm: 27, hex: '#6F1305', label: 'Ruby Brown' },
+  { srm: 28, hex: '#690C04', label: 'Ruby Brown' },
+  { srm: 29, hex: '#650B05', label: 'Ruby Brown' },
+  { srm: 30, hex: '#5C0B04', label: 'Dark Brown' },
+  { srm: 31, hex: '#590806', label: 'Dark Brown' },
+  { srm: 32, hex: '#5F0705', label: 'Dark Brown' },
+  { srm: 33, hex: '#51080B', label: 'Dark Brown' },
+  { srm: 34, hex: '#4B0406', label: 'Dark Brown' },
+  { srm: 35, hex: '#450407', label: 'Black' },
+  { srm: 36, hex: '#44040A', label: 'Black' },
+  { srm: 37, hex: '#3F0609', label: 'Black' },
+  { srm: 38, hex: '#390409', label: 'Very Dark Black/Opaque' },
+  { srm: 39, hex: '#39070C', label: 'Very Dark Black/Opaque' },
+  { srm: 40, hex: '#35080A', label: 'Very Dark Black/Opaque' },
+];
+function kleurStopHexVoorSrm(srm) {
+  const stop = KLEUR_STOPS.find(s => s.srm === Number(srm));
+  return stop ? stop.hex : '#b0b0b0';
+}
+function kleurStopLabelVoorSrm(srm) {
+  const stop = KLEUR_STOPS.find(s => s.srm === Number(srm));
+  return stop ? stop.label : 'Unrated';
+}
+
 async function openDetail(id) {
   document.getElementById('list-view').style.display = 'none';
   document.getElementById('detail-view').classList.add('active');
@@ -1293,6 +1346,16 @@ async function openDetail(id) {
               ${r.smaak_keywords.map(k => `<span style="display:inline-block; font-family:var(--mono); font-size:13px; background:#eef0e6; color:var(--hop-dark); padding:6px 14px; border-radius:20px;">${escapeHtml(k)}</span>`).join('')}
             </span>
           </div>
+        </div>
+      </div>` : ''}
+    ${r.kleur_srm !== null && r.kleur_srm !== undefined ? `
+      <div class="param-columns">
+        <div class="param-row">
+          <span>Colour</span>
+          <span style="display:inline-flex; align-items:center; gap:6px;">
+            <span style="display:inline-block; width:16px; height:16px; border-radius:4px; border:1px solid rgba(0,0,0,0.15); background:${escapeHtml(kleurStopHexVoorSrm(r.kleur_srm))};"></span>
+            ${escapeHtml(kleurStopLabelVoorSrm(r.kleur_srm))}${r.kleur_vrije_tekst ? ` \u2014 ${escapeHtml(r.kleur_vrije_tekst)}` : ''}
+          </span>
         </div>
       </div>` : ''}
     ${r.aanbevolen_schenktemperatuur !== null && r.aanbevolen_schenktemperatuur !== undefined && r.aanbevolen_schenktemperatuur !== '' ? `

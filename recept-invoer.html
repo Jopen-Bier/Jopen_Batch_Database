@@ -203,6 +203,35 @@
   .re-btn:hover { background: var(--hop); }
   .re-btn.secundair { background: transparent; color: var(--hop-dark); border: 1px solid var(--line); }
   .re-btn.secundair:disabled { color: #a89f8e; cursor: not-allowed; opacity: 0.7; }
+
+  .re-kleur-samenvatting { display: flex; align-items: center; gap: 8px; font-family: var(--serif); font-size: 14px; }
+  .re-kleur-swatch-klein { display: inline-block; width: 18px; height: 18px; border-radius: 4px; border: 1px solid rgba(0,0,0,0.15); background: #b0b0b0; flex-shrink: 0; }
+
+  /* ---------- Colour picker modal ---------- */
+  .re-kleurwiel-modal { max-width: 520px; }
+  .re-kleurwiel-instructies { font-size: 13px; color: #6b6355; margin: 0 0 16px; }
+  .re-kleurwiel-swatch { width: 100%; aspect-ratio: 16 / 9; border-radius: 6px; background: #b0b0b0; margin-bottom: 14px; }
+  .re-kleurwiel-label { text-align: center; font-weight: 700; margin-bottom: 16px; font-family: var(--serif); }
+  .re-kleurwiel-slider {
+    width: 100%; -webkit-appearance: none; appearance: none; height: 2px; background: var(--line);
+    border-radius: 2px; margin: 10px 0 22px; cursor: pointer;
+  }
+  .re-kleurwiel-slider::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 22px; height: 22px; border-radius: 50%; background: #fff;
+    border: 1px solid var(--line); box-shadow: 0 1px 3px rgba(0,0,0,0.2); cursor: pointer;
+  }
+  .re-kleurwiel-slider::-moz-range-thumb {
+    width: 22px; height: 22px; border-radius: 50%; background: #fff;
+    border: 1px solid var(--line); box-shadow: 0 1px 3px rgba(0,0,0,0.2); cursor: pointer;
+  }
+  .re-kleurwiel-vrije-row label {
+    display: block; font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.05em; color: #6b6355; margin-bottom: 4px;
+  }
+  .re-kleurwiel-vrije-row input {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 4px;
+    font-family: var(--serif); font-size: 14px; background: #fff;
+  }
   .re-btn.groot { background: var(--amber); }
   .re-btn.groot:hover { opacity: 0.9; }
 
@@ -357,9 +386,11 @@
           </div>
           <div class="re-field wide">
             <label>Colour</label>
-            <div>
-              <button type="button" class="re-btn secundair" id="re-kleur-beoordeling-btn" disabled title="Coming soon">Select colour (coming soon)</button>
+            <div class="re-kleur-samenvatting" id="re-kleur-samenvatting">
+              <span class="re-kleur-swatch-klein" id="re-kleur-swatch-klein"></span>
+              <span id="re-kleur-label-klein">Unrated</span>
             </div>
+            <button type="button" class="re-btn secundair" id="re-kleur-beoordeling-btn" style="margin-top:8px;">Select colour</button>
           </div>
           <div class="re-field">
             <label for="veld-aanbevolen_schenktemperatuur">Recommended drinking temperature (°C)</label>
@@ -579,6 +610,24 @@
     <div class="re-modal-actions">
       <button type="button" class="re-btn secundair" id="re-smaakwiel-cancel-btn">Cancel</button>
       <button type="button" class="re-btn opslaan" id="re-smaakwiel-done-btn">Done</button>
+    </div>
+  </div>
+</div>
+
+<div class="re-modal-overlay" id="re-kleurwiel-modal-overlay" style="display:none;">
+  <div class="re-modal re-kleurwiel-modal">
+    <h2>Colour</h2>
+    <p class="re-kleurwiel-instructies">Look through the beer at a white background using a natural light source or an artificial light approximating sunlight. Do not use a flashlight to provide extra light. Avoid casting shadows with your body or the beer glass. Compare colours and find the closest match.</p>
+    <div class="re-kleurwiel-swatch" id="re-kleurwiel-swatch"></div>
+    <div class="re-kleurwiel-label" id="re-kleurwiel-label">Unrated</div>
+    <input type="range" id="re-kleurwiel-slider" class="re-kleurwiel-slider" min="0" max="39" step="1" value="0" />
+    <div class="re-kleurwiel-vrije-row">
+      <label for="re-kleurwiel-vrij">Custom colour note (optional)</label>
+      <input type="text" id="re-kleurwiel-vrij" placeholder="e.g. Hazy golden with a pink hue" />
+    </div>
+    <div class="re-modal-actions">
+      <button type="button" class="re-btn secundair" id="re-kleurwiel-cancel-btn">Cancel</button>
+      <button type="button" class="re-btn opslaan" id="re-kleurwiel-done-btn">Done</button>
     </div>
   </div>
 </div>
@@ -1725,6 +1774,116 @@ document.getElementById('re-smaakwiel-free-input').addEventListener('keydown', (
   if (e.key === 'Enter') { e.preventDefault(); smaakVoegVrijeKeywordToe(); }
 });
 
+// Colour picker -- SRM (Standard Reference Method) slider. Colours and band
+// labels sampled directly from a reference colour-matching tool (39 stops,
+// SRM 2 through 40) rather than approximated by hand, so what's on screen
+// matches what was actually shown. Slider position 0 is a distinct
+// "Unrated" state (kleur_srm = null), not SRM 1.
+const KLEUR_STOPS = [
+  { srm: 2, hex: '#FEE69D', label: 'Light Straw' },
+  { srm: 3, hex: '#FED87C', label: 'Light Straw' },
+  { srm: 4, hex: '#FCC962', label: 'Dark Yellow' },
+  { srm: 5, hex: '#FBB034', label: 'Light Orange' },
+  { srm: 6, hex: '#F6A623', label: 'Light Orange' },
+  { srm: 7, hex: '#F19B21', label: 'Light Amber' },
+  { srm: 8, hex: '#E88E1E', label: 'Light Amber' },
+  { srm: 9, hex: '#E4841C', label: 'Amber' },
+  { srm: 10, hex: '#DC7A1A', label: 'Amber' },
+  { srm: 11, hex: '#D57018', label: 'Dark Amber' },
+  { srm: 12, hex: '#CE6817', label: 'Dark Amber' },
+  { srm: 13, hex: '#C86015', label: 'Light Brown' },
+  { srm: 14, hex: '#C15814', label: 'Light Brown' },
+  { srm: 15, hex: '#B94F13', label: 'Light Brown' },
+  { srm: 16, hex: '#B54B12', label: 'Light Brown' },
+  { srm: 17, hex: '#B04410', label: 'Brown' },
+  { srm: 18, hex: '#A53D0E', label: 'Brown' },
+  { srm: 19, hex: '#9F360D', label: 'Brown' },
+  { srm: 20, hex: '#9C300C', label: 'Brown' },
+  { srm: 21, hex: '#8F2909', label: 'Ruby Brown' },
+  { srm: 22, hex: '#8F2909', label: 'Ruby Brown' },
+  { srm: 23, hex: '#852208', label: 'Ruby Brown' },
+  { srm: 24, hex: '#801D08', label: 'Ruby Brown' },
+  { srm: 25, hex: '#7A1907', label: 'Ruby Brown' },
+  { srm: 26, hex: '#751806', label: 'Ruby Brown' },
+  { srm: 27, hex: '#6F1305', label: 'Ruby Brown' },
+  { srm: 28, hex: '#690C04', label: 'Ruby Brown' },
+  { srm: 29, hex: '#650B05', label: 'Ruby Brown' },
+  { srm: 30, hex: '#5C0B04', label: 'Dark Brown' },
+  { srm: 31, hex: '#590806', label: 'Dark Brown' },
+  { srm: 32, hex: '#5F0705', label: 'Dark Brown' },
+  { srm: 33, hex: '#51080B', label: 'Dark Brown' },
+  { srm: 34, hex: '#4B0406', label: 'Dark Brown' },
+  { srm: 35, hex: '#450407', label: 'Black' },
+  { srm: 36, hex: '#44040A', label: 'Black' },
+  { srm: 37, hex: '#3F0609', label: 'Black' },
+  { srm: 38, hex: '#390409', label: 'Very Dark Black/Opaque' },
+  { srm: 39, hex: '#39070C', label: 'Very Dark Black/Opaque' },
+  { srm: 40, hex: '#35080A', label: 'Very Dark Black/Opaque' },
+];
+const KLEUR_ONBEOORDEELD_HEX = '#b0b0b0';
+
+function kleurStopVoorSrm(srm) {
+  if (srm === null || srm === undefined || srm === '') return null;
+  return KLEUR_STOPS.find(s => s.srm === Number(srm)) || null;
+}
+
+let kleurSrm = null;              // applied/official value, used on save
+let kleurVrijeTekst = null;
+let kleurSrmWerk = null;          // working copy while the modal is open
+let kleurVrijeTekstWerk = null;
+
+function renderKleurSamenvatting() {
+  const swatch = document.getElementById('re-kleur-swatch-klein');
+  const label = document.getElementById('re-kleur-label-klein');
+  if (!swatch || !label) return;
+  const stop = kleurStopVoorSrm(kleurSrm);
+  swatch.style.background = stop ? stop.hex : KLEUR_ONBEOORDEELD_HEX;
+  const labelTekst = stop ? stop.label : 'Unrated';
+  label.textContent = kleurVrijeTekst ? `${labelTekst} \u2014 ${kleurVrijeTekst}` : labelTekst;
+}
+
+function renderKleurwielPreview() {
+  const slider = document.getElementById('re-kleurwiel-slider');
+  const swatch = document.getElementById('re-kleurwiel-swatch');
+  const label = document.getElementById('re-kleurwiel-label');
+  const waarde = Number(slider.value);
+  if (waarde === 0) {
+    swatch.style.background = KLEUR_ONBEOORDEELD_HEX;
+    label.textContent = 'Unrated';
+    kleurSrmWerk = null;
+  } else {
+    const stop = KLEUR_STOPS[waarde - 1];
+    swatch.style.background = stop.hex;
+    label.textContent = stop.label;
+    kleurSrmWerk = stop.srm;
+  }
+}
+
+function openKleurModal() {
+  kleurSrmWerk = kleurSrm;
+  kleurVrijeTekstWerk = kleurVrijeTekst;
+  const slider = document.getElementById('re-kleurwiel-slider');
+  const stopIndex = kleurSrm ? KLEUR_STOPS.findIndex(s => s.srm === Number(kleurSrm)) : -1;
+  slider.value = stopIndex >= 0 ? stopIndex + 1 : 0;
+  document.getElementById('re-kleurwiel-vrij').value = kleurVrijeTekst || '';
+  renderKleurwielPreview();
+  document.getElementById('re-kleurwiel-modal-overlay').style.display = 'flex';
+}
+
+function sluitKleurModal(toepassen) {
+  if (toepassen) {
+    kleurSrm = kleurSrmWerk;
+    kleurVrijeTekst = document.getElementById('re-kleurwiel-vrij').value.trim() || null;
+    renderKleurSamenvatting();
+  }
+  document.getElementById('re-kleurwiel-modal-overlay').style.display = 'none';
+}
+
+document.getElementById('re-kleur-beoordeling-btn').addEventListener('click', openKleurModal);
+document.getElementById('re-kleurwiel-cancel-btn').addEventListener('click', () => sluitKleurModal(false));
+document.getElementById('re-kleurwiel-done-btn').addEventListener('click', () => sluitKleurModal(true));
+document.getElementById('re-kleurwiel-slider').addEventListener('input', renderKleurwielPreview);
+
 function leesBasisgegevens() {
   const brouwselVal = document.getElementById('veld-brouwsel_hl').value;
   return {
@@ -1740,6 +1899,8 @@ function leesBasisgegevens() {
       const v = document.getElementById('veld-aanbevolen_schenktemperatuur').value;
       return v === '' ? null : Number(v);
     })(),
+    kleur_srm: kleurSrm,
+    kleur_vrije_tekst: kleurVrijeTekst,
   };
 }
 
@@ -1921,6 +2082,9 @@ async function initReceptInvoer() {
   vulExtraVeldenUit(null, null);
   smaakKeywords = [];
   renderSmaakChipsSamenvatting();
+  kleurSrm = null;
+  kleurVrijeTekst = null;
+  renderKleurSamenvatting();
 
   const id = urlParam('id');
   if (id) {
@@ -2095,6 +2259,9 @@ document.getElementById('re-kopieer-btn').addEventListener('click', async () => 
     smaakKeywords = (bron.smaak_keywords || []).slice();
     renderSmaakChipsSamenvatting();
     document.getElementById('veld-aanbevolen_schenktemperatuur').value = bron.aanbevolen_schenktemperatuur ?? '';
+    kleurSrm = bron.kleur_srm ?? null;
+    kleurVrijeTekst = bron.kleur_vrije_tekst ?? null;
+    renderKleurSamenvatting();
     document.getElementById('veld-bier_risico').value = (ferm.data && ferm.data.bier_risico) || '';
     document.getElementById('veld-bier_status').value = (ferm.data && ferm.data.bier_status) || '';
     pasBadgeKleurToe(document.getElementById('veld-bier_risico'), BIER_RISICO_KLEUREN);
@@ -2183,6 +2350,9 @@ async function laadBestaandRecept(id) {
   smaakKeywords = (bestaandRecept.smaak_keywords || []).slice();
   renderSmaakChipsSamenvatting();
   document.getElementById('veld-aanbevolen_schenktemperatuur').value = bestaandRecept.aanbevolen_schenktemperatuur ?? '';
+  kleurSrm = bestaandRecept.kleur_srm ?? null;
+  kleurVrijeTekst = bestaandRecept.kleur_vrije_tekst ?? null;
+  renderKleurSamenvatting();
 
   renderParamGrid('re-specs-grid', SPECS_FIELDS, specs.data || {});
   renderParamGrid('re-ferm-grid', FERM_FIELDS, ferm.data || {});
