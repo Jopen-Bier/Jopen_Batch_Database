@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jopen — Inventory</title>
+<link rel="stylesheet" href="jopen-shared.css">
+<style>
+  main.vr-main { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  .vr-tabs { display: flex; gap: 4px; margin-bottom: 18px; border-bottom: 1px solid #ddd; }
+  .vr-tab-btn {
+    background: none; border: none; padding: 10px 16px; font-size: 0.95em; cursor: pointer;
+    color: #6b6b6b; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .vr-tab-btn.actief { color: var(--jopen-red); border-bottom-color: var(--jopen-red); font-weight: 600; }
+  .vr-tab-panel { display: none; }
+  .vr-tab-panel.actief { display: block; }
+  section.vr-block {
+    background: white; border-radius: 10px; padding: 20px 22px; margin-bottom: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  section.vr-block h2 { font-size: 1em; margin: 0 0 14px 0; color: var(--jopen-red); }
+  .vr-field { margin-bottom: 14px; position: relative; }
+  .vr-field label {
+    display: block; font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.04em;
+    color: #6b6b6b; margin-bottom: 4px;
+  }
+  .vr-field input[type="text"], .vr-field input[type="number"], .vr-field input[type="date"], .vr-field select, .vr-field textarea {
+    width: 100%; padding: 8px 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 0.95em; box-sizing: border-box;
+  }
+  .vr-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 18px; }
+  .vr-grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px 18px; }
+  .vr-checkbox-row { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+  .vr-checkbox-row input { width: auto; }
+  #vr-ontv-resultaten, #vr-manu-resultaten {
+    position: absolute; z-index: 5; top: 100%; left: 0; right: 0;
+    background: white; border: 1px solid #ccc; border-top: none; border-radius: 0 0 6px 6px;
+    max-height: 220px; overflow-y: auto; display: none;
+  }
+  #vr-ontv-resultaten div, #vr-manu-resultaten div {
+    padding: 8px 10px; cursor: pointer; font-size: 0.92em; border-bottom: 1px solid #f0f0ee;
+  }
+  #vr-ontv-resultaten div:hover, #vr-manu-resultaten div:hover { background: var(--jopen-red-tint); }
+  .vr-btn {
+    background: var(--jopen-red); color: white; border: none; padding: 9px 20px;
+    border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.95em;
+  }
+  .vr-btn:disabled { opacity: 0.5; cursor: default; }
+  .vr-btn-secundair {
+    background: none; border: 1px solid var(--jopen-red); color: var(--jopen-red); border-radius: 6px;
+    padding: 5px 12px; cursor: pointer; font-size: 0.85em;
+  }
+  #vr-ontv-melding, #vr-manu-melding { margin-left: 12px; font-size: 0.9em; }
+  .vr-melding.fout { color: #a33f2c; }
+  .vr-melding.ok { color: #2f7d3c; }
+  table.vr-table { width: 100%; border-collapse: collapse; font-size: 0.88em; }
+  table.vr-table th, table.vr-table td { text-align: left; padding: 7px 10px; border-bottom: 1px solid #eee; }
+  table.vr-table th { color: #6b6b6b; font-weight: 600; font-size: 0.85em; }
+  .vr-status-badge { padding: 2px 8px; border-radius: 10px; font-size: 0.8em; font-weight: 600; }
+  .vr-status-actief { background: #e6f4ea; color: #2f7d3c; }
+  .vr-status-leeg { background: #f0f0ee; color: #6b6b6b; }
+  .vr-status-afgesloten { background: #f0f0ee; color: #6b6b6b; }
+  .vr-filters { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+  .vr-filters input, .vr-filters select { padding: 6px 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 0.9em; }
+  .vr-skeleton { color: #bbb; }
+  .vr-lot-regel { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .vr-lot-regel select { flex: 2; padding: 6px 8px; border: 1px solid #ccc; border-radius: 6px; }
+  .vr-lot-regel input { flex: 1; padding: 6px 8px; border: 1px solid #ccc; border-radius: 6px; }
+  .vr-geen-rechten { color: #6b6b6b; font-size: 0.9em; }
+  .bc-geen { color: #999; cursor: default; }
+</style>
+</head>
+<body>
+
+  <div id="jopen-nav"></div>
+
+  <main class="vr-main">
+    <h1 style="margin-bottom:2px;">Inventory</h1>
+    <p class="jopen-subtitel" style="margin-top:0;">Raw material lots, manual/ad-hoc bookings, and accounting sign-off.</p>
+
+    <div class="vr-tabs">
+      <button type="button" class="vr-tab-btn actief" data-tab="ontvangst">Receiving</button>
+      <button type="button" class="vr-tab-btn" data-tab="overzicht">Lot overview</button>
+      <button type="button" class="vr-tab-btn" data-tab="handmatig">Manual / ad-hoc booking</button>
+      <button type="button" class="vr-tab-btn" data-tab="boekhouding">Accounting sign-off</button>
+    </div>
+
+    <!-- ===================== ONTVANGST ===================== -->
+    <div class="vr-tab-panel actief" data-tab="ontvangst">
+      <section class="vr-block">
+        <h2>Register a new lot</h2>
+        <div id="vr-ontv-geen-rechten" class="vr-geen-rechten" style="display:none;">
+          You need editor access to register a new lot.
+        </div>
+        <div id="vr-ontv-formulier">
+          <div class="vr-field">
+            <label for="vr-ontv-ingredient-zoek">Ingredient</label>
+            <input type="text" id="vr-ontv-ingredient-zoek" placeholder="Search by ingredient name…" autocomplete="off" />
+            <div id="vr-ontv-resultaten"></div>
+          </div>
+
+          <div class="vr-grid2">
+            <div class="vr-field"><label for="vr-ontv-leverancier">Supplier</label><input type="text" id="vr-ontv-leverancier" /></div>
+            <div class="vr-field"><label for="vr-ontv-lotcode">Lot / batch code</label><input type="text" id="vr-ontv-lotcode" /></div>
+          </div>
+          <div class="vr-grid3">
+            <div class="vr-field"><label for="vr-ontv-datum">Receiving date</label><input type="date" id="vr-ontv-datum" /></div>
+            <div class="vr-field"><label for="vr-ontv-hoeveelheid">Quantity received</label><input type="number" step="0.001" id="vr-ontv-hoeveelheid" /></div>
+            <div class="vr-field"><label for="vr-ontv-eenheid">Unit</label><input type="text" id="vr-ontv-eenheid" placeholder="kg, g, l, stuks…" /></div>
+          </div>
+          <div class="vr-grid3">
+            <div class="vr-field"><label for="vr-ontv-colli">Number of packages</label><input type="text" id="vr-ontv-colli" placeholder="e.g. 2 boxes" /></div>
+            <div class="vr-field"><label for="vr-ontv-locatie">Location</label><input type="text" id="vr-ontv-locatie" /></div>
+            <div class="vr-field"><label for="vr-ontv-tht">Best-before date</label><input type="date" id="vr-ontv-tht" /></div>
+          </div>
+          <div class="vr-field" id="vr-ontv-alpha-veld" style="display:none; max-width:220px;">
+            <label for="vr-ontv-alpha">Alpha % (this lot)</label>
+            <input type="number" step="0.1" id="vr-ontv-alpha" />
+          </div>
+          <div class="vr-checkbox-row"><input type="checkbox" id="vr-ontv-ontvangstcontrole" /><label for="vr-ontv-ontvangstcontrole" style="margin:0;">Receiving check done</label></div>
+          <div class="vr-checkbox-row"><input type="checkbox" id="vr-ontv-ingangscontrole" /><label for="vr-ontv-ingangscontrole" style="margin:0;">Incoming check done</label></div>
+          <div class="vr-field"><label for="vr-ontv-notitie">Notes</label><textarea id="vr-ontv-notitie" rows="2"></textarea></div>
+
+          <button type="button" id="vr-ontv-btn" class="vr-btn" disabled>Register lot</button>
+          <span id="vr-ontv-melding" class="vr-melding"></span>
+        </div>
+      </section>
+    </div>
+
+    <!-- ===================== LOT OVERZICHT ===================== -->
+    <div class="vr-tab-panel" data-tab="overzicht">
+      <section class="vr-block">
+        <h2>Lots</h2>
+        <div class="vr-filters">
+          <input type="text" id="vr-ovz-zoek" placeholder="Search ingredient / supplier / lot code…" style="min-width:260px;" />
+          <select id="vr-ovz-status">
+            <option value="">All statuses</option>
+            <option value="actief">Active</option>
+            <option value="leeg">Empty</option>
+            <option value="afgesloten">Closed</option>
+          </select>
+        </div>
+        <div style="max-height:520px; overflow-y:auto;">
+          <table class="vr-table">
+            <thead><tr>
+              <th>Ingredient</th><th>Supplier</th><th>Lot code</th><th>Received</th>
+              <th>Qty received</th><th>Remaining</th><th>Status</th><th></th>
+            </tr></thead>
+            <tbody id="vr-ovz-tbody"><tr><td colspan="8" class="vr-skeleton">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <!-- ===================== HANDMATIG / AD-HOC ===================== -->
+    <div class="vr-tab-panel" data-tab="handmatig">
+      <section class="vr-block">
+        <h2>Book out — manual or ad-hoc</h2>
+        <p class="jopen-subtitel" style="margin-top:0;">
+          Use this for Cellar additions / Yeast (always booked out later, once actually added), and for anything used
+          off-recipe. Off-recipe bookings need to be signed off by accounting — see the "Accounting sign-off" tab.
+        </p>
+        <div id="vr-manu-geen-rechten" class="vr-geen-rechten" style="display:none;">
+          You need editor access to book out stock.
+        </div>
+        <div id="vr-manu-formulier">
+          <div class="vr-field">
+            <label for="vr-manu-ingredient-zoek">Ingredient</label>
+            <input type="text" id="vr-manu-ingredient-zoek" placeholder="Search by ingredient name…" autocomplete="off" />
+            <div id="vr-manu-resultaten"></div>
+          </div>
+          <div class="vr-grid2">
+            <div class="vr-field">
+              <label for="vr-manu-lot">Lot</label>
+              <select id="vr-manu-lot"><option value="">Select ingredient first…</option></select>
+            </div>
+            <div class="vr-field"><label for="vr-manu-hoeveelheid">Quantity</label><input type="number" step="0.001" id="vr-manu-hoeveelheid" /></div>
+          </div>
+          <div class="vr-grid2">
+            <div class="vr-field">
+              <label for="vr-manu-batch">Beer batch</label>
+              <select id="vr-manu-batch"><option value="">Loading…</option></select>
+            </div>
+            <div class="vr-checkbox-row" style="margin-top:26px;">
+              <input type="checkbox" id="vr-manu-adhoc" />
+              <label for="vr-manu-adhoc" style="margin:0;">This is off-recipe (ad-hoc) — needs accounting sign-off</label>
+            </div>
+          </div>
+          <div class="vr-field"><label for="vr-manu-notitie">Notes</label><textarea id="vr-manu-notitie" rows="2" placeholder="e.g. which recipe line this covers, or why it's off-recipe"></textarea></div>
+
+          <button type="button" id="vr-manu-btn" class="vr-btn" disabled>Book out</button>
+          <span id="vr-manu-melding" class="vr-melding"></span>
+        </div>
+      </section>
+    </div>
+
+    <!-- ===================== BOEKHOUDING ===================== -->
+    <div class="vr-tab-panel" data-tab="boekhouding">
+      <section class="vr-block">
+        <h2>Accounting sign-off</h2>
+        <p class="jopen-subtitel" style="margin-top:0;">
+          Off-recipe (ad-hoc) bookings that still need to be entered in the accounting system. Mark as done once
+          that's been taken care of.
+        </p>
+        <div style="max-height:520px; overflow-y:auto;">
+          <table class="vr-table">
+            <thead><tr>
+              <th>Date</th><th>Ingredient</th><th>Batch</th><th>Qty</th><th>Booked by</th><th>Note</th><th></th>
+            </tr></thead>
+            <tbody id="vr-boek-tbody"><tr><td colspan="7" class="vr-skeleton">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="nav.js"></script>
+  <script>
+    let alleIngredienten = [];       // {id, naam, category_id, usesAlphaPct}
+    let alleOpenBatches = [];
+    let magBewerken = false;
+    let magVerwijderen = false;
+    let geselecteerdIngredientOntv = null;
+    let geselecteerdIngredientManu = null;
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str ?? '';
+      return div.innerHTML;
+    }
+    function vandaag() { return new Date().toISOString().slice(0, 10); }
+
+    // ---------------------------------------------------------------------
+    // Tabs
+    // ---------------------------------------------------------------------
+    document.querySelectorAll('.vr-tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tab = btn.dataset.tab;
+        document.querySelectorAll('.vr-tab-btn').forEach(b => b.classList.toggle('actief', b === btn));
+        document.querySelectorAll('.vr-tab-panel').forEach(p => p.classList.toggle('actief', p.dataset.tab === tab));
+        if (tab === 'overzicht') laadLotOverzicht();
+        if (tab === 'boekhouding') laadBoekhouding();
+      });
+    });
+
+    // ---------------------------------------------------------------------
+    // Gedeeld: ingredienten + open batches laden
+    // ---------------------------------------------------------------------
+    async function laadIngredienten() {
+      const { data, error } = await supabaseClient
+        .from('ingredients')
+        .select('id, naam, category_id, ingredient_categories(uses_alpha_pct)')
+        .eq('versie_status', 'huidig')
+        .order('naam');
+      if (error) { console.error('Kon ingrediënten niet laden:', error); return; }
+      alleIngredienten = (data || []).map(i => ({
+        id: i.id, naam: i.naam,
+        usesAlphaPct: !!(i.ingredient_categories && i.ingredient_categories.uses_alpha_pct),
+      }));
+    }
+
+    async function laadOpenBatches() {
+      const { data, error } = await supabaseClient
+        .from('batches')
+        .select('id, batchnummer, naam, status')
+        .neq('status', 'afgerond')
+        .order('batchnummer', { ascending: false });
+      if (error) { console.error('Kon batches niet laden:', error); return; }
+      alleOpenBatches = data || [];
+      const opties = ['<option value="">Select batch…</option>']
+        .concat(alleOpenBatches.map(b => `<option value="${b.id}">${escapeHtml(String(b.batchnummer))} — ${escapeHtml(b.naam)}</option>`));
+      document.getElementById('vr-manu-batch').innerHTML = opties.join('');
+    }
+
+    // ---------------------------------------------------------------------
+    // ONTVANGST
+    // ---------------------------------------------------------------------
+    function toonOntvResultaten(term) {
+      const container = document.getElementById('vr-ontv-resultaten');
+      const t = term.trim().toLowerCase();
+      if (t === '') { container.style.display = 'none'; container.innerHTML = ''; return; }
+      const matches = alleIngredienten.filter(i => i.naam.toLowerCase().includes(t)).slice(0, 25);
+      container.innerHTML = matches.length
+        ? matches.map(i => `<div data-id="${i.id}">${escapeHtml(i.naam)}</div>`).join('')
+        : '<div class="bc-geen">No matches</div>';
+      container.style.display = 'block';
+    }
+    document.getElementById('vr-ontv-ingredient-zoek').addEventListener('input', (e) => {
+      geselecteerdIngredientOntv = null;
+      werkOntvKnopBij();
+      toonOntvResultaten(e.target.value);
+    });
+    document.getElementById('vr-ontv-resultaten').addEventListener('click', (e) => {
+      const rij = e.target.closest('[data-id]');
+      if (!rij) return;
+      const ing = alleIngredienten.find(i => String(i.id) === rij.dataset.id);
+      if (!ing) return;
+      geselecteerdIngredientOntv = ing;
+      document.getElementById('vr-ontv-ingredient-zoek').value = ing.naam;
+      document.getElementById('vr-ontv-resultaten').style.display = 'none';
+      document.getElementById('vr-ontv-alpha-veld').style.display = ing.usesAlphaPct ? 'block' : 'none';
+      werkOntvKnopBij();
+    });
+    document.addEventListener('click', (e) => {
+      const wrap = document.getElementById('vr-ontv-ingredient-zoek');
+      const results = document.getElementById('vr-ontv-resultaten');
+      if (e.target !== wrap && !results.contains(e.target)) results.style.display = 'none';
+      const wrap2 = document.getElementById('vr-manu-ingredient-zoek');
+      const results2 = document.getElementById('vr-manu-resultaten');
+      if (e.target !== wrap2 && !results2.contains(e.target)) results2.style.display = 'none';
+    });
+
+    function werkOntvKnopBij() {
+      const hoeveelheid = document.getElementById('vr-ontv-hoeveelheid').value.trim();
+      document.getElementById('vr-ontv-btn').disabled = !(magBewerken && geselecteerdIngredientOntv && hoeveelheid !== '');
+    }
+    ['vr-ontv-hoeveelheid'].forEach(id => document.getElementById(id).addEventListener('input', werkOntvKnopBij));
+
+    document.getElementById('vr-ontv-datum').value = vandaag();
+
+    document.getElementById('vr-ontv-btn').addEventListener('click', async () => {
+      const melding = document.getElementById('vr-ontv-melding');
+      if (!geselecteerdIngredientOntv) return;
+      const { data: { session } } = await supabaseClient.auth.getSession();
+
+      melding.textContent = 'Saving…'; melding.className = 'vr-melding';
+      const { error } = await supabaseClient.from('grondstof_lots').insert({
+        ingredient_id: geselecteerdIngredientOntv.id,
+        leverancier: document.getElementById('vr-ontv-leverancier').value.trim() || null,
+        lotcode: document.getElementById('vr-ontv-lotcode').value.trim() || null,
+        ontvangstdatum: document.getElementById('vr-ontv-datum').value || vandaag(),
+        hoeveelheid_ontvangen: Number(document.getElementById('vr-ontv-hoeveelheid').value),
+        eenheid: document.getElementById('vr-ontv-eenheid').value.trim() || null,
+        aantal_colli: document.getElementById('vr-ontv-colli').value.trim() || null,
+        locatie: document.getElementById('vr-ontv-locatie').value.trim() || null,
+        tht_datum: document.getElementById('vr-ontv-tht').value || null,
+        alpha_pct: document.getElementById('vr-ontv-alpha-veld').style.display !== 'none'
+          ? (document.getElementById('vr-ontv-alpha').value === '' ? null : Number(document.getElementById('vr-ontv-alpha').value))
+          : null,
+        ontvangstcontrole: document.getElementById('vr-ontv-ontvangstcontrole').checked,
+        ingangscontrole: document.getElementById('vr-ontv-ingangscontrole').checked,
+        notitie: document.getElementById('vr-ontv-notitie').value.trim() || null,
+        aangemaakt_door: session?.user?.id ?? null,
+      });
+
+      if (error) {
+        melding.textContent = 'Could not save: ' + error.message;
+        melding.className = 'vr-melding fout';
+        return;
+      }
+      melding.textContent = 'Lot registered.';
+      melding.className = 'vr-melding ok';
+      ['vr-ontv-leverancier','vr-ontv-lotcode','vr-ontv-hoeveelheid','vr-ontv-eenheid','vr-ontv-colli','vr-ontv-locatie','vr-ontv-tht','vr-ontv-alpha','vr-ontv-notitie']
+        .forEach(id => document.getElementById(id).value = '');
+      document.getElementById('vr-ontv-ontvangstcontrole').checked = false;
+      document.getElementById('vr-ontv-ingangscontrole').checked = false;
+      document.getElementById('vr-ontv-ingredient-zoek').value = '';
+      document.getElementById('vr-ontv-alpha-veld').style.display = 'none';
+      geselecteerdIngredientOntv = null;
+      werkOntvKnopBij();
+    });
+
+    // ---------------------------------------------------------------------
+    // LOT OVERZICHT
+    // ---------------------------------------------------------------------
+    // "Remaining" wordt client-side afgeleid: ontvangen − som(uitboekingen).
+    // Correcties worden hier bewust nog niet in meegenomen (komen zelden voor
+    // en de eerste versie houdt de berekening simpel) -- als dat in de
+    // praktijk een probleem blijkt, is dit de plek om het uit te breiden.
+    async function laadLotOverzicht() {
+      const tbody = document.getElementById('vr-ovz-tbody');
+      tbody.innerHTML = '<tr><td colspan="8" class="vr-skeleton">Loading…</td></tr>';
+
+      const [lotsRes, mutRes] = await Promise.all([
+        supabaseClient.from('grondstof_lots')
+          .select('id, ingredient_id, leverancier, lotcode, ontvangstdatum, hoeveelheid_ontvangen, eenheid, status, ingredients(naam)')
+          .order('ontvangstdatum', { ascending: false }),
+        supabaseClient.from('voorraad_mutaties').select('lot_id, hoeveelheid').eq('type', 'uitboeking'),
+      ]);
+      if (lotsRes.error) {
+        tbody.innerHTML = `<tr><td colspan="8" style="color:#a33f2c;">Could not load lots: ${escapeHtml(lotsRes.error.message)}</td></tr>`;
+        return;
+      }
+      const uitgeboektPerLot = {};
+      (mutRes.data || []).forEach(m => {
+        if (m.lot_id == null) return;
+        uitgeboektPerLot[m.lot_id] = (uitgeboektPerLot[m.lot_id] || 0) + Number(m.hoeveelheid || 0);
+      });
+
+      window._vrLots = (lotsRes.data || []).map(l => ({
+        ...l,
+        resterend: Number(l.hoeveelheid_ontvangen || 0) - (uitgeboektPerLot[l.id] || 0),
+      }));
+      renderLotOverzicht();
+    }
+
+    function renderLotOverzicht() {
+      const tbody = document.getElementById('vr-ovz-tbody');
+      const zoekterm = document.getElementById('vr-ovz-zoek').value.trim().toLowerCase();
+      const statusFilter = document.getElementById('vr-ovz-status').value;
+
+      let lots = window._vrLots || [];
+      if (statusFilter) lots = lots.filter(l => l.status === statusFilter);
+      if (zoekterm) lots = lots.filter(l =>
+        (l.ingredients?.naam || '').toLowerCase().includes(zoekterm) ||
+        (l.leverancier || '').toLowerCase().includes(zoekterm) ||
+        (l.lotcode || '').toLowerCase().includes(zoekterm));
+
+      if (lots.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="vr-skeleton">No lots found.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = lots.map(l => `
+        <tr>
+          <td>${escapeHtml(l.ingredients?.naam || '—')}</td>
+          <td>${escapeHtml(l.leverancier || '—')}</td>
+          <td>${escapeHtml(l.lotcode || '—')}</td>
+          <td>${l.ontvangstdatum || '—'}</td>
+          <td>${l.hoeveelheid_ontvangen ?? '—'} ${escapeHtml(l.eenheid || '')}</td>
+          <td>${l.resterend.toFixed(3).replace(/\.?0+$/, '')} ${escapeHtml(l.eenheid || '')}</td>
+          <td><span class="vr-status-badge vr-status-${l.status}">${l.status}</span></td>
+          <td>${(magBewerken && l.status === 'actief') ? `<button type="button" class="vr-btn-secundair vr-sluit-lot-btn" data-id="${l.id}">Close lot</button>` : ''}</td>
+        </tr>`).join('');
+
+      tbody.querySelectorAll('.vr-sluit-lot-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          if (!confirm('Close this lot? It will no longer be offered as an option when booking out stock.')) return;
+          btn.disabled = true;
+          const { error } = await supabaseClient.from('grondstof_lots').update({ status: 'afgesloten' }).eq('id', btn.dataset.id);
+          if (error) { alert('Could not close lot: ' + error.message); btn.disabled = false; return; }
+          laadLotOverzicht();
+        });
+      });
+    }
+    document.getElementById('vr-ovz-zoek').addEventListener('input', renderLotOverzicht);
+    document.getElementById('vr-ovz-status').addEventListener('change', renderLotOverzicht);
+
+    // ---------------------------------------------------------------------
+    // HANDMATIG / AD-HOC UITBOEKEN
+    // ---------------------------------------------------------------------
+    function toonManuResultaten(term) {
+      const container = document.getElementById('vr-manu-resultaten');
+      const t = term.trim().toLowerCase();
+      if (t === '') { container.style.display = 'none'; container.innerHTML = ''; return; }
+      const matches = alleIngredienten.filter(i => i.naam.toLowerCase().includes(t)).slice(0, 25);
+      container.innerHTML = matches.length
+        ? matches.map(i => `<div data-id="${i.id}">${escapeHtml(i.naam)}</div>`).join('')
+        : '<div class="bc-geen">No matches</div>';
+      container.style.display = 'block';
+    }
+    document.getElementById('vr-manu-ingredient-zoek').addEventListener('input', (e) => {
+      geselecteerdIngredientManu = null;
+      document.getElementById('vr-manu-lot').innerHTML = '<option value="">Select ingredient first…</option>';
+      werkManuKnopBij();
+      toonManuResultaten(e.target.value);
+    });
+    document.getElementById('vr-manu-resultaten').addEventListener('click', async (e) => {
+      const rij = e.target.closest('[data-id]');
+      if (!rij) return;
+      const ing = alleIngredienten.find(i => String(i.id) === rij.dataset.id);
+      if (!ing) return;
+      geselecteerdIngredientManu = ing;
+      document.getElementById('vr-manu-ingredient-zoek').value = ing.naam;
+      document.getElementById('vr-manu-resultaten').style.display = 'none';
+      await laadActieveLotsVoorSelect(ing.id);
+      werkManuKnopBij();
+    });
+
+    async function laadActieveLotsVoorSelect(ingredientId) {
+      const select = document.getElementById('vr-manu-lot');
+      select.innerHTML = '<option value="">Loading…</option>';
+      const [lotsRes, mutRes] = await Promise.all([
+        supabaseClient.from('grondstof_lots').select('id, lotcode, hoeveelheid_ontvangen, eenheid')
+          .eq('ingredient_id', ingredientId).eq('status', 'actief').order('ontvangstdatum'),
+        supabaseClient.from('voorraad_mutaties').select('lot_id, hoeveelheid').eq('type', 'uitboeking'),
+      ]);
+      const uitgeboekt = {};
+      (mutRes.data || []).forEach(m => { if (m.lot_id != null) uitgeboekt[m.lot_id] = (uitgeboekt[m.lot_id] || 0) + Number(m.hoeveelheid || 0); });
+      const lots = (lotsRes.data || []).map(l => ({ ...l, resterend: Number(l.hoeveelheid_ontvangen || 0) - (uitgeboekt[l.id] || 0) }));
+      select.innerHTML = lots.length
+        ? ['<option value="">Select lot…</option>'].concat(lots.map(l =>
+            `<option value="${l.id}">${escapeHtml(l.lotcode || '(no code)')} — ${l.resterend.toFixed(2)} ${escapeHtml(l.eenheid || '')} remaining</option>`)).join('')
+        : '<option value="">No active lots for this ingredient</option>';
+    }
+
+    function werkManuKnopBij() {
+      const lot = document.getElementById('vr-manu-lot').value;
+      const hoeveelheid = document.getElementById('vr-manu-hoeveelheid').value.trim();
+      const batch = document.getElementById('vr-manu-batch').value;
+      document.getElementById('vr-manu-btn').disabled = !(magBewerken && geselecteerdIngredientManu && lot && hoeveelheid !== '' && batch);
+    }
+    ['vr-manu-lot','vr-manu-hoeveelheid','vr-manu-batch'].forEach(id => {
+      document.getElementById(id).addEventListener('input', werkManuKnopBij);
+      document.getElementById(id).addEventListener('change', werkManuKnopBij);
+    });
+
+    document.getElementById('vr-manu-btn').addEventListener('click', async () => {
+      const melding = document.getElementById('vr-manu-melding');
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      const isAdhoc = document.getElementById('vr-manu-adhoc').checked;
+
+      melding.textContent = 'Saving…'; melding.className = 'vr-melding';
+      const { error } = await supabaseClient.from('voorraad_mutaties').insert({
+        lot_id: Number(document.getElementById('vr-manu-lot').value),
+        type: 'uitboeking',
+        hoeveelheid: Number(document.getElementById('vr-manu-hoeveelheid').value),
+        batch_id: Number(document.getElementById('vr-manu-batch').value),
+        notitie: document.getElementById('vr-manu-notitie').value.trim() || (isAdhoc ? 'Off-recipe / ad-hoc' : null),
+        geboekt_in_boekhouding: !isAdhoc, // alleen ad-hoc/off-recipe hoeft aftekening
+        aangemaakt_door: session?.user?.id ?? null,
+      });
+
+      if (error) {
+        melding.textContent = 'Could not save: ' + error.message;
+        melding.className = 'vr-melding fout';
+        return;
+      }
+      melding.textContent = 'Booked out.';
+      melding.className = 'vr-melding ok';
+      document.getElementById('vr-manu-hoeveelheid').value = '';
+      document.getElementById('vr-manu-notitie').value = '';
+      document.getElementById('vr-manu-adhoc').checked = false;
+      werkManuKnopBij();
+    });
+
+    // ---------------------------------------------------------------------
+    // BOEKHOUDING / AFTEKENING
+    // ---------------------------------------------------------------------
+    async function laadBoekhouding() {
+      const tbody = document.getElementById('vr-boek-tbody');
+      tbody.innerHTML = '<tr><td colspan="7" class="vr-skeleton">Loading…</td></tr>';
+
+      const { data, error } = await supabaseClient
+        .from('voorraad_mutaties')
+        .select('id, aangemaakt_op, notitie, hoeveelheid, batches(batchnummer, naam), grondstof_lots(ingredients(naam), eenheid), gebruikers!voorraad_mutaties_aangemaakt_door_fkey(naam)')
+        .eq('type', 'uitboeking')
+        .eq('geboekt_in_boekhouding', false)
+        .order('aangemaakt_op', { ascending: false });
+
+      if (error) {
+        tbody.innerHTML = `<tr><td colspan="7" style="color:#a33f2c;">Could not load: ${escapeHtml(error.message)}</td></tr>`;
+        return;
+      }
+      if (!data || data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="vr-skeleton">Nothing pending — all caught up.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.map(m => `
+        <tr>
+          <td>${m.aangemaakt_op ? new Date(m.aangemaakt_op).toLocaleDateString() : '—'}</td>
+          <td>${escapeHtml(m.grondstof_lots?.ingredients?.naam || '—')}</td>
+          <td>${m.batches ? escapeHtml(String(m.batches.batchnummer)) + ' — ' + escapeHtml(m.batches.naam) : '—'}</td>
+          <td>${m.hoeveelheid ?? '—'} ${escapeHtml(m.grondstof_lots?.eenheid || '')}</td>
+          <td>${escapeHtml(m.gebruikers?.naam || '—')}</td>
+          <td>${escapeHtml(m.notitie || '—')}</td>
+          <td>${magBewerken ? `<button type="button" class="vr-btn-secundair vr-afteken-btn" data-id="${m.id}">Mark booked</button>` : ''}</td>
+        </tr>`).join('');
+
+      tbody.querySelectorAll('.vr-afteken-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const { data: { session } } = await supabaseClient.auth.getSession();
+          btn.disabled = true;
+          const { error: updErr } = await supabaseClient.from('voorraad_mutaties').update({
+            geboekt_in_boekhouding: true,
+            geboekt_door: session?.user?.id ?? null,
+            geboekt_op: new Date().toISOString(),
+          }).eq('id', btn.dataset.id);
+          if (updErr) { alert('Could not sign off: ' + updErr.message); btn.disabled = false; return; }
+          laadBoekhouding();
+        });
+      });
+    }
+
+    // ---------------------------------------------------------------------
+    // Init
+    // ---------------------------------------------------------------------
+    window.addEventListener('DOMContentLoaded', async () => {
+      const gebruiker = await getHuidigeGebruiker();
+      magBewerken = !!gebruiker && await magBewerkenModule('inventory');
+      magVerwijderen = !!gebruiker && await magVerwijderenModule('inventory');
+
+      document.getElementById('vr-ontv-geen-rechten').style.display = magBewerken ? 'none' : 'block';
+      document.getElementById('vr-ontv-formulier').style.display = magBewerken ? 'block' : 'none';
+      document.getElementById('vr-manu-geen-rechten').style.display = magBewerken ? 'none' : 'block';
+      document.getElementById('vr-manu-formulier').style.display = magBewerken ? 'block' : 'none';
+
+      await laadIngredienten();
+      await laadOpenBatches();
+      werkOntvKnopBij();
+      werkManuKnopBij();
+    });
+  </script>
+</body>
+</html>

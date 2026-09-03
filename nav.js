@@ -45,6 +45,9 @@ const JOPEN_MODULE_GROEPEN = [
       { naam: 'Recipes', href: 'receptoverzicht.html', moduleKey: 'recipes' },
       { naam: 'Ingredients', href: 'ingredienten.html', moduleKey: 'ingredients' },
   ]},
+  { naam: 'Inventory', items: [
+      { naam: 'Inventory', href: 'voorraad.html', moduleKey: 'inventory' },
+  ]},
   { naam: 'Configuration', items: [
       { naam: 'Settings', href: 'settings.html', moduleKey: 'settings' },
   ]},

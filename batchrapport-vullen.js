@@ -1025,7 +1025,13 @@ async function brZetHopGroepRanden(writer, stylesManager, bundel, overloop) {
  * Genereert het batchrapport voor het gegeven batchnummer en start meteen
  * een download in de browser.
  */
-async function genereerEnDownloadBatchrapport(supabase, batchnummer) {
+// `ingredientOverrides`: optioneel, { [recipe_ingredient_id]: { hoeveelheid?, alpha_pct? } }.
+// Komt uit de Voorraadbeheer-uitboek-stap bij Create batch: als de operator daar voor een
+// Hop (kook)-regel een ander lot koos met een afwijkende werkelijke alpha%, wordt hier het
+// bijgestelde gewicht/de werkelijke alpha in het rapport geplakt i.p.v. de receptwaarden --
+// zie voorraad-uitboeken in batchcreation.html. Zonder overrides (bv. bij het opnieuw
+// downloaden van een bestaand rapport) verandert er niets aan het bestaande gedrag.
+async function genereerEnDownloadBatchrapport(supabase, batchnummer, ingredientOverrides = {}) {
   const [scalarMap, ingredientMap, revisieMap, formatenMap, templateBuffer] = await Promise.all([
     brFetchJson('data/scalar_field_map.json'),
     brFetchJson('data/ingredient_field_map.json'),
@@ -1038,6 +1044,10 @@ async function genereerEnDownloadBatchrapport(supabase, batchnummer) {
   ]);
 
   const bundel = await haalBatchDataOpBrowser(supabase, batchnummer);
+  if (ingredientOverrides && Object.keys(ingredientOverrides).length > 0) {
+    bundel.recipe_ingredients = bundel.recipe_ingredients.map(r =>
+      ingredientOverrides[r.id] ? { ...r, ...ingredientOverrides[r.id] } : r);
+  }
 
   const naam = bundel.recipes.naam || '';
   const locatie = (bundel.recipes.locatie || '').toLowerCase();

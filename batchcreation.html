@@ -73,6 +73,35 @@
     position: sticky; top: 0; background: white;
   }
   .bc-skeleton { color: #bbb; }
+
+  /* Voorraad-uitboeken modal (bij Create batch) */
+  .vb-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 200;
+    display: none; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 30px 16px;
+  }
+  .vb-modal { background: white; border-radius: 10px; max-width: 780px; width: 100%; padding: 22px 26px; margin-bottom: 30px; }
+  .vb-modal h2 { margin-top: 0; font-size: 1.1em; color: var(--jopen-red); }
+  .vb-modal p.vb-uitleg { color: #6b6b6b; font-size: 0.9em; margin-top: -6px; }
+  .vb-rij { border: 1px solid #eee; border-radius: 8px; padding: 12px 14px; margin-bottom: 12px; }
+  .vb-rij.vb-later { opacity: 0.55; }
+  .vb-rij-kop { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .vb-rij-naam { font-weight: 600; }
+  .vb-rij-nodig { color: #6b6b6b; font-size: 0.85em; }
+  .vb-lot-lijn { display: flex; gap: 8px; margin-bottom: 6px; align-items: center; }
+  .vb-lot-lijn select { flex: 2; padding: 6px 8px; border: 1px solid #ccc; border-radius: 6px; }
+  .vb-lot-lijn input { flex: 1; padding: 6px 8px; border: 1px solid #ccc; border-radius: 6px; }
+  .vb-lot-lijn button { background: none; border: none; color: #a33f2c; cursor: pointer; font-size: 1.1em; padding: 0 4px; }
+  .vb-add-lot { background: none; border: none; color: var(--jopen-red); cursor: pointer; font-size: 0.85em; padding: 0; }
+  .vb-toegewezen { font-size: 0.85em; margin-top: 4px; }
+  .vb-toegewezen.vb-over { color: #a33f2c; font-weight: 600; }
+  .vb-toegewezen.vb-onder { color: #a06a1c; }
+  .vb-toegewezen.vb-ok { color: #2f7d3c; }
+  .vb-hop-alpha { background: #fff8ec; border-radius: 6px; padding: 8px 10px; margin-top: 8px; font-size: 0.85em; }
+  .vb-hop-alpha.vb-afwijkend { background: #fdeceb; }
+  .vb-hop-alpha label { display: block; font-size: 0.75em; text-transform: uppercase; color: #6b6355; margin: 6px 0 2px; }
+  .vb-hop-alpha input { width: 120px; padding: 5px 8px; border: 1px solid #ccc; border-radius: 6px; }
+  .vb-modal-acties { display: flex; justify-content: space-between; align-items: center; margin-top: 18px; }
+  .vb-skip-link { color: #6b6b6b; font-size: 0.85em; text-decoration: underline; cursor: pointer; background: none; border: none; }
 </style>
 </head>
 <body>
@@ -135,6 +164,27 @@
       </div>
     </section>
   </main>
+
+  <!-- Voorraad-uitboeken: verschijnt na "Create batch", vóór het rapport wordt gegenereerd. -->
+  <div class="vb-overlay" id="vb-overlay">
+    <div class="vb-modal">
+      <h2>Book out stock for this batch</h2>
+      <p class="vb-uitleg">
+        Malt, Hop (boil), Additions Brewing and Dry hop are normally booked out now. Uncheck a line to book it
+        out later instead (e.g. Cellar additions, Yeast, or an ingredient that's always added later such as
+        Zinc sulphate). For Hop (boil), the lot's actual alpha% is checked against the recipe's reference alpha —
+        adjust the weight if you want to keep the same EBU.
+      </p>
+      <div id="vb-rijen"><div class="vr-skeleton">Loading ingredients…</div></div>
+      <div class="vb-modal-acties">
+        <button type="button" class="vb-skip-link" id="vb-skip-btn">Skip stock booking, just generate report</button>
+        <div>
+          <button type="button" id="vb-bevestig-btn" class="vr-btn" style="background:var(--jopen-red);color:white;border:none;padding:9px 20px;border-radius:6px;font-weight:600;cursor:pointer;">Confirm &amp; generate report</button>
+        </div>
+      </div>
+      <div id="vb-melding" style="margin-top:10px; font-size:0.9em;"></div>
+    </div>
+  </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
@@ -273,9 +323,10 @@
         return;
       }
 
-      melding.textContent = 'Batch created — generating report…';
+      melding.textContent = 'Batch created.';
       melding.className = 'ok';
       const batchnummerGemaakt = Number(batchnummerVal);
+      const brouwselsGemaakt = Number(brouwselsVal);
       document.getElementById('bc-recept-zoek').value = '';
       document.getElementById('bc-batchnummer').value = '';
       document.getElementById('bc-brouwsels').value = '';
@@ -284,12 +335,324 @@
       werkMaakKnopBij();
       laadRecenteBatches();
 
+      await opStartUitboeken(batchnummerGemaakt, recept, brouwselsGemaakt);
+    });
+
+    // =========================================================================
+    // Voorraad-uitboeken -- direct na Create batch, vóór de rapportgeneratie.
+    // Alleen relevant voor de rollen die standaard meteen worden afgeboekt (Mout,
+    // Hop kook, Toegiften Brouwerij, Dry hop); Kelder/Gist blijven altijd "later"
+    // en lopen via het handmatige formulier op voorraad.html. De operator kan
+    // elke regel per keer omzetten (bv. Zinksulfaat, dat qua rol bij Toegiften
+    // Brouwerij hoort maar in de praktijk altijd later wordt toegevoegd) -- dit is
+    // bewust geen vast ingrediënt-kenmerk, zie Voorraadbeheer_plan.md.
+    // =========================================================================
+    const VB_DIRECTE_ROLLEN = ['hoofdmout', 'hopgift_kook', 'toegift_brouwerij', 'dry_hop'];
+    let vbRijenState = []; // [{ regel, benodigd, eenheid, isHop, lots, allocaties: [{lotId, hoeveelheid}], finalHoeveelheid, finalAlpha, direct }]
+
+    function vbBerekenBenodigd(regel, brouwselHl, aantalBrouwsels) {
+      const eenheid = regel.eenheid;
+      let perBrouwsel = Number(regel.hoeveelheid) || 0;
+      let uitEenheid = eenheid;
+      if (eenheid && eenheid.endsWith('/hl') && brouwselHl) {
+        perBrouwsel = Number(regel.hoeveelheid) * brouwselHl;
+        uitEenheid = eenheid.split('/')[0];
+      } else if (eenheid && eenheid.endsWith('/l') && brouwselHl) {
+        perBrouwsel = Number(regel.hoeveelheid) * brouwselHl * 100;
+        uitEenheid = eenheid.split('/')[0];
+      }
+      return { totaal: perBrouwsel * (aantalBrouwsels || 1), eenheid: uitEenheid };
+    }
+
+    async function opStartUitboeken(batchnummer, recept, aantalBrouwsels) {
+      const overlay = document.getElementById('vb-overlay');
+      const rijenContainer = document.getElementById('vb-rijen');
+      document.getElementById('vb-melding').textContent = '';
+      overlay.style.display = 'flex';
+      rijenContainer.innerHTML = '<div class="vr-skeleton">Loading ingredients…</div>';
+
+      const [ingrRes, ingredientenRes] = await Promise.all([
+        supabaseClient.from('recipe_ingredients').select('*').eq('recipe_id', recept.id).in('rol', VB_DIRECTE_ROLLEN),
+        supabaseClient.from('ingredients').select('id, naam, category_id, ingredient_categories(uses_alpha_pct)'),
+      ]);
+      if (ingrRes.error) {
+        rijenContainer.innerHTML = `<div style="color:#a33f2c;">Could not load recipe ingredients: ${escapeHtml(ingrRes.error.message)}</div>`;
+        vbRijenState = [];
+        return;
+      }
+      const ingredientNaam = new Map((ingredientenRes.data || []).map(i => [i.id, i.naam]));
+      const hopIngredientIds = new Set((ingredientenRes.data || []).filter(i => i.ingredient_categories && i.ingredient_categories.uses_alpha_pct).map(i => i.id));
+
+      const regels = (ingrRes.data || []);
+      const ingredientIds = [...new Set(regels.map(r => r.ingredient_id))];
+
+      let lotsPerIngredient = {};
+      if (ingredientIds.length > 0) {
+        const [lotsRes, mutRes] = await Promise.all([
+          supabaseClient.from('grondstof_lots').select('id, ingredient_id, lotcode, hoeveelheid_ontvangen, eenheid, alpha_pct')
+            .in('ingredient_id', ingredientIds).eq('status', 'actief').order('ontvangstdatum'),
+          supabaseClient.from('voorraad_mutaties').select('lot_id, hoeveelheid').eq('type', 'uitboeking'),
+        ]);
+        const uitgeboekt = {};
+        (mutRes.data || []).forEach(m => { if (m.lot_id != null) uitgeboekt[m.lot_id] = (uitgeboekt[m.lot_id] || 0) + Number(m.hoeveelheid || 0); });
+        (lotsRes.data || []).forEach(l => {
+          const resterend = Number(l.hoeveelheid_ontvangen || 0) - (uitgeboekt[l.id] || 0);
+          if (!lotsPerIngredient[l.ingredient_id]) lotsPerIngredient[l.ingredient_id] = [];
+          lotsPerIngredient[l.ingredient_id].push({ ...l, resterend });
+        });
+      }
+
+      const brouwselHl = recept.brouwsel_hl !== null && recept.brouwsel_hl !== undefined ? Number(recept.brouwsel_hl) : null;
+      vbRijenState = regels.map(regel => {
+        const { totaal, eenheid } = vbBerekenBenodigd(regel, brouwselHl, aantalBrouwsels);
+        const isHop = regel.rol === 'hopgift_kook' && hopIngredientIds.has(regel.ingredient_id);
+        return {
+          regel,
+          naam: ingredientNaam.get(regel.ingredient_id) || `Ingredient #${regel.ingredient_id}`,
+          benodigd: totaal,
+          eenheid,
+          isHop,
+          lots: lotsPerIngredient[regel.ingredient_id] || [],
+          allocaties: [{ lotId: '', hoeveelheid: '' }],
+          finalHoeveelheid: totaal,
+          finalAlpha: regel.alpha_pct,
+          direct: true,
+        };
+      });
+
+      renderVbRijen();
+      overlay.dataset.batchnummer = batchnummer;
+    }
+
+    function vbFmt(n) {
+      if (n === null || n === undefined || Number.isNaN(n)) return '—';
+      return Number(n).toFixed(3).replace(/\.?0+$/, '');
+    }
+
+    function renderVbRijen() {
+      const container = document.getElementById('vb-rijen');
+      if (vbRijenState.length === 0) {
+        container.innerHTML = '<div class="vr-skeleton">No Malt, Hop (boil), Additions Brewing or Dry hop lines on this recipe.</div>';
+        return;
+      }
+      container.innerHTML = vbRijenState.map((rij, idx) => vbRenderRij(rij, idx)).join('');
+      vbBindRijEvents();
+    }
+
+    function vbRenderRij(rij, idx) {
+      const toegewezen = rij.allocaties.reduce((s, a) => s + (Number(a.hoeveelheid) || 0), 0);
+      let toegewezenClass = 'vb-onder', toegewezenTekst = `Allocated: ${vbFmt(toegewezen)} / ${vbFmt(rij.benodigd)} ${rij.eenheid || ''} — not fully allocated yet`;
+      if (Math.abs(toegewezen - rij.benodigd) < 0.0005) { toegewezenClass = 'vb-ok'; toegewezenTekst = `Allocated: ${vbFmt(toegewezen)} / ${vbFmt(rij.benodigd)} ${rij.eenheid || ''}`; }
+      else if (toegewezen > rij.benodigd && !rij.isHop) { toegewezenClass = 'vb-over'; toegewezenTekst = `More KG than recipe used (${vbFmt(toegewezen)} / ${vbFmt(rij.benodigd)} ${rij.eenheid || ''})`; }
+      else if (toegewezen > rij.benodigd && rij.isHop) { toegewezenClass = 'vb-ok'; toegewezenTekst = `Allocated: ${vbFmt(toegewezen)} / ${vbFmt(rij.benodigd)} ${rij.eenheid || ''} (adjusted for actual alpha)`; }
+
+      const lotOpties = (lotId) => ['<option value="">Select lot…</option>'].concat(
+        rij.lots.map(l => `<option value="${l.id}" ${String(l.id) === String(lotId) ? 'selected' : ''}>${escapeHtml(l.lotcode || '(no code)')} — ${vbFmt(l.resterend)} ${escapeHtml(l.eenheid || '')} remaining${l.alpha_pct != null ? ` — alpha ${l.alpha_pct}%` : ''}</option>`)
+      ).join('');
+
+      const lotLijnenHtml = rij.allocaties.map((a, aIdx) => `
+        <div class="vb-lot-lijn" data-rij="${idx}" data-alloc="${aIdx}">
+          <select class="vb-lot-select">${rij.lots.length ? lotOpties(a.lotId) : '<option value="">No active lots for this ingredient</option>'}</select>
+          <input type="number" step="0.001" class="vb-lot-hoeveelheid" placeholder="Quantity" value="${a.hoeveelheid}" />
+          ${rij.allocaties.length > 1 ? '<button type="button" class="vb-verwijder-lot" title="Remove">&times;</button>' : ''}
+        </div>`).join('');
+
+      let hopBlokHtml = '';
+      if (rij.isHop) {
+        const gekozenLots = rij.allocaties.map(a => rij.lots.find(l => String(l.id) === String(a.lotId))).filter(Boolean);
+        let werkelijkeAlpha = null;
+        if (gekozenLots.length > 0) {
+          const totaalGewicht = rij.allocaties.reduce((s, a, i) => rij.lots.find(l => String(l.id) === String(a.lotId)) ? s + (Number(a.hoeveelheid) || 0) : s, 0);
+          if (totaalGewicht > 0) {
+            let som = 0;
+            rij.allocaties.forEach(a => {
+              const lot = rij.lots.find(l => String(l.id) === String(a.lotId));
+              if (lot && lot.alpha_pct != null) som += lot.alpha_pct * (Number(a.hoeveelheid) || 0);
+            });
+            werkelijkeAlpha = som / totaalGewicht;
+          } else if (gekozenLots[0].alpha_pct != null) {
+            werkelijkeAlpha = gekozenLots[0].alpha_pct;
+          }
+        }
+        const referentieAlpha = rij.regel.alpha_pct;
+        const wijktAf = werkelijkeAlpha != null && referentieAlpha != null && Math.abs(werkelijkeAlpha - referentieAlpha) > 0.0001;
+        const suggestie = (wijktAf && rij.benodigd) ? (rij.benodigd * (referentieAlpha / werkelijkeAlpha)) : null;
+        hopBlokHtml = `
+          <div class="vb-hop-alpha ${wijktAf ? 'vb-afwijkend' : ''}">
+            Recipe alpha: <strong>${referentieAlpha != null ? referentieAlpha + '%' : '—'}</strong>
+            &nbsp;·&nbsp; Lot alpha: <strong>${werkelijkeAlpha != null ? werkelijkeAlpha.toFixed(2) + '%' : '— (pick a lot)'}</strong>
+            ${wijktAf ? `&nbsp;·&nbsp; <span style="color:#a33f2c;">Alpha differs from recipe</span>` : ''}
+            <label>Weight to actually use (${rij.eenheid || ''})</label>
+            <input type="number" step="0.001" class="vb-hop-final-gewicht" value="${vbFmt(rij.finalHoeveelheid)}" />
+            ${suggestie !== null ? `<button type="button" class="vb-hop-toepassen-btn" style="margin-left:8px;" data-idx="${idx}">Use ${vbFmt(suggestie)} ${rij.eenheid || ''} (same EBU)</button>` : ''}
+          </div>`;
+      }
+
+      return `
+        <div class="vb-rij ${rij.direct ? '' : 'vb-later'}" data-rij="${idx}">
+          <div class="vb-rij-kop">
+            <div>
+              <span class="vb-rij-naam">${escapeHtml(rij.naam)}</span>
+              <span class="vb-rij-nodig"> — needed: ${vbFmt(rij.benodigd)} ${rij.eenheid || ''}</span>
+            </div>
+            <label style="font-size:0.85em; display:flex; align-items:center; gap:6px;">
+              <input type="checkbox" class="vb-direct-check" ${rij.direct ? 'checked' : ''} /> Book out now
+            </label>
+          </div>
+          <div class="vb-lot-body" style="${rij.direct ? '' : 'display:none;'}">
+            ${lotLijnenHtml}
+            <button type="button" class="vb-add-lot">+ split across another lot</button>
+            <div class="vb-toegewezen ${toegewezenClass}">${toegewezenTekst}</div>
+            ${hopBlokHtml}
+          </div>
+        </div>`;
+    }
+
+    function vbBindRijEvents() {
+      const container = document.getElementById('vb-rijen');
+      container.querySelectorAll('.vb-direct-check').forEach(cb => {
+        cb.addEventListener('change', (e) => {
+          const idx = Number(e.target.closest('[data-rij]').dataset.rij);
+          vbRijenState[idx].direct = e.target.checked;
+          renderVbRijen();
+        });
+      });
+      container.querySelectorAll('.vb-lot-select').forEach(sel => {
+        sel.addEventListener('change', (e) => {
+          const lijn = e.target.closest('[data-alloc]');
+          const idx = Number(lijn.dataset.rij), aIdx = Number(lijn.dataset.alloc);
+          vbRijenState[idx].allocaties[aIdx].lotId = e.target.value;
+          renderVbRijen();
+        });
+      });
+      container.querySelectorAll('.vb-lot-hoeveelheid').forEach(inp => {
+        inp.addEventListener('input', (e) => {
+          const lijn = e.target.closest('[data-alloc]');
+          const idx = Number(lijn.dataset.rij), aIdx = Number(lijn.dataset.alloc);
+          vbRijenState[idx].allocaties[aIdx].hoeveelheid = e.target.value;
+          renderVbRijen();
+        });
+      });
+      container.querySelectorAll('.vb-verwijder-lot').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const lijn = e.target.closest('[data-alloc]');
+          const idx = Number(lijn.dataset.rij), aIdx = Number(lijn.dataset.alloc);
+          vbRijenState[idx].allocaties.splice(aIdx, 1);
+          renderVbRijen();
+        });
+      });
+      container.querySelectorAll('.vb-add-lot').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const idx = Number(e.target.closest('[data-rij]').dataset.rij);
+          vbRijenState[idx].allocaties.push({ lotId: '', hoeveelheid: '' });
+          renderVbRijen();
+        });
+      });
+      container.querySelectorAll('.vb-hop-final-gewicht').forEach(inp => {
+        inp.addEventListener('input', (e) => {
+          const idx = Number(e.target.closest('[data-rij]').dataset.rij);
+          vbRijenState[idx].finalHoeveelheid = Number(e.target.value) || 0;
+        });
+      });
+      container.querySelectorAll('.vb-hop-toepassen-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const idx = Number(e.target.dataset.idx);
+          const referentieAlpha = vbRijenState[idx].regel.alpha_pct;
+          const gekozenLots = vbRijenState[idx].allocaties.map(a => vbRijenState[idx].lots.find(l => String(l.id) === String(a.lotId))).filter(Boolean);
+          let werkelijkeAlpha = null;
+          const totaalGewicht = vbRijenState[idx].allocaties.reduce((s, a) => s + (Number(a.hoeveelheid) || 0), 0);
+          if (totaalGewicht > 0) {
+            let som = 0;
+            vbRijenState[idx].allocaties.forEach(a => {
+              const lot = vbRijenState[idx].lots.find(l => String(l.id) === String(a.lotId));
+              if (lot && lot.alpha_pct != null) som += lot.alpha_pct * (Number(a.hoeveelheid) || 0);
+            });
+            werkelijkeAlpha = som / totaalGewicht;
+          }
+          if (werkelijkeAlpha != null && referentieAlpha != null) {
+            vbRijenState[idx].finalHoeveelheid = vbRijenState[idx].benodigd * (referentieAlpha / werkelijkeAlpha);
+          }
+          renderVbRijen();
+        });
+      });
+    }
+
+    document.getElementById('vb-skip-btn').addEventListener('click', async () => {
+      const overlay = document.getElementById('vb-overlay');
+      const batchnummer = Number(overlay.dataset.batchnummer);
+      overlay.style.display = 'none';
+      const melding = document.getElementById('bc-melding');
+      melding.textContent = 'Generating report…'; melding.className = 'ok';
       try {
-        await genereerEnDownloadBatchrapport(supabaseClient, batchnummerGemaakt);
-        melding.textContent = 'Batch created and report downloaded.';
+        await genereerEnDownloadBatchrapport(supabaseClient, batchnummer);
+        melding.textContent = 'Batch created and report downloaded (stock not booked).';
       } catch (genErr) {
         console.error(genErr);
         melding.textContent = 'Batch created, but the report could not be generated: ' + genErr.message;
+        melding.className = 'fout';
+      }
+    });
+
+    document.getElementById('vb-bevestig-btn').addEventListener('click', async () => {
+      const overlay = document.getElementById('vb-overlay');
+      const batchnummer = Number(overlay.dataset.batchnummer);
+      const vbMelding = document.getElementById('vb-melding');
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      const { data: batchRow } = await supabaseClient.from('batches').select('id').eq('batchnummer', batchnummer).single();
+      if (!batchRow) { vbMelding.textContent = 'Could not find the created batch.'; vbMelding.style.color = '#a33f2c'; return; }
+
+      vbMelding.textContent = 'Booking out stock…'; vbMelding.style.color = '';
+
+      const mutaties = [];
+      const overrides = {};
+      for (const rij of vbRijenState) {
+        if (!rij.direct) continue;
+        for (const a of rij.allocaties) {
+          if (!a.lotId || !a.hoeveelheid || Number(a.hoeveelheid) <= 0) continue;
+          mutaties.push({
+            lot_id: Number(a.lotId),
+            type: 'uitboeking',
+            hoeveelheid: Number(a.hoeveelheid),
+            batch_id: batchRow.id,
+            recipe_ingredient_id: rij.regel.id,
+            geboekt_in_boekhouding: true, // directe uitboeking bij Create batch, geen ad-hoc/boekhoud-aftekening nodig
+            aangemaakt_door: session?.user?.id ?? null,
+          });
+        }
+        if (rij.isHop) {
+          overrides[rij.regel.id] = { hoeveelheid: rij.finalHoeveelheid };
+          const gekozenLots = rij.allocaties.map(a => rij.lots.find(l => String(l.id) === String(a.lotId))).filter(Boolean);
+          const totaalGewicht = rij.allocaties.reduce((s, a) => s + (Number(a.hoeveelheid) || 0), 0);
+          if (gekozenLots.length > 0 && totaalGewicht > 0) {
+            let som = 0;
+            rij.allocaties.forEach(a => {
+              const lot = rij.lots.find(l => String(l.id) === String(a.lotId));
+              if (lot && lot.alpha_pct != null) som += lot.alpha_pct * (Number(a.hoeveelheid) || 0);
+            });
+            overrides[rij.regel.id].alpha_pct = som / totaalGewicht;
+          }
+        }
+      }
+
+      if (mutaties.length > 0) {
+        const { error: mutErr } = await supabaseClient.from('voorraad_mutaties').insert(mutaties);
+        if (mutErr) {
+          vbMelding.textContent = 'Could not book out stock: ' + mutErr.message + ' — report was not generated yet.';
+          vbMelding.style.color = '#a33f2c';
+          return;
+        }
+      }
+
+      vbMelding.textContent = 'Stock booked — generating report…';
+      overlay.style.display = 'none';
+      const melding = document.getElementById('bc-melding');
+      melding.textContent = 'Generating report…'; melding.className = 'ok';
+      try {
+        await genereerEnDownloadBatchrapport(supabaseClient, batchnummer, overrides);
+        melding.textContent = 'Batch created, stock booked, and report downloaded.';
+      } catch (genErr) {
+        console.error(genErr);
+        melding.textContent = 'Stock booked, but the report could not be generated: ' + genErr.message;
         melding.className = 'fout';
       }
     });
