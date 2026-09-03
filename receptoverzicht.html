@@ -1395,13 +1395,13 @@ async function openDetail(id) {
           </div>
         </div>
       </div>` : ''}
-    ${r.kleur_srm !== null && r.kleur_srm !== undefined ? `
+    ${(r.kleur_srm !== null && r.kleur_srm !== undefined) || r.kleur_vrije_tekst ? `
       <div class="param-columns">
         <div class="param-row">
           <span>Colour</span>
           <span style="display:inline-flex; align-items:center; gap:6px;">
-            <span style="display:inline-block; width:16px; height:16px; border-radius:4px; border:1px solid rgba(0,0,0,0.15); background:${escapeHtml(kleurStopHexVoorSrm(r.kleur_srm))};"></span>
-            ${escapeHtml(kleurStopLabelVoorSrm(r.kleur_srm))}${r.kleur_vrije_tekst ? ` \u2014 ${escapeHtml(r.kleur_vrije_tekst)}` : ''}
+            ${(r.kleur_srm !== null && r.kleur_srm !== undefined) ? `<span style="display:inline-block; width:16px; height:16px; border-radius:4px; border:1px solid rgba(0,0,0,0.15); background:${escapeHtml(kleurStopHexVoorSrm(r.kleur_srm))};"></span>
+            ${escapeHtml(kleurStopLabelVoorSrm(r.kleur_srm))}${r.kleur_vrije_tekst ? ` \u2014 ${escapeHtml(r.kleur_vrije_tekst)}` : ''}` : escapeHtml(r.kleur_vrije_tekst)}
           </span>
         </div>
       </div>` : ''}
