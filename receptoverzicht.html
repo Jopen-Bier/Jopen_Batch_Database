@@ -332,6 +332,16 @@
           <div id="dd-locatie-options"></div>
         </div>
       </div>
+      <div class="dd-filter" id="dd-productsheet">
+        <button type="button" class="dd-filter-btn" id="dd-productsheet-btn">Product Sheet <span class="dd-filter-caret">&#9662;</span><span class="dd-filter-mark" id="dd-productsheet-mark" style="display:none;"></span></button>
+        <div class="dd-filter-panel" id="dd-productsheet-panel" style="display:none;">
+          <div class="dd-filter-panel-header">
+            <button type="button" data-actie="all">Select all</button>
+            <button type="button" data-actie="none">Clear</button>
+          </div>
+          <div id="dd-productsheet-options"></div>
+        </div>
+      </div>
       <div class="count" id="result-count"></div>
       <a href="recept-invoer.html" class="edit-pill" id="new-recipe-link" style="display:none; margin-bottom:0;">+ New recipe</a>
     </div>
@@ -365,14 +375,15 @@ const FILTER_OPSLAG_KEY = 'jopen_receptoverzicht_filters_v1';
 function laadOpgeslagenFilters() {
   try {
     const ruw = localStorage.getItem(FILTER_OPSLAG_KEY);
-    if (!ruw) return { status: null, locatie: null };
+    if (!ruw) return { status: null, locatie: null, productsheet: null };
     const parsed = JSON.parse(ruw);
     return {
       status: Array.isArray(parsed.status) ? parsed.status : null,
       locatie: Array.isArray(parsed.locatie) ? parsed.locatie : null,
+      productsheet: Array.isArray(parsed.productsheet) ? parsed.productsheet : null,
     };
   } catch (e) {
-    return { status: null, locatie: null };
+    return { status: null, locatie: null, productsheet: null };
   }
 }
 
@@ -381,12 +392,14 @@ function bewaarFilters() {
     localStorage.setItem(FILTER_OPSLAG_KEY, JSON.stringify({
       status: [...geselecteerdeStatussen],
       locatie: [...geselecteerdeLocaties],
+      productsheet: [...geselecteerdeProductSheetStatussen],
     }));
   } catch (e) { /* localStorage niet beschikbaar: filter werkt nog steeds, alleen niet onthouden */ }
 }
 
 let geselecteerdeStatussen = new Set();
 let geselecteerdeLocaties = new Set();
+let geselecteerdeProductSheetStatussen = new Set();
 
 const mainEl = document.getElementById('main');
 const connStatus = document.getElementById('conn-status');
@@ -510,6 +523,8 @@ async function loadRecipes() {
   geselecteerdeStatussen = new Set(opgeslagen.status ? opgeslagen.status.filter(s => alleStatussen.includes(s)) : alleStatussen);
   const alleLocaties = [...new Set(allRecipes.map(r => r.locatie).filter(Boolean))].sort();
   geselecteerdeLocaties = new Set(opgeslagen.locatie ? opgeslagen.locatie.filter(l => alleLocaties.includes(l)) : alleLocaties);
+  const alleProductSheetStatussen = ['groen', 'rood', 'missing'];
+  geselecteerdeProductSheetStatussen = new Set(opgeslagen.productsheet ? opgeslagen.productsheet.filter(s => alleProductSheetStatussen.includes(s)) : alleProductSheetStatussen);
 
   renderFilterToggles();
   pasFiltersToe();
@@ -568,6 +583,14 @@ function renderFilterToggles() {
     bewaarFilters();
     pasFiltersToe();
   });
+
+  const productSheetOpties = [
+    ['groen', 'In sync'], ['rood', 'Out of sync'], ['missing', 'Missing'],
+  ];
+  setupDropdownFilter('productsheet', productSheetOpties, geselecteerdeProductSheetStatussen, () => {
+    bewaarFilters();
+    pasFiltersToe();
+  });
 }
 
 // -- Dropdown open/dicht, buiten-klik sluit alles, één tegelijk open --
@@ -583,6 +606,7 @@ function toggleDropdownPanel(prefix) {
 }
 document.getElementById('dd-status-btn').addEventListener('click', (e) => { e.stopPropagation(); toggleDropdownPanel('status'); });
 document.getElementById('dd-locatie-btn').addEventListener('click', (e) => { e.stopPropagation(); toggleDropdownPanel('locatie'); });
+document.getElementById('dd-productsheet-btn').addEventListener('click', (e) => { e.stopPropagation(); toggleDropdownPanel('productsheet'); });
 document.querySelectorAll('.dd-filter-panel').forEach(p => p.addEventListener('click', e => e.stopPropagation()));
 document.addEventListener('click', () => {
   document.querySelectorAll('.dd-filter-panel').forEach(p => p.style.display = 'none');
@@ -740,7 +764,11 @@ function pasFiltersToe() {
     const matchtZoekterm = (r.naam || '').toLowerCase().includes(q) || (r.bierstijl || '').toLowerCase().includes(q);
     const matchtStatus = geselecteerdeStatussen.has(r.status);
     const matchtLocatie = !r.locatie || geselecteerdeLocaties.has(r.locatie);
-    return matchtZoekterm && matchtStatus && matchtLocatie;
+    const psStatus = !(r.recipe_group_id in productSheetStatusPerGroep)
+      ? 'missing'
+      : (productSheetStatusPerGroep[r.recipe_group_id] ? 'groen' : 'rood');
+    const matchtProductSheet = geselecteerdeProductSheetStatussen.has(psStatus);
+    return matchtZoekterm && matchtStatus && matchtLocatie && matchtProductSheet;
   });
 
   const vergelijk = (a, b) => {
