@@ -626,7 +626,7 @@ function renderList(recipes) {
     { veld: 'laatste_wijziging', label: 'Last modified' },
     { veld: 'laatste_wijziging_door', label: 'Modified by' },
     { veld: 'laatste_batch', label: 'Last batch generated' },
-    { veld: null, label: 'Product Sheet' },
+    { veld: 'product_sheet', label: 'Product Sheet' },
   ];
   const headerHtml = kolommen.map(k => {
     if (!k.veld) return `<th>${k.label}</th>`;
@@ -766,6 +766,14 @@ function pasFiltersToe() {
         const da = laatsteBatchPerRecept[a.id] || '';
         const db = laatsteBatchPerRecept[b.id] || '';
         return da.localeCompare(db);
+      }
+      case 'product_sheet': {
+        // Sorteervolgorde: groen (in sync) -> rood (out of sync) -> missing (geen sheet)
+        const rang = (r) => {
+          if (!(r.recipe_group_id in productSheetStatusPerGroep)) return 2; // missing
+          return productSheetStatusPerGroep[r.recipe_group_id] ? 0 : 1; // groen : rood
+        };
+        return rang(a) - rang(b);
       }
       default: return (a.naam || '').localeCompare(b.naam || '');
     }
