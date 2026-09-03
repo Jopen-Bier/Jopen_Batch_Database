@@ -203,6 +203,11 @@ function renderSheet(live, status, p, revisies) {
       ${paramRow('Number of days on barrel', p.vat_dagen)}
     </div>` : '';
 
+  const opmerkingenHtml = p.opmerkingen ? `
+    <div class="param-columns">
+      <div class="full-span"><div class="param-row"><span>Additional information / comments</span><span style="white-space:pre-wrap;">${escapeHtml(p.opmerkingen)}</span></div></div>
+    </div>` : '';
+
   const nutritionHtml = (p.energie_kj || p.energie_kcal) ? `
     <div class="param-columns">
       ${paramRow('Energy', p.energie_kj, 'kJ')}
@@ -252,6 +257,7 @@ function renderSheet(live, status, p, revisies) {
 
     ${barrelHtml ? `<div class="section-title">Barrel aged beer</div>${barrelHtml}` : ''}
     ${nutritionHtml ? `<div class="section-title">Nutritional values (per 100ml)</div>${nutritionHtml}` : ''}
+    ${opmerkingenHtml ? `<div class="section-title">Additional information</div>${opmerkingenHtml}` : ''}
 
     <div class="section-title">Version history</div>
     ${revisiesHtml}
