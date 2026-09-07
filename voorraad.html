@@ -81,6 +81,27 @@
   .vr-detail-rij { display: flex; justify-content: space-between; gap: 16px; padding: 7px 0; border-bottom: 1px solid #f0f0ee; font-size: 0.92em; }
   .vr-detail-label { color: #6b6b6b; }
   .vr-detail-waarde { text-align: right; font-weight: 500; }
+
+  /* Accounting sign-off: maand-tabs + uitklapbare grondstof-groepen */
+  .vr-maand-tabs { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
+  .vr-maand-tab-btn {
+    background: #f5f4f1; border: 1px solid transparent; border-radius: 20px; padding: 6px 14px;
+    font-size: 0.85em; cursor: pointer; display: flex; align-items: center; gap: 6px;
+  }
+  .vr-maand-tab-btn.actief { background: var(--jopen-red-tint); border-color: var(--jopen-red); color: var(--jopen-red); font-weight: 600; }
+  .vr-maand-pending {
+    background: #a33f2c; color: white; border-radius: 10px; padding: 0 6px; font-size: 0.8em; font-weight: 700;
+  }
+  .vr-boek-groep { border: 1px solid #eee; border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
+  .vr-boek-groep-kop {
+    display: flex; align-items: center; gap: 12px; padding: 10px 14px; cursor: pointer; flex-wrap: wrap;
+  }
+  .vr-boek-groep-kop:hover { background: #fafaf8; }
+  .vr-boek-groep-chevron { color: #999; width: 12px; }
+  .vr-boek-groep-naam { font-weight: 600; flex: 1; min-width: 140px; }
+  .vr-boek-groep-totaal { color: #6b6b6b; font-size: 0.88em; }
+  .vr-boek-groep-body { border-top: 1px solid #eee; padding: 4px 14px 10px; }
+  .vr-boek-rij:hover { background: var(--jopen-red-tint); }
 </style>
 </head>
 <body>
@@ -207,9 +228,19 @@
               <label for="vr-manu-batch">Beer batch</label>
               <select id="vr-manu-batch"><option value="">Loading…</option></select>
             </div>
-            <div class="vr-checkbox-row" style="margin-top:26px;">
-              <input type="checkbox" id="vr-manu-adhoc" />
-              <label for="vr-manu-adhoc" style="margin:0;">Off-recipe (ad-hoc) — not on the recipe at all</label>
+            <div>
+              <div class="vr-checkbox-row" style="margin-top:26px;">
+                <input type="checkbox" id="vr-manu-adhoc" />
+                <label for="vr-manu-adhoc" style="margin:0;">Off-recipe (ad-hoc) — not on the recipe at all</label>
+              </div>
+              <div class="vr-checkbox-row">
+                <input type="checkbox" id="vr-manu-spoilage" />
+                <label for="vr-manu-spoilage" style="margin:0;">Spoilage</label>
+              </div>
+              <div class="vr-checkbox-row">
+                <input type="checkbox" id="vr-manu-correction" />
+                <label for="vr-manu-correction" style="margin:0;">Correction</label>
+              </div>
             </div>
           </div>
           <div class="vr-field"><label for="vr-manu-notitie">Notes</label><textarea id="vr-manu-notitie" rows="2" placeholder="e.g. which recipe line this covers, or why it's off-recipe"></textarea></div>
@@ -225,24 +256,12 @@
       <section class="vr-block">
         <h2>Accounting sign-off</h2>
         <p class="jopen-subtitel" style="margin-top:0;">
-          Every manual booking (Cellar additions, Yeast, and off-recipe/ad-hoc usage) needs to be entered in
-          the accounting system. Mark as done once that's been taken care of.
+          Bookings are grouped by month to match how sign-off is actually done — once a month, in bulk, per raw
+          material. Open a month to see the totals per ingredient; expand an ingredient to see (and click into) the
+          individual bookings.
         </p>
-        <div class="vr-filters">
-          <select id="vr-boek-status">
-            <option value="open" selected>Pending sign-off</option>
-            <option value="afgetekend">Signed off</option>
-            <option value="alle">All</option>
-          </select>
-        </div>
-        <div style="max-height:520px; overflow-y:auto;">
-          <table class="vr-table">
-            <thead><tr>
-              <th>Date</th><th>Ingredient</th><th>Batch</th><th>Qty</th><th>Requested by</th><th>Note</th><th>Status</th><th>Signed off</th><th></th>
-            </tr></thead>
-            <tbody id="vr-boek-tbody"><tr><td colspan="9" class="vr-skeleton">Loading…</td></tr></tbody>
-          </table>
-        </div>
+        <div class="vr-maand-tabs" id="vr-maand-tabs"></div>
+        <div id="vr-boek-inhoud"><div class="vr-skeleton">Loading…</div></div>
       </section>
     </div>
   </main>
@@ -250,7 +269,7 @@
   <!-- Lot-detailpopup -->
   <div class="vr-overlay" id="vr-lot-detail-overlay">
     <div class="vr-detail-modal">
-      <h2>Lot details</h2>
+      <h2 id="vr-lot-detail-titel">Lot details</h2>
       <div id="vr-lot-detail-body"></div>
       <div style="margin-top:16px; text-align:right;">
         <button type="button" id="vr-lot-detail-sluiten" class="vr-btn-secundair">Close</button>
@@ -288,7 +307,6 @@
         if (tab === 'boekhouding') laadBoekhouding();
       });
     });
-    document.getElementById('vr-boek-status').addEventListener('change', laadBoekhouding);
 
     // ---------------------------------------------------------------------
     // Eenheden-conversie: massa <-> massa, volume <-> volume altijd; massa <-> volume
@@ -583,10 +601,18 @@
     document.getElementById('vr-ovz-status').addEventListener('change', renderLotOverzicht);
 
     // ---------------------------------------------------------------------
-    // Lot-detailpopup (toont exact wat bij ontvangst is ingevuld)
+    // Generieke detailpopup, gebruikt voor zowel lot- als boeking-details.
     // ---------------------------------------------------------------------
+    function toonDetailPopup(titel, rijen) {
+      document.getElementById('vr-lot-detail-titel').textContent = titel;
+      document.getElementById('vr-lot-detail-body').innerHTML = rijen.map(([label, waarde]) =>
+        `<div class="vr-detail-rij"><span class="vr-detail-label">${escapeHtml(label)}</span><span class="vr-detail-waarde">${escapeHtml(String(waarde))}</span></div>`
+      ).join('');
+      document.getElementById('vr-lot-detail-overlay').style.display = 'flex';
+    }
+
     function toonLotDetail(l) {
-      const rijen = [
+      toonDetailPopup('Lot details', [
         ['Ingredient', l.ingredients?.naam || '—'],
         ['Supplier', l.leverancier || '—'],
         ['Lot / batch code', l.lotcode || '—'],
@@ -604,12 +630,7 @@
         ['Status', l.status],
         ['Entered by', l.invoerder?.naam || '—'],
         ['Entered on', l.aangemaakt_op ? new Date(l.aangemaakt_op).toLocaleString() : '—'],
-      ];
-      const overlay = document.getElementById('vr-lot-detail-overlay');
-      document.getElementById('vr-lot-detail-body').innerHTML = rijen.map(([label, waarde]) =>
-        `<div class="vr-detail-rij"><span class="vr-detail-label">${escapeHtml(label)}</span><span class="vr-detail-waarde">${escapeHtml(String(waarde))}</span></div>`
-      ).join('');
-      overlay.style.display = 'flex';
+      ]);
     }
     document.getElementById('vr-lot-detail-sluiten').addEventListener('click', () => {
       document.getElementById('vr-lot-detail-overlay').style.display = 'none';
@@ -750,6 +771,8 @@
         batch_id: Number(document.getElementById('vr-manu-batch').value),
         notitie: document.getElementById('vr-manu-notitie').value.trim() || null,
         off_recipe: isAdhoc,
+        is_spoilage: document.getElementById('vr-manu-spoilage').checked,
+        is_correction: document.getElementById('vr-manu-correction').checked,
         // Elke handmatige/latere boeking gaat via deze pagina, ongeacht of hij aan een
         // receptregel hangt (Kelder/Gist) of echt off-recipe is -- allebei moeten
         // door accounting afgetekend worden. Alleen de automatische uitboeking bij
@@ -768,65 +791,194 @@
       document.getElementById('vr-manu-hoeveelheid').value = '';
       document.getElementById('vr-manu-notitie').value = '';
       document.getElementById('vr-manu-adhoc').checked = false;
+      document.getElementById('vr-manu-spoilage').checked = false;
+      document.getElementById('vr-manu-correction').checked = false;
       document.getElementById('vr-manu-conversie-info').textContent = '';
       werkManuKnopBij();
     });
 
     // ---------------------------------------------------------------------
-    // BOEKHOUDING / AFTEKENING
+    // BOEKHOUDING / AFTEKENING -- gegroepeerd per maand, dan per grondstof
+    // (+eenheid, om geen kg/l door elkaar op te tellen), met een uitklapbare
+    // lijst van individuele boekingen die aanklikbaar zijn voor het detail.
     // ---------------------------------------------------------------------
-    async function laadBoekhouding() {
-      const tbody = document.getElementById('vr-boek-tbody');
-      tbody.innerHTML = '<tr><td colspan="9" class="vr-skeleton">Loading…</td></tr>';
+    let vrBoekMutaties = [];   // alle uitboekingen, ruwe data
+    let vrBoekMaand = null;    // geselecteerde maand-sleutel 'YYYY-MM'
+    let vrBoekOpen = new Set(); // welke ingredient-groepen binnen de huidige maand uitgeklapt zijn
 
-      const statusFilter = document.getElementById('vr-boek-status').value;
-      let query = supabaseClient
+    function vrMaandSleutel(iso) {
+      const d = new Date(iso);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    }
+    function vrMaandLabel(sleutel) {
+      const [jaar, maand] = sleutel.split('-').map(Number);
+      return new Date(jaar, maand - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+    }
+
+    async function laadBoekhouding() {
+      const inhoud = document.getElementById('vr-boek-inhoud');
+      inhoud.innerHTML = '<div class="vr-skeleton">Loading…</div>';
+
+      const { data, error } = await supabaseClient
         .from('voorraad_mutaties')
-        .select(`id, aangemaakt_op, notitie, hoeveelheid, off_recipe, ingevoerde_hoeveelheid, ingevoerde_eenheid,
-          geboekt_in_boekhouding, geboekt_op,
-          batches(batchnummer, naam), grondstof_lots(ingredients(naam), eenheid),
+        .select(`id, aangemaakt_op, notitie, hoeveelheid, off_recipe, is_spoilage, is_correction,
+          ingevoerde_hoeveelheid, ingevoerde_eenheid, geboekt_in_boekhouding, geboekt_op,
+          batches(batchnummer, naam), grondstof_lots(lotcode, eenheid, ingredients(id, naam)),
           gebruikers!voorraad_mutaties_aangemaakt_door_fkey(naam),
           geboekt_door_gebruiker:gebruikers!voorraad_mutaties_geboekt_door_fkey(naam)`)
         .eq('type', 'uitboeking')
         .order('aangemaakt_op', { ascending: false });
-      if (statusFilter === 'open') query = query.eq('geboekt_in_boekhouding', false);
-      if (statusFilter === 'afgetekend') query = query.eq('geboekt_in_boekhouding', true);
-      const { data, error } = await query;
 
       if (error) {
-        tbody.innerHTML = `<tr><td colspan="9" style="color:#a33f2c;">Could not load: ${escapeHtml(error.message)}</td></tr>`;
+        inhoud.innerHTML = `<div style="color:#a33f2c;">Could not load: ${escapeHtml(error.message)}</div>`;
         return;
       }
-      if (!data || data.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="9" class="vr-skeleton">${statusFilter === 'open' ? 'Nothing pending — all caught up.' : 'Nothing found.'}</td></tr>`;
-        return;
-      }
-      tbody.innerHTML = data.map(m => `
-        <tr>
-          <td>${m.aangemaakt_op ? new Date(m.aangemaakt_op).toLocaleDateString() : '—'}</td>
-          <td>${escapeHtml(m.grondstof_lots?.ingredients?.naam || '—')} ${m.off_recipe ? '<span class="vr-status-badge" style="background:#fdeceb;color:#a33f2c;">Off-recipe</span>' : ''}</td>
-          <td>${m.batches ? escapeHtml(String(m.batches.batchnummer)) + ' — ' + escapeHtml(m.batches.naam) : '—'}</td>
-          <td>${m.hoeveelheid ?? '—'} ${escapeHtml(m.grondstof_lots?.eenheid || '')}${m.ingevoerde_hoeveelheid != null ? `<br><span style="color:#999; font-size:0.85em;">entered as ${m.ingevoerde_hoeveelheid} ${escapeHtml(m.ingevoerde_eenheid || '')}</span>` : ''}</td>
-          <td>${escapeHtml(m.gebruikers?.naam || '—')}</td>
-          <td>${escapeHtml(m.notitie || '—')}</td>
-          <td><span class="vr-status-badge ${m.geboekt_in_boekhouding ? 'vr-status-actief' : ''}" style="${m.geboekt_in_boekhouding ? '' : 'background:#fff3d6;color:#a06a1c;'}">${m.geboekt_in_boekhouding ? 'Signed off' : 'Pending'}</span></td>
-          <td>${m.geboekt_in_boekhouding ? `${escapeHtml(m.geboekt_door_gebruiker?.naam || '—')}<br><span style="color:#999; font-size:0.85em;">${m.geboekt_op ? new Date(m.geboekt_op).toLocaleString() : ''}</span>` : '—'}</td>
-          <td>${(magBewerken && !m.geboekt_in_boekhouding) ? `<button type="button" class="vr-btn-secundair vr-afteken-btn" data-id="${m.id}">Mark booked</button>` : ''}</td>
-        </tr>`).join('');
+      vrBoekMutaties = data || [];
+      renderMaandTabs();
+      if (!vrBoekMaand && vrBoekMutaties.length > 0) vrBoekMaand = vrMaandSleutel(vrBoekMutaties[0].aangemaakt_op);
+      vrBoekOpen = new Set();
+      renderBoekInhoud();
+    }
 
-      tbody.querySelectorAll('.vr-afteken-btn').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          const { data: { session } } = await supabaseClient.auth.getSession();
+    function renderMaandTabs() {
+      const container = document.getElementById('vr-maand-tabs');
+      const maanden = [...new Set(vrBoekMutaties.map(m => vrMaandSleutel(m.aangemaakt_op)))]; // al aflopend gesorteerd
+      if (maanden.length === 0) { container.innerHTML = ''; return; }
+      if (!vrBoekMaand || !maanden.includes(vrBoekMaand)) vrBoekMaand = maanden[0];
+      container.innerHTML = maanden.map(m => {
+        const pending = vrBoekMutaties.filter(x => vrMaandSleutel(x.aangemaakt_op) === m && !x.geboekt_in_boekhouding).length;
+        return `<button type="button" class="vr-maand-tab-btn ${m === vrBoekMaand ? 'actief' : ''}" data-maand="${m}">
+          ${escapeHtml(vrMaandLabel(m))}${pending > 0 ? `<span class="vr-maand-pending">${pending}</span>` : ''}
+        </button>`;
+      }).join('');
+      container.querySelectorAll('.vr-maand-tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          vrBoekMaand = btn.dataset.maand;
+          vrBoekOpen = new Set();
+          renderMaandTabs();
+          renderBoekInhoud();
+        });
+      });
+    }
+
+    function vrBoekVlagBadges(m) {
+      let html = '';
+      if (m.off_recipe) html += '<span class="vr-status-badge" style="background:#fdeceb;color:#a33f2c;">Off-recipe</span> ';
+      if (m.is_spoilage) html += '<span class="vr-status-badge" style="background:#fdeceb;color:#a33f2c;">Spoilage</span> ';
+      if (m.is_correction) html += '<span class="vr-status-badge" style="background:#eef1fd;color:#3a4fa3;">Correction</span> ';
+      return html;
+    }
+
+    function renderBoekInhoud() {
+      const inhoud = document.getElementById('vr-boek-inhoud');
+      if (vrBoekMutaties.length === 0) { inhoud.innerHTML = '<div class="vr-skeleton">No bookings yet.</div>'; return; }
+
+      const opDezeMaand = vrBoekMutaties.filter(m => vrMaandSleutel(m.aangemaakt_op) === vrBoekMaand);
+
+      // Groeperen per grondstof + eenheid (twee lots van hetzelfde ingrediënt horen normaal
+      // dezelfde eenheid te hebben, maar we tellen nooit kg en l zomaar bij elkaar op).
+      const groepen = new Map();
+      opDezeMaand.forEach(m => {
+        const naam = m.grondstof_lots?.ingredients?.naam || '(unknown ingredient)';
+        const eenheid = m.grondstof_lots?.eenheid || '';
+        const sleutel = naam + '||' + eenheid;
+        if (!groepen.has(sleutel)) groepen.set(sleutel, { naam, eenheid, mutaties: [] });
+        groepen.get(sleutel).mutaties.push(m);
+      });
+      const groepenArr = [...groepen.values()].sort((a, b) => a.naam.localeCompare(b.naam));
+
+      inhoud.innerHTML = groepenArr.map((g, gIdx) => {
+        const totaal = g.mutaties.reduce((s, m) => s + Number(m.hoeveelheid || 0), 0);
+        const pending = g.mutaties.filter(m => !m.geboekt_in_boekhouding);
+        const open = vrBoekOpen.has(gIdx);
+        return `
+          <div class="vr-boek-groep">
+            <div class="vr-boek-groep-kop" data-idx="${gIdx}">
+              <span class="vr-boek-groep-chevron">${open ? '▾' : '▸'}</span>
+              <span class="vr-boek-groep-naam">${escapeHtml(g.naam)}</span>
+              <span class="vr-boek-groep-totaal">${totaal.toFixed(3).replace(/\.?0+$/, '')} ${escapeHtml(g.eenheid)} — ${g.mutaties.length} booking${g.mutaties.length === 1 ? '' : 's'}</span>
+              ${pending.length > 0
+                ? `<span class="vr-status-badge" style="background:#fff3d6;color:#a06a1c;">${pending.length} pending</span>`
+                : '<span class="vr-status-badge vr-status-actief">All signed off</span>'}
+              ${(magBewerken && pending.length > 0)
+                ? `<button type="button" class="vr-btn-secundair vr-groep-afteken-btn" data-idx="${gIdx}">Mark all signed off</button>` : ''}
+            </div>
+            <div class="vr-boek-groep-body" style="${open ? '' : 'display:none;'}">
+              <table class="vr-table">
+                <thead><tr>
+                  <th>Date</th><th>Lot</th><th>Batch</th><th>Qty</th><th>Requested by</th><th>Flags</th><th>Status</th>
+                </tr></thead>
+                <tbody>
+                  ${g.mutaties.map(m => `
+                    <tr class="vr-boek-rij" data-id="${m.id}" style="cursor:pointer;">
+                      <td>${m.aangemaakt_op ? new Date(m.aangemaakt_op).toLocaleDateString() : '—'}</td>
+                      <td>${escapeHtml(m.grondstof_lots?.lotcode || '—')}</td>
+                      <td>${m.batches ? escapeHtml(String(m.batches.batchnummer)) : '—'}</td>
+                      <td>${m.hoeveelheid ?? '—'} ${escapeHtml(g.eenheid)}</td>
+                      <td>${escapeHtml(m.gebruikers?.naam || '—')}</td>
+                      <td>${vrBoekVlagBadges(m)}</td>
+                      <td><span class="vr-status-badge ${m.geboekt_in_boekhouding ? 'vr-status-actief' : ''}" style="${m.geboekt_in_boekhouding ? '' : 'background:#fff3d6;color:#a06a1c;'}">${m.geboekt_in_boekhouding ? 'Signed off' : 'Pending'}</span></td>
+                    </tr>`).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>`;
+      }).join('');
+
+      inhoud.querySelectorAll('.vr-boek-groep-kop').forEach(kop => {
+        kop.addEventListener('click', (e) => {
+          if (e.target.closest('.vr-groep-afteken-btn')) return;
+          const idx = Number(kop.dataset.idx);
+          if (vrBoekOpen.has(idx)) vrBoekOpen.delete(idx); else vrBoekOpen.add(idx);
+          renderBoekInhoud();
+        });
+      });
+      inhoud.querySelectorAll('.vr-boek-rij').forEach(tr => {
+        tr.addEventListener('click', () => {
+          const m = vrBoekMutaties.find(x => String(x.id) === tr.dataset.id);
+          if (m) toonBoekingDetail(m);
+        });
+      });
+      inhoud.querySelectorAll('.vr-groep-afteken-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const idx = Number(btn.dataset.idx);
+          const groep = groepenArr[idx];
+          const teAftekenen = groep.mutaties.filter(m => !m.geboekt_in_boekhouding).map(m => m.id);
+          if (teAftekenen.length === 0) return;
+          if (!confirm(`Mark all ${teAftekenen.length} pending booking(s) of "${groep.naam}" this month as signed off?`)) return;
           btn.disabled = true;
+          const { data: { session } } = await supabaseClient.auth.getSession();
           const { error: updErr } = await supabaseClient.from('voorraad_mutaties').update({
             geboekt_in_boekhouding: true,
             geboekt_door: session?.user?.id ?? null,
             geboekt_op: new Date().toISOString(),
-          }).eq('id', btn.dataset.id);
+          }).in('id', teAftekenen);
           if (updErr) { alert('Could not sign off: ' + updErr.message); btn.disabled = false; return; }
           laadBoekhouding();
         });
       });
+    }
+
+    function toonBoekingDetail(m) {
+      toonDetailPopup('Booking details', [
+        ['Ingredient', m.grondstof_lots?.ingredients?.naam || '—'],
+        ['Lot code', m.grondstof_lots?.lotcode || '—'],
+        ['Date', m.aangemaakt_op ? new Date(m.aangemaakt_op).toLocaleString() : '—'],
+        ['Batch', m.batches ? `${m.batches.batchnummer} — ${m.batches.naam}` : '—'],
+        ['Quantity', `${m.hoeveelheid ?? '—'} ${m.grondstof_lots?.eenheid || ''}`],
+        ...(m.ingevoerde_hoeveelheid != null ? [['Entered as', `${m.ingevoerde_hoeveelheid} ${m.ingevoerde_eenheid || ''}`]] : []),
+        ['Requested by', m.gebruikers?.naam || '—'],
+        ['Off-recipe', m.off_recipe ? 'Yes' : 'No'],
+        ['Spoilage', m.is_spoilage ? 'Yes' : 'No'],
+        ['Correction', m.is_correction ? 'Yes' : 'No'],
+        ['Notes', m.notitie || '—'],
+        ['Status', m.geboekt_in_boekhouding ? 'Signed off' : 'Pending'],
+        ...(m.geboekt_in_boekhouding ? [
+          ['Signed off by', m.geboekt_door_gebruiker?.naam || '—'],
+          ['Signed off on', m.geboekt_op ? new Date(m.geboekt_op).toLocaleString() : '—'],
+        ] : []),
+      ]);
     }
 
     // ---------------------------------------------------------------------
