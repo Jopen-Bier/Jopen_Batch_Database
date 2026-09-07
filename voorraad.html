@@ -610,7 +610,8 @@
         type: 'uitboeking',
         hoeveelheid: Number(document.getElementById('vr-manu-hoeveelheid').value),
         batch_id: Number(document.getElementById('vr-manu-batch').value),
-        notitie: document.getElementById('vr-manu-notitie').value.trim() || (isAdhoc ? 'Off-recipe / ad-hoc' : null),
+        notitie: document.getElementById('vr-manu-notitie').value.trim() || null,
+        off_recipe: isAdhoc,
         // Elke handmatige/latere boeking gaat via deze pagina, ongeacht of hij aan een
         // receptregel hangt (Kelder/Gist) of echt off-recipe is -- allebei moeten
         // door accounting afgetekend worden. Alleen de automatische uitboeking bij
@@ -641,7 +642,7 @@
 
       const { data, error } = await supabaseClient
         .from('voorraad_mutaties')
-        .select('id, aangemaakt_op, notitie, hoeveelheid, batches(batchnummer, naam), grondstof_lots(ingredients(naam), eenheid), gebruikers!voorraad_mutaties_aangemaakt_door_fkey(naam)')
+        .select('id, aangemaakt_op, notitie, hoeveelheid, off_recipe, batches(batchnummer, naam), grondstof_lots(ingredients(naam), eenheid), gebruikers!voorraad_mutaties_aangemaakt_door_fkey(naam)')
         .eq('type', 'uitboeking')
         .eq('geboekt_in_boekhouding', false)
         .order('aangemaakt_op', { ascending: false });
@@ -657,7 +658,7 @@
       tbody.innerHTML = data.map(m => `
         <tr>
           <td>${m.aangemaakt_op ? new Date(m.aangemaakt_op).toLocaleDateString() : '—'}</td>
-          <td>${escapeHtml(m.grondstof_lots?.ingredients?.naam || '—')}</td>
+          <td>${escapeHtml(m.grondstof_lots?.ingredients?.naam || '—')} ${m.off_recipe ? '<span class="vr-status-badge" style="background:#fdeceb;color:#a33f2c;">Off-recipe</span>' : ''}</td>
           <td>${m.batches ? escapeHtml(String(m.batches.batchnummer)) + ' — ' + escapeHtml(m.batches.naam) : '—'}</td>
           <td>${m.hoeveelheid ?? '—'} ${escapeHtml(m.grondstof_lots?.eenheid || '')}</td>
           <td>${escapeHtml(m.gebruikers?.naam || '—')}</td>
