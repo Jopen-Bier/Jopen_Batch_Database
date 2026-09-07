@@ -161,7 +161,7 @@
         <h2>Book out — manual or ad-hoc</h2>
         <p class="jopen-subtitel" style="margin-top:0;">
           Use this for Cellar additions / Yeast (always booked out later, once actually added), and for anything used
-          off-recipe. Off-recipe bookings need to be signed off by accounting — see the "Accounting sign-off" tab.
+          off-recipe. Every booking made here — recipe-linked or not — needs accounting sign-off, see the "Accounting sign-off" tab.
         </p>
         <div id="vr-manu-geen-rechten" class="vr-geen-rechten" style="display:none;">
           You need editor access to book out stock.
@@ -186,7 +186,7 @@
             </div>
             <div class="vr-checkbox-row" style="margin-top:26px;">
               <input type="checkbox" id="vr-manu-adhoc" />
-              <label for="vr-manu-adhoc" style="margin:0;">This is off-recipe (ad-hoc) — needs accounting sign-off</label>
+              <label for="vr-manu-adhoc" style="margin:0;">Off-recipe (ad-hoc) — not on the recipe at all</label>
             </div>
           </div>
           <div class="vr-field"><label for="vr-manu-notitie">Notes</label><textarea id="vr-manu-notitie" rows="2" placeholder="e.g. which recipe line this covers, or why it's off-recipe"></textarea></div>
@@ -202,8 +202,8 @@
       <section class="vr-block">
         <h2>Accounting sign-off</h2>
         <p class="jopen-subtitel" style="margin-top:0;">
-          Off-recipe (ad-hoc) bookings that still need to be entered in the accounting system. Mark as done once
-          that's been taken care of.
+          Every manual booking (Cellar additions, Yeast, and off-recipe/ad-hoc usage) still needs to be entered in
+          the accounting system. Mark as done once that's been taken care of.
         </p>
         <div style="max-height:520px; overflow-y:auto;">
           <table class="vr-table">
@@ -511,7 +511,11 @@
         hoeveelheid: Number(document.getElementById('vr-manu-hoeveelheid').value),
         batch_id: Number(document.getElementById('vr-manu-batch').value),
         notitie: document.getElementById('vr-manu-notitie').value.trim() || (isAdhoc ? 'Off-recipe / ad-hoc' : null),
-        geboekt_in_boekhouding: !isAdhoc, // alleen ad-hoc/off-recipe hoeft aftekening
+        // Elke handmatige/latere boeking gaat via deze pagina, ongeacht of hij aan een
+        // receptregel hangt (Kelder/Gist) of echt off-recipe is -- allebei moeten
+        // door accounting afgetekend worden. Alleen de automatische uitboeking bij
+        // Create batch (rechtstreeks uit het recept) slaat dit over.
+        geboekt_in_boekhouding: false,
         aangemaakt_door: session?.user?.id ?? null,
       });
 
