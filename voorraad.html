@@ -123,7 +123,7 @@
           <div class="vr-grid3">
             <div class="vr-field"><label for="vr-ontv-datum">Receiving date</label><input type="date" id="vr-ontv-datum" /></div>
             <div class="vr-field"><label for="vr-ontv-hoeveelheid">Quantity received</label><input type="number" step="0.001" id="vr-ontv-hoeveelheid" /></div>
-            <div class="vr-field"><label for="vr-ontv-eenheid">Unit</label><input type="text" id="vr-ontv-eenheid" placeholder="kg, g, l, stuks…" /></div>
+            <div class="vr-field"><label for="vr-ontv-eenheid">Unit</label><select id="vr-ontv-eenheid"><option value="">—</option></select></div>
           </div>
           <div class="vr-grid3">
             <div class="vr-field"><label for="vr-ontv-colli">Number of packages</label><input type="text" id="vr-ontv-colli" placeholder="e.g. 2 boxes" /></div>
@@ -196,8 +196,12 @@
               <label for="vr-manu-lot">Lot</label>
               <select id="vr-manu-lot"><option value="">Select ingredient first…</option></select>
             </div>
-            <div class="vr-field"><label for="vr-manu-hoeveelheid">Quantity</label><input type="number" step="0.001" id="vr-manu-hoeveelheid" /></div>
+            <div class="vr-field vr-grid2" style="grid-template-columns: 2fr 1fr; gap:8px;">
+              <div><label for="vr-manu-hoeveelheid">Quantity</label><input type="number" step="0.001" id="vr-manu-hoeveelheid" /></div>
+              <div><label for="vr-manu-eenheid">Unit</label><select id="vr-manu-eenheid"><option value="">—</option></select></div>
+            </div>
           </div>
+          <div id="vr-manu-conversie-info" style="font-size:0.8em; color:#6b6355; margin:-8px 0 14px;"></div>
           <div class="vr-grid2">
             <div class="vr-field">
               <label for="vr-manu-batch">Beer batch</label>
@@ -279,17 +283,80 @@
     });
 
     // ---------------------------------------------------------------------
+    // Eenheden-conversie: massa <-> massa, volume <-> volume altijd; massa <-> volume
+    // alleen als de ingredient-kaart een dichtheid (g/mL) heeft ingevuld. Ontbreekt die,
+    // dan wordt die optie simpelweg niet aangeboden -- geen gok-conversiefactor.
+    // ---------------------------------------------------------------------
+    const VR_MASSA_NAAR_G = { mg: 0.001, g: 1, kg: 1000 };
+    const VR_VOLUME_NAAR_ML = { ml: 1, l: 1000 };
+    const VR_FYSIEKE_EENHEDEN = ['g', 'kg', 'ml', 'l', 'stuks'];
+    function vrEenheidType(eenheid) {
+      if (!eenheid) return null;
+      if (VR_MASSA_NAAR_G[eenheid] !== undefined) return 'massa';
+      if (VR_VOLUME_NAAR_ML[eenheid] !== undefined) return 'volume';
+      if (eenheid === 'stuks') return 'stuks';
+      return 'overig';
+    }
+    // Geeft de lijst eenheden terug waarin de operator een uitboeking voor dit lot
+    // mag invoeren: altijd de lot-eenheid zelf + andere eenheden van dezelfde
+    // dimensie, plus de andere dimensie (massa<->volume) als dichtheid bekend is.
+    function vrToegestaneEenheden(lotEenheid, dichtheidGPerMl) {
+      const type = vrEenheidType(lotEenheid);
+      if (type === 'massa') {
+        const opties = Object.keys(VR_MASSA_NAAR_G);
+        return (dichtheidGPerMl != null) ? opties.concat(Object.keys(VR_VOLUME_NAAR_ML)) : opties;
+      }
+      if (type === 'volume') {
+        const opties = Object.keys(VR_VOLUME_NAAR_ML);
+        return (dichtheidGPerMl != null) ? opties.concat(Object.keys(VR_MASSA_NAAR_G)) : opties;
+      }
+      // stuks of een niet-herkende eenheid: geen conversie, alleen de eigen eenheid.
+      return lotEenheid ? [lotEenheid] : [];
+    }
+    // Rekent `hoeveelheid` in `vanEenheid` om naar `naarEenheid`. Geeft null terug als
+    // dat niet kan (bv. massa->volume zonder dichtheid).
+    function vrConverteer(hoeveelheid, vanEenheid, naarEenheid, dichtheidGPerMl) {
+      if (vanEenheid === naarEenheid) return hoeveelheid;
+      const vanType = vrEenheidType(vanEenheid), naarType = vrEenheidType(naarEenheid);
+      if (vanType === 'massa' && naarType === 'massa') {
+        return (hoeveelheid * VR_MASSA_NAAR_G[vanEenheid]) / VR_MASSA_NAAR_G[naarEenheid];
+      }
+      if (vanType === 'volume' && naarType === 'volume') {
+        return (hoeveelheid * VR_VOLUME_NAAR_ML[vanEenheid]) / VR_VOLUME_NAAR_ML[naarEenheid];
+      }
+      if (dichtheidGPerMl != null) {
+        if (vanType === 'massa' && naarType === 'volume') {
+          const gram = hoeveelheid * VR_MASSA_NAAR_G[vanEenheid];
+          const ml = gram / dichtheidGPerMl;
+          return ml / VR_VOLUME_NAAR_ML[naarEenheid];
+        }
+        if (vanType === 'volume' && naarType === 'massa') {
+          const ml = hoeveelheid * VR_VOLUME_NAAR_ML[vanEenheid];
+          const gram = ml * dichtheidGPerMl;
+          return gram / VR_MASSA_NAAR_G[naarEenheid];
+        }
+      }
+      return null;
+    }
+
+    function vrVulEenhedenSelect(select, eenheden, geselecteerd) {
+      select.innerHTML = ['<option value="">—</option>']
+        .concat(eenheden.map(e => `<option value="${e}" ${e === geselecteerd ? 'selected' : ''}>${e}</option>`)).join('');
+    }
+
+    // ---------------------------------------------------------------------
     // Gedeeld: ingredienten + open batches laden
     // ---------------------------------------------------------------------
     async function laadIngredienten() {
       const { data, error } = await supabaseClient
         .from('ingredients')
-        .select('id, naam, category_id, eenheid, leverancier, leverancier_2, leverancier_3, ingredient_categories(uses_alpha_pct)')
+        .select('id, naam, category_id, eenheid, dichtheid, leverancier, leverancier_2, leverancier_3, ingredient_categories(uses_alpha_pct)')
         .eq('versie_status', 'huidig')
         .order('naam');
       if (error) { console.error('Kon ingrediënten niet laden:', error); return; }
       alleIngredienten = (data || []).map(i => ({
         id: i.id, naam: i.naam, eenheid: i.eenheid,
+        dichtheid: i.dichtheid != null ? Number(i.dichtheid) : null,
         leveranciers: [i.leverancier, i.leverancier_2, i.leverancier_3].filter(Boolean),
         usesAlphaPct: !!(i.ingredient_categories && i.ingredient_categories.uses_alpha_pct),
       }));
@@ -351,8 +418,11 @@
       // want een ontvangst kan altijd van een afwijkende leverancier komen.
       document.getElementById('vr-ontv-leverancier-lijst').innerHTML =
         ing.leveranciers.map(l => `<option value="${escapeHtml(l)}"></option>`).join('');
-      // Unit vooraf invullen vanuit de ingredient-kaart, blijft ook hier gewoon aanpasbaar.
-      if (ing.eenheid && !document.getElementById('vr-ontv-eenheid').value.trim()) {
+      // Unit vooraf invullen vanuit de ingredient-kaart -- alleen als dat daadwerkelijk een
+      // fysieke ontvangst-eenheid is (kg/g/l/ml/stuks). Bij additives staat hier vaak een
+      // tarief (bv. g/hl, de doseer-eenheid uit het recept) -- dat is geen ontvangst-eenheid
+      // en wordt dus bewust NIET overgenomen; de operator kiest dan zelf.
+      if (ing.eenheid && VR_FYSIEKE_EENHEDEN.includes(ing.eenheid)) {
         document.getElementById('vr-ontv-eenheid').value = ing.eenheid;
       }
       werkOntvKnopBij();
@@ -556,6 +626,8 @@
     document.getElementById('vr-manu-ingredient-zoek').addEventListener('input', (e) => {
       geselecteerdIngredientManu = null;
       document.getElementById('vr-manu-lot').innerHTML = '<option value="">Select ingredient first…</option>';
+      vrVulEenhedenSelect(document.getElementById('vr-manu-eenheid'), []);
+      document.getElementById('vr-manu-conversie-info').textContent = '';
       werkManuKnopBij();
       toonManuResultaten(e.target.value);
     });
@@ -571,6 +643,7 @@
       werkManuKnopBij();
     });
 
+    let vrManuLots = [];
     async function laadActieveLotsVoorSelect(ingredientId) {
       const select = document.getElementById('vr-manu-lot');
       select.innerHTML = '<option value="">Loading…</option>';
@@ -581,20 +654,59 @@
       ]);
       const uitgeboekt = {};
       (mutRes.data || []).forEach(m => { if (m.lot_id != null) uitgeboekt[m.lot_id] = (uitgeboekt[m.lot_id] || 0) + Number(m.hoeveelheid || 0); });
-      const lots = (lotsRes.data || []).map(l => ({ ...l, resterend: Number(l.hoeveelheid_ontvangen || 0) - (uitgeboekt[l.id] || 0) }));
-      select.innerHTML = lots.length
-        ? ['<option value="">Select lot…</option>'].concat(lots.map(l =>
+      vrManuLots = (lotsRes.data || []).map(l => ({ ...l, resterend: Number(l.hoeveelheid_ontvangen || 0) - (uitgeboekt[l.id] || 0) }));
+      select.innerHTML = vrManuLots.length
+        ? ['<option value="">Select lot…</option>'].concat(vrManuLots.map(l =>
             `<option value="${l.id}">${escapeHtml(l.lotcode || '(no code)')} — ${l.resterend.toFixed(2)} ${escapeHtml(l.eenheid || '')} remaining</option>`)).join('')
         : '<option value="">No active lots for this ingredient</option>';
+      vrManuEenhedenBijwerken();
     }
+
+    // Zodra een lot gekozen is: Unit-dropdown vullen met wat toegestaan is voor dát lot
+    // (zie vrToegestaneEenheden), default op de lot-eenheid zelf.
+    function vrManuEenhedenBijwerken() {
+      const lotId = document.getElementById('vr-manu-lot').value;
+      const lot = vrManuLots.find(l => String(l.id) === String(lotId));
+      const eenheidSelect = document.getElementById('vr-manu-eenheid');
+      if (!lot) { vrVulEenhedenSelect(eenheidSelect, []); document.getElementById('vr-manu-conversie-info').textContent = ''; return; }
+      const dichtheid = geselecteerdIngredientManu ? geselecteerdIngredientManu.dichtheid : null;
+      const opties = vrToegestaneEenheden(lot.eenheid, dichtheid);
+      vrVulEenhedenSelect(eenheidSelect, opties, lot.eenheid);
+      if (dichtheid == null && vrEenheidType(lot.eenheid) !== 'stuks' && vrEenheidType(lot.eenheid) !== 'overig') {
+        document.getElementById('vr-manu-conversie-info').textContent =
+          `Only ${vrEenheidType(lot.eenheid) === 'massa' ? 'mass' : 'volume'} units offered — fill in the ingredient's density to also allow ${vrEenheidType(lot.eenheid) === 'massa' ? 'volume' : 'mass'} units.`;
+      } else {
+        vrManuConversieInfoBijwerken();
+      }
+    }
+
+    // Live voorbeeld tonen als de gekozen eenheid afwijkt van de lot-eenheid, zodat de
+    // operator kan controleren of de omrekening klopt vóórdat hij opslaat.
+    function vrManuConversieInfoBijwerken() {
+      const infoEl = document.getElementById('vr-manu-conversie-info');
+      const lotId = document.getElementById('vr-manu-lot').value;
+      const lot = vrManuLots.find(l => String(l.id) === String(lotId));
+      const gekozenEenheid = document.getElementById('vr-manu-eenheid').value;
+      const hoeveelheid = Number(document.getElementById('vr-manu-hoeveelheid').value);
+      if (!lot || !gekozenEenheid || gekozenEenheid === lot.eenheid || !hoeveelheid) { infoEl.textContent = ''; return; }
+      const dichtheid = geselecteerdIngredientManu ? geselecteerdIngredientManu.dichtheid : null;
+      const omgerekend = vrConverteer(hoeveelheid, gekozenEenheid, lot.eenheid, dichtheid);
+      infoEl.textContent = omgerekend !== null
+        ? `≈ ${omgerekend.toFixed(3).replace(/\.?0+$/, '')} ${lot.eenheid} will be deducted from this lot.`
+        : `Cannot convert ${gekozenEenheid} to ${lot.eenheid} for this ingredient.`;
+    }
+    document.getElementById('vr-manu-lot').addEventListener('change', vrManuEenhedenBijwerken);
+    document.getElementById('vr-manu-eenheid').addEventListener('change', vrManuConversieInfoBijwerken);
+    document.getElementById('vr-manu-hoeveelheid').addEventListener('input', vrManuConversieInfoBijwerken);
 
     function werkManuKnopBij() {
       const lot = document.getElementById('vr-manu-lot').value;
       const hoeveelheid = document.getElementById('vr-manu-hoeveelheid').value.trim();
+      const eenheid = document.getElementById('vr-manu-eenheid').value;
       const batch = document.getElementById('vr-manu-batch').value;
-      document.getElementById('vr-manu-btn').disabled = !(magBewerken && geselecteerdIngredientManu && lot && hoeveelheid !== '' && batch);
+      document.getElementById('vr-manu-btn').disabled = !(magBewerken && geselecteerdIngredientManu && lot && hoeveelheid !== '' && eenheid && batch);
     }
-    ['vr-manu-lot','vr-manu-hoeveelheid','vr-manu-batch'].forEach(id => {
+    ['vr-manu-lot','vr-manu-hoeveelheid','vr-manu-eenheid','vr-manu-batch'].forEach(id => {
       document.getElementById(id).addEventListener('input', werkManuKnopBij);
       document.getElementById(id).addEventListener('change', werkManuKnopBij);
     });
@@ -604,11 +716,29 @@
       const { data: { session } } = await supabaseClient.auth.getSession();
       const isAdhoc = document.getElementById('vr-manu-adhoc').checked;
 
+      const lotId = document.getElementById('vr-manu-lot').value;
+      const lot = vrManuLots.find(l => String(l.id) === String(lotId));
+      const ingevoerdeHoeveelheid = Number(document.getElementById('vr-manu-hoeveelheid').value);
+      const ingevoerdeEenheid = document.getElementById('vr-manu-eenheid').value;
+      const dichtheid = geselecteerdIngredientManu ? geselecteerdIngredientManu.dichtheid : null;
+      const isConversie = lot && ingevoerdeEenheid !== lot.eenheid;
+      const hoeveelheidInLotEenheid = isConversie
+        ? vrConverteer(ingevoerdeHoeveelheid, ingevoerdeEenheid, lot.eenheid, dichtheid)
+        : ingevoerdeHoeveelheid;
+
+      if (hoeveelheidInLotEenheid === null) {
+        melding.textContent = `Could not convert ${ingevoerdeEenheid} to ${lot.eenheid} — fill in the ingredient's density first.`;
+        melding.className = 'vr-melding fout';
+        return;
+      }
+
       melding.textContent = 'Saving…'; melding.className = 'vr-melding';
       const { error } = await supabaseClient.from('voorraad_mutaties').insert({
-        lot_id: Number(document.getElementById('vr-manu-lot').value),
+        lot_id: Number(lotId),
         type: 'uitboeking',
-        hoeveelheid: Number(document.getElementById('vr-manu-hoeveelheid').value),
+        hoeveelheid: hoeveelheidInLotEenheid,
+        ingevoerde_hoeveelheid: isConversie ? ingevoerdeHoeveelheid : null,
+        ingevoerde_eenheid: isConversie ? ingevoerdeEenheid : null,
         batch_id: Number(document.getElementById('vr-manu-batch').value),
         notitie: document.getElementById('vr-manu-notitie').value.trim() || null,
         off_recipe: isAdhoc,
@@ -630,6 +760,7 @@
       document.getElementById('vr-manu-hoeveelheid').value = '';
       document.getElementById('vr-manu-notitie').value = '';
       document.getElementById('vr-manu-adhoc').checked = false;
+      document.getElementById('vr-manu-conversie-info').textContent = '';
       werkManuKnopBij();
     });
 
@@ -642,7 +773,7 @@
 
       const { data, error } = await supabaseClient
         .from('voorraad_mutaties')
-        .select('id, aangemaakt_op, notitie, hoeveelheid, off_recipe, batches(batchnummer, naam), grondstof_lots(ingredients(naam), eenheid), gebruikers!voorraad_mutaties_aangemaakt_door_fkey(naam)')
+        .select('id, aangemaakt_op, notitie, hoeveelheid, off_recipe, ingevoerde_hoeveelheid, ingevoerde_eenheid, batches(batchnummer, naam), grondstof_lots(ingredients(naam), eenheid), gebruikers!voorraad_mutaties_aangemaakt_door_fkey(naam)')
         .eq('type', 'uitboeking')
         .eq('geboekt_in_boekhouding', false)
         .order('aangemaakt_op', { ascending: false });
@@ -660,7 +791,7 @@
           <td>${m.aangemaakt_op ? new Date(m.aangemaakt_op).toLocaleDateString() : '—'}</td>
           <td>${escapeHtml(m.grondstof_lots?.ingredients?.naam || '—')} ${m.off_recipe ? '<span class="vr-status-badge" style="background:#fdeceb;color:#a33f2c;">Off-recipe</span>' : ''}</td>
           <td>${m.batches ? escapeHtml(String(m.batches.batchnummer)) + ' — ' + escapeHtml(m.batches.naam) : '—'}</td>
-          <td>${m.hoeveelheid ?? '—'} ${escapeHtml(m.grondstof_lots?.eenheid || '')}</td>
+          <td>${m.hoeveelheid ?? '—'} ${escapeHtml(m.grondstof_lots?.eenheid || '')}${m.ingevoerde_hoeveelheid != null ? `<br><span style="color:#999; font-size:0.85em;">entered as ${m.ingevoerde_hoeveelheid} ${escapeHtml(m.ingevoerde_eenheid || '')}</span>` : ''}</td>
           <td>${escapeHtml(m.gebruikers?.naam || '—')}</td>
           <td>${escapeHtml(m.notitie || '—')}</td>
           <td>${magBewerken ? `<button type="button" class="vr-btn-secundair vr-afteken-btn" data-id="${m.id}">Mark booked</button>` : ''}</td>
@@ -694,6 +825,7 @@
       document.getElementById('vr-manu-geen-rechten').style.display = magBewerken ? 'none' : 'block';
       document.getElementById('vr-manu-formulier').style.display = magBewerken ? 'block' : 'none';
 
+      vrVulEenhedenSelect(document.getElementById('vr-ontv-eenheid'), VR_FYSIEKE_EENHEDEN);
       await laadIngredienten();
       await laadOpenBatches();
       await laadOntvangenDoorOpties();
