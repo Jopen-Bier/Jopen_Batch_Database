@@ -225,15 +225,22 @@
       <section class="vr-block">
         <h2>Accounting sign-off</h2>
         <p class="jopen-subtitel" style="margin-top:0;">
-          Every manual booking (Cellar additions, Yeast, and off-recipe/ad-hoc usage) still needs to be entered in
+          Every manual booking (Cellar additions, Yeast, and off-recipe/ad-hoc usage) needs to be entered in
           the accounting system. Mark as done once that's been taken care of.
         </p>
+        <div class="vr-filters">
+          <select id="vr-boek-status">
+            <option value="open" selected>Pending sign-off</option>
+            <option value="afgetekend">Signed off</option>
+            <option value="alle">All</option>
+          </select>
+        </div>
         <div style="max-height:520px; overflow-y:auto;">
           <table class="vr-table">
             <thead><tr>
-              <th>Date</th><th>Ingredient</th><th>Batch</th><th>Qty</th><th>Booked by</th><th>Note</th><th></th>
+              <th>Date</th><th>Ingredient</th><th>Batch</th><th>Qty</th><th>Requested by</th><th>Note</th><th>Status</th><th>Signed off</th><th></th>
             </tr></thead>
-            <tbody id="vr-boek-tbody"><tr><td colspan="7" class="vr-skeleton">Loading…</td></tr></tbody>
+            <tbody id="vr-boek-tbody"><tr><td colspan="9" class="vr-skeleton">Loading…</td></tr></tbody>
           </table>
         </div>
       </section>
@@ -281,6 +288,7 @@
         if (tab === 'boekhouding') laadBoekhouding();
       });
     });
+    document.getElementById('vr-boek-status').addEventListener('change', laadBoekhouding);
 
     // ---------------------------------------------------------------------
     // Eenheden-conversie: massa <-> massa, volume <-> volume altijd; massa <-> volume
@@ -769,21 +777,28 @@
     // ---------------------------------------------------------------------
     async function laadBoekhouding() {
       const tbody = document.getElementById('vr-boek-tbody');
-      tbody.innerHTML = '<tr><td colspan="7" class="vr-skeleton">Loading…</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="9" class="vr-skeleton">Loading…</td></tr>';
 
-      const { data, error } = await supabaseClient
+      const statusFilter = document.getElementById('vr-boek-status').value;
+      let query = supabaseClient
         .from('voorraad_mutaties')
-        .select('id, aangemaakt_op, notitie, hoeveelheid, off_recipe, ingevoerde_hoeveelheid, ingevoerde_eenheid, batches(batchnummer, naam), grondstof_lots(ingredients(naam), eenheid), gebruikers!voorraad_mutaties_aangemaakt_door_fkey(naam)')
+        .select(`id, aangemaakt_op, notitie, hoeveelheid, off_recipe, ingevoerde_hoeveelheid, ingevoerde_eenheid,
+          geboekt_in_boekhouding, geboekt_op,
+          batches(batchnummer, naam), grondstof_lots(ingredients(naam), eenheid),
+          gebruikers!voorraad_mutaties_aangemaakt_door_fkey(naam),
+          geboekt_door_gebruiker:gebruikers!voorraad_mutaties_geboekt_door_fkey(naam)`)
         .eq('type', 'uitboeking')
-        .eq('geboekt_in_boekhouding', false)
         .order('aangemaakt_op', { ascending: false });
+      if (statusFilter === 'open') query = query.eq('geboekt_in_boekhouding', false);
+      if (statusFilter === 'afgetekend') query = query.eq('geboekt_in_boekhouding', true);
+      const { data, error } = await query;
 
       if (error) {
-        tbody.innerHTML = `<tr><td colspan="7" style="color:#a33f2c;">Could not load: ${escapeHtml(error.message)}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" style="color:#a33f2c;">Could not load: ${escapeHtml(error.message)}</td></tr>`;
         return;
       }
       if (!data || data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="vr-skeleton">Nothing pending — all caught up.</td></tr>';
+        tbody.innerHTML = `<tr><td colspan="9" class="vr-skeleton">${statusFilter === 'open' ? 'Nothing pending — all caught up.' : 'Nothing found.'}</td></tr>`;
         return;
       }
       tbody.innerHTML = data.map(m => `
@@ -794,7 +809,9 @@
           <td>${m.hoeveelheid ?? '—'} ${escapeHtml(m.grondstof_lots?.eenheid || '')}${m.ingevoerde_hoeveelheid != null ? `<br><span style="color:#999; font-size:0.85em;">entered as ${m.ingevoerde_hoeveelheid} ${escapeHtml(m.ingevoerde_eenheid || '')}</span>` : ''}</td>
           <td>${escapeHtml(m.gebruikers?.naam || '—')}</td>
           <td>${escapeHtml(m.notitie || '—')}</td>
-          <td>${magBewerken ? `<button type="button" class="vr-btn-secundair vr-afteken-btn" data-id="${m.id}">Mark booked</button>` : ''}</td>
+          <td><span class="vr-status-badge ${m.geboekt_in_boekhouding ? 'vr-status-actief' : ''}" style="${m.geboekt_in_boekhouding ? '' : 'background:#fff3d6;color:#a06a1c;'}">${m.geboekt_in_boekhouding ? 'Signed off' : 'Pending'}</span></td>
+          <td>${m.geboekt_in_boekhouding ? `${escapeHtml(m.geboekt_door_gebruiker?.naam || '—')}<br><span style="color:#999; font-size:0.85em;">${m.geboekt_op ? new Date(m.geboekt_op).toLocaleString() : ''}</span>` : '—'}</td>
+          <td>${(magBewerken && !m.geboekt_in_boekhouding) ? `<button type="button" class="vr-btn-secundair vr-afteken-btn" data-id="${m.id}">Mark booked</button>` : ''}</td>
         </tr>`).join('');
 
       tbody.querySelectorAll('.vr-afteken-btn').forEach(btn => {
