@@ -300,7 +300,6 @@
       const { data, error } = await supabaseClient
         .from('gebruikers')
         .select('id, naam')
-        .in('rol', ['admin', 'head_brewer', 'brewer'])
         .order('naam');
       if (error) { console.error('Kon gebruikerslijst niet laden:', error); select.innerHTML = '<option value="">—</option>'; return; }
       select.innerHTML = ['<option value="">—</option>']
