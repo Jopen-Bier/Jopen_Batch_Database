@@ -386,6 +386,15 @@
         .concat(eenheden.map(e => `<option value="${e}" ${e === geselecteerd ? 'selected' : ''}>${e}</option>`)).join('');
     }
 
+    // Kleine leesbaarheids-conversie voor totalen op de Accounting sign-off-pagina --
+    // alleen g->kg en ml->l, puur om af te lezen wat je moet afwegen; heeft geen
+    // invloed op wat er daadwerkelijk wordt opgeslagen/uitgeboekt.
+    function vrKgLiterConversie(hoeveelheid, eenheid) {
+      if (eenheid === 'g') return `${(hoeveelheid / 1000).toFixed(3).replace(/\.?0+$/, '')} kg`;
+      if (eenheid === 'ml') return `${(hoeveelheid / 1000).toFixed(3).replace(/\.?0+$/, '')} l`;
+      return null;
+    }
+
     // ---------------------------------------------------------------------
     // Gedeeld: ingredienten + open batches laden
     // ---------------------------------------------------------------------
@@ -968,7 +977,7 @@
             <div class="vr-boek-groep-kop" data-idx="${gIdx}">
               <span class="vr-boek-groep-chevron">${open ? '▾' : '▸'}</span>
               <span class="vr-boek-groep-naam">${escapeHtml(g.naam)}</span>
-              <span class="vr-boek-groep-totaal">${totaal.toFixed(3).replace(/\.?0+$/, '')} ${escapeHtml(g.eenheid)} — ${g.mutaties.length} booking${g.mutaties.length === 1 ? '' : 's'}</span>
+              <span class="vr-boek-groep-totaal">${totaal.toFixed(3).replace(/\.?0+$/, '')} ${escapeHtml(g.eenheid)}${vrKgLiterConversie(totaal, g.eenheid) ? ` (${vrKgLiterConversie(totaal, g.eenheid)})` : ''} — ${g.mutaties.length} booking${g.mutaties.length === 1 ? '' : 's'}</span>
               ${pending.length > 0
                 ? `<span class="vr-status-badge" style="background:#fff3d6;color:#a06a1c;">${pending.length} pending</span>`
                 : '<span class="vr-status-badge vr-status-actief">All signed off</span>'}
