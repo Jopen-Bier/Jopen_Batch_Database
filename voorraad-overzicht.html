@@ -97,7 +97,8 @@
     <div class="vo-modal">
       <h2>Lot details</h2>
       <div id="vo-lot-detail-body"></div>
-      <div style="margin-top:16px; text-align:right;">
+      <div style="margin-top:16px; display:flex; justify-content:space-between; align-items:center;">
+        <div id="vo-lot-detail-leeg-knop"></div>
         <button type="button" id="vo-lot-detail-sluiten" style="background:none;border:1px solid var(--jopen-red);color:var(--jopen-red);border-radius:6px;padding:5px 12px;cursor:pointer;">Close</button>
       </div>
     </div>
@@ -301,6 +302,14 @@
       document.getElementById('vo-lot-detail-body').innerHTML = rijen.map(([label, waarde]) =>
         `<div class="vo-detail-rij"><span class="vo-detail-label">${escapeHtml(label)}</span><span class="vo-detail-waarde">${escapeHtml(String(waarde))}</span></div>`
       ).join('');
+
+      const legeKnopContainer = document.getElementById('vo-lot-detail-leeg-knop');
+      if (magBewerken && l.resterend > 0) {
+        legeKnopContainer.innerHTML = `<button type="button" id="vo-lot-leeg-btn" style="background:none;border:1px solid #a33f2c;color:#a33f2c;border-radius:6px;padding:5px 12px;cursor:pointer;">Mark lot as empty</button>`;
+        document.getElementById('vo-lot-leeg-btn').addEventListener('click', () => zetLotOpLeeg(l, groep));
+      } else {
+        legeKnopContainer.innerHTML = '';
+      }
       document.getElementById('vo-lot-detail-overlay').style.display = 'flex';
     }
     document.getElementById('vo-lot-detail-sluiten').addEventListener('click', () => {
@@ -309,6 +318,41 @@
     document.getElementById('vo-lot-detail-overlay').addEventListener('click', (e) => {
       if (e.target.id === 'vo-lot-detail-overlay') document.getElementById('vo-lot-detail-overlay').style.display = 'none';
     });
+
+    // Boekt in één keer de resterende hoeveelheid van een lot uit (naar exact 0) en
+    // zet het lot op 'leeg'. Verwerkt als een gewone Book out material-boeking
+    // (type 'uitboeking', geen batch, gemarkeerd als correctie) zodat 'ie ook gewoon
+    // in de Accounting sign-off-lijst verschijnt en afgetekend moet worden -- net als
+    // elke andere handmatige boeking.
+    async function zetLotOpLeeg(l, groep) {
+      if (!confirm(`Book out the remaining ${vfmt(l.resterend)} ${l.eenheid || ''} of lot "${l.lotcode || '(no code)'}" and mark it as empty?`)) return;
+      const btn = document.getElementById('vo-lot-leeg-btn');
+      btn.disabled = true;
+      btn.textContent = 'Saving…';
+      const { data: { session } } = await supabaseClient.auth.getSession();
+
+      const { error: mutErr } = await supabaseClient.from('voorraad_mutaties').insert({
+        lot_id: l.id,
+        type: 'uitboeking',
+        hoeveelheid: l.resterend,
+        notitie: 'Lot marked empty from Stock overview',
+        is_correction: true,
+        geboekt_in_boekhouding: false,
+        aangemaakt_door: session?.user?.id ?? null,
+      });
+      if (mutErr) {
+        alert('Could not book out this lot: ' + mutErr.message);
+        btn.disabled = false;
+        btn.textContent = 'Mark lot as empty';
+        return;
+      }
+      const { error: lotErr } = await supabaseClient.from('grondstof_lots').update({ status: 'leeg' }).eq('id', l.id);
+      if (lotErr) {
+        alert('Booked out, but could not update the lot status: ' + lotErr.message);
+      }
+      document.getElementById('vo-lot-detail-overlay').style.display = 'none';
+      laadStockOverview();
+    }
 
     // ---------------------------------------------------------------------
     // Print / export -- gebruikt gewoon de huidige filters + huidige open/dicht-
@@ -322,7 +366,10 @@
     // ---------------------------------------------------------------------
     // Init
     // ---------------------------------------------------------------------
+    let magBewerken = false;
     window.addEventListener('DOMContentLoaded', async () => {
+      const gebruiker = await getHuidigeGebruiker();
+      magBewerken = !!gebruiker && await magBewerkenModule('inventory');
       await laadStockOverview();
     });
   </script>
