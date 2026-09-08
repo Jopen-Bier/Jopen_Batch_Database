@@ -199,6 +199,9 @@
             <option value="leeg">Empty</option>
             <option value="afgesloten">Closed</option>
           </select>
+          <select id="vr-ovz-categorie">
+            <option value="">All categories</option>
+          </select>
         </div>
         <div style="max-height:520px; overflow-y:auto;">
           <table class="vr-table">
@@ -553,7 +556,7 @@
         supabaseClient.from('grondstof_lots')
           .select(`id, ingredient_id, leverancier, lotcode, ontvangstdatum, hoeveelheid_ontvangen, eenheid,
             aantal_colli, locatie, ontvangstcontrole, ingangscontrole, tht_datum, alpha_pct, notitie, status,
-            aangemaakt_op, ingredients(naam),
+            aangemaakt_op, ingredients(naam, ingredient_categories(name)),
             ontvanger:gebruikers!grondstof_lots_ontvangen_door_fkey(naam),
             invoerder:gebruikers!grondstof_lots_aangemaakt_door_fkey(naam)`)
           .order('ontvangstdatum', { ascending: false }),
@@ -573,16 +576,29 @@
         ...l,
         resterend: Number(l.hoeveelheid_ontvangen || 0) - (uitgeboektPerLot[l.id] || 0),
       }));
+      vrVulCategorieFilter();
       renderLotOverzicht();
+    }
+
+    function vrVulCategorieFilter() {
+      const select = document.getElementById('vr-ovz-categorie');
+      const huidige = select.value;
+      const categorieen = [...new Set((window._vrLots || [])
+        .map(l => l.ingredients?.ingredient_categories?.name)
+        .filter(Boolean))].sort();
+      select.innerHTML = ['<option value="">All categories</option>']
+        .concat(categorieen.map(c => `<option value="${escapeHtml(c)}" ${c === huidige ? 'selected' : ''}>${escapeHtml(c)}</option>`)).join('');
     }
 
     function renderLotOverzicht() {
       const tbody = document.getElementById('vr-ovz-tbody');
       const zoekterm = document.getElementById('vr-ovz-zoek').value.trim().toLowerCase();
       const statusFilter = document.getElementById('vr-ovz-status').value;
+      const categorieFilter = document.getElementById('vr-ovz-categorie').value;
 
       let lots = window._vrLots || [];
       if (statusFilter) lots = lots.filter(l => l.status === statusFilter);
+      if (categorieFilter) lots = lots.filter(l => l.ingredients?.ingredient_categories?.name === categorieFilter);
       if (zoekterm) lots = lots.filter(l =>
         (l.ingredients?.naam || '').toLowerCase().includes(zoekterm) ||
         (l.leverancier || '').toLowerCase().includes(zoekterm) ||
@@ -637,6 +653,7 @@
     }
     document.getElementById('vr-ovz-zoek').addEventListener('input', renderLotOverzicht);
     document.getElementById('vr-ovz-status').addEventListener('change', renderLotOverzicht);
+    document.getElementById('vr-ovz-categorie').addEventListener('change', renderLotOverzicht);
 
     // ---------------------------------------------------------------------
     // Generieke detailpopup, gebruikt voor zowel lot- als boeking-details.
