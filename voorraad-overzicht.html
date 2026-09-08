@@ -24,11 +24,6 @@
   .vo-filters { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
   .vo-filters input, .vo-filters select { padding: 6px 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 0.9em; }
   .vo-filters label.vo-checkbox { display: flex; align-items: center; gap: 6px; font-size: 0.9em; cursor: pointer; }
-  .vo-below-min-btn {
-    background: none; border: 1px solid #a33f2c; color: #a33f2c; border-radius: 6px;
-    padding: 6px 12px; font-size: 0.88em; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px;
-  }
-  .vo-below-min-badge { background: #a33f2c; color: white; border-radius: 10px; padding: 0 6px; font-size: 0.85em; }
   .vo-print-btn {
     background: none; border: 1px solid var(--jopen-red); color: var(--jopen-red); border-radius: 6px;
     padding: 6px 12px; font-size: 0.88em; font-weight: 600; cursor: pointer;
@@ -62,10 +57,9 @@
   .vo-detail-rij { display: flex; justify-content: space-between; gap: 16px; padding: 7px 0; border-bottom: 1px solid #f0f0ee; font-size: 0.92em; }
   .vo-detail-label { color: #6b6b6b; }
   .vo-detail-waarde { text-align: right; font-weight: 500; }
-  .vo-below-min-lijst-rij { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f0f0ee; font-size: 0.92em; }
 
   @media print {
-    #jopen-nav, .vo-koppen, .vo-filters, .vo-snelkoppelingen, .vo-print-btn, .vo-below-min-btn { display: none !important; }
+    #jopen-nav, .vo-koppen, .vo-filters, .vo-snelkoppelingen, .vo-print-btn { display: none !important; }
     .vo-groep-body { display: block !important; }
     .vo-chevron { display: none; }
     section.vo-block { box-shadow: none; }
@@ -84,7 +78,7 @@
       </div>
       <div class="vo-snelkoppelingen">
         <a href="voorraad-inboeken.html">Book in</a>
-        <a href="voorraad-uitboeken.html">Book out</a>
+        <a href="voorraad-uitboeken.html">Manual booking</a>
         <a href="verbruiksprognose.html">Consumption forecast</a>
       </div>
     </div>
@@ -94,25 +88,11 @@
         <input type="text" id="vo-zoek" placeholder="Search ingredient…" style="min-width:220px;" />
         <select id="vo-categorie"><option value="">All categories</option></select>
         <label class="vo-checkbox"><input type="checkbox" id="vo-alleen-onder-min" /> Below minimum only</label>
-        <button type="button" class="vo-below-min-btn" id="vo-below-min-btn">
-          Below minimum <span class="vo-below-min-badge" id="vo-below-min-teller" style="display:none;">0</span>
-        </button>
         <button type="button" class="vo-print-btn" id="vo-print-btn">Print / export selection</button>
       </div>
       <div id="vo-lijst"><div class="vo-skeleton">Loading…</div></div>
     </section>
   </main>
-
-  <!-- Below-minimum popup -->
-  <div class="vo-overlay" id="vo-below-min-overlay">
-    <div class="vo-modal">
-      <h2>Below minimum stock</h2>
-      <div id="vo-below-min-body"></div>
-      <div style="margin-top:16px; text-align:right;">
-        <button type="button" class="vr-btn-secundair" id="vo-below-min-sluiten" style="background:none;border:1px solid var(--jopen-red);color:var(--jopen-red);border-radius:6px;padding:5px 12px;cursor:pointer;">Close</button>
-      </div>
-    </div>
-  </div>
 
   <!-- Lot-detailpopup -->
   <div class="vo-overlay" id="vo-lot-detail-overlay">
@@ -245,11 +225,6 @@
       if (zoekterm) groepen = groepen.filter(g => g.naam.toLowerCase().includes(zoekterm));
       if (alleenOnderMin) groepen = groepen.filter(isOnderMinimum);
 
-      const onderMinAantal = vrGroepen.filter(isOnderMinimum).length;
-      const teller = document.getElementById('vo-below-min-teller');
-      teller.textContent = onderMinAantal;
-      teller.style.display = onderMinAantal > 0 ? 'inline-block' : 'none';
-
       if (groepen.length === 0) {
         lijst.innerHTML = '<div class="vo-skeleton">No ingredients match these filters.</div>';
         return;
@@ -310,28 +285,6 @@
     document.getElementById('vo-zoek').addEventListener('input', renderStockLijst);
     document.getElementById('vo-categorie').addEventListener('change', renderStockLijst);
     document.getElementById('vo-alleen-onder-min').addEventListener('change', renderStockLijst);
-
-    // ---------------------------------------------------------------------
-    // Below-minimum popup
-    // ---------------------------------------------------------------------
-    document.getElementById('vo-below-min-btn').addEventListener('click', () => {
-      const onder = vrGroepen.filter(isOnderMinimum).sort((a, b) => a.naam.localeCompare(b.naam));
-      const body = document.getElementById('vo-below-min-body');
-      body.innerHTML = onder.length === 0
-        ? '<p class="vo-skeleton">Nothing below its minimum right now.</p>'
-        : onder.map(g => `
-          <div class="vo-below-min-lijst-rij">
-            <span>${escapeHtml(g.naam)}</span>
-            <span>${vfmt(g.totaal)} / ${vfmt(g.minimum)} ${escapeHtml(g.eenheid)}</span>
-          </div>`).join('');
-      document.getElementById('vo-below-min-overlay').style.display = 'flex';
-    });
-    document.getElementById('vo-below-min-sluiten').addEventListener('click', () => {
-      document.getElementById('vo-below-min-overlay').style.display = 'none';
-    });
-    document.getElementById('vo-below-min-overlay').addEventListener('click', (e) => {
-      if (e.target.id === 'vo-below-min-overlay') document.getElementById('vo-below-min-overlay').style.display = 'none';
-    });
 
     // ---------------------------------------------------------------------
     // Lot-detailpopup

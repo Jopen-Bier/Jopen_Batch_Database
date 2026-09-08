@@ -47,7 +47,7 @@ const JOPEN_MODULE_GROEPEN = [
   { naam: 'Inventory', items: [
       { naam: 'Stock overview', href: 'voorraad-overzicht.html', moduleKey: 'inventory' },
       { naam: 'Book in', href: 'voorraad-inboeken.html', moduleKey: 'inventory' },
-      { naam: 'Book out', href: 'voorraad-uitboeken.html', moduleKey: 'inventory' },
+      { naam: 'Manual booking', href: 'voorraad-uitboeken.html', moduleKey: 'inventory' },
       { naam: 'Consumption forecast', href: 'verbruiksprognose.html', moduleKey: 'brewing_planning' },
   ]},
   { naam: 'Configuration', items: [
