@@ -89,6 +89,7 @@
         <input type="text" id="vo-zoek" placeholder="Search ingredient…" style="min-width:220px;" />
         <select id="vo-categorie"><option value="">All categories</option></select>
         <label class="vo-checkbox"><input type="checkbox" id="vo-alleen-onder-min" /> Below minimum only</label>
+        <label class="vo-checkbox"><input type="checkbox" id="vo-toon-leeg" /> Show empty stock</label>
         <button type="button" class="vo-print-btn" id="vo-print-btn">Print / export selection</button>
         <a href="voorraad-inboeken.html" class="vo-book-in-btn">+ Book in</a>
       </div>
@@ -222,11 +223,13 @@
       const zoekterm = document.getElementById('vo-zoek').value.trim().toLowerCase();
       const categorieFilter = document.getElementById('vo-categorie').value;
       const alleenOnderMin = document.getElementById('vo-alleen-onder-min').checked;
+      const toonLeeg = document.getElementById('vo-toon-leeg').checked;
 
       let groepen = vrGroepen;
       if (categorieFilter) groepen = groepen.filter(g => g.categorie === categorieFilter);
       if (zoekterm) groepen = groepen.filter(g => g.naam.toLowerCase().includes(zoekterm));
       if (alleenOnderMin) groepen = groepen.filter(isOnderMinimum);
+      if (!toonLeeg) groepen = groepen.filter(g => g.totaal > 0);
 
       if (groepen.length === 0) {
         lijst.innerHTML = '<div class="vo-skeleton">No ingredients match these filters.</div>';
@@ -288,6 +291,7 @@
     document.getElementById('vo-zoek').addEventListener('input', renderStockLijst);
     document.getElementById('vo-categorie').addEventListener('change', renderStockLijst);
     document.getElementById('vo-alleen-onder-min').addEventListener('change', renderStockLijst);
+    document.getElementById('vo-toon-leeg').addEventListener('change', renderStockLijst);
 
     // ---------------------------------------------------------------------
     // Lot-detailpopup
