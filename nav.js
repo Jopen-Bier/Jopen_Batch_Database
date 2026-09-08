@@ -39,15 +39,16 @@ const JOPEN_MODULE_GROEPEN = [
   ]},
   { naam: 'Planning', items: [
       { naam: 'Brewing planning', href: 'brouwplanning.html', moduleKey: 'brewing_planning' },
-      { naam: 'Consumption forecast', href: 'verbruiksprognose.html', moduleKey: 'brewing_planning' },
   ]},
   { naam: 'Databases', items: [
       { naam: 'Recipes', href: 'receptoverzicht.html', moduleKey: 'recipes' },
       { naam: 'Ingredients', href: 'ingredienten.html', moduleKey: 'ingredients' },
   ]},
   { naam: 'Inventory', items: [
+      { naam: 'Stock overview', href: 'voorraad-overzicht.html', moduleKey: 'inventory' },
       { naam: 'Book in', href: 'voorraad-inboeken.html', moduleKey: 'inventory' },
       { naam: 'Book out', href: 'voorraad-uitboeken.html', moduleKey: 'inventory' },
+      { naam: 'Consumption forecast', href: 'verbruiksprognose.html', moduleKey: 'brewing_planning' },
   ]},
   { naam: 'Configuration', items: [
       { naam: 'Settings', href: 'settings.html', moduleKey: 'settings' },

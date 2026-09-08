@@ -83,13 +83,8 @@
   <div id="jopen-nav"></div>
 
   <main class="vr-main">
-    <h1 style="margin-bottom:2px;">Book in</h1>
-    <p class="jopen-subtitel" style="margin-top:0;">Receive raw material lots and see what's currently in stock.</p>
-
-    <div class="vr-tabs">
-      <button type="button" class="vr-tab-btn actief" data-tab="ontvangst">Receiving</button>
-      <button type="button" class="vr-tab-btn" data-tab="overzicht">Lot overview</button>
-    </div>
+    <h1 style="margin-bottom:2px;">Book in — Receiving</h1>
+    <p class="jopen-subtitel" style="margin-top:0;">Register a newly received raw material lot. Current stock and lot history live on <a href="voorraad-overzicht.html">Stock overview</a>.</p>
 
     <!-- ===================== ONTVANGST ===================== -->
     <div class="vr-tab-panel actief" data-tab="ontvangst">
@@ -143,45 +138,12 @@
       </section>
     </div>
 
-    <!-- ===================== LOT OVERZICHT ===================== -->
-    <div class="vr-tab-panel" data-tab="overzicht">
-      <section class="vr-block">
-        <h2>Lots</h2>
-        <div class="vr-filters">
-          <input type="text" id="vr-ovz-zoek" placeholder="Search ingredient / supplier / lot code…" style="min-width:260px;" />
-          <select id="vr-ovz-status">
-            <option value="">All statuses</option>
-            <option value="actief">Active</option>
-            <option value="leeg">Empty</option>
-            <option value="afgesloten">Closed</option>
-          </select>
-          <select id="vr-ovz-categorie">
-            <option value="">All categories</option>
-          </select>
-        </div>
-        <div style="max-height:520px; overflow-y:auto;">
-          <table class="vr-table">
-            <thead><tr>
-              <th>Ingredient</th><th>Supplier</th><th>Lot code</th><th>Received</th>
-              <th>Qty received</th><th>Remaining</th><th>Status</th><th></th>
-            </tr></thead>
-            <tbody id="vr-ovz-tbody"><tr><td colspan="8" class="vr-skeleton">Loading…</td></tr></tbody>
-          </table>
+          <button type="button" id="vr-ontv-btn" class="vr-btn" disabled>Register lot</button>
+          <span id="vr-ontv-melding" class="vr-melding"></span>
         </div>
       </section>
     </div>
   </main>
-
-  <!-- Lot-detailpopup -->
-  <div class="vr-overlay" id="vr-lot-detail-overlay">
-    <div class="vr-detail-modal">
-      <h2 id="vr-lot-detail-titel">Lot details</h2>
-      <div id="vr-lot-detail-body"></div>
-      <div style="margin-top:16px; text-align:right;">
-        <button type="button" id="vr-lot-detail-sluiten" class="vr-btn-secundair">Close</button>
-      </div>
-    </div>
-  </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
@@ -189,7 +151,6 @@
   <script>
     let alleIngredienten = [];       // {id, naam, eenheid, leveranciers, usesAlphaPct}
     let magBewerken = false;
-    let magVerwijderen = false;
     let geselecteerdIngredientOntv = null;
 
     function escapeHtml(str) {
@@ -204,18 +165,6 @@
       select.innerHTML = ['<option value="">—</option>']
         .concat(eenheden.map(e => `<option value="${e}" ${e === geselecteerd ? 'selected' : ''}>${e}</option>`)).join('');
     }
-
-    // ---------------------------------------------------------------------
-    // Tabs
-    // ---------------------------------------------------------------------
-    document.querySelectorAll('.vr-tab-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const tab = btn.dataset.tab;
-        document.querySelectorAll('.vr-tab-btn').forEach(b => b.classList.toggle('actief', b === btn));
-        document.querySelectorAll('.vr-tab-panel').forEach(p => p.classList.toggle('actief', p.dataset.tab === tab));
-        if (tab === 'overzicht') laadLotOverzicht();
-      });
-    });
 
     // ---------------------------------------------------------------------
     // Gedeeld: ingredienten laden
@@ -277,12 +226,12 @@
       // want een ontvangst kan altijd van een afwijkende leverancier komen.
       document.getElementById('vr-ontv-leverancier-lijst').innerHTML =
         ing.leveranciers.map(l => `<option value="${escapeHtml(l)}"></option>`).join('');
-      // Unit vooraf invullen vanuit de ingredient-kaart -- alleen als dat daadwerkelijk een
-      // fysieke ontvangst-eenheid is (kg/g/l/ml/stuks). Bij additives staat hier vaak een
-      // tarief (bv. g/hl, de doseer-eenheid uit het recept) -- dat is geen ontvangst-eenheid
-      // en wordt dus bewust NIET overgenomen; de operator kiest dan zelf.
-      if (ing.eenheid && VR_FYSIEKE_EENHEDEN.includes(ing.eenheid)) {
-        document.getElementById('vr-ontv-eenheid').value = ing.eenheid;
+      // Unit vooraf invullen vanuit de ingredient-kaart. Bij additives staat hier een
+      // tarief (bv. g/hl, de doseer-eenheid uit het recept) -- de fysieke voorraad-eenheid
+      // is dan het deel vóór de "/" (g/hl -> g), dus die pakken we, niet de hele rate.
+      const afgeleideEenheid = ing.eenheid ? ing.eenheid.split('/')[0] : '';
+      if (afgeleideEenheid && VR_FYSIEKE_EENHEDEN.includes(afgeleideEenheid)) {
+        document.getElementById('vr-ontv-eenheid').value = afgeleideEenheid;
       }
       werkOntvKnopBij();
     });
@@ -344,165 +293,11 @@
     });
 
     // ---------------------------------------------------------------------
-    // LOT OVERZICHT
-    // ---------------------------------------------------------------------
-    // "Remaining" wordt client-side afgeleid: ontvangen − som(uitboekingen).
-    // Correcties worden hier bewust nog niet in meegenomen (komen zelden voor
-    // en de eerste versie houdt de berekening simpel) -- als dat in de
-    // praktijk een probleem blijkt, is dit de plek om het uit te breiden.
-    async function laadLotOverzicht() {
-      const tbody = document.getElementById('vr-ovz-tbody');
-      tbody.innerHTML = '<tr><td colspan="8" class="vr-skeleton">Loading…</td></tr>';
-
-      const [lotsRes, mutRes] = await Promise.all([
-        supabaseClient.from('grondstof_lots')
-          .select(`id, ingredient_id, leverancier, lotcode, ontvangstdatum, hoeveelheid_ontvangen, eenheid,
-            aantal_colli, locatie, ontvangstcontrole, ingangscontrole, tht_datum, alpha_pct, notitie, status,
-            aangemaakt_op, ingredients(naam, ingredient_categories(name)),
-            ontvanger:gebruikers!grondstof_lots_ontvangen_door_fkey(naam),
-            invoerder:gebruikers!grondstof_lots_aangemaakt_door_fkey(naam)`)
-          .order('ontvangstdatum', { ascending: false }),
-        supabaseClient.from('voorraad_mutaties').select('lot_id, hoeveelheid').eq('type', 'uitboeking'),
-      ]);
-      if (lotsRes.error) {
-        tbody.innerHTML = `<tr><td colspan="8" style="color:#a33f2c;">Could not load lots: ${escapeHtml(lotsRes.error.message)}</td></tr>`;
-        return;
-      }
-      const uitgeboektPerLot = {};
-      (mutRes.data || []).forEach(m => {
-        if (m.lot_id == null) return;
-        uitgeboektPerLot[m.lot_id] = (uitgeboektPerLot[m.lot_id] || 0) + Number(m.hoeveelheid || 0);
-      });
-
-      window._vrLots = (lotsRes.data || []).map(l => ({
-        ...l,
-        resterend: Number(l.hoeveelheid_ontvangen || 0) - (uitgeboektPerLot[l.id] || 0),
-      }));
-      vrVulCategorieFilter();
-      renderLotOverzicht();
-    }
-
-    function vrVulCategorieFilter() {
-      const select = document.getElementById('vr-ovz-categorie');
-      const huidige = select.value;
-      const categorieen = [...new Set((window._vrLots || [])
-        .map(l => l.ingredients?.ingredient_categories?.name)
-        .filter(Boolean))].sort();
-      select.innerHTML = ['<option value="">All categories</option>']
-        .concat(categorieen.map(c => `<option value="${escapeHtml(c)}" ${c === huidige ? 'selected' : ''}>${escapeHtml(c)}</option>`)).join('');
-    }
-
-    function renderLotOverzicht() {
-      const tbody = document.getElementById('vr-ovz-tbody');
-      const zoekterm = document.getElementById('vr-ovz-zoek').value.trim().toLowerCase();
-      const statusFilter = document.getElementById('vr-ovz-status').value;
-      const categorieFilter = document.getElementById('vr-ovz-categorie').value;
-
-      let lots = window._vrLots || [];
-      if (statusFilter) lots = lots.filter(l => l.status === statusFilter);
-      if (categorieFilter) lots = lots.filter(l => l.ingredients?.ingredient_categories?.name === categorieFilter);
-      if (zoekterm) lots = lots.filter(l =>
-        (l.ingredients?.naam || '').toLowerCase().includes(zoekterm) ||
-        (l.leverancier || '').toLowerCase().includes(zoekterm) ||
-        (l.lotcode || '').toLowerCase().includes(zoekterm));
-
-      if (lots.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="vr-skeleton">No lots found.</td></tr>';
-        return;
-      }
-      tbody.innerHTML = lots.map(l => `
-        <tr class="vr-lot-rij" data-id="${l.id}" style="cursor:pointer;">
-          <td>${escapeHtml(l.ingredients?.naam || '—')}</td>
-          <td>${escapeHtml(l.leverancier || '—')}</td>
-          <td>${escapeHtml(l.lotcode || '—')}</td>
-          <td>${l.ontvangstdatum || '—'}</td>
-          <td>${l.hoeveelheid_ontvangen ?? '—'} ${escapeHtml(l.eenheid || '')}</td>
-          <td>${l.resterend.toFixed(3).replace(/\.?0+$/, '')} ${escapeHtml(l.eenheid || '')}</td>
-          <td><span class="vr-status-badge vr-status-${l.status}">${l.status}</span></td>
-          <td>
-            ${(magBewerken && l.status === 'actief') ? `<button type="button" class="vr-btn-secundair vr-sluit-lot-btn" data-id="${l.id}">Close lot</button>` : ''}
-            ${magVerwijderen ? `<button type="button" class="vr-btn-secundair vr-verwijder-lot-btn" data-id="${l.id}" style="color:#a33f2c;border-color:#a33f2c;margin-left:6px;">Delete</button>` : ''}
-          </td>
-        </tr>`).join('');
-
-      tbody.querySelectorAll('.vr-lot-rij').forEach(tr => {
-        tr.addEventListener('click', (e) => {
-          if (e.target.closest('.vr-sluit-lot-btn') || e.target.closest('.vr-verwijder-lot-btn')) return; // knoppen hebben hun eigen handler
-          const lot = (window._vrLots || []).find(l => String(l.id) === tr.dataset.id);
-          if (lot) toonLotDetail(lot);
-        });
-      });
-      tbody.querySelectorAll('.vr-sluit-lot-btn').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-          e.stopPropagation();
-          if (!confirm('Close this lot? It will no longer be offered as an option when booking out stock.')) return;
-          btn.disabled = true;
-          const { error } = await supabaseClient.from('grondstof_lots').update({ status: 'afgesloten' }).eq('id', btn.dataset.id);
-          if (error) { alert('Could not close lot: ' + error.message); btn.disabled = false; return; }
-          laadLotOverzicht();
-        });
-      });
-      tbody.querySelectorAll('.vr-verwijder-lot-btn').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-          e.stopPropagation();
-          if (!confirm('Delete this lot permanently? This cannot be undone, and will fail if bookings already reference it.')) return;
-          btn.disabled = true;
-          const { error } = await supabaseClient.from('grondstof_lots').delete().eq('id', btn.dataset.id);
-          if (error) { alert('Could not delete lot: ' + error.message); btn.disabled = false; return; }
-          laadLotOverzicht();
-        });
-      });
-    }
-    document.getElementById('vr-ovz-zoek').addEventListener('input', renderLotOverzicht);
-    document.getElementById('vr-ovz-status').addEventListener('change', renderLotOverzicht);
-    document.getElementById('vr-ovz-categorie').addEventListener('change', renderLotOverzicht);
-
-    // ---------------------------------------------------------------------
-    // Lot-detailpopup
-    // ---------------------------------------------------------------------
-    function toonDetailPopup(titel, rijen) {
-      document.getElementById('vr-lot-detail-titel').textContent = titel;
-      document.getElementById('vr-lot-detail-body').innerHTML = rijen.map(([label, waarde]) =>
-        `<div class="vr-detail-rij"><span class="vr-detail-label">${escapeHtml(label)}</span><span class="vr-detail-waarde">${escapeHtml(String(waarde))}</span></div>`
-      ).join('');
-      document.getElementById('vr-lot-detail-overlay').style.display = 'flex';
-    }
-
-    function toonLotDetail(l) {
-      toonDetailPopup('Lot details', [
-        ['Ingredient', l.ingredients?.naam || '—'],
-        ['Supplier', l.leverancier || '—'],
-        ['Lot / batch code', l.lotcode || '—'],
-        ['Receiving date', l.ontvangstdatum || '—'],
-        ['Quantity received', `${l.hoeveelheid_ontvangen ?? '—'} ${l.eenheid || ''}`],
-        ['Remaining', `${l.resterend.toFixed(3).replace(/\.?0+$/, '')} ${l.eenheid || ''}`],
-        ['Number of packages', l.aantal_colli || '—'],
-        ['Location', l.locatie || '—'],
-        ['Best-before date', l.tht_datum || '—'],
-        ...(l.alpha_pct != null ? [['Alpha % (this lot)', l.alpha_pct + '%']] : []),
-        ['Receiving check done', l.ontvangstcontrole ? 'Yes' : 'No'],
-        ['Incoming check done', l.ingangscontrole ? 'Yes' : 'No'],
-        ['Received by', l.ontvanger?.naam || '—'],
-        ['Notes', l.notitie || '—'],
-        ['Status', l.status],
-        ['Entered by', l.invoerder?.naam || '—'],
-        ['Entered on', l.aangemaakt_op ? new Date(l.aangemaakt_op).toLocaleString() : '—'],
-      ]);
-    }
-    document.getElementById('vr-lot-detail-sluiten').addEventListener('click', () => {
-      document.getElementById('vr-lot-detail-overlay').style.display = 'none';
-    });
-    document.getElementById('vr-lot-detail-overlay').addEventListener('click', (e) => {
-      if (e.target.id === 'vr-lot-detail-overlay') document.getElementById('vr-lot-detail-overlay').style.display = 'none';
-    });
-
-    // ---------------------------------------------------------------------
     // Init
     // ---------------------------------------------------------------------
     window.addEventListener('DOMContentLoaded', async () => {
       const gebruiker = await getHuidigeGebruiker();
       magBewerken = !!gebruiker && await magBewerkenModule('inventory');
-      magVerwijderen = !!gebruiker && await magVerwijderenModule('inventory');
 
       document.getElementById('vr-ontv-geen-rechten').style.display = magBewerken ? 'none' : 'block';
       document.getElementById('vr-ontv-formulier').style.display = magBewerken ? 'block' : 'none';

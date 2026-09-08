@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jopen — Stock overview</title>
+<link rel="stylesheet" href="jopen-shared.css">
+<style>
+  main.vo-main { max-width: 1150px; margin: 0 auto; padding: 24px; }
+  .vo-koppen { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; }
+  .vo-snelkoppelingen { display: flex; gap: 8px; }
+  .vo-snelkoppelingen a {
+    background: #f5f4f1; border: 1px solid #ddd; border-radius: 8px; padding: 8px 14px;
+    font-size: 0.88em; font-weight: 600; color: #333; text-decoration: none;
+  }
+  .vo-snelkoppelingen a:hover { background: var(--jopen-red-tint); }
+  section.vo-block {
+    background: white; border-radius: 10px; padding: 20px 22px; margin-bottom: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  .vo-filters { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+  .vo-filters input, .vo-filters select { padding: 6px 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 0.9em; }
+  .vo-filters label.vo-checkbox { display: flex; align-items: center; gap: 6px; font-size: 0.9em; cursor: pointer; }
+  .vo-below-min-btn {
+    background: none; border: 1px solid #a33f2c; color: #a33f2c; border-radius: 6px;
+    padding: 6px 12px; font-size: 0.88em; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px;
+  }
+  .vo-below-min-badge { background: #a33f2c; color: white; border-radius: 10px; padding: 0 6px; font-size: 0.85em; }
+  .vo-print-btn {
+    background: none; border: 1px solid var(--jopen-red); color: var(--jopen-red); border-radius: 6px;
+    padding: 6px 12px; font-size: 0.88em; font-weight: 600; cursor: pointer;
+  }
+  .vo-skeleton { color: #bbb; }
+  .vo-groep { border: 1px solid #eee; border-radius: 8px; margin-bottom: 8px; overflow: hidden; }
+  .vo-groep.vo-onder-minimum { border-color: #a33f2c; }
+  .vo-groep-kop { display: flex; align-items: center; gap: 14px; padding: 10px 14px; cursor: pointer; flex-wrap: wrap; }
+  .vo-groep-kop:hover { background: #fafaf8; }
+  .vo-chevron { color: #999; width: 12px; }
+  .vo-groep-naam { font-weight: 600; flex: 1; min-width: 160px; }
+  .vo-groep-categorie { color: #999; font-size: 0.78em; text-transform: uppercase; letter-spacing: 0.03em; }
+  .vo-groep-voorraad { font-size: 0.92em; min-width: 120px; }
+  .vo-groep-loopt-leeg { font-size: 0.85em; color: #6b6b6b; min-width: 160px; }
+  .vo-groep-loopt-leeg.vo-urgent { color: #a33f2c; font-weight: 600; }
+  .vo-status-badge { padding: 2px 8px; border-radius: 10px; font-size: 0.8em; font-weight: 600; }
+  .vo-status-onder-min { background: #fdeceb; color: #a33f2c; }
+  .vo-status-ok { background: #e6f4ea; color: #2f7d3c; }
+  .vo-groep-body { border-top: 1px solid #eee; padding: 4px 14px 10px; }
+  table.vo-table { width: 100%; border-collapse: collapse; font-size: 0.88em; }
+  table.vo-table th, table.vo-table td { text-align: left; padding: 7px 10px; border-bottom: 1px solid #eee; }
+  table.vo-table th { color: #6b6b6b; font-weight: 600; font-size: 0.85em; }
+  .vo-lot-rij:hover { background: var(--jopen-red-tint); }
+  .vo-lot-rij { cursor: pointer; }
+  .vo-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 200;
+    display: none; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 30px 16px;
+  }
+  .vo-modal { background: white; border-radius: 10px; max-width: 560px; width: 100%; padding: 22px 26px; margin-bottom: 30px; }
+  .vo-modal h2 { margin-top: 0; font-size: 1.1em; color: var(--jopen-red); }
+  .vo-detail-rij { display: flex; justify-content: space-between; gap: 16px; padding: 7px 0; border-bottom: 1px solid #f0f0ee; font-size: 0.92em; }
+  .vo-detail-label { color: #6b6b6b; }
+  .vo-detail-waarde { text-align: right; font-weight: 500; }
+  .vo-below-min-lijst-rij { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f0f0ee; font-size: 0.92em; }
+
+  @media print {
+    #jopen-nav, .vo-koppen, .vo-filters, .vo-snelkoppelingen, .vo-print-btn, .vo-below-min-btn { display: none !important; }
+    .vo-groep-body { display: block !important; }
+    .vo-chevron { display: none; }
+    section.vo-block { box-shadow: none; }
+  }
+</style>
+</head>
+<body>
+
+  <div id="jopen-nav"></div>
+
+  <main class="vo-main">
+    <div class="vo-koppen">
+      <div>
+        <h1 style="margin-bottom:2px;">Stock overview</h1>
+        <p class="jopen-subtitel" style="margin-top:0;">Current stock per ingredient, with alerts for low stock and projected shortages.</p>
+      </div>
+      <div class="vo-snelkoppelingen">
+        <a href="voorraad-inboeken.html">Book in</a>
+        <a href="voorraad-uitboeken.html">Book out</a>
+        <a href="verbruiksprognose.html">Consumption forecast</a>
+      </div>
+    </div>
+
+    <section class="vo-block">
+      <div class="vo-filters">
+        <input type="text" id="vo-zoek" placeholder="Search ingredient…" style="min-width:220px;" />
+        <select id="vo-categorie"><option value="">All categories</option></select>
+        <label class="vo-checkbox"><input type="checkbox" id="vo-alleen-onder-min" /> Below minimum only</label>
+        <button type="button" class="vo-below-min-btn" id="vo-below-min-btn">
+          Below minimum <span class="vo-below-min-badge" id="vo-below-min-teller" style="display:none;">0</span>
+        </button>
+        <button type="button" class="vo-print-btn" id="vo-print-btn">Print / export selection</button>
+      </div>
+      <div id="vo-lijst"><div class="vo-skeleton">Loading…</div></div>
+    </section>
+  </main>
+
+  <!-- Below-minimum popup -->
+  <div class="vo-overlay" id="vo-below-min-overlay">
+    <div class="vo-modal">
+      <h2>Below minimum stock</h2>
+      <div id="vo-below-min-body"></div>
+      <div style="margin-top:16px; text-align:right;">
+        <button type="button" class="vr-btn-secundair" id="vo-below-min-sluiten" style="background:none;border:1px solid var(--jopen-red);color:var(--jopen-red);border-radius:6px;padding:5px 12px;cursor:pointer;">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Lot-detailpopup -->
+  <div class="vo-overlay" id="vo-lot-detail-overlay">
+    <div class="vo-modal">
+      <h2>Lot details</h2>
+      <div id="vo-lot-detail-body"></div>
+      <div style="margin-top:16px; text-align:right;">
+        <button type="button" id="vo-lot-detail-sluiten" style="background:none;border:1px solid var(--jopen-red);color:var(--jopen-red);border-radius:6px;padding:5px 12px;cursor:pointer;">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="nav.js"></script>
+  <script src="voorraad-forecast.js"></script>
+  <script>
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str ?? '';
+      return div.innerHTML;
+    }
+    function vfmt(n) {
+      if (n === null || n === undefined || Number.isNaN(n)) return '—';
+      return Number(n).toFixed(3).replace(/\.?0+$/, '');
+    }
+
+    let vrGroepen = [];   // [{ ingredientId, naam, eenheid, categorie, minimum, totaal, loopLeegWeek, lots: [...] }]
+    let vrOpen = new Set();
+    const WEKEN_VOORUITKIJK = 52; // hoe ver vooruit we op basis van brew_planning projecteren
+
+    async function laadStockOverview() {
+      const lijst = document.getElementById('vo-lijst');
+      lijst.innerHTML = '<div class="vo-skeleton">Loading…</div>';
+
+      const [ingrRes, lotsRes, mutRes, forecastRes] = await Promise.all([
+        supabaseClient.from('ingredients')
+          .select('id, naam, eenheid, minimum_voorraad, category_id, ingredient_categories(name)')
+          .eq('versie_status', 'huidig'),
+        supabaseClient.from('grondstof_lots')
+          .select('id, ingredient_id, lotcode, leverancier, ontvangstdatum, hoeveelheid_ontvangen, eenheid, tht_datum, locatie, status')
+          .eq('status', 'actief'),
+        supabaseClient.from('voorraad_mutaties').select('lot_id, hoeveelheid').eq('type', 'uitboeking'),
+        vfBerekenVerbruik(supabaseClient, vfVooruitkijkPeriodes(WEKEN_VOORUITKIJK)),
+      ]);
+
+      if (ingrRes.error || lotsRes.error) {
+        lijst.innerHTML = `<div style="color:#a33f2c;">Could not load stock: ${escapeHtml((ingrRes.error || lotsRes.error).message)}</div>`;
+        return;
+      }
+
+      const uitgeboektPerLot = {};
+      (mutRes.data || []).forEach(m => {
+        if (m.lot_id == null) return;
+        uitgeboektPerLot[m.lot_id] = (uitgeboektPerLot[m.lot_id] || 0) + Number(m.hoeveelheid || 0);
+      });
+      const lots = (lotsRes.data || []).map(l => ({
+        ...l, resterend: Number(l.hoeveelheid_ontvangen || 0) - (uitgeboektPerLot[l.id] || 0),
+      }));
+
+      const ingredientMap = {};
+      (ingrRes.data || []).forEach(i => { ingredientMap[i.id] = i; });
+
+      // Groeperen per ingrediënt + eenheid (net als Accounting sign-off: nooit kg/l
+      // door elkaar optellen als dat ooit zou voorkomen).
+      const groepenMap = new Map();
+      lots.forEach(l => {
+        const ing = ingredientMap[l.ingredient_id];
+        const naam = ing?.naam || `#${l.ingredient_id}`;
+        const sleutel = `${l.ingredient_id}|${l.eenheid || ''}`;
+        if (!groepenMap.has(sleutel)) {
+          groepenMap.set(sleutel, {
+            ingredientId: l.ingredient_id, naam, eenheid: l.eenheid || '',
+            categorie: ing?.ingredient_categories?.name || null,
+            minimum: ing?.minimum_voorraad != null ? Number(ing.minimum_voorraad) : null,
+            totaal: 0, lots: [],
+          });
+        }
+        const g = groepenMap.get(sleutel);
+        g.totaal += l.resterend;
+        g.lots.push(l);
+      });
+
+      // Ook ingrediënten met een ingesteld minimum maar (nu) geen enkel actief lot
+      // laten zien -- juist dat "0 op voorraad, minimum was 5kg" geval is precies
+      // waar het bijna-leeg-signaal voor bedoeld is.
+      (ingrRes.data || []).forEach(i => {
+        if (i.minimum_voorraad == null) return;
+        const heeftAlEenGroep = [...groepenMap.values()].some(g => g.ingredientId === i.id);
+        if (heeftAlEenGroep) return;
+        const afgeleideEenheid = (i.eenheid || '').split('/')[0] || '';
+        groepenMap.set(`${i.id}|leeg`, {
+          ingredientId: i.id, naam: i.naam, eenheid: afgeleideEenheid,
+          categorie: i.ingredient_categories?.name || null,
+          minimum: Number(i.minimum_voorraad), totaal: 0, lots: [],
+        });
+      });
+
+      // Loopt-leeg-projectie koppelen (zelfde ingredient+canonieke eenheid-sleutel als
+      // voorraad-forecast.js zelf gebruikt).
+      vrGroepen = [...groepenMap.values()].map(g => {
+        const forecastKey = `${g.ingredientId}|${vfCanoniekeEenheid(g.eenheid)}`;
+        const forecastEntry = (forecastRes && forecastRes.perIngredient) ? forecastRes.perIngredient[forecastKey] : null;
+        const loopLeegWeek = forecastEntry ? vfLoopVoorraadVooruit(g.totaal, forecastEntry.perWeek) : null;
+        return { ...g, loopLeegWeek };
+      }).sort((a, b) => a.naam.localeCompare(b.naam));
+
+      vulCategorieFilter();
+      renderStockLijst();
+    }
+
+    function vulCategorieFilter() {
+      const select = document.getElementById('vo-categorie');
+      const huidige = select.value;
+      const categorieen = [...new Set(vrGroepen.map(g => g.categorie).filter(Boolean))].sort();
+      select.innerHTML = ['<option value="">All categories</option>']
+        .concat(categorieen.map(c => `<option value="${escapeHtml(c)}" ${c === huidige ? 'selected' : ''}>${escapeHtml(c)}</option>`)).join('');
+    }
+
+    function isOnderMinimum(g) { return g.minimum != null && g.totaal < g.minimum; }
+
+    function renderStockLijst() {
+      const lijst = document.getElementById('vo-lijst');
+      const zoekterm = document.getElementById('vo-zoek').value.trim().toLowerCase();
+      const categorieFilter = document.getElementById('vo-categorie').value;
+      const alleenOnderMin = document.getElementById('vo-alleen-onder-min').checked;
+
+      let groepen = vrGroepen;
+      if (categorieFilter) groepen = groepen.filter(g => g.categorie === categorieFilter);
+      if (zoekterm) groepen = groepen.filter(g => g.naam.toLowerCase().includes(zoekterm));
+      if (alleenOnderMin) groepen = groepen.filter(isOnderMinimum);
+
+      const onderMinAantal = vrGroepen.filter(isOnderMinimum).length;
+      const teller = document.getElementById('vo-below-min-teller');
+      teller.textContent = onderMinAantal;
+      teller.style.display = onderMinAantal > 0 ? 'inline-block' : 'none';
+
+      if (groepen.length === 0) {
+        lijst.innerHTML = '<div class="vo-skeleton">No ingredients match these filters.</div>';
+        return;
+      }
+
+      lijst.innerHTML = groepen.map((g, idx) => {
+        const open = vrOpen.has(g.ingredientId + '|' + g.eenheid);
+        const onderMin = isOnderMinimum(g);
+        const loopLeegTekst = g.loopLeegWeek
+          ? `Runs out around ${escapeHtml(g.loopLeegWeek)} (based on planning)`
+          : (g.totaal <= 0 ? 'No stock' : 'No shortage expected within planning horizon');
+        return `
+          <div class="vo-groep ${onderMin ? 'vo-onder-minimum' : ''}" data-key="${g.ingredientId}|${g.eenheid}">
+            <div class="vo-groep-kop">
+              <span class="vo-chevron">${open ? '▾' : '▸'}</span>
+              <span class="vo-groep-naam">${escapeHtml(g.naam)}${g.categorie ? ` <span class="vo-groep-categorie">${escapeHtml(g.categorie)}</span>` : ''}</span>
+              <span class="vo-groep-voorraad">${vfmt(g.totaal)} ${escapeHtml(g.eenheid)}${g.minimum != null ? ` <span style="color:#999;">(min ${vfmt(g.minimum)})</span>` : ''}</span>
+              <span class="vo-groep-loopt-leeg ${g.loopLeegWeek ? 'vo-urgent' : ''}">${loopLeegTekst}</span>
+              ${onderMin ? '<span class="vo-status-badge vo-status-onder-min">Below minimum</span>' : ''}
+            </div>
+            <div class="vo-groep-body" style="${open ? '' : 'display:none;'}">
+              ${g.lots.length === 0 ? '<p class="vo-skeleton">No active lots.</p>' : `
+              <table class="vo-table">
+                <thead><tr><th>Lot code</th><th>Supplier</th><th>Received</th><th>Qty received</th><th>Remaining</th><th>Best-before</th><th>Location</th></tr></thead>
+                <tbody>
+                  ${g.lots.map(l => `
+                    <tr class="vo-lot-rij" data-id="${l.id}">
+                      <td>${escapeHtml(l.lotcode || '(no code)')}</td>
+                      <td>${escapeHtml(l.leverancier || '—')}</td>
+                      <td>${l.ontvangstdatum || '—'}</td>
+                      <td>${l.hoeveelheid_ontvangen ?? '—'} ${escapeHtml(l.eenheid || '')}</td>
+                      <td>${vfmt(l.resterend)} ${escapeHtml(l.eenheid || '')}</td>
+                      <td>${l.tht_datum || '—'}</td>
+                      <td>${escapeHtml(l.locatie || '—')}</td>
+                    </tr>`).join('')}
+                </tbody>
+              </table>`}
+            </div>
+          </div>`;
+      }).join('');
+
+      lijst.querySelectorAll('.vo-groep-kop').forEach(kop => {
+        kop.addEventListener('click', () => {
+          const key = kop.closest('.vo-groep').dataset.key;
+          if (vrOpen.has(key)) vrOpen.delete(key); else vrOpen.add(key);
+          renderStockLijst();
+        });
+      });
+      lijst.querySelectorAll('.vo-lot-rij').forEach(tr => {
+        tr.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const groep = groepen.find(g => g.lots.some(l => String(l.id) === tr.dataset.id));
+          const lot = groep?.lots.find(l => String(l.id) === tr.dataset.id);
+          if (lot) toonLotDetail(lot, groep);
+        });
+      });
+    }
+    document.getElementById('vo-zoek').addEventListener('input', renderStockLijst);
+    document.getElementById('vo-categorie').addEventListener('change', renderStockLijst);
+    document.getElementById('vo-alleen-onder-min').addEventListener('change', renderStockLijst);
+
+    // ---------------------------------------------------------------------
+    // Below-minimum popup
+    // ---------------------------------------------------------------------
+    document.getElementById('vo-below-min-btn').addEventListener('click', () => {
+      const onder = vrGroepen.filter(isOnderMinimum).sort((a, b) => a.naam.localeCompare(b.naam));
+      const body = document.getElementById('vo-below-min-body');
+      body.innerHTML = onder.length === 0
+        ? '<p class="vo-skeleton">Nothing below its minimum right now.</p>'
+        : onder.map(g => `
+          <div class="vo-below-min-lijst-rij">
+            <span>${escapeHtml(g.naam)}</span>
+            <span>${vfmt(g.totaal)} / ${vfmt(g.minimum)} ${escapeHtml(g.eenheid)}</span>
+          </div>`).join('');
+      document.getElementById('vo-below-min-overlay').style.display = 'flex';
+    });
+    document.getElementById('vo-below-min-sluiten').addEventListener('click', () => {
+      document.getElementById('vo-below-min-overlay').style.display = 'none';
+    });
+    document.getElementById('vo-below-min-overlay').addEventListener('click', (e) => {
+      if (e.target.id === 'vo-below-min-overlay') document.getElementById('vo-below-min-overlay').style.display = 'none';
+    });
+
+    // ---------------------------------------------------------------------
+    // Lot-detailpopup
+    // ---------------------------------------------------------------------
+    function toonLotDetail(l, groep) {
+      const rijen = [
+        ['Ingredient', groep?.naam || '—'],
+        ['Supplier', l.leverancier || '—'],
+        ['Lot / batch code', l.lotcode || '—'],
+        ['Receiving date', l.ontvangstdatum || '—'],
+        ['Quantity received', `${l.hoeveelheid_ontvangen ?? '—'} ${l.eenheid || ''}`],
+        ['Remaining', `${vfmt(l.resterend)} ${l.eenheid || ''}`],
+        ['Location', l.locatie || '—'],
+        ['Best-before date', l.tht_datum || '—'],
+      ];
+      document.getElementById('vo-lot-detail-body').innerHTML = rijen.map(([label, waarde]) =>
+        `<div class="vo-detail-rij"><span class="vo-detail-label">${escapeHtml(label)}</span><span class="vo-detail-waarde">${escapeHtml(String(waarde))}</span></div>`
+      ).join('');
+      document.getElementById('vo-lot-detail-overlay').style.display = 'flex';
+    }
+    document.getElementById('vo-lot-detail-sluiten').addEventListener('click', () => {
+      document.getElementById('vo-lot-detail-overlay').style.display = 'none';
+    });
+    document.getElementById('vo-lot-detail-overlay').addEventListener('click', (e) => {
+      if (e.target.id === 'vo-lot-detail-overlay') document.getElementById('vo-lot-detail-overlay').style.display = 'none';
+    });
+
+    // ---------------------------------------------------------------------
+    // Print / export -- gebruikt gewoon de huidige filters + huidige open/dicht-
+    // status; voor een stocktelling zet je vóór het printen elke groep open zodat
+    // de lots meegeprint worden (of laat ze dicht voor een korte totalen-lijst).
+    // ---------------------------------------------------------------------
+    document.getElementById('vo-print-btn').addEventListener('click', () => {
+      window.print();
+    });
+
+    // ---------------------------------------------------------------------
+    // Init
+    // ---------------------------------------------------------------------
+    window.addEventListener('DOMContentLoaded', async () => {
+      await laadStockOverview();
+    });
+  </script>
+</body>
+</html>
