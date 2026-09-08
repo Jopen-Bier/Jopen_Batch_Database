@@ -28,6 +28,12 @@
     background: none; border: 1px solid var(--jopen-red); color: var(--jopen-red); border-radius: 6px;
     padding: 6px 12px; font-size: 0.88em; font-weight: 600; cursor: pointer;
   }
+  .vo-book-in-btn {
+    background: var(--jopen-red); color: white; border: none; border-radius: 6px;
+    padding: 8px 16px; font-size: 0.9em; font-weight: 700; cursor: pointer; text-decoration: none;
+    margin-left: auto;
+  }
+  .vo-book-in-btn:hover { opacity: 0.9; }
   .vo-skeleton { color: #bbb; }
   .vo-groep { border: 1px solid #eee; border-radius: 8px; margin-bottom: 8px; overflow: hidden; }
   .vo-groep.vo-onder-minimum { border-color: #a33f2c; }
@@ -59,7 +65,7 @@
   .vo-detail-waarde { text-align: right; font-weight: 500; }
 
   @media print {
-    #jopen-nav, .vo-koppen, .vo-filters, .vo-snelkoppelingen, .vo-print-btn { display: none !important; }
+    #jopen-nav, .vo-koppen, .vo-filters, .vo-snelkoppelingen, .vo-print-btn, .vo-book-in-btn { display: none !important; }
     .vo-groep-body { display: block !important; }
     .vo-chevron { display: none; }
     section.vo-block { box-shadow: none; }
@@ -76,9 +82,6 @@
         <h1 style="margin-bottom:2px;">Stock overview</h1>
         <p class="jopen-subtitel" style="margin-top:0;">Current stock per ingredient, with alerts for low stock and projected shortages.</p>
       </div>
-      <div class="vo-snelkoppelingen">
-        <a href="voorraad-inboeken.html">Book in</a>
-      </div>
     </div>
 
     <section class="vo-block">
@@ -87,6 +90,7 @@
         <select id="vo-categorie"><option value="">All categories</option></select>
         <label class="vo-checkbox"><input type="checkbox" id="vo-alleen-onder-min" /> Below minimum only</label>
         <button type="button" class="vo-print-btn" id="vo-print-btn">Print / export selection</button>
+        <a href="voorraad-inboeken.html" class="vo-book-in-btn">+ Book in</a>
       </div>
       <div id="vo-lijst"><div class="vo-skeleton">Loading…</div></div>
     </section>
