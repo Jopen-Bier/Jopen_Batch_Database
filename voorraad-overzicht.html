@@ -29,7 +29,7 @@
   .vo-meta { font-family: var(--mono); font-size: 13px; color: #6b6355; margin-bottom: 24px; }
   .vo-huidige-week {
     background: var(--hop-dark); color: #fff; border-radius: 6px; padding: 10px 20px; text-align: center;
-    font-family: var(--mono);
+    font-family: var(--mono); display: inline-block; margin-bottom: 8px;
   }
   .vo-huidige-week-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.75; }
   .vo-huidige-week-waarde { font-size: 22px; font-weight: 700; letter-spacing: 0.02em; }
@@ -170,11 +170,11 @@
 <div id="jopen-nav"></div>
 
 <main class="vo-main">
-  <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:16px;">
-    <div>
-      <h1 class="vo-titel">Stock overview</h1>
-      <p class="vo-meta">Current stock per ingredient, with alerts for low stock and projected shortages.</p>
-    </div>
+  <div>
+    <h1 class="vo-titel">Stock overview</h1>
+    <p class="vo-meta">Current stock per ingredient, with alerts for low stock and projected shortages.</p>
+  </div>
+  <div style="text-align:center;">
     <div class="vo-huidige-week" id="vo-huidige-week"></div>
   </div>
 
