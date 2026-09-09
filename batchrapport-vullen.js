@@ -826,7 +826,7 @@ async function brVulIngredientRijen(writer, bundel, ingredientMap, overloop) {
     },
     toegift_brouwerij: {
       eersteRij: RIJ_BROUWHUIS_EERSTE + n0 + nHop + nDryHop, vasteSloten: RIJ_BROUWHUIS_LAATSTE - RIJ_BROUWHUIS_EERSTE + 1,
-      kolommen: { naam: 'A', ratio: 'E', hoeveelheid: 'G', tijdstip: 'I' },
+      kolommen: { naam: 'A', ratio: 'E', hoeveelheid: 'G', tijdstip: 'I', heelBatchNotitie: 'Q' },
     },
     toegift_kelder: {
       eersteRij: RIJ_KELDER_EERSTE + n0 + nHop + nDryHop + n1, vasteSloten: RIJ_KELDER_LAATSTE - RIJ_KELDER_EERSTE + 1,
@@ -847,7 +847,12 @@ async function brVulIngredientRijen(writer, bundel, ingredientMap, overloop) {
       const { eersteRij, vasteSloten, kolommen } = dynamischeBlokken[rol];
       const brouwselHl = bundel.recipes.brouwsel_hl !== null && bundel.recipes.brouwsel_hl !== undefined
         ? Number(bundel.recipes.brouwsel_hl) : null;
-      const aantalBrouwselsVanDezeBatch = rol === 'toegift_kelder' ? (Number(bundel.batch.aantal_brouwsels) || 1) : 1;
+      // Brewing-toevoegingen zijn normaal x1 (per individueel brouwsel),
+      // BEHALVE als de regel is gemarkeerd met alles_in_brouwsel_1 ("All in
+      // brew 1?" in de app): dan hele batch in één keer bij het eerste
+      // brouwsel, dus net als Cellar x aantal brouwsels van DEZE batch.
+      // Zichtbaar met een '*' achter het getal in kolom G + uitleg in Q.
+      const aantalBrouwselsBatch = Number(bundel.batch.aantal_brouwsels) || 1;
       // Ook als er minder regels zijn dan het oorspronkelijke aantal sloten,
       // blijven we tot dat oorspronkelijke aantal doorlopen om eventuele
       // restjes van een vorige generatie/sjabloonwaarde leeg te maken.
@@ -855,6 +860,8 @@ async function brVulIngredientRijen(writer, bundel, ingredientMap, overloop) {
       for (let i = 0; i < totaalRijen; i++) {
         const rij = eersteRij + i;
         const regel = rijen[i];
+        const heelBatch = rol === 'toegift_brouwerij' && !!(regel && regel.alles_in_brouwsel_1);
+        const aantalBrouwselsVoorRegel = (rol === 'toegift_kelder' || heelBatch) ? aantalBrouwselsBatch : 1;
         for (const attr in kolommen) {
           const cel = `Recept-voorblad!${kolommen[attr]}${rij}`;
           if (!regel) { await writer.setCelWaarde(cel, null); continue; }
@@ -864,7 +871,10 @@ async function brVulIngredientRijen(writer, bundel, ingredientMap, overloop) {
           } else if (attr === 'ratio') {
             waarde = formatRatio(regel);
           } else if (attr === 'hoeveelheid' && (rol === 'toegift_brouwerij' || rol === 'toegift_kelder')) {
-            waarde = berekenAfweegWaarde(regel, brouwselHl, aantalBrouwselsVanDezeBatch);
+            waarde = berekenAfweegWaarde(regel, brouwselHl, aantalBrouwselsVoorRegel);
+            if (heelBatch && waarde !== null && waarde !== undefined) waarde = `${waarde}*`;
+          } else if (attr === 'heelBatchNotitie') {
+            waarde = heelBatch ? '*Amount calculated for entire batch, add all in first brew.' : null;
           } else {
             waarde = regel[attr];
           }

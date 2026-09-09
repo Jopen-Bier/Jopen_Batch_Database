@@ -1216,7 +1216,7 @@ async function openDetail(id) {
     return i.tijdstip || '—';
   }
 
-  function ingTabelHtml(rollenFilter, kolomRol, toonHdt = false, toonAlpha = false, toonMout = false, toonHopEbu = false, toonAfweeg = false) {
+  function ingTabelHtml(rollenFilter, kolomRol, toonHdt = false, toonAlpha = false, toonMout = false, toonHopEbu = false, toonAfweeg = false, toonHeelBatch = false) {
     let subset = ings.filter(i => rollenFilter.includes(i.rol));
     if (subset.length === 0) return '<div class="empty">None added.</div>';
     if (toonHdt) subset = sorteerHopHerbsRegels(subset);
@@ -1268,6 +1268,7 @@ async function openDetail(id) {
         ${toonAlpha ? `<td>${i.alpha_pct ?? '—'}</td>` : ''}
         <td>${i.hoeveelheid ?? '—'} ${i.eenheid || ''}</td>
         ${toonAfweeg ? `<td>${afweegWeergave(i)}</td>` : ''}
+        ${toonHeelBatch ? `<td>${i.alles_in_brouwsel_1 ? '✓ All in brew 1' : '—'}</td>` : ''}
         ${toonMout ? `<td>${i.kleur_ebc ?? '—'}</td><td>${totaalKg > 0 ? ((i.hoeveelheid || 0) / totaalKg * 100).toFixed(1) + '%' : '—'}</td>` : ''}
         <td>${escapeHtml(timingWeergave(i))}</td>
         ${toonHopEbu ? rendementCel + ebuCel : ''}
@@ -1291,6 +1292,7 @@ async function openDetail(id) {
         <thead><tr>
           ${kolomRol ? '<th>Role</th>' : ''}<th>Name</th>${toonAlpha ? '<th>Alpha %</th>' : ''}<th>Amount</th>
           ${toonAfweeg ? '<th>Weigh for this brew</th>' : ''}
+          ${toonHeelBatch ? '<th>All in brew 1?</th>' : ''}
           ${toonMout ? '<th>EBC</th><th>%</th>' : ''}<th>Timing</th>
           ${toonHopEbu ? '<th>Rendement %</th><th>EBU</th>' : ''}${toonHdt ? '<th>HDT</th>' : ''}<th>Note</th>
         </tr></thead>
@@ -1470,7 +1472,7 @@ async function openDetail(id) {
     ${hopSomHtml()}
 
     <div class="section-title">Additions Brewing</div>
-    ${ingTabelHtml(['toegift_brouwerij'], false, false, false, false, false, true)}
+    ${ingTabelHtml(['toegift_brouwerij'], false, false, false, false, false, true, true)}
 
     <div class="section-title">Yeasts</div>
     ${ingTabelHtml(['gist'], false)}

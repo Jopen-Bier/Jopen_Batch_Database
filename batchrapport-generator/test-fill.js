@@ -33,14 +33,17 @@ async function test() {
       { rol: 'hoofdmout', volgorde: 1, ingredient_id: 4, hoeveelheid: 800, kleur_ebc: 5 },
       { rol: 'hoofdmout', volgorde: 2, ingredient_id: 5, hoeveelheid: 100, kleur_ebc: 900 },
       { rol: 'gist', volgorde: 1, ingredient_id: 6, hoeveelheid: 2 },
+      { rol: 'toegift_brouwerij', volgorde: 1, ingredient_id: 8, hoeveelheid: 11, eenheid: 'g/hl', tijdstip: 'mash', alles_in_brouwsel_1: false },
+      { rol: 'toegift_brouwerij', volgorde: 2, ingredient_id: 9, hoeveelheid: 5, eenheid: 'g/hl', tijdstip: 'kook', alles_in_brouwsel_1: true },
     ],
     recipe_revisies: [
       { versie_major: 2, versie_minor: 0, datum: '2026-01-15', door: 'Jaap', wijziging: 'Major revision test' },
     ],
     ingredientNaam: new Map([
       [1, 'Magnum'], [2, 'Citra CRYO'], [3, 'Cascade'], [4, 'Pilsmout'], [5, 'Chocolate malt'], [6, 'US-05'], [7, 'Saaz'],
+      [8, 'Calcium Chloride'], [9, 'Protafloc'],
     ]),
-    batch: { batchnummer: 99999 },
+    batch: { batchnummer: 99999, aantal_brouwsels: 3 },
   };
 
   const templateBuffer = fs.readFileSync('./Batchrapport_sjabloon.xlsx');
@@ -99,6 +102,12 @@ async function test() {
   console.log('A44 (Saaz, 45 min):', ws.getCell('A44').value);
   console.log('A45 (moet LEEG zijn -- witregel):', ws.getCell('A45').value);
   console.log('A46 (Citra CRYO, 0 min):', ws.getCell('A46').value);
+  // "All in brew 1?" -- Additions Brewing, rij 75 (normaal, x1) en rij 76
+  // (alles_in_brouwsel_1: true, batch.aantal_brouwsels=3 -> x3 + '*' + notitie in Q).
+  console.log('G75 (Calcium Chloride, normaal: 11 g/hl x 60hl x1 = 660.0 g, GEEN *):', ws.getCell('G75').value);
+  console.log('Q75 (moet LEEG zijn):', ws.getCell('Q75').value);
+  console.log('G76 (Protafloc, all-in-brew-1: 5 g/hl x 60hl x3 brouwsels = 900.0 g, MET *):', ws.getCell('G76').value);
+  console.log('Q76 (moet de uitlegregel bevatten):', ws.getCell('Q76').value);
   console.log('A43 border (moet GEEN dikke rand):', JSON.stringify(ws.getCell('A43').border));
   console.log('A44 border (moet WEL dikke rand -- laatste van groep 45min, vlak boven witregel):', JSON.stringify(ws.getCell('A44').border));
   console.log('A45 border (witregel, geen dikke rand):', JSON.stringify(ws.getCell('A45').border));

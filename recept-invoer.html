@@ -490,7 +490,7 @@
       <div class="re-section">
         <h2>Additions Brewing</h2>
         <table class="re-ing-table">
-          <thead><tr><th></th><th>Ingredient</th><th>Amount</th><th>Unit</th><th>Weigh for this brew</th><th>Timing</th><th>Note</th><th></th></tr></thead>
+          <thead><tr><th></th><th>Ingredient</th><th>Amount</th><th>Unit</th><th>Weigh for this brew</th><th>All in brew 1?</th><th>Timing</th><th>Note</th><th></th></tr></thead>
           <tbody id="re-ing-brouwtoegift-tbody"></tbody>
         </table>
         <button type="button" class="re-btn secundair" data-tbody="re-ing-brouwtoegift-tbody" data-roles="toegift_brouwerij" data-add-btn>+ Add brewing addition</button>
@@ -1113,6 +1113,7 @@ function voegIngredientRegelToe(tbodyId, rollenLijst, regel = {}) {
   const isHopSectie = tbodyId === 're-ing-hop-tbody';
   const isMoutSectie = tbodyId === 're-ing-mout-tbody';
   const isAdditiveSectie = tbodyId === 're-ing-brouwtoegift-tbody' || tbodyId === 're-ing-keldertoegift-tbody';
+  const isBrouwerijSectie = tbodyId === 're-ing-brouwtoegift-tbody';
   const rolKolomHtml = meerdereRollen
     ? `<td><select class="re-ing-rol">${rolOptiesVoor(rollenLijst, regel.rol || rollenLijst[0])}</select></td>`
     : '';
@@ -1136,6 +1137,15 @@ function voegIngredientRegelToe(tbodyId, rollenLijst, regel = {}) {
   // een tarief, geen absoluut gewicht. Berekend/bijgewerkt door
   // herberekenAfweegHoeveelheden(), dit is puur de lege container.
   const afweegKolomHtml = isAdditiveSectie ? `<td class="re-ing-afweeg" title="Amount to weigh for this brew, calculated from the rate and the recipe's Brouwsel (hl)">—</td>` : '';
+  // "All in brew 1?": alleen bij Additions Brewing. Vlag dat deze toevoeging
+  // voor de HELE batch in één keer bij het eerste brouwsel wordt gedaan i.p.v.
+  // per brouwsel herhaald. Zuiver metadata hier -- het "Weigh for this brew"
+  // getal blijft ongewijzigd (het werkelijke aantal brouwsels van een batch is
+  // pas bekend bij Create Batch); de daadwerkelijke batch-totaal-berekening en
+  // de '*'-markering gebeuren alleen in het gegenereerde Excel-batchrapport.
+  const heelBatchKolomHtml = isBrouwerijSectie
+    ? `<td style="text-align:center;"><input type="checkbox" class="re-ing-heel-batch" title="Whole batch amount added all at once in the first brew, instead of repeated per brew. Only affects the generated Excel batch report." ${regel.alles_in_brouwsel_1 ? 'checked' : ''} /></td>`
+    : '';
   // Rendement/EBU: alleen inhoud voor Hop (boil), dry hop toont altijd "—"
   // (geen kooktijd-in-minuten beschikbaar). Waardes worden hierna berekend
   // door herberekenHopRendementEnEbu(), dit zijn puur de lege containers.
@@ -1175,6 +1185,7 @@ function voegIngredientRegelToe(tbodyId, rollenLijst, regel = {}) {
     <td><input type="number" class="re-ing-hoeveelheid" value="${regel.hoeveelheid ?? ''}" /></td>
     <td><select class="re-ing-eenheid">${eenhedenOptiesVoorRegel(regel.eenheid ?? '')}</select></td>
     ${afweegKolomHtml}
+    ${heelBatchKolomHtml}
     ${ebcKolomHtml}
     ${percentageKolomHtml}
     ${tijdstipKolomHtml}
@@ -1354,6 +1365,7 @@ function leesIngredientRegelsUit(tbodyId) {
 
     const alphaEl = tr.querySelector('.re-ing-alpha');
     const ebcEl = tr.querySelector('.re-ing-ebc');
+    const heelBatchEl = tr.querySelector('.re-ing-heel-batch');
 
     return {
       rol,
@@ -1366,6 +1378,7 @@ function leesIngredientRegelsUit(tbodyId) {
       alpha_pct: alphaEl ? (alphaEl.value === '' ? null : Number(alphaEl.value)) : null,
       kleur_ebc: ebcEl ? (ebcEl.value === '' ? null : Number(ebcEl.value)) : null,
       notitie: tr.querySelector('.re-ing-notitie').value.trim() || null,
+      alles_in_brouwsel_1: heelBatchEl ? heelBatchEl.checked : false,
     };
   });
 }
