@@ -157,15 +157,13 @@
 <div id="jopen-nav"></div>
 
 <main class="vo-main">
-  <div style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:12px;">
-    <div>
-      <h1 class="vo-titel">Stock overview</h1>
-      <p class="vo-meta">Current stock per ingredient, with alerts for low stock and projected shortages.</p>
-    </div>
-    <a href="voorraad-inboeken.html" class="vo-bewerk-btn">+ Book in</a>
+  <div>
+    <h1 class="vo-titel">Stock overview</h1>
+    <p class="vo-meta">Current stock per ingredient, with alerts for low stock and projected shortages.</p>
   </div>
 
   <div class="vo-toolbar">
+    <a href="voorraad-inboeken.html" class="vo-bewerk-btn">+ Book in</a>
     <input id="vo-zoek" placeholder="Search by name…" />
     <div class="dd-filter" id="dd-vo-categorie">
       <button type="button" class="dd-filter-btn" id="dd-vo-categorie-btn">Category <span class="dd-filter-caret">&#9662;</span><span class="dd-filter-mark" id="dd-vo-categorie-mark" style="display:none;"></span></button>
@@ -182,6 +180,7 @@
     <button type="button" class="vo-print-btn" id="vo-print-btn">Print / export selection</button>
     <div class="vo-count" id="vo-result-count"></div>
   </div>
+
 
   <div id="vo-list-container"><div class="vo-loading">Loading stock…</div></div>
 </main>
