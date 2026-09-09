@@ -100,6 +100,10 @@
         <label for="vp-tot">To week</label>
         <input type="number" id="vp-tot" min="1" max="53" value="12" />
       </div>
+      <div class="vp-veld">
+        <label for="vp-ingredient-filter">Ingredient</label>
+        <input type="text" id="vp-ingredient-filter" placeholder="All ingredients" style="min-width:180px;" />
+      </div>
       <div class="vp-samenvatting" id="vp-samenvatting">—</div>
       <button type="button" id="vp-export-btn" class="vp-export-btn" disabled>Export to Excel</button>
     </div>
@@ -244,15 +248,18 @@
       document.getElementById('vp-export-btn').disabled = Object.keys(laatsteResultaat.perRol).length === 0;
 
       const rollenTeTonen = actieveRolFilter === 'alle' ? ROL_VOLGORDE : [actieveRolFilter];
+      const ingredientZoekterm = document.getElementById('vp-ingredient-filter').value.trim().toLowerCase();
       let html = '';
       let ietsGetoond = false;
 
       rollenTeTonen.forEach(rol => {
         const ingredientenVanRol = laatsteResultaat.perRol[rol];
         if (!ingredientenVanRol || Object.keys(ingredientenVanRol).length === 0) return;
-        ietsGetoond = true;
 
-        const rijen = Object.values(ingredientenVanRol).sort((a, b) => b.totaal - a.totaal);
+        let rijen = Object.values(ingredientenVanRol).sort((a, b) => b.totaal - a.totaal);
+        if (ingredientZoekterm) rijen = rijen.filter(r => r.naam.toLowerCase().includes(ingredientZoekterm));
+        if (rijen.length === 0) return;
+        ietsGetoond = true;
         const isHopsGroep = rol === 'hops';
 
         html += `
@@ -445,6 +452,7 @@
     ['vp-jaar', 'vp-van', 'vp-tot'].forEach(id => {
       document.getElementById(id).addEventListener('change', berekenPrognose);
     });
+    document.getElementById('vp-ingredient-filter').addEventListener('input', renderResultaat);
 
     (async function init() {
       const ok = await vereisIngelogd();
@@ -465,6 +473,24 @@
       document.getElementById('vp-jaar').value = nuJaar;
       document.getElementById('vp-van').value = Math.max(1, nuWeek);
       document.getElementById('vp-tot').value = Math.min(isoWeeksInYear(nuJaar), nuWeek + 8);
+
+      // Vanuit Stock overview kan hierheen gelinkt worden met een vooraf ingevulde
+      // grondstof + weekbereik: ?ingredient=<id>&jaar=YYYY&van=WW&tot=WW. Cross-jaar
+      // bereiken (loopt-leeg-week in het volgende jaar) worden bewust geclipt naar het
+      // einde van "jaar" -- een bereik-selector die twee jaren overspant bestaat hier
+      // nog niet, dat zou een aparte uitbreiding zijn.
+      const params = new URLSearchParams(window.location.search);
+      const jaarParam = params.get('jaar');
+      const vanParam = params.get('van');
+      const totParam = params.get('tot');
+      const ingredientParam = params.get('ingredient');
+      if (jaarParam) document.getElementById('vp-jaar').value = jaarParam;
+      if (vanParam) document.getElementById('vp-van').value = vanParam;
+      if (totParam) document.getElementById('vp-tot').value = Math.min(Number(totParam), isoWeeksInYear(Number(jaarParam || nuJaar)));
+      if (ingredientParam) {
+        const { data } = await supabaseClient.from('ingredients').select('naam').eq('id', ingredientParam).eq('versie_status', 'huidig').single();
+        if (data) document.getElementById('vp-ingredient-filter').value = data.naam;
+      }
 
       await berekenPrognose();
     })();

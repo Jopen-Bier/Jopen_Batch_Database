@@ -105,7 +105,14 @@
   }
   .status-ok { background: #e1ead9; color: var(--hop-dark); }
   .status-onder-min { background: #f4ded3; color: #a3492f; }
+  .vo-week-pil-nu { background: #a3492f; color: #fff; }
+  .vo-week-pil-volgende { background: #f0d4d4; color: #8a3b3b; }
   .vo-loopt-leeg-urgent { color: #a3492f; font-weight: 600; }
+  .vo-forecast-btn {
+    display: inline-block; padding: 5px 12px; border: 1px solid var(--line); border-radius: 4px;
+    font-family: var(--mono); font-size: 11px; color: var(--hop-dark); text-decoration: none; white-space: nowrap;
+  }
+  .vo-forecast-btn:hover { border-color: var(--hop-dark); background: #f4f2ea; }
 
   .vo-subrij td { padding: 0; border-bottom: 1px solid var(--line); background: #faf9f5; }
   .vo-subrij-inhoud { padding: 16px 24px 20px 40px; }
@@ -429,15 +436,36 @@
       return;
     }
 
-    const kolommen = [['naam', 'Name'], ['categorie', 'Category'], ['eenheid', 'Unit'], ['voorraad', 'Current stock'], ['minimum', 'Minimum'], ['status', 'Status'], ['loopt_leeg', 'Runs out']];
+    const huidige = vfIsoWeekVanVandaag();
+    const huidigeWeekSleutel = vfWeekSleutel(huidige.jaar, huidige.week);
+    let vwJaar = huidige.jaar, vwWeek = huidige.week + 1;
+    if (vwWeek > vfIsoWeeksInJaar(huidige.jaar)) { vwJaar++; vwWeek = 1; }
+    const volgendeWeekSleutel = vfWeekSleutel(vwJaar, vwWeek);
+
+    const kolommen = [['naam', 'Name'], ['categorie', 'Category'], ['eenheid', 'Unit'], ['voorraad', 'Current stock'], ['minimum', 'Minimum'], ['status', 'Status'], ['loopt_leeg', 'Runs out'], ['forecast', '']];
 
     const rijenHtml = groepen.map(g => {
       const sleutel = `${g.ingredientId}|${g.eenheid}`;
       const uitgeklapt = vrUitgeklapt.has(sleutel);
       const onderMin = isOnderMinimum(g);
+      let weekPil = '';
+      if (g.loopLeegWeek === huidigeWeekSleutel) weekPil = ' <span class="status-pill vo-week-pil-nu">This week</span>';
+      else if (g.loopLeegWeek === volgendeWeekSleutel) weekPil = ' <span class="status-pill vo-week-pil-volgende">Next week</span>';
       const loopLeegTekst = g.loopLeegWeek
-        ? `Runs out ~${escapeHtml(g.loopLeegWeek)}`
+        ? `Runs out ~${escapeHtml(g.loopLeegWeek)}${weekPil}`
         : (g.totaal <= 0 ? 'No stock' : 'No shortage expected');
+
+      // Forecast-knop: huidige week t/m de loopt-leeg-week (of, als er geen tekort
+      // voorzien is, een standaard 12 weken vooruit) -- clip naar het einde van het
+      // huidige jaar als de loopt-leeg-week toevallig in het volgende jaar valt, want
+      // Consumption forecast kent nog geen jaargrens-overschrijdend bereik.
+      let totJaar = huidige.jaar, totWeek = Math.min(huidige.week + 12, vfIsoWeeksInJaar(huidige.jaar));
+      if (g.loopLeegWeek) {
+        const [lj, lw] = g.loopLeegWeek.split('-W');
+        totWeek = (Number(lj) === huidige.jaar) ? Number(lw) : vfIsoWeeksInJaar(huidige.jaar);
+      }
+      const forecastUrl = `verbruiksprognose.html?ingredient=${g.ingredientId}&jaar=${totJaar}&van=${huidige.week}&tot=${totWeek}`;
+
       let subrijHtml = '';
       if (uitgeklapt) {
         const historieOpen = vrHistorieOpen.has(sleutel);
@@ -480,6 +508,7 @@
           <td>${g.minimum != null ? vfmt(g.minimum) : '—'}</td>
           <td>${onderMin ? '<span class="status-pill status-onder-min">Below minimum</span>' : '<span class="status-pill status-ok">OK</span>'}</td>
           <td class="${g.loopLeegWeek ? 'vo-loopt-leeg-urgent' : ''}">${loopLeegTekst}</td>
+          <td><a href="${forecastUrl}" class="vo-forecast-btn">Forecast</a></td>
         </tr>${subrijHtml}`;
     }).join('');
 
@@ -531,6 +560,9 @@
         const lot = alleLots.find(l => String(l.id) === tr.dataset.id);
         if (lot) toonLotDetail(lot, g);
       });
+    });
+    container.querySelectorAll('.vo-forecast-btn').forEach(a => {
+      a.addEventListener('click', (e) => e.stopPropagation());
     });
   }
 
