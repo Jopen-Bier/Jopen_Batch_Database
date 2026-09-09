@@ -467,8 +467,8 @@
           <td><span class="vo-chevron">${uitgeklapt ? '▾' : '▸'}</span>${escapeHtml(g.naam)}</td>
           <td>${escapeHtml(g.categorie || '—')}</td>
           <td>${escapeHtml(g.eenheid || '—')}</td>
-          <td class="vo-tabel-getal">${vfmt(g.totaal)}</td>
-          <td class="vo-tabel-getal">${g.minimum != null ? vfmt(g.minimum) : '—'}</td>
+          <td>${vfmt(g.totaal)}</td>
+          <td>${g.minimum != null ? vfmt(g.minimum) : '—'}</td>
           <td>${onderMin ? '<span class="status-pill status-onder-min">Below minimum</span>' : '<span class="status-pill status-ok">OK</span>'}</td>
           <td class="${g.loopLeegWeek ? 'vo-loopt-leeg-urgent' : ''}">${loopLeegTekst}</td>
         </tr>${subrijHtml}`;
@@ -477,7 +477,7 @@
     container.innerHTML = `
       <table class="vo-tabel">
         <thead><tr>${kolommen.map(([kolom, label]) =>
-          `<th class="vo-sorteerbaar${kolom === 'voorraad' || kolom === 'minimum' ? ' vo-tabel-getal' : ''}" data-kolom="${kolom}">${label}${sorteerPijl(kolom)}</th>`).join('')}</tr></thead>
+          `<th class="vo-sorteerbaar" data-kolom="${kolom}">${label}${sorteerPijl(kolom)}</th>`).join('')}</tr></thead>
         <tbody>${rijenHtml}</tbody>
       </table>`;
 
