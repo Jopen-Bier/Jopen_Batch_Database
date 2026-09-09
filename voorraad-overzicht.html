@@ -662,6 +662,18 @@
     magBewerken = !!gebruiker && await magBewerkenModule('inventory');
     await laadStockOverview();
   });
+
+  // Terugnavigeren (browser "Vorige") kan de pagina uit de bfcache herstellen i.p.v.
+  // 'm opnieuw te laden -- als je de pagina verliet vóórdat de data binnen was, bleef
+  // hij daardoor voor altijd op de laad-skeleton staan. event.persisted === true
+  // betekent "dit is een bfcache-restore, geen verse laadbeurt", dus dan alsnog de
+  // data ophalen.
+  window.addEventListener('pageshow', (e) => {
+    if (e.persisted) {
+      toonHuidigeWeek();
+      laadStockOverview();
+    }
+  });
 </script>
 </body>
 </html>
