@@ -27,6 +27,12 @@
   .vo-main { font-family: var(--serif); color: var(--ink); background: var(--paper); padding: 24px 32px 60px; }
   .vo-titel { font-size: 32px; margin: 0 0 4px; }
   .vo-meta { font-family: var(--mono); font-size: 13px; color: #6b6355; margin-bottom: 24px; }
+  .vo-huidige-week {
+    background: var(--hop-dark); color: #fff; border-radius: 6px; padding: 10px 20px; text-align: center;
+    font-family: var(--mono);
+  }
+  .vo-huidige-week-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.75; }
+  .vo-huidige-week-waarde { font-size: 22px; font-weight: 700; letter-spacing: 0.02em; }
 
   .vo-bewerk-btn {
     background: var(--amber); color: #fff; border: none; padding: 10px 20px;
@@ -157,9 +163,12 @@
 <div id="jopen-nav"></div>
 
 <main class="vo-main">
-  <div>
-    <h1 class="vo-titel">Stock overview</h1>
-    <p class="vo-meta">Current stock per ingredient, with alerts for low stock and projected shortages.</p>
+  <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:16px;">
+    <div>
+      <h1 class="vo-titel">Stock overview</h1>
+      <p class="vo-meta">Current stock per ingredient, with alerts for low stock and projected shortages.</p>
+    </div>
+    <div class="vo-huidige-week" id="vo-huidige-week"></div>
   </div>
 
   <div class="vo-toolbar">
@@ -606,7 +615,17 @@
   // ---------------------------------------------------------------------
   // Init
   // ---------------------------------------------------------------------
+  function toonHuidigeWeek() {
+    // vfIsoWeekVanVandaag() zit al in voorraad-forecast.js -- zelfde berekening als
+    // de 'Runs out ~YYYY-Www'-projectie hieronder, dus deze twee blijven per definitie
+    // met elkaar te relateren.
+    const { jaar, week } = vfIsoWeekVanVandaag();
+    document.getElementById('vo-huidige-week').innerHTML =
+      `<div class="vo-huidige-week-label">Current week</div><div class="vo-huidige-week-waarde">${jaar}-W${String(week).padStart(2, '0')}</div>`;
+  }
+
   window.addEventListener('DOMContentLoaded', async () => {
+    toonHuidigeWeek();
     const gebruiker = await getHuidigeGebruiker();
     magBewerken = !!gebruiker && await magBewerkenModule('inventory');
     await laadStockOverview();
