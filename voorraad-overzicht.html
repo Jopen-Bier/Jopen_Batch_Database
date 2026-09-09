@@ -7,10 +7,13 @@
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Jopen — Stock overview</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link rel="stylesheet" href="jopen-shared.css">
 <style>
-  /* Zelfde visuele taal als receptoverzicht.html/ingredienten.html, los gehouden
-     van jopen-shared.css zodat Inventory zijn eigen, rustigere leesbaarheid heeft. */
+  /* Zelfde visuele taal als receptoverzicht.html/ingredienten.html, bewust los van
+     jopen-shared.css (en van het rode thema dat Book in/Book out material/Accounting
+     sign-off nog gebruiken) -- zie sessie-overleg: dit wordt de stijl waar Inventory
+     op termijn naartoe groeit, te beginnen bij deze pagina. */
   :root {
     --ink: #1c2b26;
     --paper: #f6f4ee;
@@ -21,298 +24,427 @@
     --mono: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, Helvetica, sans-serif;
     --serif: Arial, Helvetica, sans-serif;
   }
-  main.vo-main { font-family: var(--serif); color: var(--ink); background: var(--paper); padding: 24px 32px 60px; max-width: 1150px; margin: 0 auto; }
+  .vo-main { font-family: var(--serif); color: var(--ink); background: var(--paper); padding: 24px 32px 60px; }
   .vo-titel { font-size: 32px; margin: 0 0 4px; }
   .vo-meta { font-family: var(--mono); font-size: 13px; color: #6b6355; margin-bottom: 24px; }
+
   .vo-bewerk-btn {
-    background: var(--amber); color: #fff; border: none; border-radius: 6px; padding: 10px 18px;
-    font-family: var(--serif); font-size: 14px; font-weight: 700; cursor: pointer; text-decoration: none;
-    display: inline-block;
+    background: var(--amber); color: #fff; border: none; padding: 10px 20px;
+    border-radius: 20px; font-family: var(--mono); font-size: 12px; font-weight: 700; letter-spacing: 0.06em;
+    cursor: pointer; text-decoration: none; display: inline-block;
   }
   .vo-bewerk-btn:hover { background: #96601f; }
 
   .vo-toolbar { display: flex; gap: 12px; align-items: center; margin-bottom: 18px; flex-wrap: wrap; }
-  .vo-toolbar input[type="text"], .vo-toolbar select {
+  .vo-toolbar input {
     padding: 10px 14px; border: 1px solid var(--line); border-radius: 4px;
     font-family: var(--serif); font-size: 15px; background: #fff;
   }
-  #vo-zoek { flex: 0 0 auto; min-width: 220px; }
-  .vo-checkbox { display: flex; align-items: center; gap: 6px; font-size: 14px; cursor: pointer; color: var(--ink); }
+  #vo-zoek { flex: 1; min-width: 220px; }
+  .vo-toggle { font-family: var(--serif); font-size: 14px; display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .vo-count { font-family: var(--mono); font-size: 12px; color: #7a7266; white-space: nowrap; margin-left: auto; }
   .vo-print-btn {
-    background: #fff; border: 1px solid var(--line); color: var(--ink); border-radius: 4px;
-    padding: 9px 14px; font-family: var(--serif); font-size: 14px; cursor: pointer;
+    padding: 9px 14px; border: 1px solid var(--line); border-radius: 4px; background: #fff; color: var(--ink);
+    font-family: var(--serif); font-size: 14px; cursor: pointer;
   }
   .vo-print-btn:hover { border-color: var(--hop-dark); }
-  .vo-count { font-family: var(--mono); font-size: 12px; color: #7a7266; white-space: nowrap; margin-left: auto; }
+
+  .dd-filter { position: relative; display: inline-block; }
+  .dd-filter-btn {
+    position: relative; display: flex; align-items: center; gap: 6px;
+    padding: 9px 14px; border: 1px solid var(--line); border-radius: 4px;
+    font-family: var(--serif); font-size: 14px; background: #fff; color: var(--ink); cursor: pointer;
+  }
+  .dd-filter-btn:hover { border-color: var(--hop-dark); }
+  .dd-filter-btn.actief-menu { border-color: var(--hop-dark); }
+  .dd-filter-caret { font-size: 10px; opacity: 0.55; }
+  .dd-filter-mark {
+    position: absolute; top: -4px; right: -4px; width: 9px; height: 9px; border-radius: 50%;
+    background: var(--amber); border: 2px solid var(--paper);
+  }
+  .dd-filter-panel {
+    position: absolute; top: calc(100% + 6px); left: 0; z-index: 60; min-width: 200px;
+    background: #fff; border: 1px solid var(--line); border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.14); padding: 6px 0;
+  }
+  .dd-filter-panel-header {
+    display: flex; justify-content: space-between; gap: 10px; padding: 2px 14px 8px;
+    margin-bottom: 4px; border-bottom: 1px solid var(--line);
+  }
+  .dd-filter-panel-header button {
+    background: none; border: none; padding: 0; cursor: pointer;
+    font-family: var(--mono); font-size: 11px; color: var(--hop-dark); text-decoration: underline;
+  }
+  .dd-filter-option { display: flex; align-items: center; gap: 9px; padding: 7px 14px; font-size: 14px; cursor: pointer; }
+  .dd-filter-option:hover { background: #f4f2ea; }
+  .dd-filter-option input { cursor: pointer; }
 
   table.vo-tabel { width: 100%; border-collapse: collapse; background: #fff; }
   table.vo-tabel thead th {
     text-align: left; font-family: var(--mono); font-size: 11px; text-transform: uppercase;
     letter-spacing: 0.08em; color: #6b6355; padding: 10px 14px; border-bottom: 2px solid var(--hop-dark);
   }
+  table.vo-tabel thead th.vo-sorteerbaar { cursor: pointer; user-select: none; white-space: nowrap; }
+  table.vo-tabel thead th.vo-sorteerbaar:hover { color: var(--hop-dark); }
   table.vo-tabel tbody td { padding: 12px 14px; border-bottom: 1px solid var(--line); font-size: 15px; }
   table.vo-tabel tbody td.vo-tabel-getal { font-family: var(--mono); text-align: right; }
-  table.vo-tabel tbody tr.vo-groep-rij { cursor: pointer; }
-  table.vo-tabel tbody tr.vo-groep-rij:hover { background: #eef0e6; }
-  table.vo-tabel tbody tr.vo-onder-minimum td:first-child { box-shadow: inset 3px 0 0 #a33f2c; }
-  .vo-chevron { color: #9a927f; width: 12px; display: inline-block; }
-  .vo-categorie-tag { color: #7a7266; font-size: 12px; }
+  table.vo-tabel tbody tr.vo-rij { cursor: pointer; }
+  table.vo-tabel tbody tr.vo-rij:hover { background: #eef0e6; }
+  table.vo-tabel tbody tr.vo-rij.vo-uitgeklapt { background: #eef0e6; }
+  .vo-chevron { color: #9a9484; display: inline-block; width: 12px; }
 
   .status-pill {
     font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
     padding: 3px 9px; border-radius: 20px; display: inline-block;
   }
   .status-ok { background: #e1ead9; color: var(--hop-dark); }
-  .status-onder-min { background: #f6e2dc; color: #a33f2c; }
-  .status-leeg { background: #e6e2d8; color: #7a7266; }
+  .status-onder-min { background: #f4ded3; color: #a3492f; }
+  .vo-loopt-leeg-urgent { color: #a3492f; font-weight: 600; }
 
-  tr.vo-expand-rij td { padding: 0; border-bottom: 1px solid var(--line); }
-  .vo-expand-inner { background: var(--paper); padding: 14px 24px 18px 46px; }
-  table.vo-sub-tabel { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid var(--line); }
-  table.vo-sub-tabel th {
-    text-align: left; font-family: var(--mono); font-size: 10px; text-transform: uppercase;
-    letter-spacing: 0.06em; color: #6b6355; padding: 8px 10px; border-bottom: 1px solid var(--line);
-  }
-  table.vo-sub-tabel td { padding: 8px 10px; border-bottom: 1px solid #ece8dc; font-size: 14px; }
-  table.vo-sub-tabel tr:last-child td { border-bottom: none; }
-  table.vo-sub-tabel tr.vo-lot-rij { cursor: pointer; }
-  table.vo-sub-tabel tr.vo-lot-rij:hover { background: #faf8f2; }
+  .vo-subrij td { padding: 0; border-bottom: 1px solid var(--line); background: #faf9f5; }
+  .vo-subrij-inhoud { padding: 16px 24px 20px 40px; }
+  table.vo-lot-tabel { width: 100%; border-collapse: collapse; font-size: 13px; background: #fff; border: 1px solid var(--line); }
+  table.vo-lot-tabel th, table.vo-lot-tabel td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); }
+  table.vo-lot-tabel th { font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; color: #6b6355; font-weight: normal; }
+  tr.vo-lot-rij { cursor: pointer; }
+  tr.vo-lot-rij:hover { background: #f4f2ea; }
   .vo-historie-btn {
-    margin-top: 10px; background: none; border: none; color: var(--hop-dark); font-family: var(--mono);
-    font-size: 12px; cursor: pointer; text-decoration: underline; padding: 0;
+    margin-top: 10px; background: none; border: none; color: var(--hop-dark); font-size: 12px; cursor: pointer;
+    text-decoration: underline; padding: 0; font-family: var(--mono);
   }
-  .vo-skeleton { color: #9a927f; font-size: 14px; }
-  .vo-loopt-leeg-urgent { color: #a33f2c; font-weight: 600; }
 
-  .vo-overlay {
-    position: fixed; inset: 0; background: rgba(28,43,38,0.45); z-index: 200;
-    display: none; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 30px 16px;
+  .vo-empty, .vo-loading, .vo-error {
+    text-align: center; padding: 60px 20px; font-family: var(--mono); font-size: 13px; color: #7a7266;
   }
-  .vo-modal { background: #fff; border-radius: 6px; max-width: 560px; width: 100%; padding: 24px 28px; margin-bottom: 30px; border: 1px solid var(--line); }
-  .vo-modal h2 { margin-top: 0; font-size: 20px; color: var(--ink); }
-  .vo-detail-rij { display: flex; justify-content: space-between; gap: 16px; padding: 7px 0; border-bottom: 1px solid #ece8dc; font-size: 14px; }
-  .vo-detail-label { color: #6b6355; }
-  .vo-detail-waarde { text-align: right; font-weight: 500; }
-  .vo-modal-btn {
-    background: #fff; border: 1.5px solid var(--line); color: var(--ink); border-radius: 4px;
-    padding: 7px 14px; font-family: var(--serif); font-size: 14px; cursor: pointer;
+  .vo-error { color: #a3492f; }
+
+  /* Lot-detailpopup, zelfde modal-taal als de rest van deze stijl */
+  .vo-modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(28,43,38,0.45); z-index: 200;
+    align-items: flex-start; justify-content: center; overflow-y: auto; padding: 40px 16px;
   }
-  .vo-modal-btn:hover { border-color: var(--hop-dark); }
-  .vo-modal-btn-gevaar { border-color: #a33f2c; color: #a33f2c; }
-  .vo-modal-btn-gevaar:hover { background: #a33f2c; color: #fff; }
+  .vo-modal {
+    background: #fff; border-radius: 6px; max-width: 520px; width: 100%; padding: 24px 28px; margin-bottom: 30px;
+    border: 1px solid var(--line);
+  }
+  .vo-modal-titel { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--amber); margin: 0 0 14px; }
+  .vo-kv { display: flex; justify-content: space-between; font-size: 14px; padding: 6px 0; border-bottom: 1px solid #ece8dc; }
+  .vo-kv:last-child { border-bottom: none; }
+  .vo-kv span:first-child { color: #6b6355; }
+  .vo-kv span:last-child { font-family: var(--mono); text-align: right; }
+  .vo-batch-titel {
+    font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: #6b6355; margin: 18px 0 8px;
+  }
+  .vo-leeg-btn {
+    background: none; border: 1px solid #a3492f; color: #a3492f; border-radius: 20px;
+    padding: 8px 16px; font-family: var(--mono); font-size: 12px; font-weight: 700; cursor: pointer;
+  }
+  .vo-leeg-btn:hover { background: #a3492f; color: #fff; }
+  .vo-sluit-btn {
+    background: transparent; color: #6b6355; border: 1px solid var(--line);
+    padding: 8px 16px; border-radius: 4px; font-family: var(--mono); font-size: 12px; cursor: pointer;
+  }
 
   @media print {
-    #jopen-nav, .vo-toolbar { display: none !important; }
-    tr.vo-expand-rij { display: table-row !important; }
-    .vo-chevron { display: none; }
+    #jopen-nav, .vo-toolbar, .vo-bewerk-btn, .vo-print-btn, .vo-chevron { display: none !important; }
+    .vo-subrij { display: table-row !important; }
   }
 </style>
 </head>
 <body>
 
-  <div id="jopen-nav"></div>
+<div id="jopen-nav"></div>
 
-  <main class="vo-main">
-    <div style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:12px;">
-      <div>
-        <h1 class="vo-titel">Stock overview</h1>
-        <p class="vo-meta">Current stock per ingredient, with alerts for low stock and projected shortages.</p>
-      </div>
-      <a href="voorraad-inboeken.html" class="vo-bewerk-btn">+ Book in</a>
+<main class="vo-main">
+  <div style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:12px;">
+    <div>
+      <h1 class="vo-titel">Stock overview</h1>
+      <p class="vo-meta">Current stock per ingredient, with alerts for low stock and projected shortages.</p>
     </div>
-
-    <div class="vo-toolbar">
-      <input type="text" id="vo-zoek" placeholder="Search ingredient…" />
-      <select id="vo-categorie"><option value="">All categories</option></select>
-      <label class="vo-checkbox"><input type="checkbox" id="vo-alleen-onder-min" /> Below minimum only</label>
-      <label class="vo-checkbox"><input type="checkbox" id="vo-toon-leeg" /> Show empty stock</label>
-      <button type="button" class="vo-print-btn" id="vo-print-btn">Print / export selection</button>
-      <div class="vo-count" id="vo-count"></div>
-    </div>
-    <div id="vo-lijst"><div class="vo-skeleton">Loading…</div></div>
-  </main>
-
-  <!-- Lot-detailpopup -->
-  <div class="vo-overlay" id="vo-lot-detail-overlay">
-    <div class="vo-modal">
-      <h2>Lot details</h2>
-      <div id="vo-lot-detail-body"></div>
-      <div style="margin-top:16px;">
-        <div style="font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:#6b6355; margin-bottom:8px;">Used in these batches (track &amp; trace)</div>
-        <div id="vo-lot-detail-batches"><span class="vo-skeleton">Loading…</span></div>
-      </div>
-      <div style="margin-top:20px; display:flex; justify-content:space-between; align-items:center;">
-        <div id="vo-lot-detail-leeg-knop"></div>
-        <button type="button" id="vo-lot-detail-sluiten" class="vo-modal-btn">Close</button>
-      </div>
-    </div>
+    <a href="voorraad-inboeken.html" class="vo-bewerk-btn">+ Book in</a>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js"></script>
-  <script src="nav.js"></script>
-  <script src="voorraad-forecast.js"></script>
-  <script>
-    function escapeHtml(str) {
-      const div = document.createElement('div');
-      div.textContent = str ?? '';
-      return div.innerHTML;
+  <div class="vo-toolbar">
+    <input id="vo-zoek" placeholder="Search by name…" />
+    <div class="dd-filter" id="dd-vo-categorie">
+      <button type="button" class="dd-filter-btn" id="dd-vo-categorie-btn">Category <span class="dd-filter-caret">&#9662;</span><span class="dd-filter-mark" id="dd-vo-categorie-mark" style="display:none;"></span></button>
+      <div class="dd-filter-panel" id="dd-vo-categorie-panel" style="display:none;">
+        <div class="dd-filter-panel-header">
+          <button type="button" data-actie="all">Select all</button>
+          <button type="button" data-actie="none">Clear</button>
+        </div>
+        <div id="dd-vo-categorie-options"></div>
+      </div>
+    </div>
+    <label class="vo-toggle"><input type="checkbox" id="vo-alleen-onder-min" /> Below minimum only</label>
+    <label class="vo-toggle"><input type="checkbox" id="vo-toon-leeg" /> Show empty stock</label>
+    <button type="button" class="vo-print-btn" id="vo-print-btn">Print / export selection</button>
+    <div class="vo-count" id="vo-result-count"></div>
+  </div>
+
+  <div id="vo-list-container"><div class="vo-loading">Loading stock…</div></div>
+</main>
+
+<!-- Lot-detailpopup -->
+<div class="vo-modal-overlay" id="vo-lot-detail-overlay">
+  <div class="vo-modal">
+    <div class="vo-modal-titel">Lot details</div>
+    <div id="vo-lot-detail-body"></div>
+    <div class="vo-batch-titel">Used in these batches (track &amp; trace)</div>
+    <div id="vo-lot-detail-batches"><span class="vo-loading" style="padding:10px 0;">Loading…</span></div>
+    <div style="margin-top:18px; display:flex; justify-content:space-between; align-items:center;">
+      <div id="vo-lot-detail-leeg-knop"></div>
+      <button type="button" id="vo-lot-detail-sluiten" class="vo-sluit-btn">Close</button>
+    </div>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="nav.js"></script>
+<script src="voorraad-forecast.js"></script>
+<script>
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str ?? '';
+    return div.innerHTML;
+  }
+  function vfmt(n) {
+    if (n === null || n === undefined || Number.isNaN(n)) return '—';
+    return Number(n).toFixed(3).replace(/\.?0+$/, '');
+  }
+
+  let magBewerken = false;
+  let vrGroepen = [];          // alle grondstofgroepen (zie laadStockOverview)
+  let laatstGefilterd = [];
+  let vrUitgeklapt = new Set();     // groep-sleutels die uitgeklapt zijn
+  let vrHistorieOpen = new Set();   // groep-sleutels waarvan history getoond wordt
+  let vrHistorieCache = {};         // groep-sleutel -> niet-actieve lots, lazy geladen
+  let huidigeSortering = { kolom: 'naam', oplopend: true };
+  let alleCategorieen = [];
+  let geselecteerdeCategorieen = new Set();
+  const WEKEN_VOORUITKIJK = 52;
+
+  // ---------------------------------------------------------------------
+  // Data laden
+  // ---------------------------------------------------------------------
+  async function laadStockOverview() {
+    vrHistorieCache = {};
+    vrHistorieOpen = new Set();
+    const container = document.getElementById('vo-list-container');
+    container.innerHTML = '<div class="vo-loading">Loading stock…</div>';
+
+    const [ingrRes, lotsRes, mutRes, forecastRes] = await Promise.all([
+      supabaseClient.from('ingredients')
+        .select('id, naam, eenheid, minimum_voorraad, category_id, ingredient_categories(name)')
+        .eq('versie_status', 'huidig'),
+      supabaseClient.from('grondstof_lots')
+        .select('id, ingredient_id, lotcode, leverancier, ontvangstdatum, hoeveelheid_ontvangen, eenheid, tht_datum, locatie, status')
+        .eq('status', 'actief'),
+      supabaseClient.from('voorraad_mutaties').select('lot_id, hoeveelheid').eq('type', 'uitboeking'),
+      vfBerekenVerbruik(supabaseClient, vfVooruitkijkPeriodes(WEKEN_VOORUITKIJK)),
+    ]);
+
+    if (ingrRes.error || lotsRes.error) {
+      container.innerHTML = `<div class="vo-error">Could not load stock: ${escapeHtml((ingrRes.error || lotsRes.error).message)}</div>`;
+      return;
     }
-    function vfmt(n) {
-      if (n === null || n === undefined || Number.isNaN(n)) return '—';
-      return Number(n).toFixed(3).replace(/\.?0+$/, '');
-    }
 
-    let vrGroepen = [];   // [{ ingredientId, naam, eenheid, categorie, minimum, totaal, loopLeegWeek, lots: [...] }]
-    let vrOpen = new Set();
-    let vrHistorieOpen = new Set();  // groep-sleutels waarvan de gesloten/lege lots (history) getoond worden
-    let vrHistorieCache = {};        // groep-sleutel -> array van niet-actieve lots, lazy geladen
-    const WEKEN_VOORUITKIJK = 52; // hoe ver vooruit we op basis van brew_planning projecteren
+    const uitgeboektPerLot = {};
+    (mutRes.data || []).forEach(m => {
+      if (m.lot_id == null) return;
+      uitgeboektPerLot[m.lot_id] = (uitgeboektPerLot[m.lot_id] || 0) + Number(m.hoeveelheid || 0);
+    });
+    const lots = (lotsRes.data || []).map(l => ({
+      ...l, resterend: Number(l.hoeveelheid_ontvangen || 0) - (uitgeboektPerLot[l.id] || 0),
+    }));
 
-    async function laadStockOverview() {
-      vrHistorieCache = {};
-      vrHistorieOpen = new Set();
-      const lijst = document.getElementById('vo-lijst');
-      lijst.innerHTML = '<div class="vo-skeleton">Loading…</div>';
+    const ingredientMap = {};
+    (ingrRes.data || []).forEach(i => { ingredientMap[i.id] = i; });
 
-      const [ingrRes, lotsRes, mutRes, forecastRes] = await Promise.all([
-        supabaseClient.from('ingredients')
-          .select('id, naam, eenheid, minimum_voorraad, category_id, ingredient_categories(name)')
-          .eq('versie_status', 'huidig'),
-        supabaseClient.from('grondstof_lots')
-          .select('id, ingredient_id, lotcode, leverancier, ontvangstdatum, hoeveelheid_ontvangen, eenheid, tht_datum, locatie, status')
-          .eq('status', 'actief'),
-        supabaseClient.from('voorraad_mutaties').select('lot_id, hoeveelheid').eq('type', 'uitboeking'),
-        vfBerekenVerbruik(supabaseClient, vfVooruitkijkPeriodes(WEKEN_VOORUITKIJK)),
-      ]);
-
-      if (ingrRes.error || lotsRes.error) {
-        lijst.innerHTML = `<div style="color:#a33f2c;">Could not load stock: ${escapeHtml((ingrRes.error || lotsRes.error).message)}</div>`;
-        return;
-      }
-
-      const uitgeboektPerLot = {};
-      (mutRes.data || []).forEach(m => {
-        if (m.lot_id == null) return;
-        uitgeboektPerLot[m.lot_id] = (uitgeboektPerLot[m.lot_id] || 0) + Number(m.hoeveelheid || 0);
-      });
-      const lots = (lotsRes.data || []).map(l => ({
-        ...l, resterend: Number(l.hoeveelheid_ontvangen || 0) - (uitgeboektPerLot[l.id] || 0),
-      }));
-
-      const ingredientMap = {};
-      (ingrRes.data || []).forEach(i => { ingredientMap[i.id] = i; });
-
-      // Groeperen per ingrediënt + eenheid (net als Accounting sign-off: nooit kg/l
-      // door elkaar optellen als dat ooit zou voorkomen).
-      const groepenMap = new Map();
-      lots.forEach(l => {
-        const ing = ingredientMap[l.ingredient_id];
-        const naam = ing?.naam || `#${l.ingredient_id}`;
-        const sleutel = `${l.ingredient_id}|${l.eenheid || ''}`;
-        if (!groepenMap.has(sleutel)) {
-          groepenMap.set(sleutel, {
-            ingredientId: l.ingredient_id, naam, eenheid: l.eenheid || '',
-            categorie: ing?.ingredient_categories?.name || null,
-            minimum: ing?.minimum_voorraad != null ? Number(ing.minimum_voorraad) : null,
-            totaal: 0, lots: [],
-          });
-        }
-        const g = groepenMap.get(sleutel);
-        g.totaal += l.resterend;
-        g.lots.push(l);
-      });
-
-      // Ook ingrediënten met een ingesteld minimum maar (nu) geen enkel actief lot
-      // laten zien -- juist dat "0 op voorraad, minimum was 5kg" geval is precies
-      // waar het bijna-leeg-signaal voor bedoeld is.
-      (ingrRes.data || []).forEach(i => {
-        if (i.minimum_voorraad == null) return;
-        const heeftAlEenGroep = [...groepenMap.values()].some(g => g.ingredientId === i.id);
-        if (heeftAlEenGroep) return;
-        const afgeleideEenheid = (i.eenheid || '').split('/')[0] || '';
-        groepenMap.set(`${i.id}|leeg`, {
-          ingredientId: i.id, naam: i.naam, eenheid: afgeleideEenheid,
-          categorie: i.ingredient_categories?.name || null,
-          minimum: Number(i.minimum_voorraad), totaal: 0, lots: [],
+    const groepenMap = new Map();
+    lots.forEach(l => {
+      const ing = ingredientMap[l.ingredient_id];
+      const naam = ing?.naam || `#${l.ingredient_id}`;
+      const sleutel = `${l.ingredient_id}|${l.eenheid || ''}`;
+      if (!groepenMap.has(sleutel)) {
+        groepenMap.set(sleutel, {
+          ingredientId: l.ingredient_id, naam, eenheid: l.eenheid || '',
+          categorie: ing?.ingredient_categories?.name || null,
+          categorieId: ing?.category_id != null ? String(ing.category_id) : null,
+          minimum: ing?.minimum_voorraad != null ? Number(ing.minimum_voorraad) : null,
+          totaal: 0, lots: [],
         });
-      });
-
-      // Loopt-leeg-projectie koppelen (zelfde ingredient+canonieke eenheid-sleutel als
-      // voorraad-forecast.js zelf gebruikt).
-      vrGroepen = [...groepenMap.values()].map(g => {
-        const forecastKey = `${g.ingredientId}|${vfCanoniekeEenheid(g.eenheid)}`;
-        const forecastEntry = (forecastRes && forecastRes.perIngredient) ? forecastRes.perIngredient[forecastKey] : null;
-        const loopLeegWeek = forecastEntry ? vfLoopVoorraadVooruit(g.totaal, forecastEntry.perWeek) : null;
-        return { ...g, loopLeegWeek };
-      }).sort((a, b) => a.naam.localeCompare(b.naam));
-
-      vulCategorieFilter();
-      renderStockLijst();
-    }
-
-    function vulCategorieFilter() {
-      const select = document.getElementById('vo-categorie');
-      const huidige = select.value;
-      const categorieen = [...new Set(vrGroepen.map(g => g.categorie).filter(Boolean))].sort();
-      select.innerHTML = ['<option value="">All categories</option>']
-        .concat(categorieen.map(c => `<option value="${escapeHtml(c)}" ${c === huidige ? 'selected' : ''}>${escapeHtml(c)}</option>`)).join('');
-    }
-
-    function isOnderMinimum(g) { return g.minimum != null && g.totaal < g.minimum; }
-
-    function renderStockLijst() {
-      const lijst = document.getElementById('vo-lijst');
-      const zoekterm = document.getElementById('vo-zoek').value.trim().toLowerCase();
-      const categorieFilter = document.getElementById('vo-categorie').value;
-      const alleenOnderMin = document.getElementById('vo-alleen-onder-min').checked;
-      const toonLeeg = document.getElementById('vo-toon-leeg').checked;
-
-      let groepen = vrGroepen;
-      if (categorieFilter) groepen = groepen.filter(g => g.categorie === categorieFilter);
-      if (zoekterm) groepen = groepen.filter(g => g.naam.toLowerCase().includes(zoekterm));
-      if (alleenOnderMin) groepen = groepen.filter(isOnderMinimum);
-      if (!toonLeeg) groepen = groepen.filter(g => g.totaal > 0);
-
-      document.getElementById('vo-count').textContent = `${groepen.length} ingredient${groepen.length === 1 ? '' : 's'}`;
-
-      if (groepen.length === 0) {
-        lijst.innerHTML = '<p class="vo-skeleton">No ingredients match these filters.</p>';
-        return;
       }
+      const g = groepenMap.get(sleutel);
+      g.totaal += l.resterend;
+      g.lots.push(l);
+    });
 
-      const rijenHtml = groepen.map((g) => {
-        const groepKey = g.ingredientId + '|' + g.eenheid;
-        const open = vrOpen.has(groepKey);
-        const historieOpen = vrHistorieOpen.has(groepKey);
-        const historischeLots = vrHistorieCache[groepKey] || [];
-        const onderMin = isOnderMinimum(g);
-        const loopLeegTekst = g.loopLeegWeek
-          ? `Runs out ~${escapeHtml(g.loopLeegWeek)}`
-          : (g.totaal <= 0 ? 'No stock' : 'No shortage expected');
+    (ingrRes.data || []).forEach(i => {
+      if (i.minimum_voorraad == null) return;
+      if ([...groepenMap.values()].some(g => g.ingredientId === i.id)) return;
+      groepenMap.set(`${i.id}|leeg`, {
+        ingredientId: i.id, naam: i.naam, eenheid: (i.eenheid || '').split('/')[0] || '',
+        categorie: i.ingredient_categories?.name || null,
+        categorieId: i.category_id != null ? String(i.category_id) : null,
+        minimum: Number(i.minimum_voorraad), totaal: 0, lots: [],
+      });
+    });
+
+    vrGroepen = [...groepenMap.values()].map(g => {
+      const forecastKey = `${g.ingredientId}|${vfCanoniekeEenheid(g.eenheid)}`;
+      const forecastEntry = (forecastRes && forecastRes.perIngredient) ? forecastRes.perIngredient[forecastKey] : null;
+      const loopLeegWeek = forecastEntry ? vfLoopVoorraadVooruit(g.totaal, forecastEntry.perWeek) : null;
+      return { ...g, loopLeegWeek };
+    });
+
+    alleCategorieen = [...new Map(
+      vrGroepen.filter(g => g.categorieId).map(g => [g.categorieId, g.categorie])
+    ).entries()].map(([id, naam]) => ({ id, naam })).sort((a, b) => a.naam.localeCompare(b.naam));
+    if (geselecteerdeCategorieen.size === 0) geselecteerdeCategorieen = new Set(alleCategorieen.map(c => c.id));
+    setupCategorieFilter();
+
+    pasFiltersToe();
+  }
+
+  // ---------------------------------------------------------------------
+  // Filters
+  // ---------------------------------------------------------------------
+  function setupCategorieFilter() {
+    const optionsContainer = document.getElementById('dd-vo-categorie-options');
+    optionsContainer.innerHTML = alleCategorieen.map(c => `
+      <label class="dd-filter-option">
+        <input type="checkbox" value="${escapeHtml(c.id)}" ${geselecteerdeCategorieen.has(c.id) ? 'checked' : ''} />
+        ${escapeHtml(c.naam)}
+      </label>`).join('');
+
+    const mark = document.getElementById('dd-vo-categorie-mark');
+    const werkMarkBij = () => { mark.style.display = geselecteerdeCategorieen.size < alleCategorieen.length ? 'block' : 'none'; };
+    werkMarkBij();
+
+    optionsContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        if (cb.checked) geselecteerdeCategorieen.add(cb.value); else geselecteerdeCategorieen.delete(cb.value);
+        werkMarkBij();
+        pasFiltersToe();
+      });
+    });
+    const panel = document.getElementById('dd-vo-categorie-panel');
+    panel.querySelector('[data-actie="all"]').onclick = () => {
+      alleCategorieen.forEach(c => geselecteerdeCategorieen.add(c.id));
+      optionsContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = true);
+      werkMarkBij(); pasFiltersToe();
+    };
+    panel.querySelector('[data-actie="none"]').onclick = () => {
+      geselecteerdeCategorieen.clear();
+      optionsContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
+      werkMarkBij(); pasFiltersToe();
+    };
+  }
+  function toggleDropdownPanel(prefix) {
+    const panel = document.getElementById(`dd-${prefix}-panel`);
+    const wasOpen = panel.style.display !== 'none';
+    document.querySelectorAll('.dd-filter-panel').forEach(p => p.style.display = 'none');
+    document.querySelectorAll('.dd-filter-btn').forEach(b => b.classList.remove('actief-menu'));
+    if (!wasOpen) {
+      panel.style.display = 'block';
+      document.getElementById(`dd-${prefix}-btn`).classList.add('actief-menu');
+    }
+  }
+  document.getElementById('dd-vo-categorie-btn').addEventListener('click', (e) => { e.stopPropagation(); toggleDropdownPanel('vo-categorie'); });
+  document.querySelectorAll('.dd-filter-panel').forEach(p => p.addEventListener('click', e => e.stopPropagation()));
+  document.addEventListener('click', () => {
+    document.querySelectorAll('.dd-filter-panel').forEach(p => p.style.display = 'none');
+    document.querySelectorAll('.dd-filter-btn').forEach(b => b.classList.remove('actief-menu'));
+  });
+
+  function isOnderMinimum(g) { return g.minimum != null && g.totaal < g.minimum; }
+
+  function pasFiltersToe() {
+    const zoekterm = document.getElementById('vo-zoek').value.trim().toLowerCase();
+    const alleenOnderMin = document.getElementById('vo-alleen-onder-min').checked;
+    const toonLeeg = document.getElementById('vo-toon-leeg').checked;
+
+    const gefilterd = vrGroepen.filter(g => {
+      const matchtZoek = !zoekterm || g.naam.toLowerCase().includes(zoekterm);
+      const matchtCategorie = !g.categorieId || geselecteerdeCategorieen.has(g.categorieId);
+      const matchtMin = !alleenOnderMin || isOnderMinimum(g);
+      const matchtLeeg = toonLeeg || g.totaal > 0;
+      return matchtZoek && matchtCategorie && matchtMin && matchtLeeg;
+    });
+    laatstGefilterd = gefilterd;
+    renderStockLijst(pasSorteringToe(gefilterd));
+  }
+  document.getElementById('vo-zoek').addEventListener('input', pasFiltersToe);
+  document.getElementById('vo-alleen-onder-min').addEventListener('change', pasFiltersToe);
+  document.getElementById('vo-toon-leeg').addEventListener('change', pasFiltersToe);
+
+  // ---------------------------------------------------------------------
+  // Sortering
+  // ---------------------------------------------------------------------
+  function zetSortering(kolom) {
+    if (huidigeSortering.kolom === kolom) huidigeSortering.oplopend = !huidigeSortering.oplopend;
+    else huidigeSortering = { kolom, oplopend: true };
+    renderStockLijst(pasSorteringToe(laatstGefilterd));
+  }
+  function sorteerPijl(kolom) {
+    if (huidigeSortering.kolom !== kolom) return '';
+    return huidigeSortering.oplopend ? ' &#9650;' : ' &#9660;';
+  }
+  function pasSorteringToe(groepen) {
+    const { kolom, oplopend } = huidigeSortering;
+    const rijen = [...groepen];
+    rijen.sort((a, b) => {
+      let av, bv;
+      if (kolom === 'naam') { av = a.naam.toLowerCase(); bv = b.naam.toLowerCase(); }
+      else if (kolom === 'categorie') { av = a.categorie || ''; bv = b.categorie || ''; }
+      else if (kolom === 'voorraad') { av = a.totaal; bv = b.totaal; }
+      else if (kolom === 'status') { av = isOnderMinimum(a) ? 0 : 1; bv = isOnderMinimum(b) ? 0 : 1; }
+      else { av = a.naam.toLowerCase(); bv = b.naam.toLowerCase(); }
+      if (av < bv) return oplopend ? -1 : 1;
+      if (av > bv) return oplopend ? 1 : -1;
+      return 0;
+    });
+    return rijen;
+  }
+
+  // ---------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------
+  function renderStockLijst(groepen) {
+    const container = document.getElementById('vo-list-container');
+    document.getElementById('vo-result-count').textContent = `${groepen.length} ingredient${groepen.length === 1 ? '' : 's'}`;
+
+    if (groepen.length === 0) {
+      container.innerHTML = '<div class="vo-empty">No ingredients match these filters.</div>';
+      return;
+    }
+
+    const kolommen = [['naam', 'Name'], ['categorie', 'Category'], ['eenheid', 'Unit'], ['voorraad', 'Current stock'], ['minimum', 'Minimum'], ['status', 'Status'], ['loopt_leeg', 'Runs out']];
+
+    const rijenHtml = groepen.map(g => {
+      const sleutel = `${g.ingredientId}|${g.eenheid}`;
+      const uitgeklapt = vrUitgeklapt.has(sleutel);
+      const onderMin = isOnderMinimum(g);
+      const loopLeegTekst = g.loopLeegWeek
+        ? `Runs out ~${escapeHtml(g.loopLeegWeek)}`
+        : (g.totaal <= 0 ? 'No stock' : 'No shortage expected');
+      let subrijHtml = '';
+      if (uitgeklapt) {
+        const historieOpen = vrHistorieOpen.has(sleutel);
+        const historischeLots = vrHistorieCache[sleutel] || [];
         const alleLots = historieOpen ? g.lots.concat(historischeLots) : g.lots;
-
-        const groepRij = `
-          <tr class="vo-groep-rij ${onderMin ? 'vo-onder-minimum' : ''}" data-key="${groepKey}">
-            <td><span class="vo-chevron">${open ? '▾' : '▸'}</span> ${escapeHtml(g.naam)}</td>
-            <td><span class="vo-categorie-tag">${escapeHtml(g.categorie || '—')}</span></td>
-            <td>${escapeHtml(g.eenheid || '—')}</td>
-            <td class="vo-tabel-getal">${vfmt(g.totaal)}</td>
-            <td class="vo-tabel-getal">${g.minimum != null ? vfmt(g.minimum) : '—'}</td>
-            <td><span class="status-pill ${onderMin ? 'status-onder-min' : (g.totaal <= 0 ? 'status-leeg' : 'status-ok')}">${onderMin ? 'Below minimum' : (g.totaal <= 0 ? 'No stock' : 'OK')}</span></td>
-            <td class="${g.loopLeegWeek ? 'vo-loopt-leeg-urgent' : ''}">${loopLeegTekst}</td>
-          </tr>`;
-
-        const expandRij = `
-          <tr class="vo-expand-rij" data-expand-key="${groepKey}" style="${open ? '' : 'display:none;'}">
-            <td colspan="7">
-              <div class="vo-expand-inner">
-                ${alleLots.length === 0 ? '<p class="vo-skeleton">No active lots.</p>' : `
-                <table class="vo-sub-tabel">
+        subrijHtml = `
+          <tr class="vo-subrij" data-sub-voor="${sleutel}">
+            <td colspan="${kolommen.length}">
+              <div class="vo-subrij-inhoud">
+                ${alleLots.length === 0 ? '<p class="vo-empty" style="padding:12px 0;">No active lots.</p>' : `
+                <table class="vo-lot-tabel">
                   <thead><tr><th>Lot code</th><th>Supplier</th><th>Received</th><th>Qty received</th><th>Remaining</th><th>Best-before</th><th>Location</th><th>Status</th></tr></thead>
                   <tbody>
                     ${alleLots.map(l => `
-                      <tr class="vo-lot-rij" data-id="${l.id}">
+                      <tr class="vo-lot-rij" data-id="${l.id}" data-groep="${sleutel}">
                         <td>${escapeHtml(l.lotcode || '(no code)')}</td>
                         <td>${escapeHtml(l.leverancier || '—')}</td>
                         <td>${l.ontvangstdatum || '—'}</td>
@@ -320,191 +452,166 @@
                         <td>${vfmt(l.resterend)} ${escapeHtml(l.eenheid || '')}</td>
                         <td>${l.tht_datum || '—'}</td>
                         <td>${escapeHtml(l.locatie || '—')}</td>
-                        <td><span class="status-pill ${l.status === 'actief' ? 'status-ok' : 'status-leeg'}">${escapeHtml(l.status)}</span></td>
+                        <td><span class="status-pill ${l.status === 'actief' ? 'status-ok' : ''}">${escapeHtml(l.status)}</span></td>
                       </tr>`).join('')}
                   </tbody>
                 </table>`}
-                <button type="button" class="vo-historie-btn" data-key="${groepKey}">
+                <button type="button" class="vo-historie-btn" data-key="${sleutel}">
                   ${historieOpen ? 'Hide closed/empty lots' : 'Show closed/empty lots (history)'}
                 </button>
               </div>
             </td>
           </tr>`;
-
-        return groepRij + expandRij;
-      }).join('');
-
-      lijst.innerHTML = `
-        <table class="vo-tabel">
-          <thead><tr>
-            <th>Ingredient</th><th>Category</th><th>Unit</th><th>Current stock</th><th>Minimum</th><th>Status</th><th>Forecast</th>
-          </tr></thead>
-          <tbody>${rijenHtml}</tbody>
-        </table>`;
-
-      lijst.querySelectorAll('.vo-groep-rij').forEach(tr => {
-        tr.addEventListener('click', () => {
-          const key = tr.dataset.key;
-          if (vrOpen.has(key)) vrOpen.delete(key); else vrOpen.add(key);
-          renderStockLijst();
-        });
-      });
-      lijst.querySelectorAll('.vo-historie-btn').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-          e.stopPropagation();
-          const key = btn.dataset.key;
-          if (vrHistorieOpen.has(key)) {
-            vrHistorieOpen.delete(key);
-            renderStockLijst();
-            return;
-          }
-          btn.textContent = 'Loading…';
-          const g = groepen.find(x => (x.ingredientId + '|' + x.eenheid) === key);
-          if (!vrHistorieCache[key]) {
-            const { data, error } = await supabaseClient.from('grondstof_lots')
-              .select('id, ingredient_id, lotcode, leverancier, ontvangstdatum, hoeveelheid_ontvangen, eenheid, tht_datum, locatie, status')
-              .eq('ingredient_id', g.ingredientId).eq('eenheid', g.eenheid).neq('status', 'actief')
-              .order('ontvangstdatum', { ascending: false });
-            if (error) { alert('Could not load lot history: ' + error.message); return; }
-            vrHistorieCache[key] = (data || []).map(l => ({ ...l, resterend: 0 }));
-          }
-          vrHistorieOpen.add(key);
-          renderStockLijst();
-        });
-      });
-      lijst.querySelectorAll('.vo-lot-rij').forEach(tr => {
-        tr.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const key = tr.closest('.vo-expand-rij').dataset.expandKey;
-          const g = groepen.find(x => (x.ingredientId + '|' + x.eenheid) === key);
-          const alleLots = g.lots.concat(vrHistorieCache[key] || []);
-          const lot = alleLots.find(l => String(l.id) === tr.dataset.id);
-          if (lot) toonLotDetail(lot, g);
-        });
-      });
-    }
-    document.getElementById('vo-zoek').addEventListener('input', renderStockLijst);
-    document.getElementById('vo-categorie').addEventListener('change', renderStockLijst);
-    document.getElementById('vo-alleen-onder-min').addEventListener('change', renderStockLijst);
-    document.getElementById('vo-toon-leeg').addEventListener('change', renderStockLijst);
-
-    // ---------------------------------------------------------------------
-    // Lot-detailpopup
-    // ---------------------------------------------------------------------
-    function toonLotDetail(l, groep) {
-      const rijen = [
-        ['Ingredient', groep?.naam || '—'],
-        ['Supplier', l.leverancier || '—'],
-        ['Lot / batch code', l.lotcode || '—'],
-        ['Receiving date', l.ontvangstdatum || '—'],
-        ['Quantity received', `${l.hoeveelheid_ontvangen ?? '—'} ${l.eenheid || ''}`],
-        ['Remaining', `${vfmt(l.resterend)} ${l.eenheid || ''}`],
-        ['Location', l.locatie || '—'],
-        ['Best-before date', l.tht_datum || '—'],
-        ['Status', l.status || '—'],
-      ];
-      document.getElementById('vo-lot-detail-body').innerHTML = rijen.map(([label, waarde]) =>
-        `<div class="vo-detail-rij"><span class="vo-detail-label">${escapeHtml(label)}</span><span class="vo-detail-waarde">${escapeHtml(String(waarde))}</span></div>`
-      ).join('');
-      laadLotBatchGebruik(l.id);
-
-      const legeKnopContainer = document.getElementById('vo-lot-detail-leeg-knop');
-      if (magBewerken && l.resterend > 0) {
-        legeKnopContainer.innerHTML = `<button type="button" id="vo-lot-leeg-btn" class="vo-modal-btn vo-modal-btn-gevaar">Mark lot as empty</button>`;
-        document.getElementById('vo-lot-leeg-btn').addEventListener('click', () => zetLotOpLeeg(l, groep));
-      } else {
-        legeKnopContainer.innerHTML = '';
       }
-      document.getElementById('vo-lot-detail-overlay').style.display = 'flex';
-    }
-    // Track & trace: welke bierbatches hebben materiaal uit dit lot gehad. Telt zowel
-    // directe uitboekingen (Book out material) als, zodra dat weer actief is, de
-    // automatische uitboeking bij Create batch -- allebei staan gewoon in
-    // voorraad_mutaties met hetzelfde lot_id en een batch_id.
-    async function laadLotBatchGebruik(lotId) {
-      const container = document.getElementById('vo-lot-detail-batches');
-      container.innerHTML = '<span class="vo-skeleton">Loading…</span>';
-      const { data, error } = await supabaseClient
-        .from('voorraad_mutaties')
-        .select('hoeveelheid, aangemaakt_op, batches(batchnummer, naam)')
-        .eq('lot_id', lotId)
-        .eq('type', 'uitboeking')
-        .not('batch_id', 'is', null)
-        .order('aangemaakt_op', { ascending: true });
-      if (error) {
-        container.innerHTML = `<span style="color:#a33f2c;">Could not load: ${escapeHtml(error.message)}</span>`;
-        return;
+      return `
+        <tr class="vo-rij ${uitgeklapt ? 'vo-uitgeklapt' : ''}" data-key="${sleutel}">
+          <td><span class="vo-chevron">${uitgeklapt ? '▾' : '▸'}</span>${escapeHtml(g.naam)}</td>
+          <td>${escapeHtml(g.categorie || '—')}</td>
+          <td>${escapeHtml(g.eenheid || '—')}</td>
+          <td class="vo-tabel-getal">${vfmt(g.totaal)}</td>
+          <td class="vo-tabel-getal">${g.minimum != null ? vfmt(g.minimum) : '—'}</td>
+          <td>${onderMin ? '<span class="status-pill status-onder-min">Below minimum</span>' : '<span class="status-pill status-ok">OK</span>'}</td>
+          <td class="${g.loopLeegWeek ? 'vo-loopt-leeg-urgent' : ''}">${loopLeegTekst}</td>
+        </tr>${subrijHtml}`;
+    }).join('');
+
+    container.innerHTML = `
+      <table class="vo-tabel">
+        <thead><tr>${kolommen.map(([kolom, label]) =>
+          `<th class="vo-sorteerbaar${kolom === 'voorraad' || kolom === 'minimum' ? ' vo-tabel-getal' : ''}" data-kolom="${kolom}">${label}${sorteerPijl(kolom)}</th>`).join('')}</tr></thead>
+        <tbody>${rijenHtml}</tbody>
+      </table>`;
+
+    container.querySelectorAll('thead th[data-kolom]').forEach(th => {
+      // Alleen naam/categorie/voorraad/status hebben een zinnige sorteerbetekenis
+      if (['naam', 'categorie', 'voorraad', 'status'].includes(th.dataset.kolom)) {
+        th.addEventListener('click', () => zetSortering(th.dataset.kolom));
       }
-      if (!data || data.length === 0) {
-        container.innerHTML = '<span class="vo-skeleton">Not used in any batch yet.</span>';
-        return;
-      }
-      container.innerHTML = data.map(m => `
-        <div class="vo-detail-rij">
-          <span class="vo-detail-label">${m.batches ? escapeHtml(String(m.batches.batchnummer)) + ' — ' + escapeHtml(m.batches.naam) : '(deleted batch)'}</span>
-          <span class="vo-detail-waarde">${vfmt(m.hoeveelheid)} · ${m.aangemaakt_op ? new Date(m.aangemaakt_op).toLocaleDateString() : '—'}</span>
-        </div>`).join('');
-    }
-    document.getElementById('vo-lot-detail-sluiten').addEventListener('click', () => {
-      document.getElementById('vo-lot-detail-overlay').style.display = 'none';
     });
-    document.getElementById('vo-lot-detail-overlay').addEventListener('click', (e) => {
-      if (e.target.id === 'vo-lot-detail-overlay') document.getElementById('vo-lot-detail-overlay').style.display = 'none';
-    });
-
-    // Boekt in één keer de resterende hoeveelheid van een lot uit (naar exact 0) en
-    // zet het lot op 'leeg'. Verwerkt als een gewone Book out material-boeking
-    // (type 'uitboeking', geen batch, gemarkeerd als correctie) zodat 'ie ook gewoon
-    // in de Accounting sign-off-lijst verschijnt en afgetekend moet worden -- net als
-    // elke andere handmatige boeking.
-    async function zetLotOpLeeg(l, groep) {
-      if (!confirm(`Book out the remaining ${vfmt(l.resterend)} ${l.eenheid || ''} of lot "${l.lotcode || '(no code)'}" and mark it as empty?`)) return;
-      const btn = document.getElementById('vo-lot-leeg-btn');
-      btn.disabled = true;
-      btn.textContent = 'Saving…';
-      const { data: { session } } = await supabaseClient.auth.getSession();
-
-      const { error: mutErr } = await supabaseClient.from('voorraad_mutaties').insert({
-        lot_id: l.id,
-        type: 'uitboeking',
-        hoeveelheid: l.resterend,
-        notitie: 'Lot marked empty from Stock overview',
-        is_correction: true,
-        geboekt_in_boekhouding: false,
-        aangemaakt_door: session?.user?.id ?? null,
+    container.querySelectorAll('tr.vo-rij').forEach(tr => {
+      tr.addEventListener('click', () => {
+        const key = tr.dataset.key;
+        if (vrUitgeklapt.has(key)) vrUitgeklapt.delete(key); else vrUitgeklapt.add(key);
+        renderStockLijst(pasSorteringToe(laatstGefilterd));
       });
-      if (mutErr) {
-        alert('Could not book out this lot: ' + mutErr.message);
-        btn.disabled = false;
-        btn.textContent = 'Mark lot as empty';
-        return;
-      }
-      const { error: lotErr } = await supabaseClient.from('grondstof_lots').update({ status: 'leeg' }).eq('id', l.id);
-      if (lotErr) {
-        alert('Booked out, but could not update the lot status: ' + lotErr.message);
-      }
-      document.getElementById('vo-lot-detail-overlay').style.display = 'none';
-      laadStockOverview();
+    });
+    container.querySelectorAll('.vo-historie-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const key = btn.dataset.key;
+        if (vrHistorieOpen.has(key)) { vrHistorieOpen.delete(key); renderStockLijst(pasSorteringToe(laatstGefilterd)); return; }
+        btn.textContent = 'Loading…';
+        const g = vrGroepen.find(x => `${x.ingredientId}|${x.eenheid}` === key);
+        if (!vrHistorieCache[key]) {
+          const { data, error } = await supabaseClient.from('grondstof_lots')
+            .select('id, ingredient_id, lotcode, leverancier, ontvangstdatum, hoeveelheid_ontvangen, eenheid, tht_datum, locatie, status')
+            .eq('ingredient_id', g.ingredientId).eq('eenheid', g.eenheid).neq('status', 'actief')
+            .order('ontvangstdatum', { ascending: false });
+          if (error) { alert('Could not load lot history: ' + error.message); return; }
+          vrHistorieCache[key] = (data || []).map(l => ({ ...l, resterend: 0 }));
+        }
+        vrHistorieOpen.add(key);
+        renderStockLijst(pasSorteringToe(laatstGefilterd));
+      });
+    });
+    container.querySelectorAll('.vo-lot-rij').forEach(tr => {
+      tr.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const key = tr.dataset.groep;
+        const g = vrGroepen.find(x => `${x.ingredientId}|${x.eenheid}` === key);
+        const alleLots = g.lots.concat(vrHistorieCache[key] || []);
+        const lot = alleLots.find(l => String(l.id) === tr.dataset.id);
+        if (lot) toonLotDetail(lot, g);
+      });
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // Lot-detailpopup
+  // ---------------------------------------------------------------------
+  function toonLotDetail(l, groep) {
+    const rijen = [
+      ['Ingredient', groep?.naam || '—'],
+      ['Supplier', l.leverancier || '—'],
+      ['Lot / batch code', l.lotcode || '—'],
+      ['Receiving date', l.ontvangstdatum || '—'],
+      ['Quantity received', `${l.hoeveelheid_ontvangen ?? '—'} ${l.eenheid || ''}`],
+      ['Remaining', `${vfmt(l.resterend)} ${l.eenheid || ''}`],
+      ['Location', l.locatie || '—'],
+      ['Best-before date', l.tht_datum || '—'],
+      ['Status', l.status || '—'],
+    ];
+    document.getElementById('vo-lot-detail-body').innerHTML = rijen.map(([label, waarde]) =>
+      `<div class="vo-kv"><span>${escapeHtml(label)}</span><span>${escapeHtml(String(waarde))}</span></div>`
+    ).join('');
+    laadLotBatchGebruik(l.id);
+
+    const legeKnopContainer = document.getElementById('vo-lot-detail-leeg-knop');
+    if (magBewerken && l.resterend > 0) {
+      legeKnopContainer.innerHTML = `<button type="button" id="vo-lot-leeg-btn" class="vo-leeg-btn">Mark lot as empty</button>`;
+      document.getElementById('vo-lot-leeg-btn').addEventListener('click', () => zetLotOpLeeg(l, groep));
+    } else {
+      legeKnopContainer.innerHTML = '';
     }
+    document.getElementById('vo-lot-detail-overlay').style.display = 'flex';
+  }
 
-    // ---------------------------------------------------------------------
-    // Print / export -- gebruikt gewoon de huidige filters + huidige open/dicht-
-    // status; voor een stocktelling zet je vóór het printen elke groep open zodat
-    // de lots meegeprint worden (of laat ze dicht voor een korte totalen-lijst).
-    // ---------------------------------------------------------------------
-    document.getElementById('vo-print-btn').addEventListener('click', () => {
-      window.print();
-    });
+  async function laadLotBatchGebruik(lotId) {
+    const container = document.getElementById('vo-lot-detail-batches');
+    container.innerHTML = '<span class="vo-loading" style="padding:10px 0;">Loading…</span>';
+    const { data, error } = await supabaseClient
+      .from('voorraad_mutaties')
+      .select('hoeveelheid, aangemaakt_op, batches(batchnummer, naam)')
+      .eq('lot_id', lotId).eq('type', 'uitboeking').not('batch_id', 'is', null)
+      .order('aangemaakt_op', { ascending: true });
+    if (error) { container.innerHTML = `<span style="color:#a3492f;">Could not load: ${escapeHtml(error.message)}</span>`; return; }
+    if (!data || data.length === 0) { container.innerHTML = '<span class="vo-loading" style="padding:10px 0;">Not used in any batch yet.</span>'; return; }
+    container.innerHTML = data.map(m => `
+      <div class="vo-kv">
+        <span>${m.batches ? escapeHtml(String(m.batches.batchnummer)) + ' — ' + escapeHtml(m.batches.naam) : '(deleted batch)'}</span>
+        <span>${vfmt(m.hoeveelheid)} · ${m.aangemaakt_op ? new Date(m.aangemaakt_op).toLocaleDateString() : '—'}</span>
+      </div>`).join('');
+  }
 
-    // ---------------------------------------------------------------------
-    // Init
-    // ---------------------------------------------------------------------
-    let magBewerken = false;
-    window.addEventListener('DOMContentLoaded', async () => {
-      const gebruiker = await getHuidigeGebruiker();
-      magBewerken = !!gebruiker && await magBewerkenModule('inventory');
-      await laadStockOverview();
+  document.getElementById('vo-lot-detail-sluiten').addEventListener('click', () => {
+    document.getElementById('vo-lot-detail-overlay').style.display = 'none';
+  });
+  document.getElementById('vo-lot-detail-overlay').addEventListener('click', (e) => {
+    if (e.target.id === 'vo-lot-detail-overlay') document.getElementById('vo-lot-detail-overlay').style.display = 'none';
+  });
+
+  async function zetLotOpLeeg(l, groep) {
+    if (!confirm(`Book out the remaining ${vfmt(l.resterend)} ${l.eenheid || ''} of lot "${l.lotcode || '(no code)'}" and mark it as empty?`)) return;
+    const btn = document.getElementById('vo-lot-leeg-btn');
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+    const { data: { session } } = await supabaseClient.auth.getSession();
+
+    const { error: mutErr } = await supabaseClient.from('voorraad_mutaties').insert({
+      lot_id: l.id, type: 'uitboeking', hoeveelheid: l.resterend,
+      notitie: 'Lot marked empty from Stock overview', is_correction: true,
+      geboekt_in_boekhouding: false, aangemaakt_door: session?.user?.id ?? null,
     });
-  </script>
+    if (mutErr) { alert('Could not book out this lot: ' + mutErr.message); btn.disabled = false; btn.textContent = 'Mark lot as empty'; return; }
+    const { error: lotErr } = await supabaseClient.from('grondstof_lots').update({ status: 'leeg' }).eq('id', l.id);
+    if (lotErr) alert('Booked out, but could not update the lot status: ' + lotErr.message);
+    document.getElementById('vo-lot-detail-overlay').style.display = 'none';
+    laadStockOverview();
+  }
+
+  // ---------------------------------------------------------------------
+  // Print / export
+  // ---------------------------------------------------------------------
+  document.getElementById('vo-print-btn').addEventListener('click', () => window.print());
+
+  // ---------------------------------------------------------------------
+  // Init
+  // ---------------------------------------------------------------------
+  window.addEventListener('DOMContentLoaded', async () => {
+    const gebruiker = await getHuidigeGebruiker();
+    magBewerken = !!gebruiker && await magBewerkenModule('inventory');
+    await laadStockOverview();
+  });
+</script>
 </body>
 </html>
