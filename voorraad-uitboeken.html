@@ -9,104 +9,130 @@
 <title>Jopen — Book out material</title>
 <link rel="stylesheet" href="jopen-shared.css">
 <style>
-  main.vr-main { max-width: 1100px; margin: 0 auto; padding: 24px; }
-  .vr-tabs { display: flex; gap: 4px; margin-bottom: 18px; border-bottom: 1px solid #ddd; }
-  .vr-tab-btn {
-    background: none; border: none; padding: 10px 16px; font-size: 0.95em; cursor: pointer;
-    color: #6b6b6b; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  /* Zelfde visuele taal als ingredienten.html/receptoverzicht.html/voorraad-overzicht.html/voorraad-inboeken.html. */
+  :root {
+    --ink: #1c2b26;
+    --paper: #f6f4ee;
+    --line: #d8d2c4;
+    --hop: #4c6b4f;
+    --hop-dark: #33473a;
+    --amber: #b4772c;
+    --mono: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, Helvetica, sans-serif;
+    --serif: Arial, Helvetica, sans-serif;
   }
-  .vr-tab-btn.actief { color: var(--jopen-red); border-bottom-color: var(--jopen-red); font-weight: 600; }
+  main.vr-main { font-family: var(--serif); color: var(--ink); background: var(--paper); padding: 24px 32px 60px; max-width: 1100px; margin: 0 auto; }
+  .vr-titel { font-size: 32px; margin: 0 0 4px; }
+  .vr-meta { font-family: var(--mono); font-size: 13px; color: #6b6355; margin: 0 0 8px; }
+
+  .vr-tabs { display: flex; gap: 4px; margin-bottom: 18px; border-bottom: 2px solid var(--line); }
+  .vr-tab-btn {
+    background: none; border: none; padding: 10px 16px; font-size: 14px; cursor: pointer; font-family: var(--serif);
+    color: #6b6355; border-bottom: 2px solid transparent; margin-bottom: -2px;
+  }
+  .vr-tab-btn.actief { color: var(--hop-dark); border-bottom-color: var(--hop-dark); font-weight: 700; }
   .vr-tab-panel { display: none; }
   .vr-tab-panel.actief { display: block; }
   section.vr-block {
-    background: white; border-radius: 10px; padding: 20px 22px; margin-bottom: 20px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    background: white; border: 1px solid var(--line); border-radius: 6px; padding: 22px 26px; margin-bottom: 20px;
   }
-  section.vr-block h2 { font-size: 1em; margin: 0 0 14px 0; color: var(--jopen-red); }
+  section.vr-block h2 {
+    font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: #6b6355; margin: 0 0 10px 0;
+  }
   .vr-field { margin-bottom: 14px; position: relative; }
   .vr-field label {
-    display: block; font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.04em;
-    color: #6b6b6b; margin-bottom: 4px;
+    display: block; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em;
+    font-family: var(--mono); color: #6b6355; margin-bottom: 5px;
   }
   .vr-field input[type="text"], .vr-field input[type="number"], .vr-field input[type="date"], .vr-field select, .vr-field textarea {
-    width: 100%; padding: 8px 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 0.95em; box-sizing: border-box;
+    width: 100%; padding: 9px 11px; border: 1px solid var(--line); border-radius: 4px; font-size: 15px;
+    font-family: var(--serif); box-sizing: border-box; background: #fff; color: var(--ink);
   }
   .vr-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 18px; }
-  .vr-checkbox-row { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+  .vr-checkbox-row { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; font-size: 15px; }
   .vr-checkbox-row input { width: auto; }
   #vr-manu-resultaten {
     position: absolute; z-index: 5; top: 100%; left: 0; right: 0;
-    background: white; border: 1px solid #ccc; border-top: none; border-radius: 0 0 6px 6px;
+    background: white; border: 1px solid var(--line); border-top: none; border-radius: 0 0 4px 4px;
     max-height: 220px; overflow-y: auto; display: none;
   }
-  #vr-manu-resultaten div { padding: 8px 10px; cursor: pointer; font-size: 0.92em; border-bottom: 1px solid #f0f0ee; }
-  #vr-manu-resultaten div:hover { background: var(--jopen-red-tint); }
+  #vr-manu-resultaten div { padding: 9px 11px; cursor: pointer; font-size: 15px; border-bottom: 1px solid #ece8dc; }
+  #vr-manu-resultaten div:hover { background: #faf8f2; }
   .vr-btn {
-    background: var(--jopen-red); color: white; border: none; padding: 9px 20px;
-    border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.95em;
+    background: var(--amber); color: white; border: none; padding: 10px 22px;
+    border-radius: 6px; font-weight: 700; cursor: pointer; font-size: 14px; font-family: var(--serif);
   }
-  .vr-btn:disabled { opacity: 0.5; cursor: default; }
+  .vr-btn:hover { background: #96601f; }
+  .vr-btn:disabled { opacity: 0.4; cursor: default; background: var(--amber); }
   .vr-btn-secundair {
-    background: none; border: 1px solid var(--jopen-red); color: var(--jopen-red); border-radius: 6px;
-    padding: 5px 12px; cursor: pointer; font-size: 0.85em;
+    background: none; border: 1.5px solid var(--line); color: var(--ink); border-radius: 4px;
+    padding: 6px 14px; cursor: pointer; font-size: 13px; font-family: var(--serif);
   }
-  #vr-manu-melding { margin-left: 12px; font-size: 0.9em; }
+  .vr-btn-secundair:hover { border-color: var(--hop-dark); }
+  #vr-manu-melding { margin-left: 12px; font-size: 13px; }
   .vr-melding.fout { color: #a33f2c; }
-  .vr-melding.ok { color: #2f7d3c; }
-  table.vr-table { width: 100%; border-collapse: collapse; font-size: 0.88em; }
-  table.vr-table th, table.vr-table td { text-align: left; padding: 7px 10px; border-bottom: 1px solid #eee; }
-  table.vr-table th { color: #6b6b6b; font-weight: 600; font-size: 0.85em; }
-  .vr-status-badge { padding: 2px 8px; border-radius: 10px; font-size: 0.8em; font-weight: 600; }
-  .vr-status-actief { background: #e6f4ea; color: #2f7d3c; }
-  .vr-skeleton { color: #bbb; }
-  .vr-geen-rechten { color: #6b6b6b; font-size: 0.9em; }
-  .bc-geen { color: #999; cursor: default; }
+  .vr-melding.ok { color: var(--hop-dark); }
+  table.vr-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  table.vr-table th, table.vr-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  table.vr-table th { font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.06em; color: #6b6355; font-weight: 600; font-size: 11px; }
+  .status-pill {
+    font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+    padding: 3px 9px; border-radius: 20px; display: inline-block;
+  }
+  .status-ok { background: #e1ead9; color: var(--hop-dark); }
+  .status-pending { background: #f3e6cf; color: #8a6d1e; }
+  .status-flag { background: #f6e2dc; color: #a33f2c; }
+  .status-correction { background: #dfe4f2; color: #3a4fa3; }
+  .vr-skeleton { color: #9a927f; font-size: 14px; }
+  .vr-geen-rechten { color: #6b6355; font-size: 14px; }
+  .bc-geen { color: #9a927f; cursor: default; }
   .vr-overlay {
-    position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 200;
+    position: fixed; inset: 0; background: rgba(28,43,38,0.45); z-index: 200;
     display: none; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 30px 16px;
   }
-  .vr-detail-modal { background: white; border-radius: 10px; max-width: 560px; width: 100%; padding: 22px 26px; margin-bottom: 30px; }
-  .vr-detail-modal h2 { margin-top: 0; font-size: 1.1em; color: var(--jopen-red); }
-  .vr-detail-rij { display: flex; justify-content: space-between; gap: 16px; padding: 7px 0; border-bottom: 1px solid #f0f0ee; font-size: 0.92em; }
-  .vr-detail-label { color: #6b6b6b; }
+  .vr-detail-modal { background: white; border-radius: 6px; border: 1px solid var(--line); max-width: 560px; width: 100%; padding: 24px 28px; margin-bottom: 30px; }
+  .vr-detail-modal h2 { margin-top: 0; font-size: 20px; color: var(--ink); }
+  .vr-detail-rij { display: flex; justify-content: space-between; gap: 16px; padding: 7px 0; border-bottom: 1px solid #ece8dc; font-size: 14px; }
+  .vr-detail-label { color: #6b6355; }
   .vr-detail-waarde { text-align: right; font-weight: 500; }
 
   /* Accounting sign-off: maandkiezer (jaar -> maand) + uitklapbare grondstof-groepen */
   .vr-maand-select-wrap { position: relative; display: inline-block; margin-bottom: 16px; }
   .vr-maand-select-btn {
-    background: #f5f4f1; border: 1px solid #ddd; border-radius: 8px; padding: 8px 14px;
-    font-size: 0.92em; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px;
+    background: #fff; border: 1px solid var(--line); border-radius: 4px; padding: 9px 14px;
+    font-family: var(--serif); font-size: 14px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px; color: var(--ink);
   }
-  .vr-maand-select-chevron { color: #999; font-size: 0.85em; }
+  .vr-maand-select-btn:hover { border-color: var(--hop-dark); }
+  .vr-maand-select-chevron { color: #9a927f; font-size: 0.85em; }
   .vr-maand-select-panel {
     position: absolute; z-index: 10; top: 100%; left: 0; margin-top: 6px;
-    background: white; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    background: white; border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 4px 16px rgba(28,43,38,0.12);
     padding: 12px; min-width: 260px;
   }
-  .vr-maand-select-jaren { display: flex; gap: 6px; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 10px; flex-wrap: wrap; }
+  .vr-maand-select-jaren { display: flex; gap: 6px; margin-bottom: 10px; border-bottom: 1px solid var(--line); padding-bottom: 10px; flex-wrap: wrap; }
   .vr-maand-select-jaar-btn {
-    background: none; border: 1px solid #ddd; border-radius: 6px; padding: 5px 10px; font-size: 0.88em; cursor: pointer;
+    background: none; border: 1px solid var(--line); border-radius: 4px; padding: 5px 10px; font-size: 13px; cursor: pointer; font-family: var(--serif);
   }
-  .vr-maand-select-jaar-btn.actief { background: var(--jopen-red); border-color: var(--jopen-red); color: white; font-weight: 600; }
+  .vr-maand-select-jaar-btn.actief { background: var(--hop-dark); border-color: var(--hop-dark); color: white; font-weight: 700; }
   .vr-maand-select-maanden { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
   .vr-maand-select-maand-btn {
-    background: #f5f4f1; border: 1px solid transparent; border-radius: 6px; padding: 7px 8px; font-size: 0.85em;
-    cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px;
+    background: var(--paper); border: 1px solid transparent; border-radius: 4px; padding: 7px 8px; font-size: 13px; font-family: var(--serif);
+    cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px; color: var(--ink);
   }
-  .vr-maand-select-maand-btn.actief { background: var(--jopen-red-tint); border-color: var(--jopen-red); color: var(--jopen-red); font-weight: 600; }
+  .vr-maand-select-maand-btn.actief { background: #e1ead9; border-color: var(--hop-dark); color: var(--hop-dark); font-weight: 700; }
   .vr-maand-pending {
-    background: #a33f2c; color: white; border-radius: 10px; padding: 0 6px; font-size: 0.8em; font-weight: 700;
+    background: #a33f2c; color: white; border-radius: 10px; padding: 0 6px; font-size: 11px; font-weight: 700;
   }
-  .vr-boek-groep { border: 1px solid #eee; border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
+  .vr-boek-groep { border: 1px solid var(--line); border-radius: 6px; margin-bottom: 10px; overflow: hidden; }
   .vr-boek-groep-kop {
     display: flex; align-items: center; gap: 12px; padding: 10px 14px; cursor: pointer; flex-wrap: wrap;
   }
   .vr-boek-groep-kop:hover { background: #fafaf8; }
-  .vr-boek-groep-chevron { color: #999; width: 12px; }
-  .vr-boek-groep-naam { font-weight: 600; flex: 1; min-width: 140px; }
-  .vr-boek-groep-totaal { color: #6b6b6b; font-size: 0.88em; }
-  .vr-boek-groep-body { border-top: 1px solid #eee; padding: 4px 14px 10px; }
-  .vr-boek-rij:hover { background: var(--jopen-red-tint); }
+  .vr-boek-groep-chevron { color: #9a927f; width: 12px; }
+  .vr-boek-groep-naam { font-weight: 700; flex: 1; min-width: 140px; }
+  .vr-boek-groep-totaal { color: #6b6355; font-size: 13px; }
+  .vr-boek-groep-body { border-top: 1px solid var(--line); padding: 4px 14px 10px; background: var(--paper); }
+  .vr-boek-rij:hover { background: #faf8f2; }
 </style>
 </head>
 <body>
@@ -114,8 +140,8 @@
   <div id="jopen-nav"></div>
 
   <main class="vr-main">
-    <h1 style="margin-bottom:2px;">Book out material</h1>
-    <p class="jopen-subtitel" style="margin-top:0;">Manual/ad-hoc stock bookings, and accounting sign-off.</p>
+    <h1 class="vr-titel">Book out material</h1>
+    <p class="vr-meta">Manual/ad-hoc stock bookings, and accounting sign-off.</p>
 
     <div class="vr-tabs">
       <button type="button" class="vr-tab-btn actief" data-tab="handmatig">Manual booking</button>
@@ -126,7 +152,7 @@
     <div class="vr-tab-panel actief" data-tab="handmatig">
       <section class="vr-block">
         <h2>Manual booking</h2>
-        <p class="jopen-subtitel" style="margin-top:0;">
+        <p class="vr-meta">
           Use this for Cellar additions / Yeast (always booked out later, once actually added), and for anything used off-recipe.
         </p>
         <div id="vr-manu-geen-rechten" class="vr-geen-rechten" style="display:none;">
@@ -181,7 +207,7 @@
     <div class="vr-tab-panel" data-tab="boekhouding">
       <section class="vr-block">
         <h2>Accounting sign-off</h2>
-        <p class="jopen-subtitel" style="margin-top:0;">
+        <p class="vr-meta">
           Bookings are grouped by month to match how sign-off is actually done — once a month, in bulk, per raw
           material. Open a month to see the totals per ingredient; expand an ingredient to see (and click into) the
           individual bookings.
@@ -618,9 +644,9 @@
 
     function vrBoekVlagBadges(m) {
       let html = '';
-      if (m.off_recipe) html += '<span class="vr-status-badge" style="background:#fdeceb;color:#a33f2c;">Off-recipe</span> ';
-      if (m.is_spoilage) html += '<span class="vr-status-badge" style="background:#fdeceb;color:#a33f2c;">Spoilage</span> ';
-      if (m.is_correction) html += '<span class="vr-status-badge" style="background:#eef1fd;color:#3a4fa3;">Correction</span> ';
+      if (m.off_recipe) html += '<span class="status-pill status-flag">Off-recipe</span> ';
+      if (m.is_spoilage) html += '<span class="status-pill status-flag">Spoilage</span> ';
+      if (m.is_correction) html += '<span class="status-pill status-correction">Correction</span> ';
       return html;
     }
 
@@ -653,8 +679,8 @@
               <span class="vr-boek-groep-naam">${escapeHtml(g.naam)}</span>
               <span class="vr-boek-groep-totaal">${totaal.toFixed(3).replace(/\.?0+$/, '')} ${escapeHtml(g.eenheid)}${vrKgLiterConversie(totaal, g.eenheid) ? ` (${vrKgLiterConversie(totaal, g.eenheid)})` : ''} — ${g.mutaties.length} booking${g.mutaties.length === 1 ? '' : 's'}</span>
               ${pending.length > 0
-                ? `<span class="vr-status-badge" style="background:#fff3d6;color:#a06a1c;">${pending.length} pending</span>`
-                : '<span class="vr-status-badge vr-status-actief">All signed off</span>'}
+                ? `<span class="status-pill status-pending">${pending.length} pending</span>`
+                : '<span class="status-pill status-ok">All signed off</span>'}
               ${(magBewerken && pending.length > 0)
                 ? `<button type="button" class="vr-btn-secundair vr-groep-afteken-btn" data-idx="${gIdx}">Mark all signed off</button>` : ''}
             </div>
@@ -672,7 +698,7 @@
                       <td>${m.hoeveelheid ?? '—'} ${escapeHtml(g.eenheid)}</td>
                       <td>${escapeHtml(m.gebruikers?.naam || '—')}</td>
                       <td>${vrBoekVlagBadges(m)}</td>
-                      <td><span class="vr-status-badge ${m.geboekt_in_boekhouding ? 'vr-status-actief' : ''}" style="${m.geboekt_in_boekhouding ? '' : 'background:#fff3d6;color:#a06a1c;'}">${m.geboekt_in_boekhouding ? 'Signed off' : 'Pending'}</span></td>
+                      <td><span class="status-pill ${m.geboekt_in_boekhouding ? 'status-ok' : 'status-pending'}">${m.geboekt_in_boekhouding ? 'Signed off' : 'Pending'}</span></td>
                       <td>${magVerwijderen ? `<button type="button" class="vr-btn-secundair vr-verwijder-boeking-btn" data-id="${m.id}" style="color:#a33f2c;border-color:#a33f2c;">Delete</button>` : ''}</td>
                     </tr>`).join('')}
                 </tbody>

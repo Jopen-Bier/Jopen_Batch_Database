@@ -9,66 +9,102 @@
 <title>Jopen — Stock overview</title>
 <link rel="stylesheet" href="jopen-shared.css">
 <style>
-  main.vo-main { max-width: 1150px; margin: 0 auto; padding: 24px; }
-  .vo-koppen { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; }
-  .vo-snelkoppelingen { display: flex; gap: 8px; }
-  .vo-snelkoppelingen a {
-    background: #f5f4f1; border: 1px solid #ddd; border-radius: 8px; padding: 8px 14px;
-    font-size: 0.88em; font-weight: 600; color: #333; text-decoration: none;
+  /* Zelfde visuele taal als receptoverzicht.html/ingredienten.html, los gehouden
+     van jopen-shared.css zodat Inventory zijn eigen, rustigere leesbaarheid heeft. */
+  :root {
+    --ink: #1c2b26;
+    --paper: #f6f4ee;
+    --line: #d8d2c4;
+    --hop: #4c6b4f;
+    --hop-dark: #33473a;
+    --amber: #b4772c;
+    --mono: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, Helvetica, sans-serif;
+    --serif: Arial, Helvetica, sans-serif;
   }
-  .vo-snelkoppelingen a:hover { background: var(--jopen-red-tint); }
-  section.vo-block {
-    background: white; border-radius: 10px; padding: 20px 22px; margin-bottom: 20px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  main.vo-main { font-family: var(--serif); color: var(--ink); background: var(--paper); padding: 24px 32px 60px; max-width: 1150px; margin: 0 auto; }
+  .vo-titel { font-size: 32px; margin: 0 0 4px; }
+  .vo-meta { font-family: var(--mono); font-size: 13px; color: #6b6355; margin-bottom: 24px; }
+  .vo-bewerk-btn {
+    background: var(--amber); color: #fff; border: none; border-radius: 6px; padding: 10px 18px;
+    font-family: var(--serif); font-size: 14px; font-weight: 700; cursor: pointer; text-decoration: none;
+    display: inline-block;
   }
-  .vo-filters { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
-  .vo-filters input, .vo-filters select { padding: 6px 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 0.9em; }
-  .vo-filters label.vo-checkbox { display: flex; align-items: center; gap: 6px; font-size: 0.9em; cursor: pointer; }
+  .vo-bewerk-btn:hover { background: #96601f; }
+
+  .vo-toolbar { display: flex; gap: 12px; align-items: center; margin-bottom: 18px; flex-wrap: wrap; }
+  .vo-toolbar input[type="text"], .vo-toolbar select {
+    padding: 10px 14px; border: 1px solid var(--line); border-radius: 4px;
+    font-family: var(--serif); font-size: 15px; background: #fff;
+  }
+  #vo-zoek { flex: 0 0 auto; min-width: 220px; }
+  .vo-checkbox { display: flex; align-items: center; gap: 6px; font-size: 14px; cursor: pointer; color: var(--ink); }
   .vo-print-btn {
-    background: none; border: 1px solid var(--jopen-red); color: var(--jopen-red); border-radius: 6px;
-    padding: 6px 12px; font-size: 0.88em; font-weight: 600; cursor: pointer;
+    background: #fff; border: 1px solid var(--line); color: var(--ink); border-radius: 4px;
+    padding: 9px 14px; font-family: var(--serif); font-size: 14px; cursor: pointer;
   }
-  .vo-book-in-btn {
-    background: var(--jopen-red); color: white; border: none; border-radius: 6px;
-    padding: 8px 16px; font-size: 0.9em; font-weight: 700; cursor: pointer; text-decoration: none;
-    margin-left: auto;
+  .vo-print-btn:hover { border-color: var(--hop-dark); }
+  .vo-count { font-family: var(--mono); font-size: 12px; color: #7a7266; white-space: nowrap; margin-left: auto; }
+
+  table.vo-tabel { width: 100%; border-collapse: collapse; background: #fff; }
+  table.vo-tabel thead th {
+    text-align: left; font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.08em; color: #6b6355; padding: 10px 14px; border-bottom: 2px solid var(--hop-dark);
   }
-  .vo-book-in-btn:hover { opacity: 0.9; }
-  .vo-skeleton { color: #bbb; }
-  .vo-groep { border: 1px solid #eee; border-radius: 8px; margin-bottom: 8px; overflow: hidden; }
-  .vo-groep.vo-onder-minimum { border-color: #a33f2c; }
-  .vo-groep-kop { display: flex; align-items: center; gap: 14px; padding: 10px 14px; cursor: pointer; flex-wrap: wrap; }
-  .vo-groep-kop:hover { background: #fafaf8; }
-  .vo-chevron { color: #999; width: 12px; }
-  .vo-groep-naam { font-weight: 600; flex: 1; min-width: 160px; }
-  .vo-groep-categorie { color: #999; font-size: 0.78em; text-transform: uppercase; letter-spacing: 0.03em; }
-  .vo-groep-voorraad { font-size: 0.92em; min-width: 120px; }
-  .vo-groep-loopt-leeg { font-size: 0.85em; color: #6b6b6b; min-width: 160px; }
-  .vo-groep-loopt-leeg.vo-urgent { color: #a33f2c; font-weight: 600; }
-  .vo-status-badge { padding: 2px 8px; border-radius: 10px; font-size: 0.8em; font-weight: 600; }
-  .vo-status-onder-min { background: #fdeceb; color: #a33f2c; }
-  .vo-status-ok { background: #e6f4ea; color: #2f7d3c; }
-  .vo-groep-body { border-top: 1px solid #eee; padding: 4px 14px 10px; }
-  table.vo-table { width: 100%; border-collapse: collapse; font-size: 0.88em; }
-  table.vo-table th, table.vo-table td { text-align: left; padding: 7px 10px; border-bottom: 1px solid #eee; }
-  table.vo-table th { color: #6b6b6b; font-weight: 600; font-size: 0.85em; }
-  .vo-lot-rij:hover { background: var(--jopen-red-tint); }
-  .vo-lot-rij { cursor: pointer; }
+  table.vo-tabel tbody td { padding: 12px 14px; border-bottom: 1px solid var(--line); font-size: 15px; }
+  table.vo-tabel tbody td.vo-tabel-getal { font-family: var(--mono); text-align: right; }
+  table.vo-tabel tbody tr.vo-groep-rij { cursor: pointer; }
+  table.vo-tabel tbody tr.vo-groep-rij:hover { background: #eef0e6; }
+  table.vo-tabel tbody tr.vo-onder-minimum td:first-child { box-shadow: inset 3px 0 0 #a33f2c; }
+  .vo-chevron { color: #9a927f; width: 12px; display: inline-block; }
+  .vo-categorie-tag { color: #7a7266; font-size: 12px; }
+
+  .status-pill {
+    font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+    padding: 3px 9px; border-radius: 20px; display: inline-block;
+  }
+  .status-ok { background: #e1ead9; color: var(--hop-dark); }
+  .status-onder-min { background: #f6e2dc; color: #a33f2c; }
+  .status-leeg { background: #e6e2d8; color: #7a7266; }
+
+  tr.vo-expand-rij td { padding: 0; border-bottom: 1px solid var(--line); }
+  .vo-expand-inner { background: var(--paper); padding: 14px 24px 18px 46px; }
+  table.vo-sub-tabel { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid var(--line); }
+  table.vo-sub-tabel th {
+    text-align: left; font-family: var(--mono); font-size: 10px; text-transform: uppercase;
+    letter-spacing: 0.06em; color: #6b6355; padding: 8px 10px; border-bottom: 1px solid var(--line);
+  }
+  table.vo-sub-tabel td { padding: 8px 10px; border-bottom: 1px solid #ece8dc; font-size: 14px; }
+  table.vo-sub-tabel tr:last-child td { border-bottom: none; }
+  table.vo-sub-tabel tr.vo-lot-rij { cursor: pointer; }
+  table.vo-sub-tabel tr.vo-lot-rij:hover { background: #faf8f2; }
+  .vo-historie-btn {
+    margin-top: 10px; background: none; border: none; color: var(--hop-dark); font-family: var(--mono);
+    font-size: 12px; cursor: pointer; text-decoration: underline; padding: 0;
+  }
+  .vo-skeleton { color: #9a927f; font-size: 14px; }
+  .vo-loopt-leeg-urgent { color: #a33f2c; font-weight: 600; }
+
   .vo-overlay {
-    position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 200;
+    position: fixed; inset: 0; background: rgba(28,43,38,0.45); z-index: 200;
     display: none; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 30px 16px;
   }
-  .vo-modal { background: white; border-radius: 10px; max-width: 560px; width: 100%; padding: 22px 26px; margin-bottom: 30px; }
-  .vo-modal h2 { margin-top: 0; font-size: 1.1em; color: var(--jopen-red); }
-  .vo-detail-rij { display: flex; justify-content: space-between; gap: 16px; padding: 7px 0; border-bottom: 1px solid #f0f0ee; font-size: 0.92em; }
-  .vo-detail-label { color: #6b6b6b; }
+  .vo-modal { background: #fff; border-radius: 6px; max-width: 560px; width: 100%; padding: 24px 28px; margin-bottom: 30px; border: 1px solid var(--line); }
+  .vo-modal h2 { margin-top: 0; font-size: 20px; color: var(--ink); }
+  .vo-detail-rij { display: flex; justify-content: space-between; gap: 16px; padding: 7px 0; border-bottom: 1px solid #ece8dc; font-size: 14px; }
+  .vo-detail-label { color: #6b6355; }
   .vo-detail-waarde { text-align: right; font-weight: 500; }
+  .vo-modal-btn {
+    background: #fff; border: 1.5px solid var(--line); color: var(--ink); border-radius: 4px;
+    padding: 7px 14px; font-family: var(--serif); font-size: 14px; cursor: pointer;
+  }
+  .vo-modal-btn:hover { border-color: var(--hop-dark); }
+  .vo-modal-btn-gevaar { border-color: #a33f2c; color: #a33f2c; }
+  .vo-modal-btn-gevaar:hover { background: #a33f2c; color: #fff; }
 
   @media print {
-    #jopen-nav, .vo-koppen, .vo-filters, .vo-snelkoppelingen, .vo-print-btn, .vo-book-in-btn { display: none !important; }
-    .vo-groep-body { display: block !important; }
+    #jopen-nav, .vo-toolbar { display: none !important; }
+    tr.vo-expand-rij { display: table-row !important; }
     .vo-chevron { display: none; }
-    section.vo-block { box-shadow: none; }
   }
 </style>
 </head>
@@ -77,24 +113,23 @@
   <div id="jopen-nav"></div>
 
   <main class="vo-main">
-    <div class="vo-koppen">
+    <div style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:12px;">
       <div>
-        <h1 style="margin-bottom:2px;">Stock overview</h1>
-        <p class="jopen-subtitel" style="margin-top:0;">Current stock per ingredient, with alerts for low stock and projected shortages.</p>
+        <h1 class="vo-titel">Stock overview</h1>
+        <p class="vo-meta">Current stock per ingredient, with alerts for low stock and projected shortages.</p>
       </div>
+      <a href="voorraad-inboeken.html" class="vo-bewerk-btn">+ Book in</a>
     </div>
 
-    <section class="vo-block">
-      <div class="vo-filters">
-        <input type="text" id="vo-zoek" placeholder="Search ingredient…" style="min-width:220px;" />
-        <select id="vo-categorie"><option value="">All categories</option></select>
-        <label class="vo-checkbox"><input type="checkbox" id="vo-alleen-onder-min" /> Below minimum only</label>
-        <label class="vo-checkbox"><input type="checkbox" id="vo-toon-leeg" /> Show empty stock</label>
-        <button type="button" class="vo-print-btn" id="vo-print-btn">Print / export selection</button>
-        <a href="voorraad-inboeken.html" class="vo-book-in-btn">+ Book in</a>
-      </div>
-      <div id="vo-lijst"><div class="vo-skeleton">Loading…</div></div>
-    </section>
+    <div class="vo-toolbar">
+      <input type="text" id="vo-zoek" placeholder="Search ingredient…" />
+      <select id="vo-categorie"><option value="">All categories</option></select>
+      <label class="vo-checkbox"><input type="checkbox" id="vo-alleen-onder-min" /> Below minimum only</label>
+      <label class="vo-checkbox"><input type="checkbox" id="vo-toon-leeg" /> Show empty stock</label>
+      <button type="button" class="vo-print-btn" id="vo-print-btn">Print / export selection</button>
+      <div class="vo-count" id="vo-count"></div>
+    </div>
+    <div id="vo-lijst"><div class="vo-skeleton">Loading…</div></div>
   </main>
 
   <!-- Lot-detailpopup -->
@@ -103,12 +138,12 @@
       <h2>Lot details</h2>
       <div id="vo-lot-detail-body"></div>
       <div style="margin-top:16px;">
-        <div style="font-size:0.8em; text-transform:uppercase; letter-spacing:0.04em; color:#6b6b6b; margin-bottom:6px;">Used in these batches (track &amp; trace)</div>
+        <div style="font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:#6b6355; margin-bottom:8px;">Used in these batches (track &amp; trace)</div>
         <div id="vo-lot-detail-batches"><span class="vo-skeleton">Loading…</span></div>
       </div>
-      <div style="margin-top:16px; display:flex; justify-content:space-between; align-items:center;">
+      <div style="margin-top:20px; display:flex; justify-content:space-between; align-items:center;">
         <div id="vo-lot-detail-leeg-knop"></div>
-        <button type="button" id="vo-lot-detail-sluiten" style="background:none;border:1px solid var(--jopen-red);color:var(--jopen-red);border-radius:6px;padding:5px 12px;cursor:pointer;">Close</button>
+        <button type="button" id="vo-lot-detail-sluiten" class="vo-modal-btn">Close</button>
       </div>
     </div>
   </div>
@@ -239,58 +274,77 @@
       if (alleenOnderMin) groepen = groepen.filter(isOnderMinimum);
       if (!toonLeeg) groepen = groepen.filter(g => g.totaal > 0);
 
+      document.getElementById('vo-count').textContent = `${groepen.length} ingredient${groepen.length === 1 ? '' : 's'}`;
+
       if (groepen.length === 0) {
-        lijst.innerHTML = '<div class="vo-skeleton">No ingredients match these filters.</div>';
+        lijst.innerHTML = '<p class="vo-skeleton">No ingredients match these filters.</p>';
         return;
       }
 
-      lijst.innerHTML = groepen.map((g, idx) => {
-        const open = vrOpen.has(g.ingredientId + '|' + g.eenheid);
+      const rijenHtml = groepen.map((g) => {
         const groepKey = g.ingredientId + '|' + g.eenheid;
+        const open = vrOpen.has(groepKey);
         const historieOpen = vrHistorieOpen.has(groepKey);
         const historischeLots = vrHistorieCache[groepKey] || [];
         const onderMin = isOnderMinimum(g);
         const loopLeegTekst = g.loopLeegWeek
-          ? `Runs out around ${escapeHtml(g.loopLeegWeek)} (based on planning)`
-          : (g.totaal <= 0 ? 'No stock' : 'No shortage expected within planning horizon');
+          ? `Runs out ~${escapeHtml(g.loopLeegWeek)}`
+          : (g.totaal <= 0 ? 'No stock' : 'No shortage expected');
         const alleLots = historieOpen ? g.lots.concat(historischeLots) : g.lots;
-        return `
-          <div class="vo-groep ${onderMin ? 'vo-onder-minimum' : ''}" data-key="${groepKey}">
-            <div class="vo-groep-kop">
-              <span class="vo-chevron">${open ? '▾' : '▸'}</span>
-              <span class="vo-groep-naam">${escapeHtml(g.naam)}${g.categorie ? ` <span class="vo-groep-categorie">${escapeHtml(g.categorie)}</span>` : ''}</span>
-              <span class="vo-groep-voorraad">${vfmt(g.totaal)} ${escapeHtml(g.eenheid)}${g.minimum != null ? ` <span style="color:#999;">(min ${vfmt(g.minimum)})</span>` : ''}</span>
-              <span class="vo-groep-loopt-leeg ${g.loopLeegWeek ? 'vo-urgent' : ''}">${loopLeegTekst}</span>
-              ${onderMin ? '<span class="vo-status-badge vo-status-onder-min">Below minimum</span>' : ''}
-            </div>
-            <div class="vo-groep-body" style="${open ? '' : 'display:none;'}">
-              ${alleLots.length === 0 ? '<p class="vo-skeleton">No active lots.</p>' : `
-              <table class="vo-table">
-                <thead><tr><th>Lot code</th><th>Supplier</th><th>Received</th><th>Qty received</th><th>Remaining</th><th>Best-before</th><th>Location</th><th>Status</th></tr></thead>
-                <tbody>
-                  ${alleLots.map(l => `
-                    <tr class="vo-lot-rij" data-id="${l.id}">
-                      <td>${escapeHtml(l.lotcode || '(no code)')}</td>
-                      <td>${escapeHtml(l.leverancier || '—')}</td>
-                      <td>${l.ontvangstdatum || '—'}</td>
-                      <td>${l.hoeveelheid_ontvangen ?? '—'} ${escapeHtml(l.eenheid || '')}</td>
-                      <td>${vfmt(l.resterend)} ${escapeHtml(l.eenheid || '')}</td>
-                      <td>${l.tht_datum || '—'}</td>
-                      <td>${escapeHtml(l.locatie || '—')}</td>
-                      <td><span class="vo-status-badge ${l.status === 'actief' ? 'vo-status-ok' : ''}">${escapeHtml(l.status)}</span></td>
-                    </tr>`).join('')}
-                </tbody>
-              </table>`}
-              <button type="button" class="vo-historie-btn" data-key="${groepKey}" style="margin-top:10px; background:none; border:none; color:var(--jopen-red); font-size:0.85em; cursor:pointer; text-decoration:underline; padding:0;">
-                ${historieOpen ? 'Hide closed/empty lots' : 'Show closed/empty lots (history)'}
-              </button>
-            </div>
-          </div>`;
+
+        const groepRij = `
+          <tr class="vo-groep-rij ${onderMin ? 'vo-onder-minimum' : ''}" data-key="${groepKey}">
+            <td><span class="vo-chevron">${open ? '▾' : '▸'}</span> ${escapeHtml(g.naam)}</td>
+            <td><span class="vo-categorie-tag">${escapeHtml(g.categorie || '—')}</span></td>
+            <td>${escapeHtml(g.eenheid || '—')}</td>
+            <td class="vo-tabel-getal">${vfmt(g.totaal)}</td>
+            <td class="vo-tabel-getal">${g.minimum != null ? vfmt(g.minimum) : '—'}</td>
+            <td><span class="status-pill ${onderMin ? 'status-onder-min' : (g.totaal <= 0 ? 'status-leeg' : 'status-ok')}">${onderMin ? 'Below minimum' : (g.totaal <= 0 ? 'No stock' : 'OK')}</span></td>
+            <td class="${g.loopLeegWeek ? 'vo-loopt-leeg-urgent' : ''}">${loopLeegTekst}</td>
+          </tr>`;
+
+        const expandRij = `
+          <tr class="vo-expand-rij" data-expand-key="${groepKey}" style="${open ? '' : 'display:none;'}">
+            <td colspan="7">
+              <div class="vo-expand-inner">
+                ${alleLots.length === 0 ? '<p class="vo-skeleton">No active lots.</p>' : `
+                <table class="vo-sub-tabel">
+                  <thead><tr><th>Lot code</th><th>Supplier</th><th>Received</th><th>Qty received</th><th>Remaining</th><th>Best-before</th><th>Location</th><th>Status</th></tr></thead>
+                  <tbody>
+                    ${alleLots.map(l => `
+                      <tr class="vo-lot-rij" data-id="${l.id}">
+                        <td>${escapeHtml(l.lotcode || '(no code)')}</td>
+                        <td>${escapeHtml(l.leverancier || '—')}</td>
+                        <td>${l.ontvangstdatum || '—'}</td>
+                        <td>${l.hoeveelheid_ontvangen ?? '—'} ${escapeHtml(l.eenheid || '')}</td>
+                        <td>${vfmt(l.resterend)} ${escapeHtml(l.eenheid || '')}</td>
+                        <td>${l.tht_datum || '—'}</td>
+                        <td>${escapeHtml(l.locatie || '—')}</td>
+                        <td><span class="status-pill ${l.status === 'actief' ? 'status-ok' : 'status-leeg'}">${escapeHtml(l.status)}</span></td>
+                      </tr>`).join('')}
+                  </tbody>
+                </table>`}
+                <button type="button" class="vo-historie-btn" data-key="${groepKey}">
+                  ${historieOpen ? 'Hide closed/empty lots' : 'Show closed/empty lots (history)'}
+                </button>
+              </div>
+            </td>
+          </tr>`;
+
+        return groepRij + expandRij;
       }).join('');
 
-      lijst.querySelectorAll('.vo-groep-kop').forEach(kop => {
-        kop.addEventListener('click', () => {
-          const key = kop.closest('.vo-groep').dataset.key;
+      lijst.innerHTML = `
+        <table class="vo-tabel">
+          <thead><tr>
+            <th>Ingredient</th><th>Category</th><th>Unit</th><th>Current stock</th><th>Minimum</th><th>Status</th><th>Forecast</th>
+          </tr></thead>
+          <tbody>${rijenHtml}</tbody>
+        </table>`;
+
+      lijst.querySelectorAll('.vo-groep-rij').forEach(tr => {
+        tr.addEventListener('click', () => {
+          const key = tr.dataset.key;
           if (vrOpen.has(key)) vrOpen.delete(key); else vrOpen.add(key);
           renderStockLijst();
         });
@@ -321,7 +375,7 @@
       lijst.querySelectorAll('.vo-lot-rij').forEach(tr => {
         tr.addEventListener('click', (e) => {
           e.stopPropagation();
-          const key = tr.closest('.vo-groep').dataset.key;
+          const key = tr.closest('.vo-expand-rij').dataset.expandKey;
           const g = groepen.find(x => (x.ingredientId + '|' + x.eenheid) === key);
           const alleLots = g.lots.concat(vrHistorieCache[key] || []);
           const lot = alleLots.find(l => String(l.id) === tr.dataset.id);
@@ -356,7 +410,7 @@
 
       const legeKnopContainer = document.getElementById('vo-lot-detail-leeg-knop');
       if (magBewerken && l.resterend > 0) {
-        legeKnopContainer.innerHTML = `<button type="button" id="vo-lot-leeg-btn" style="background:none;border:1px solid #a33f2c;color:#a33f2c;border-radius:6px;padding:5px 12px;cursor:pointer;">Mark lot as empty</button>`;
+        legeKnopContainer.innerHTML = `<button type="button" id="vo-lot-leeg-btn" class="vo-modal-btn vo-modal-btn-gevaar">Mark lot as empty</button>`;
         document.getElementById('vo-lot-leeg-btn').addEventListener('click', () => zetLotOpLeeg(l, groep));
       } else {
         legeKnopContainer.innerHTML = '';
