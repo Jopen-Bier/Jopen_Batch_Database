@@ -343,7 +343,7 @@ function formatRatio(regel) {
   return regel.eenheid ? `${regel.hoeveelheid} ${regel.eenheid}` : regel.hoeveelheid;
 }
 
-async function vulIngredientRijen(writer, bundel, overloop) {
+async function vulIngredientRijen(writer, bundel, overloop, stylesManager) {
   const { n0, nHop, nDryHop, n1, verschuifCel } = overloop;
   const dynamischeBlokken = {
     hoofdmout: {
@@ -408,6 +408,16 @@ async function vulIngredientRijen(writer, bundel, overloop) {
             if (heelBatch && waarde !== null && waarde !== undefined) waarde = `${waarde}*`;
           } else if (attr === 'heelBatchNotitie') {
             waarde = heelBatch ? '*Amount calculated for entire batch, add all in first brew.' : null;
+            if (heelBatch && stylesManager) {
+              try {
+                const huidigeStijl = await writer.haalStijlIndexOp(cel);
+                const leesbareStijl = stylesManager.voegLeesbareFontKleurToe(huidigeStijl);
+                await writer.zetOfMaakCelStijl(cel, leesbareStijl);
+              } catch (e) {
+                // Cel/stijl kon niet gevonden worden -- tekst wordt dan alsnog
+                // geschreven, alleen mogelijk met de oude (onleesbare) kleur.
+              }
+            }
           } else {
             waarde = regel[attr];
           }
@@ -629,7 +639,7 @@ async function genereerBatchrapportBuffer(bundel) {
   await vulScalaireVelden(writer, bundel, isWP, overloop.verschuifCel);
   await vulWpKerkVelden(writer, bundel, isWP);
   await vulReceptnaamKruisVelden(writer, bundel, isWP);
-  await vulIngredientRijen(writer, bundel, overloop);
+  await vulIngredientRijen(writer, bundel, overloop, stylesManager);
   await vulRevisies(writer, bundel, overloop.verschuifCel);
   await vulFormaten(writer, bundel);
   await vulHopRendementEnEbu(writer, bundel, overloop);

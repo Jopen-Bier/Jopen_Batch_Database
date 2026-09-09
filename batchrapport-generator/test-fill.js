@@ -58,7 +58,7 @@ async function test() {
   await vulScalaireVelden(writer, bundel, true, overloop.verschuifCel);
   await vulWpKerkVelden(writer, bundel, true);
   await vulReceptnaamKruisVelden(writer, bundel, true);
-  await vulIngredientRijen(writer, bundel, overloop);
+  await vulIngredientRijen(writer, bundel, overloop, stylesManager);
   await vulRevisies(writer, bundel, overloop.verschuifCel);
   await vulFormaten(writer, bundel);
   await vulHopRendementEnEbu(writer, bundel, overloop);
@@ -108,6 +108,8 @@ async function test() {
   console.log('Q75 (moet LEEG zijn):', ws.getCell('Q75').value);
   console.log('G76 (Protafloc, all-in-brew-1: 5 g/hl x 60hl x3 brouwsels = 900.0 g, MET *):', ws.getCell('G76').value);
   console.log('Q76 (moet de uitlegregel bevatten):', ws.getCell('Q76').value);
+  console.log('Q76 font color (moet theme 1 zijn, niet theme 0/wit):', JSON.stringify(ws.getCell('Q76').font));
+  console.log('Q75 font color (ongewijzigd, leeg dus stijl maakt niet uit):', JSON.stringify(ws.getCell('Q75').font));
   console.log('A43 border (moet GEEN dikke rand):', JSON.stringify(ws.getCell('A43').border));
   console.log('A44 border (moet WEL dikke rand -- laatste van groep 45min, vlak boven witregel):', JSON.stringify(ws.getCell('A44').border));
   console.log('A45 border (witregel, geen dikke rand):', JSON.stringify(ws.getCell('A45').border));

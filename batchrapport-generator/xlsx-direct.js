@@ -613,6 +613,68 @@ class StylesManager {
     return nieuweXfIdx;
   }
 
+  /**
+   * Geeft de stijlindex terug voor "dezelfde stijl als sourceStyleIdx, maar
+   * met leesbare (theme 1 / zwarte) tekstkleur i.p.v. wat er nu staat"
+   * (fill/border/alignment ongewijzigd). Nodig voor kolom Q op de Additions
+   * Brewing-rijen: die cellen stonden van origine op theme="0" (wit-op-wit,
+   * kolom Q valt buiten de Print Area en was nooit bedoeld om zichtbaar te
+   * zijn) -- onze "All in brew 1?"-notitie moet daar nu wél leesbaar staan.
+   */
+  voegLeesbareFontKleurToe(sourceStyleIdx) {
+    const cellXfsSectie = this._haalSectie('cellXfs');
+    const xfs = this._splitsElementen(cellXfsSectie.inhoud, 'xf');
+    const bronXf = xfs[sourceStyleIdx];
+    if (!bronXf) throw new Error(`Stijlindex ${sourceStyleIdx} bestaat niet`);
+    const fontIdMatch = bronXf.match(/fontId="(\d+)"/);
+    const bronFontId = fontIdMatch ? Number(fontIdMatch[1]) : 0;
+
+    const fontsSectie = this._haalSectie('fonts');
+    const fonts = this._splitsElementen(fontsSectie.inhoud, 'font');
+    const bronFont = fonts[bronFontId] || '<font></font>';
+
+    // Nieuw font: kopieer alles, vervang alleen <color .../> door theme 1
+    // (standaard "Text 1" -- zwart, zelfde als andere gewone tekstcellen
+    // in dit sjabloon, zie bv. de Ratio/Timing-kolommen op dezelfde rij).
+    const nieuwFontMetKleur = /<color[^/]*\/>/.test(bronFont)
+      ? bronFont.replace(/<color[^/]*\/>/, '<color theme="1"/>')
+      : bronFont.replace('</font>', '<color theme="1"/></font>');
+
+    let nieuweFontId = fonts.findIndex(f => f === nieuwFontMetKleur);
+    let fontsGewijzigd = false;
+    if (nieuweFontId === -1) {
+      fonts.push(nieuwFontMetKleur);
+      nieuweFontId = fonts.length - 1;
+      fontsGewijzigd = true;
+    }
+
+    const nieuweXf = bronXf.replace(/fontId="\d+"/, `fontId="${nieuweFontId}"`);
+    let nieuweXfIdx = xfs.findIndex(x => x === nieuweXf);
+    let xfsGewijzigd = false;
+    if (nieuweXfIdx === -1) {
+      xfs.push(nieuweXf);
+      nieuweXfIdx = xfs.length - 1;
+      xfsGewijzigd = true;
+    }
+
+    if (fontsGewijzigd) {
+      const nieuweInhoud = fonts.join('');
+      this.xml = this.xml.replace(
+        fontsSectie.volledigeMatch,
+        `<fonts count="${fonts.length}">${nieuweInhoud}</fonts>`
+      );
+    }
+    if (xfsGewijzigd) {
+      const nieuweInhoud = xfs.join('');
+      this.xml = this.xml.replace(
+        cellXfsSectie.volledigeMatch,
+        `<cellXfs count="${xfs.length}">${nieuweInhoud}</cellXfs>`
+      );
+    }
+
+    return nieuweXfIdx;
+  }
+
   finalize() {
     this.zip.file('xl/styles.xml', this.xml);
   }
