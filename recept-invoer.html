@@ -2544,9 +2544,36 @@ function closeSaveModal() {
   document.getElementById('re-save-modal-overlay').style.display = 'none';
 }
 
+// Voorkomt dubbele/overlappende opslaan-cycli: zonder deze vergrendeling kon
+// een dubbelklik (of een trage verbinding + ongeduldige herhaalde klik) twee
+// of drie keer tegelijk schrijfGerelateerdeData() (delete + insert op
+// recipe_ingredients, geen transactie) laten lopen. Omdat die twee calls niet
+// atomisch zijn, konden de cycli door elkaar interleaven: rijen kwamen
+// meerdere keren terug en een net-verwijderde regel kon via een "trage" oudere
+// cyclus alsnog opnieuw ingevoegd worden. Simpele boolean-lock + knoppen
+// disablen tijdens het opslaan maakt een tweede gelijktijdige cyclus onmogelijk.
+let opslaanBezig = false;
+
+function zetOpslaanKnoppenDisabled(disabled) {
+  document.getElementById('re-savebar-btn').disabled = disabled;
+  const confirmBtn = document.getElementById('re-modal-confirm-btn');
+  if (confirmBtn) confirmBtn.disabled = disabled;
+}
+
 document.getElementById('re-savebar-btn').addEventListener('click', async () => {
+  if (opslaanBezig) return;
   if (receptModus === 'nieuw') {
-    await maakNieuwRecept();
+    opslaanBezig = true;
+    zetOpslaanKnoppenDisabled(true);
+    try {
+      await maakNieuwRecept();
+    } finally {
+      // Bij succes wordt na 1s doorgestuurd naar receptoverzicht.html, dus de
+      // knop hoeft dan niet meer expliciet vrijgegeven te worden. Bij een
+      // fout (melding, geen redirect) moet een nieuwe poging wel weer kunnen.
+      opslaanBezig = false;
+      zetOpslaanKnoppenDisabled(false);
+    }
   } else {
     openSaveModal();
   }
@@ -2555,10 +2582,18 @@ document.getElementById('re-savebar-btn').addEventListener('click', async () => 
 document.getElementById('re-modal-cancel-btn').addEventListener('click', closeSaveModal);
 
 document.getElementById('re-modal-confirm-btn').addEventListener('click', async () => {
+  if (opslaanBezig) return;
+  opslaanBezig = true;
+  zetOpslaanKnoppenDisabled(true);
   const gekozen = document.querySelector('input[name="re-save-mode"]:checked');
   const mode = gekozen ? gekozen.value : 'klein';
   closeSaveModal();
-  await slaBestaandReceptOp(mode);
+  try {
+    await slaBestaandReceptOp(mode);
+  } finally {
+    opslaanBezig = false;
+    zetOpslaanKnoppenDisabled(false);
+  }
 });
 
 async function slaBestaandReceptOp(soort) {
