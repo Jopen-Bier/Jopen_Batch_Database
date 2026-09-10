@@ -40,11 +40,49 @@
   <script src="config.js"></script>
   <script src="nav.js"></script>
   <script>
-    // supabase-js picks up the access_token/refresh_token from the URL hash
-    // (after the #) automatically when the client is created
-    // (detectSessionInUrl, on by default), setting up the session for us.
-    // We just wait for that here.
+    // Twee routes naar een sessie hier:
+    //
+    // 1. token_hash/type als query-param (?token_hash=...&type=invite) --
+    //    dit is onze EIGEN link uit generate-invite-link, bewust NIET de kale
+    //    Supabase action_link. Reden: een kale GET op Supabase's eigen
+    //    /auth/v1/verify-endpoint verbruikt de eenmalige token al, ook als
+    //    die GET van een bedrijfsmail-scanner komt (Microsoft Defender Safe
+    //    Links e.d. "prefetchen" alle links uit binnenkomende mail) in plaats
+    //    van de echte ontvanger -- vandaar dat de link voor de ontvanger
+    //    steevast al "verlopen" leek. Met deze route wordt de token pas
+    //    verbruikt als DEZE pagina's JS daadwerkelijk draait en verifyOtp()
+    //    aanroept; een scanner die alleen de HTML ophaalt voert geen JS uit
+    //    en laat de token dus intact. Zie:
+    //    https://supabase.com/docs/guides/auth/auth-email-templates#email-prefetching
+    //
+    // 2. access_token/refresh_token in de URL-hash (#access_token=...) --
+    //    de oude route, nog steeds nodig als fallback voor de "forgot
+    //    password"-mail. Die gebruikt Supabase's eigen (op de gratis laag
+    //    niet aanpasbare) sjabloon met {{ .ConfirmationURL }}, dus daar kunnen
+    //    we zelf geen token_hash-link van maken. supabase-js pikt die
+    //    hash-tokens automatisch op bij het aanmaken van de client
+    //    (detectSessionInUrl, standaard aan).
     async function initAcceptInvite() {
+      const params = new URLSearchParams(window.location.search);
+      const tokenHash = params.get('token_hash');
+      const type = params.get('type');
+
+      if (tokenHash && type) {
+        const { error } = await supabaseClient.auth.verifyOtp({ token_hash: tokenHash, type });
+        // Query-string opruimen zodat een pagina-refresh de (dan al
+        // verbruikte) token niet nog eens probeert te gebruiken.
+        window.history.replaceState({}, document.title, window.location.pathname);
+
+        document.getElementById('laden').style.display = 'none';
+        if (error) {
+          document.getElementById('geen-uitnodiging').style.display = 'block';
+          return;
+        }
+        document.getElementById('wachtwoord-form').style.display = 'block';
+        return;
+      }
+
+      // Fallback: hash-fragment-tokens (forgot password-mail).
       const { data: { session } } = await supabaseClient.auth.getSession();
 
       document.getElementById('laden').style.display = 'none';

@@ -59,12 +59,13 @@ serve(async (req) => {
 
     // 3. Uitnodigingslink genereren -- dit maakt de auth-user AL aan, maar
     // stuurt zelf GEEN e-mail (in tegenstelling tot inviteUserByEmail).
+    const REDIRECT_TO = "https://jopen-bier.github.io/Jopen_Batch_Database/accept-invite.html";
     const { data: linkData, error: linkErr } = await adminClient.auth.admin.generateLink({
       type: "invite",
       email,
       options: {
         data: { naam, rol },
-        redirectTo: "https://jopen-bier.github.io/Jopen_Batch_Database/accept-invite.html",
+        redirectTo: REDIRECT_TO,
       },
     });
 
@@ -81,7 +82,25 @@ serve(async (req) => {
       return json({ error: `Link generated, but could not create gebruikers row: ${insertErr.message}` }, 500);
     }
 
-    return json({ success: true, action_link: linkData.properties.action_link }, 200);
+    // BELANGRIJK: we sturen bewust NIET linkData.properties.action_link mee.
+    // Die link wijst rechtstreeks naar Supabase's eigen `/auth/v1/verify`-
+    // endpoint, en een kale GET daarop verbruikt de eenmalige token meteen --
+    // ook als die GET niet van de echte ontvanger komt. Bedrijfsmail-scanners
+    // (bv. Microsoft Defender Safe Links, Barracuda) doen precies dat: ze
+    // "prefetchen" elke link uit een binnenkomende mail om 'm te scannen,
+    // vóórdat de mens 'm ooit ziet. Vandaar dat de link voor de ontvanger
+    // steevast al "verlopen" leek, terwijl hij bij de afzender (die de link
+    // als eerste zelf opent/test) gewoon werkte. Dit is een door Supabase
+    // zelf gedocumenteerde beperking, zie:
+    // https://supabase.com/docs/guides/auth/auth-email-templates#email-prefetching
+    //
+    // Oplossing: we bouwen zelf een link naar ONZE eigen accept-invite.html
+    // met de token_hash als query-param. Een scanner die alleen de pagina
+    // ophaalt (geen JS uitvoert) verbruikt de token niet -- pas
+    // accept-invite.html zelf wisselt 'm client-side in via verifyOtp().
+    const eigenLink = `${REDIRECT_TO}?token_hash=${encodeURIComponent(linkData.properties.hashed_token)}&type=invite`;
+
+    return json({ success: true, action_link: eigenLink }, 200);
   } catch (e) {
     return json({ error: String(e) }, 500);
   }
