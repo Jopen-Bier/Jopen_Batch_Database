@@ -107,6 +107,8 @@ async function test() {
   console.log('G75 (Calcium Chloride, normaal: 11 g/hl x 60hl x1 = 660.0 g, GEEN *):', ws.getCell('G75').value);
   console.log('Q75 (moet LEEG zijn):', ws.getCell('Q75').value);
   console.log('G76 (Protafloc, all-in-brew-1: 5 g/hl x 60hl x3 brouwsels = 900.0 g, MET *):', ws.getCell('G76').value);
+  console.log('G76 font (moet underline: single hebben):', JSON.stringify(ws.getCell('G76').font));
+  console.log('G75 font (ongewijzigd, geen underline):', JSON.stringify(ws.getCell('G75').font));
   console.log('Q76 (moet de uitlegregel bevatten):', ws.getCell('Q76').value);
   console.log('Q76 font color (moet theme 1 zijn, niet theme 0/wit):', JSON.stringify(ws.getCell('Q76').font));
   console.log('Q75 font color (ongewijzigd, leeg dus stijl maakt niet uit):', JSON.stringify(ws.getCell('Q75').font));

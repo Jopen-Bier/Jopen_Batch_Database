@@ -618,6 +618,62 @@ class StylesManager {
     return nieuweXfIdx;
   }
 
+  /**
+   * Geeft de stijlindex terug voor "dezelfde stijl als sourceStyleIdx, maar
+   * met een enkele onderstreping". Zelfde logica als de Node-versie in
+   * xlsx-direct.js -- moet in sync blijven.
+   */
+  voegOnderstrepingToe(sourceStyleIdx) {
+    const cellXfsSectie = this._haalSectie('cellXfs');
+    const xfs = this._splitsElementen(cellXfsSectie.inhoud, 'xf');
+    const bronXf = xfs[sourceStyleIdx];
+    if (!bronXf) throw new Error(`Stijlindex ${sourceStyleIdx} bestaat niet`);
+    const fontIdMatch = bronXf.match(/fontId="(\d+)"/);
+    const bronFontId = fontIdMatch ? Number(fontIdMatch[1]) : 0;
+
+    const fontsSectie = this._haalSectie('fonts');
+    const fonts = this._splitsElementen(fontsSectie.inhoud, 'font');
+    const bronFont = fonts[bronFontId] || '<font></font>';
+
+    const nieuwFontMetOnderstreping = /<u[^/]*\/>/.test(bronFont)
+      ? bronFont
+      : bronFont.replace('</font>', '<u val="single"/></font>');
+
+    let nieuweFontId = fonts.findIndex(f => f === nieuwFontMetOnderstreping);
+    let fontsGewijzigd = false;
+    if (nieuweFontId === -1) {
+      fonts.push(nieuwFontMetOnderstreping);
+      nieuweFontId = fonts.length - 1;
+      fontsGewijzigd = true;
+    }
+
+    const nieuweXf = bronXf.replace(/fontId="\d+"/, `fontId="${nieuweFontId}"`);
+    let nieuweXfIdx = xfs.findIndex(x => x === nieuweXf);
+    let xfsGewijzigd = false;
+    if (nieuweXfIdx === -1) {
+      xfs.push(nieuweXf);
+      nieuweXfIdx = xfs.length - 1;
+      xfsGewijzigd = true;
+    }
+
+    if (fontsGewijzigd) {
+      const nieuweInhoud = fonts.join('');
+      this.xml = this.xml.replace(
+        fontsSectie.volledigeMatch,
+        `<fonts count="${fonts.length}">${nieuweInhoud}</fonts>`
+      );
+    }
+    if (xfsGewijzigd) {
+      const nieuweInhoud = xfs.join('');
+      this.xml = this.xml.replace(
+        cellXfsSectie.volledigeMatch,
+        `<cellXfs count="${xfs.length}">${nieuweInhoud}</cellXfs>`
+      );
+    }
+
+    return nieuweXfIdx;
+  }
+
   finalize() {
     this.zip.file('xl/styles.xml', this.xml);
   }
@@ -932,7 +988,19 @@ async function brVulIngredientRijen(writer, bundel, ingredientMap, overloop, sty
             waarde = formatRatio(regel);
           } else if (attr === 'hoeveelheid' && (rol === 'toegift_brouwerij' || rol === 'toegift_kelder')) {
             waarde = berekenAfweegWaarde(regel, brouwselHl, aantalBrouwselsVoorRegel);
-            if (heelBatch && waarde !== null && waarde !== undefined) waarde = `${waarde}*`;
+            if (heelBatch && waarde !== null && waarde !== undefined) {
+              waarde = `${waarde}*`;
+              if (stylesManager) {
+                try {
+                  const huidigeStijl = await writer.haalStijlIndexOp(cel);
+                  const onderstreepteStijl = stylesManager.voegOnderstrepingToe(huidigeStijl);
+                  await writer.zetOfMaakCelStijl(cel, onderstreepteStijl);
+                } catch (e) {
+                  // Cel/stijl kon niet gevonden worden -- waarde wordt dan
+                  // alsnog geschreven, alleen zonder de onderstreping.
+                }
+              }
+            }
           } else if (attr === 'heelBatchNotitie') {
             waarde = heelBatch ? '*Amount calculated for entire batch, add all in first brew.' : null;
             if (heelBatch && stylesManager) {

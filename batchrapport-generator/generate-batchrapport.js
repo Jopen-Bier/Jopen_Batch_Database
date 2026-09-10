@@ -405,7 +405,19 @@ async function vulIngredientRijen(writer, bundel, overloop, stylesManager) {
             waarde = formatRatio(regel);
           } else if (attr === 'hoeveelheid' && (rol === 'toegift_brouwerij' || rol === 'toegift_kelder')) {
             waarde = berekenAfweegWaarde(regel, brouwselHl, aantalBrouwselsVoorRegel);
-            if (heelBatch && waarde !== null && waarde !== undefined) waarde = `${waarde}*`;
+            if (heelBatch && waarde !== null && waarde !== undefined) {
+              waarde = `${waarde}*`;
+              if (stylesManager) {
+                try {
+                  const huidigeStijl = await writer.haalStijlIndexOp(cel);
+                  const onderstreepteStijl = stylesManager.voegOnderstrepingToe(huidigeStijl);
+                  await writer.zetOfMaakCelStijl(cel, onderstreepteStijl);
+                } catch (e) {
+                  // Cel/stijl kon niet gevonden worden -- waarde wordt dan
+                  // alsnog geschreven, alleen zonder de onderstreping.
+                }
+              }
+            }
           } else if (attr === 'heelBatchNotitie') {
             waarde = heelBatch ? '*Amount calculated for entire batch, add all in first brew.' : null;
             if (heelBatch && stylesManager) {

@@ -675,6 +675,65 @@ class StylesManager {
     return nieuweXfIdx;
   }
 
+  /**
+   * Geeft de stijlindex terug voor "dezelfde stijl als sourceStyleIdx, maar
+   * met een enkele onderstreping" (fill/border/kleur/alignment ongewijzigd).
+   * Gebruikt om het berekende batch-totaal in kolom G extra te laten
+   * opvallen bij "All in brew 1?". Zelfde volgorde-conventie als de 5
+   * bestaande onderstreepte fonts in dit sjabloon: <u val="single"/> als
+   * laatste element vóór </font>. Idempotent als de bronfont al onderstreept is.
+   */
+  voegOnderstrepingToe(sourceStyleIdx) {
+    const cellXfsSectie = this._haalSectie('cellXfs');
+    const xfs = this._splitsElementen(cellXfsSectie.inhoud, 'xf');
+    const bronXf = xfs[sourceStyleIdx];
+    if (!bronXf) throw new Error(`Stijlindex ${sourceStyleIdx} bestaat niet`);
+    const fontIdMatch = bronXf.match(/fontId="(\d+)"/);
+    const bronFontId = fontIdMatch ? Number(fontIdMatch[1]) : 0;
+
+    const fontsSectie = this._haalSectie('fonts');
+    const fonts = this._splitsElementen(fontsSectie.inhoud, 'font');
+    const bronFont = fonts[bronFontId] || '<font></font>';
+
+    const nieuwFontMetOnderstreping = /<u[^/]*\/>/.test(bronFont)
+      ? bronFont
+      : bronFont.replace('</font>', '<u val="single"/></font>');
+
+    let nieuweFontId = fonts.findIndex(f => f === nieuwFontMetOnderstreping);
+    let fontsGewijzigd = false;
+    if (nieuweFontId === -1) {
+      fonts.push(nieuwFontMetOnderstreping);
+      nieuweFontId = fonts.length - 1;
+      fontsGewijzigd = true;
+    }
+
+    const nieuweXf = bronXf.replace(/fontId="\d+"/, `fontId="${nieuweFontId}"`);
+    let nieuweXfIdx = xfs.findIndex(x => x === nieuweXf);
+    let xfsGewijzigd = false;
+    if (nieuweXfIdx === -1) {
+      xfs.push(nieuweXf);
+      nieuweXfIdx = xfs.length - 1;
+      xfsGewijzigd = true;
+    }
+
+    if (fontsGewijzigd) {
+      const nieuweInhoud = fonts.join('');
+      this.xml = this.xml.replace(
+        fontsSectie.volledigeMatch,
+        `<fonts count="${fonts.length}">${nieuweInhoud}</fonts>`
+      );
+    }
+    if (xfsGewijzigd) {
+      const nieuweInhoud = xfs.join('');
+      this.xml = this.xml.replace(
+        cellXfsSectie.volledigeMatch,
+        `<cellXfs count="${xfs.length}">${nieuweInhoud}</cellXfs>`
+      );
+    }
+
+    return nieuweXfIdx;
+  }
+
   finalize() {
     this.zip.file('xl/styles.xml', this.xml);
   }
