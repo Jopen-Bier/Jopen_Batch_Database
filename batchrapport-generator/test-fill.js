@@ -29,7 +29,10 @@ async function test() {
       { rol: 'hopgift_kook', volgorde: 1, ingredient_id: 1, alpha_pct: 12.8, hoeveelheid: 5000, tijdstip: '45', hdt: 1 },
       { rol: 'hopgift_kook', volgorde: 2, ingredient_id: 2, alpha_pct: 24.5, hoeveelheid: 5000, tijdstip: '0', hdt: null },
       { rol: 'hopgift_kook', volgorde: 3, ingredient_id: 7, alpha_pct: 10, hoeveelheid: 1000, tijdstip: '45', hdt: 1 },
-      { rol: 'dry_hop', volgorde: 1, ingredient_id: 3, hoeveelheid: 7500, tijdstip: '16c' },
+      { rol: 'dry_hop', volgorde: 1, ingredient_id: 3, hoeveelheid: 7500, tijdstip: 'cold_16' },
+      { rol: 'dry_hop', volgorde: 2, ingredient_id: 2, hoeveelheid: 3000, tijdstip: 'cold_8' },
+      { rol: 'dry_hop', volgorde: 3, ingredient_id: 7, hoeveelheid: 1500, tijdstip: 'warm' },
+      { rol: 'dry_hop', volgorde: 4, ingredient_id: 1, hoeveelheid: 500, tijdstip: '0c' },
       { rol: 'hoofdmout', volgorde: 1, ingredient_id: 4, hoeveelheid: 800, kleur_ebc: 5 },
       { rol: 'hoofdmout', volgorde: 2, ingredient_id: 5, hoeveelheid: 100, kleur_ebc: 900 },
       { rol: 'gist', volgorde: 1, ingredient_id: 6, hoeveelheid: 2 },
@@ -102,6 +105,17 @@ async function test() {
   console.log('A44 (Saaz, 45 min):', ws.getCell('A44').value);
   console.log('A45 (moet LEEG zijn -- witregel):', ws.getCell('A45').value);
   console.log('A46 (Citra CRYO, 0 min):', ws.getCell('A46').value);
+  // Dry hop: sorteervolgorde moet Warm, Cold 16, Cold 8, Cold 0 zijn (warm
+  // eerst, dan cold aflopend op temperatuur), en Timing-tekst geformatteerd
+  // als 'Warm' resp. 'Cold - N°C' (ook voor de gemigreerde legacy '0c').
+  console.log('A58 (dry hop 1, moet Warm-ingrediënt zijn):', ws.getCell('A58').value);
+  console.log('G58 (moet "Warm" zijn):', ws.getCell('G58').value);
+  console.log('A59 (dry hop 2, moet cold_16-ingrediënt zijn):', ws.getCell('A59').value);
+  console.log('G59 (moet "Cold - 16°C" zijn):', ws.getCell('G59').value);
+  console.log('A60 (dry hop 3, moet cold_8-ingrediënt zijn):', ws.getCell('A60').value);
+  console.log('G60 (moet "Cold - 8°C" zijn):', ws.getCell('G60').value);
+  console.log('A61 (dry hop 4, moet legacy 0c-ingrediënt zijn):', ws.getCell('A61').value);
+  console.log('G61 (legacy \'0c\', moet "Cold - 0°C" zijn):', ws.getCell('G61').value);
   // "All in brew 1?" -- Additions Brewing, rij 75 (normaal, x1) en rij 76
   // (alles_in_brouwsel_1: true, batch.aantal_brouwsels=3 -> x3 + '*' + notitie in Q).
   console.log('G75 (Calcium Chloride, normaal: 11 g/hl x 60hl x1 = 660.0 g, GEEN *):', ws.getCell('G75').value);

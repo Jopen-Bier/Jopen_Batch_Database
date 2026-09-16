@@ -1199,20 +1199,40 @@ async function openDetail(id) {
   }
 
   // Hop Boil altijd bovenaan (hoogste Timing eerst, aflopend), daarna Dry hop
-  // in de volgorde Warm / 16°C / Cold (0°C), op basis van de exacte
-  // dropdown-waarde (warm/16c/0c) uit het invoerscherm.
+  // in de volgorde Warm / Cold (aflopend op temperatuur, warmer eerst), op
+  // basis van de tijdstip-waarde uit het invoerscherm ('warm' of 'cold_<N>').
+  // Zelfde logica als recept-invoer.html/batchrapport-generatoren -- moet
+  // overal in sync blijven.
+  function ontleedDryHopTijdstip(tijdstip) {
+    if (tijdstip === 'warm') return { categorie: 'warm', temp: null };
+    if (tijdstip === 'cold') return { categorie: 'cold', temp: null };
+    const m = String(tijdstip || '').match(/^cold_(-?\d+(?:\.\d+)?)$/);
+    if (m) return { categorie: 'cold', temp: m[1] };
+    if (tijdstip === '16c') return { categorie: 'cold', temp: '16' };
+    if (tijdstip === '0c') return { categorie: 'cold', temp: '0' };
+    return { categorie: '', temp: null };
+  }
+  function dryHopSorteerWaarde(tijdstip) {
+    const { categorie, temp } = ontleedDryHopTijdstip(tijdstip);
+    if (categorie === 'warm') return -1000;
+    if (categorie === 'cold') return temp !== null ? -parseFloat(temp) : 500;
+    return 1000;
+  }
   function sorteerHopHerbsRegels(rijen) {
     const boil = rijen.filter(r => r.rol === 'hopgift_kook')
       .sort((a, b) => (parseFloat(b.tijdstip) || -Infinity) - (parseFloat(a.tijdstip) || -Infinity));
-    const dryHopVolgorde = ['warm', '16c', '0c'];
     const dryHop = rijen.filter(r => r.rol === 'dry_hop')
-      .sort((a, b) => dryHopVolgorde.indexOf(a.tijdstip) - dryHopVolgorde.indexOf(b.tijdstip));
+      .sort((a, b) => dryHopSorteerWaarde(a.tijdstip) - dryHopSorteerWaarde(b.tijdstip));
     return [...boil, ...dryHop];
   }
 
-  const dryHopTimingLabels = { warm: 'Warm', '16c': '16°C', '0c': 'Cold (0°C)' };
   function timingWeergave(i) {
-    if (i.rol === 'dry_hop') return dryHopTimingLabels[i.tijdstip] || i.tijdstip || '—';
+    if (i.rol === 'dry_hop') {
+      const { categorie, temp } = ontleedDryHopTijdstip(i.tijdstip);
+      if (categorie === 'warm') return 'Warm';
+      if (categorie === 'cold') return temp !== null ? `Cold - ${temp}°C` : 'Cold';
+      return i.tijdstip || '—';
+    }
     return i.tijdstip || '—';
   }
 

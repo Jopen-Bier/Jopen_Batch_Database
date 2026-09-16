@@ -916,13 +916,39 @@ async function brVulReceptnaamKruisVelden(writer, bundel, isWP) {
   }
 }
 
-const DRY_HOP_VOLGORDE = ['warm', '16c', '0c'];
+// Zelfde sortering als sorteerHopHerbsRegels() in recept-invoer.html.
+// Dry hop "Timing" is 'warm' of 'cold_<temperatuur>' (vrij instelbaar
+// 0-16°C). Legacy '16c'/'0c' (van vóór deze feature) blijven herkend.
+// Zelfde logica als de Node-versie in generate-batchrapport.js -- moet
+// overal in sync blijven.
+function ontleedDryHopTijdstip(tijdstip) {
+  if (tijdstip === 'warm') return { categorie: 'warm', temp: null };
+  if (tijdstip === 'cold') return { categorie: 'cold', temp: null };
+  const m = String(tijdstip || '').match(/^cold_(-?\d+(?:\.\d+)?)$/);
+  if (m) return { categorie: 'cold', temp: m[1] };
+  if (tijdstip === '16c') return { categorie: 'cold', temp: '16' };
+  if (tijdstip === '0c') return { categorie: 'cold', temp: '0' };
+  return { categorie: '', temp: null };
+}
+function dryHopSorteerWaarde(tijdstip) {
+  const { categorie, temp } = ontleedDryHopTijdstip(tijdstip);
+  if (categorie === 'warm') return -1000;
+  if (categorie === 'cold') return temp !== null ? -parseFloat(temp) : 500;
+  return 1000;
+}
+function formatDryHopTiming(tijdstip) {
+  if (!tijdstip) return null;
+  const { categorie, temp } = ontleedDryHopTijdstip(tijdstip);
+  if (categorie === 'warm') return 'Warm';
+  if (categorie === 'cold') return temp !== null ? `Cold - ${temp}°C` : 'Cold';
+  return tijdstip;
+}
 function sorteerHopgiften(rijen, rol) {
   if (rol === 'hopgift_kook') {
     return [...rijen].sort((a, b) => (parseFloat(b.tijdstip) || -Infinity) - (parseFloat(a.tijdstip) || -Infinity));
   }
   if (rol === 'dry_hop') {
-    return [...rijen].sort((a, b) => DRY_HOP_VOLGORDE.indexOf(a.tijdstip) - DRY_HOP_VOLGORDE.indexOf(b.tijdstip));
+    return [...rijen].sort((a, b) => dryHopSorteerWaarde(a.tijdstip) - dryHopSorteerWaarde(b.tijdstip));
   }
   return rijen;
 }
@@ -1047,6 +1073,8 @@ async function brVulIngredientRijen(writer, bundel, ingredientMap, overloop, sty
                 // geschreven, alleen mogelijk met de oude (onleesbare) kleur.
               }
             }
+          } else if (attr === 'tijdstip' && rol === 'dry_hop') {
+            waarde = formatDryHopTiming(regel.tijdstip);
           } else {
             waarde = regel[attr];
           }

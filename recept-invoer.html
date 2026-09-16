@@ -20,7 +20,7 @@
     --mono: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, Helvetica, sans-serif;
     --serif: Arial, Helvetica, sans-serif;
   }
-  .re-main { font-family: var(--serif); color: var(--ink); background: var(--paper); padding: 24px 32px 80px; max-width: 1000px; margin: 0 auto; }
+  .re-main { font-family: var(--serif); color: var(--ink); background: var(--paper); padding: 24px 32px 80px; max-width: 1400px; margin: 0 auto; }
   .re-titel { font-size: 28px; margin: 0 0 4px; }
   .re-subtitel { font-family: var(--mono); font-size: 12px; color: #6b6355; margin-bottom: 24px; }
 
@@ -178,10 +178,10 @@
     font-family: var(--serif); font-size: 14px; background: #fff;
   }
 
-  table.re-ing-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
-  table.re-ing-table th { text-align: left; font-family: var(--mono); font-size: 10px; text-transform: uppercase; color: #6b6355; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  table.re-ing-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; table-layout: fixed; }
+  table.re-ing-table th { text-align: left; font-family: var(--mono); font-size: 10px; text-transform: uppercase; color: #6b6355; padding: 6px 8px; border-bottom: 1px solid var(--line); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   table.re-ing-table td { padding: 6px 8px; border-bottom: 1px solid #ece8dc; }
-  table.re-ing-table select, table.re-ing-table input { width: 100%; padding: 5px 6px; border: 1px solid var(--line); border-radius: 4px; font-family: var(--serif); font-size: 13px; }
+  table.re-ing-table select, table.re-ing-table input { width: 100%; padding: 5px 6px; border: 1px solid var(--line); border-radius: 4px; font-family: var(--serif); font-size: 13px; box-sizing: border-box; }
   td.re-ing-afweeg { font-family: var(--mono); font-size: 12px; color: #6b6355; white-space: nowrap; }
   td.re-ing-ingredient-cell { position: relative; }
   .re-ing-ingredient-resultaten {
@@ -426,6 +426,10 @@
       <div class="re-section">
         <h2>Malt &amp; Grains</h2>
         <table class="re-ing-table">
+          <colgroup>
+            <col style="width:3%"><col style="width:32%"><col style="width:8%"><col style="width:7%">
+            <col style="width:6%"><col style="width:6%"><col style="width:9%"><col style="width:25%"><col style="width:4%">
+          </colgroup>
           <thead><tr><th></th><th>Ingredient</th><th>Amount (kg)</th><th>Unit</th><th>EBC</th><th>%</th><th>Timing</th><th>Note</th><th></th></tr></thead>
           <tbody id="re-ing-mout-tbody"></tbody>
           <tfoot>
@@ -446,6 +450,11 @@
       <div class="re-section">
         <h2>Hops and Herbs</h2>
         <table class="re-ing-table">
+          <colgroup>
+            <col style="width:2.5%"><col style="width:5%"><col style="width:23%"><col style="width:6%">
+            <col style="width:8%"><col style="width:8%"><col style="width:12%"><col style="width:7%">
+            <col style="width:6%"><col style="width:6%"><col style="width:13%"><col style="width:3.5%">
+          </colgroup>
           <thead><tr><th></th><th>Role</th><th>Ingredient</th><th>Alpha %</th><th>Amount</th><th>Unit</th><th>Timing</th><th>Rendement %</th><th>EBU</th><th>HDT</th><th>Note</th><th></th></tr></thead>
           <tbody id="re-ing-hop-tbody"></tbody>
         </table>
@@ -1153,17 +1162,22 @@ function voegIngredientRegelToe(tbodyId, rollenLijst, regel = {}) {
   const ebuKolomHtml = isHopSectie ? `<td class="re-ing-ebu">—</td>` : '';
 
   // Timing: bij Hop (boil) vrije invoer (getal, bijv. kooktijd in minuten); bij
-  // Dry hop een keuze uit Warm / 16°C / Cold (0°C) i.p.v. vrije tekst.
+  // Dry hop een keuze Warm / Cold, met bij Cold een los temperatuurveld
+  // (0-16°C, vrij instelbaar i.p.v. een vaste 16°C/0°C-keuze).
+  const { categorie: dryHopCategorie, temp: dryHopTemp } = ontleedDryHopTijdstip(regel.tijdstip);
   const tijdstipKolomHtml = isHopSectie ? `
     <td>
       <input type="text" class="re-ing-tijdstip-boil" value="${regel.rol !== 'dry_hop' ? (regel.tijdstip ?? '') : ''}"
              style="${isBoilRij ? '' : 'display:none;'}" placeholder="min" />
-      <select class="re-ing-tijdstip-dryhop" style="${isBoilRij ? 'display:none;' : ''}">
-        <option value="" ${!regel.tijdstip ? 'selected' : ''}>—</option>
-        <option value="warm" ${regel.tijdstip === 'warm' ? 'selected' : ''}>Warm</option>
-        <option value="16c" ${regel.tijdstip === '16c' ? 'selected' : ''}>16°C</option>
-        <option value="0c" ${regel.tijdstip === '0c' ? 'selected' : ''}>Cold (0°C)</option>
-      </select>
+      <div class="re-ing-tijdstip-dryhop-wrap" style="${isBoilRij ? 'display:none;' : 'display:flex;'} gap:4px;">
+        <select class="re-ing-tijdstip-dryhop" style="flex:1;">
+          <option value="" ${!dryHopCategorie ? 'selected' : ''}>—</option>
+          <option value="warm" ${dryHopCategorie === 'warm' ? 'selected' : ''}>Warm</option>
+          <option value="cold" ${dryHopCategorie === 'cold' ? 'selected' : ''}>Cold</option>
+        </select>
+        <input type="number" class="re-ing-tijdstip-dryhop-temp" min="0" max="16" step="0.5" placeholder="°C"
+               value="${dryHopTemp ?? ''}" style="width:56px; flex:none; ${dryHopCategorie === 'cold' ? '' : 'display:none;'}" />
+      </div>
     </td>` : `<td><input type="text" class="re-ing-tijdstip" value="${regel.tijdstip ?? ''}" /></td>`;
 
   tr.innerHTML = `
@@ -1272,7 +1286,7 @@ function voegIngredientRegelToe(tbodyId, rollenLijst, regel = {}) {
     const rolSelect = tr.querySelector('.re-ing-rol');
     const hdtSelect = tr.querySelector('.re-ing-hdt');
     const tijdstipBoil = tr.querySelector('.re-ing-tijdstip-boil');
-    const tijdstipDryhop = tr.querySelector('.re-ing-tijdstip-dryhop');
+    const tijdstipDryhopWrap = tr.querySelector('.re-ing-tijdstip-dryhop-wrap');
     if (rolSelect) {
       rolSelect.addEventListener('change', () => {
         const isBoil = rolSelect.value === 'hopgift_kook';
@@ -1280,13 +1294,22 @@ function voegIngredientRegelToe(tbodyId, rollenLijst, regel = {}) {
           hdtSelect.disabled = !isBoil;
           if (!isBoil) hdtSelect.value = '';
         }
-        if (tijdstipBoil && tijdstipDryhop) {
+        if (tijdstipBoil && tijdstipDryhopWrap) {
           tijdstipBoil.style.display = isBoil ? '' : 'none';
-          tijdstipDryhop.style.display = isBoil ? 'none' : '';
+          tijdstipDryhopWrap.style.display = isBoil ? 'none' : 'flex';
         }
         herberekenHopRendementEnEbu();
       });
     }
+  }
+  // Dry hop Cold-temperatuurveld: alleen tonen/verplicht als "Cold" gekozen is.
+  const dryHopSelect = tr.querySelector('.re-ing-tijdstip-dryhop');
+  const dryHopTempInput = tr.querySelector('.re-ing-tijdstip-dryhop-temp');
+  if (dryHopSelect && dryHopTempInput) {
+    dryHopSelect.addEventListener('change', () => {
+      dryHopTempInput.style.display = dryHopSelect.value === 'cold' ? '' : 'none';
+      if (dryHopSelect.value !== 'cold') dryHopTempInput.value = '';
+    });
   }
 }
 
@@ -1358,7 +1381,15 @@ function leesIngredientRegelsUit(tbodyId) {
       const isBoil = rol === 'hopgift_kook';
       tijdstip = isBoil
         ? (tr.querySelector('.re-ing-tijdstip-boil').value.trim() || null)
-        : (tr.querySelector('.re-ing-tijdstip-dryhop').value || null);
+        : (() => {
+            const sel = tr.querySelector('.re-ing-tijdstip-dryhop').value;
+            if (sel === 'warm') return 'warm';
+            if (sel === 'cold') {
+              const temp = tr.querySelector('.re-ing-tijdstip-dryhop-temp').value.trim();
+              return temp !== '' ? `cold_${temp}` : 'cold';
+            }
+            return null;
+          })();
     } else {
       tijdstip = tr.querySelector('.re-ing-tijdstip').value.trim() || null;
     }
@@ -2234,12 +2265,37 @@ async function vulKopieerSelect() {
 // Hop Boil altijd bovenaan (hoogste Timing eerst, aflopend), daarna Dry hop
 // in de volgorde Warm / 16°C / Cold (0°C), gebaseerd op de exacte keuze in
 // het Timing-veld (geen tekstherkenning meer nodig nu dit een dropdown is).
+// Dry hop "Timing" wordt opgeslagen als 'warm' of 'cold_<temperatuur>' (bv.
+// 'cold_8', 'cold_2.5') -- de temperatuur is vrij instelbaar (0-16°C) i.p.v.
+// een vaste keuze uit 16°C/0°C. Legacy waarden '16c'/'0c' (van vóór deze
+// feature) worden nog herkend voor de zekerheid, ook al zijn bestaande
+// recepten al gemigreerd. Zelfde functie in receptoverzicht.html en beide
+// batchrapport-generatoren -- moet overal in sync blijven.
+function ontleedDryHopTijdstip(tijdstip) {
+  if (tijdstip === 'warm') return { categorie: 'warm', temp: null };
+  if (tijdstip === 'cold') return { categorie: 'cold', temp: null };
+  const m = String(tijdstip || '').match(/^cold_(-?\d+(?:\.\d+)?)$/);
+  if (m) return { categorie: 'cold', temp: m[1] };
+  if (tijdstip === '16c') return { categorie: 'cold', temp: '16' };
+  if (tijdstip === '0c') return { categorie: 'cold', temp: '0' };
+  return { categorie: '', temp: null };
+}
+
+// Sorteerwaarde: Warm altijd eerst, daarna Cold aflopend op temperatuur
+// (warmer eerst, zelfde volgorde-gevoel als de oude vaste 16°C-vóór-0°C).
+// Onbekende/lege waarden komen achteraan.
+function dryHopSorteerWaarde(tijdstip) {
+  const { categorie, temp } = ontleedDryHopTijdstip(tijdstip);
+  if (categorie === 'warm') return -1000;
+  if (categorie === 'cold') return temp !== null ? -parseFloat(temp) : 500;
+  return 1000;
+}
+
 function sorteerHopHerbsRegels(rijen) {
   const boil = rijen.filter(r => r.rol === 'hopgift_kook')
     .sort((a, b) => (parseFloat(b.tijdstip) || -Infinity) - (parseFloat(a.tijdstip) || -Infinity));
-  const dryHopVolgorde = ['warm', '16c', '0c'];
   const dryHop = rijen.filter(r => r.rol === 'dry_hop')
-    .sort((a, b) => dryHopVolgorde.indexOf(a.tijdstip) - dryHopVolgorde.indexOf(b.tijdstip));
+    .sort((a, b) => dryHopSorteerWaarde(a.tijdstip) - dryHopSorteerWaarde(b.tijdstip));
   return [...boil, ...dryHop];
 }
 
