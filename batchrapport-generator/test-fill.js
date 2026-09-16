@@ -3,7 +3,7 @@ const JSZip = require('jszip');
 const { XlsxDirectWriter, StylesManager } = require('./xlsx-direct');
 const {
   vulScalaireVelden, vulWpKerkVelden, vulReceptnaamKruisVelden, vulIngredientRijen, vulRevisies,
-  vulFormaten, vulHopRendementEnEbu, zetHopGroepRanden, voegOverloopRijenToe,
+  vulFormaten, vulHopRendementEnEbu, zetHopGroepRanden, vulDryHopGlTotalen, voegOverloopRijenToe,
 } = require('./generate-batchrapport');
 
 async function test() {
@@ -30,6 +30,7 @@ async function test() {
       { rol: 'hopgift_kook', volgorde: 2, ingredient_id: 2, alpha_pct: 24.5, hoeveelheid: 5000, tijdstip: '0', hdt: null },
       { rol: 'hopgift_kook', volgorde: 3, ingredient_id: 7, alpha_pct: 10, hoeveelheid: 1000, tijdstip: '45', hdt: 1 },
       { rol: 'dry_hop', volgorde: 1, ingredient_id: 3, hoeveelheid: 7500, tijdstip: 'cold_16' },
+      { rol: 'dry_hop', volgorde: 5, ingredient_id: 4, hoeveelheid: 2500, tijdstip: 'cold_16' },
       { rol: 'dry_hop', volgorde: 2, ingredient_id: 2, hoeveelheid: 3000, tijdstip: 'cold_8' },
       { rol: 'dry_hop', volgorde: 3, ingredient_id: 7, hoeveelheid: 1500, tijdstip: 'warm' },
       { rol: 'dry_hop', volgorde: 4, ingredient_id: 1, hoeveelheid: 500, tijdstip: '0c' },
@@ -66,6 +67,7 @@ async function test() {
   await vulFormaten(writer, bundel);
   await vulHopRendementEnEbu(writer, bundel, overloop);
   await zetHopGroepRanden(writer, stylesManager, bundel, overloop);
+  await vulDryHopGlTotalen(writer, stylesManager, bundel, overloop);
 
   await writer.setCelWaarde('Recept-voorblad!K3', bundel.batch.batchnummer);
   await writer.setCelWaarde('Recept-voorblad!Q1', 'WP ' + bundel.recipes.naam);
@@ -105,17 +107,33 @@ async function test() {
   console.log('A44 (Saaz, 45 min):', ws.getCell('A44').value);
   console.log('A45 (moet LEEG zijn -- witregel):', ws.getCell('A45').value);
   console.log('A46 (Citra CRYO, 0 min):', ws.getCell('A46').value);
-  // Dry hop: sorteervolgorde moet Warm, Cold 16, Cold 8, Cold 0 zijn (warm
-  // eerst, dan cold aflopend op temperatuur), en Timing-tekst geformatteerd
-  // als 'Warm' resp. 'Cold - N°C' (ook voor de gemigreerde legacy '0c').
+  // Dry hop: sorteervolgorde moet Warm, Cold 16 (x2, zelfde groep), Cold 8,
+  // Cold 0 zijn (warm eerst, dan cold aflopend op temperatuur), en
+  // Timing-tekst geformatteerd als 'Warm' resp. 'Cold - N°C' (ook voor de
+  // gemigreerde legacy '0c').
   console.log('A58 (dry hop 1, moet Warm-ingrediënt zijn):', ws.getCell('A58').value);
   console.log('G58 (moet "Warm" zijn):', ws.getCell('G58').value);
-  console.log('A59 (dry hop 2, moet cold_16-ingrediënt zijn):', ws.getCell('A59').value);
+  console.log('A59 (dry hop 2, eerste van de cold_16-groep):', ws.getCell('A59').value);
   console.log('G59 (moet "Cold - 16°C" zijn):', ws.getCell('G59').value);
-  console.log('A60 (dry hop 3, moet cold_8-ingrediënt zijn):', ws.getCell('A60').value);
-  console.log('G60 (moet "Cold - 8°C" zijn):', ws.getCell('G60').value);
-  console.log('A61 (dry hop 4, moet legacy 0c-ingrediënt zijn):', ws.getCell('A61').value);
-  console.log('G61 (legacy \'0c\', moet "Cold - 0°C" zijn):', ws.getCell('G61').value);
+  console.log('A60 (dry hop 3, tweede van de cold_16-groep):', ws.getCell('A60').value);
+  console.log('G60 (moet ook "Cold - 16°C" zijn):', ws.getCell('G60').value);
+  console.log('A61 (dry hop 4, moet cold_8-ingrediënt zijn):', ws.getCell('A61').value);
+  console.log('G61 (moet "Cold - 8°C" zijn):', ws.getCell('G61').value);
+  console.log('A62 (dry hop 5, moet legacy 0c-ingrediënt zijn):', ws.getCell('A62').value);
+  console.log('G62 (legacy \'0c\', moet "Cold - 0°C" zijn):', ws.getCell('G62').value);
+  // g/l-totalen per toevoegmoment (vervangt de oude vaste J58/J61-formules):
+  // J58 = Warm alleen (1500g / (60hl*100) = 0.25), geen samenvoeging.
+  // J59 = Cold-16°C, SAMENGEVOEGDE groep van 2 rijen (7500+2500=10000g /
+  // 6000 = 1.6667), J60 hoort bij deze samenvoeging en moet zelf leeg zijn.
+  // J61 = Cold-8°C alleen (3000/6000=0.5). J62 = Cold-0°C alleen
+  // (500/6000=0.0833). J63 = ongebruikt slot, moet leeg + neutraal zijn.
+  console.log('J58 (Warm-totaal, moet 0.25 zijn):', ws.getCell('J58').value, 'fill:', JSON.stringify(ws.getCell('J58').fill));
+  console.log('J59 (Cold-16-totaal, moet 1.6667 zijn):', ws.getCell('J59').value, 'fill:', JSON.stringify(ws.getCell('J59').fill));
+  console.log('J59 samengevoegd met J60?:', ws.getCell('J59').isMerged, '-> master:', ws.getCell('J59').master && ws.getCell('J59').master.address);
+  console.log('J60 (hoort bij J59-samenvoeging, moet zelf LEEG zijn):', ws.getCell('J60').value);
+  console.log('J61 (Cold-8-totaal, moet 0.5 zijn, GEEN samenvoeging):', ws.getCell('J61').value, 'isMerged:', ws.getCell('J61').isMerged);
+  console.log('J62 (Cold-0-totaal, moet 0.0833 zijn):', ws.getCell('J62').value);
+  console.log('J63 (ongebruikt, moet LEEG zijn):', ws.getCell('J63').value, 'fill:', JSON.stringify(ws.getCell('J63').fill));
   // "All in brew 1?" -- Additions Brewing, rij 75 (normaal, x1) en rij 76
   // (alles_in_brouwsel_1: true, batch.aantal_brouwsels=3 -> x3 + '*' + notitie in Q).
   console.log('G75 (Calcium Chloride, normaal: 11 g/hl x 60hl x1 = 660.0 g, GEEN *):', ws.getCell('G75').value);

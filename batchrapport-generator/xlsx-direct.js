@@ -125,6 +125,41 @@ class XlsxDirectWriter {
     return sheetCel;
   }
 
+  /**
+   * Voegt `sheetCel1:sheetCel2` toe als nieuwe celsamenvoeging. Werkt de
+   * `_mergesPerBestand`-cache meteen bij zodat `haalMergeAnker()` deze
+   * nieuwe samenvoeging ook meteen kent binnen dezelfde generatie-run.
+   */
+  async voegMergeToe(sheetCel1, sheetCel2) {
+    const [sheetNaam, cel1] = sheetCel1.split('!');
+    const cel2 = sheetCel2.includes('!') ? sheetCel2.split('!')[1] : sheetCel2;
+    const bestand = await this._laadSheetXml(sheetNaam);
+    let xml = this.sheetXmlPerBestand[bestand];
+    const ref = `${cel1}:${cel2}`;
+
+    const mergeBlockMatch = xml.match(/<mergeCells count="(\d+)">([\s\S]*?)<\/mergeCells>/);
+    if (mergeBlockMatch) {
+      const nieuwAantal = Number(mergeBlockMatch[1]) + 1;
+      xml = xml.replace(
+        mergeBlockMatch[0],
+        `<mergeCells count="${nieuwAantal}">${mergeBlockMatch[2]}<mergeCell ref="${ref}"/></mergeCells>`
+      );
+    } else {
+      // Geen mergeCells-sectie aanwezig -- moet direct na </sheetData> (OOXML-elementvolgorde is vast).
+      xml = xml.replace('</sheetData>', `</sheetData><mergeCells count="1"><mergeCell ref="${ref}"/></mergeCells>`);
+    }
+    this.sheetXmlPerBestand[bestand] = xml;
+
+    if (this._mergesPerBestand[bestand]) {
+      const p1 = ontleedCelRef(cel1);
+      const p2 = ontleedCelRef(cel2);
+      this._mergesPerBestand[bestand].push({
+        c1: Math.min(p1.col, p2.col), r1: Math.min(p1.row, p2.row),
+        c2: Math.max(p1.col, p2.col), r2: Math.max(p1.row, p2.row),
+      });
+    }
+  }
+
   async _laadSheetXml(sheetNaam) {
     const bestand = this.sheetNaarBestand[sheetNaam];
     if (!bestand) throw new Error(`Onbekend tabblad: ${sheetNaam}`);
@@ -758,6 +793,59 @@ class StylesManager {
       xfsGewijzigd = true;
     }
 
+    if (xfsGewijzigd) {
+      const nieuweInhoud = xfs.join('');
+      this.xml = this.xml.replace(
+        cellXfsSectie.volledigeMatch,
+        `<cellXfs count="${xfs.length}">${nieuweInhoud}</cellXfs>`
+      );
+    }
+
+    return nieuweXfIdx;
+  }
+
+  /**
+   * Geeft de stijlindex terug voor "dezelfde stijl als sourceStyleIdx, maar
+   * met vulling `fillXml`" (font/border/numFmt/alignment ongewijzigd).
+   * `fillXml` is een complete `<fill>...</fill>`-string; bij een exacte
+   * match met een bestaande vulling wordt die hergebruikt (geen duplicaat).
+   */
+  voegVulkleurToe(sourceStyleIdx, fillXml) {
+    const cellXfsSectie = this._haalSectie('cellXfs');
+    const xfs = this._splitsElementen(cellXfsSectie.inhoud, 'xf');
+    const bronXf = xfs[sourceStyleIdx];
+    if (!bronXf) throw new Error(`Stijlindex ${sourceStyleIdx} bestaat niet`);
+
+    const fillsSectie = this._haalSectie('fills');
+    const fills = this._splitsElementen(fillsSectie.inhoud, 'fill');
+
+    let nieuweFillId = fills.findIndex(f => f === fillXml);
+    let fillsGewijzigd = false;
+    if (nieuweFillId === -1) {
+      fills.push(fillXml);
+      nieuweFillId = fills.length - 1;
+      fillsGewijzigd = true;
+    }
+
+    const nieuweXf = /fillId="\d+"/.test(bronXf)
+      ? bronXf.replace(/fillId="\d+"/, `fillId="${nieuweFillId}"`)
+      : bronXf.replace('<xf ', `<xf fillId="${nieuweFillId}" `);
+
+    let nieuweXfIdx = xfs.findIndex(x => x === nieuweXf);
+    let xfsGewijzigd = false;
+    if (nieuweXfIdx === -1) {
+      xfs.push(nieuweXf);
+      nieuweXfIdx = xfs.length - 1;
+      xfsGewijzigd = true;
+    }
+
+    if (fillsGewijzigd) {
+      const nieuweInhoud = fills.join('');
+      this.xml = this.xml.replace(
+        fillsSectie.volledigeMatch,
+        `<fills count="${fills.length}">${nieuweInhoud}</fills>`
+      );
+    }
     if (xfsGewijzigd) {
       const nieuweInhoud = xfs.join('');
       this.xml = this.xml.replace(

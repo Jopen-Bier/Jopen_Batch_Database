@@ -655,6 +655,88 @@ async function zetHopGroepRanden(writer, stylesManager, bundel, overloop) {
   await dikkeRandenVoorBlok(dryHopRijen, dryHopEersteRij);
 }
 
+// Vullingen voor de dry hop g/l-totalen (zelfde kleuren als de Timing-kolom
+// zelf, zie de conditional-formatting-fix van een eerdere sessie): Warm =
+// oranje (theme 5), Cold = blauw (theme 4, hergebruikt fillId 9 dat al in
+// het sjabloon bestaat), neutraal = het standaard lichtgrijs van de rest
+// van de tabel (hergebruikt fillId 2).
+const VULLING_WARM = '<fill><patternFill patternType="solid"><fgColor theme="5" tint="0.3999"/><bgColor rgb="FFC9C9C9"/></patternFill></fill>';
+const VULLING_COLD = '<fill><patternFill patternType="solid"><fgColor theme="4" tint="0.5999"/><bgColor rgb="FFC9C9C9"/></patternFill></fill>';
+const VULLING_NEUTRAAL = '<fill><patternFill patternType="solid"><fgColor theme="0"/><bgColor rgb="FFF2F2F2"/></patternFill></fill>';
+
+/**
+ * Dry hop g/l-totaal per toevoegmoment (Warm resp. elke unieke Cold-
+ * temperatuur). Vervangt de oude vaste J58/J61-Excel-formules, die ervan
+ * uitgingen dat de 6 dry-hop-sloten altijd in twee vaste helften van 3
+ * rijen vielen, elk uniform warm-of-koud met een vaste temperatuur (16°C/
+ * 0°C) -- dat klopt niet meer nu een toevoegmoment een willekeurig aantal
+ * rijen kan beslaan en Cold een vrije temperatuur heeft. Groepeert net als
+ * de dikke scheidingslijnen (zetHopGroepRanden) op exact gelijke
+ * tijdstip-waarde, telt de hoeveelheid van die groep op, en zet het
+ * resultaat (opgeteld gewicht / (brouwsel_hl x 100) = g/l) in de eerste
+ * rij van de groep, samengevoegd over de hele groep, met de kleur van die
+ * temperatuurgroep. Maakt eerst het HELE dry-hop-bereik in kolom J leeg
+ * met een neutrale achtergrond -- dat ruimt meteen ook de oude vaste
+ * formules op, ongeacht waar de daadwerkelijke groepen nu vallen.
+ */
+async function vulDryHopGlTotalen(writer, stylesManager, bundel, overloop) {
+  const { n0, nHop } = overloop;
+  const dryHopEersteRij = RIJ_DRYHOP_EERSTE + n0 + nHop;
+  const vasteSloten = RIJ_DRYHOP_LAATSTE - RIJ_DRYHOP_EERSTE + 1;
+  const dryHopRijen = sorteerHopgiften(bundel.recipe_ingredients.filter(r => r.rol === 'dry_hop'), 'dry_hop');
+  const brouwselHl = bundel.recipes.brouwsel_hl !== null && bundel.recipes.brouwsel_hl !== undefined
+    ? Number(bundel.recipes.brouwsel_hl) : null;
+  const totaalRijen = Math.max(dryHopRijen.length, vasteSloten);
+
+  const groepen = [];
+  for (let i = 0; i < dryHopRijen.length; i++) {
+    const vorige = groepen[groepen.length - 1];
+    if (vorige && String(dryHopRijen[i].tijdstip) === String(dryHopRijen[vorige.start].tijdstip)) {
+      vorige.eind = i;
+    } else {
+      groepen.push({ start: i, eind: i });
+    }
+  }
+
+  for (let i = 0; i < totaalRijen; i++) {
+    const cel = `Recept-voorblad!J${dryHopEersteRij + i}`;
+    try {
+      await writer.setCelWaarde(cel, null);
+      const huidigeStijl = await writer.haalStijlIndexOp(cel);
+      const nieuweStijl = stylesManager.voegVulkleurToe(huidigeStijl, VULLING_NEUTRAAL);
+      await writer.zetOfMaakCelStijl(cel, nieuweStijl);
+    } catch (e) {
+      // Cel bestond niet -- zou niet moeten gebeuren, overslaan.
+    }
+  }
+
+  for (const groep of groepen) {
+    const { categorie } = ontleedDryHopTijdstip(dryHopRijen[groep.start].tijdstip);
+    const totaalGewicht = dryHopRijen.slice(groep.start, groep.eind + 1)
+      .reduce((som, r) => som + (Number(r.hoeveelheid) || 0), 0);
+    const totaalGl = (brouwselHl !== null && brouwselHl > 0) ? totaalGewicht / (brouwselHl * 100) : null;
+
+    const eersteRijGroep = dryHopEersteRij + groep.start;
+    const laatsteRijGroep = dryHopEersteRij + groep.eind;
+    const cel = `Recept-voorblad!J${eersteRijGroep}`;
+
+    await writer.setCelWaarde(cel, totaalGl);
+    try {
+      const huidigeStijl = await writer.haalStijlIndexOp(cel);
+      const fillXml = categorie === 'warm' ? VULLING_WARM : (categorie === 'cold' ? VULLING_COLD : null);
+      if (fillXml) {
+        const nieuweStijl = stylesManager.voegVulkleurToe(huidigeStijl, fillXml);
+        await writer.zetOfMaakCelStijl(cel, nieuweStijl);
+      }
+    } catch (e) {
+      // Stijl kon niet gezet worden -- waarde staat er in ieder geval wel.
+    }
+
+    if (groep.eind > groep.start) {
+      await writer.voegMergeToe(cel, `Recept-voorblad!J${laatsteRijGroep}`);
+    }
+  }
+}
 // ---------------------------------------------------------------------------
 // Hoofdlogica
 // ---------------------------------------------------------------------------
@@ -682,6 +764,7 @@ async function genereerBatchrapportBuffer(bundel) {
   await vulFormaten(writer, bundel);
   await vulHopRendementEnEbu(writer, bundel, overloop);
   await zetHopGroepRanden(writer, stylesManager, bundel, overloop);
+  await vulDryHopGlTotalen(writer, stylesManager, bundel, overloop);
 
   await writer.setCelWaarde('Recept-voorblad!H3', 'Batch nr.:');
   await writer.setCelWaarde('Recept-voorblad!K3', bundel.batch.batchnummer);
@@ -740,5 +823,5 @@ if (require.main === module) {
 module.exports = {
   bepaalHopRendement, bepaalHopEbu, vulScalaireVelden, vulWpKerkVelden, vulReceptnaamKruisVelden,
   vulIngredientRijen, vulRevisies, vulFormaten, vulHopRendementEnEbu, zetHopGroepRanden,
-  voegOverloopRijenToe, genereerBatchrapportBuffer, haalBatchDataOp,
+  vulDryHopGlTotalen, voegOverloopRijenToe, genereerBatchrapportBuffer, haalBatchDataOp,
 };

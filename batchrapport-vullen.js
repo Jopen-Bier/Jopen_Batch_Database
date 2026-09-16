@@ -166,6 +166,39 @@ class XlsxDirectWriter {
     }
   }
 
+  /**
+   * Voegt `sheetCel1:sheetCel2` toe als nieuwe celsamenvoeging. Zelfde
+   * logica als de Node-versie in xlsx-direct.js -- moet in sync blijven.
+   */
+  async voegMergeToe(sheetCel1, sheetCel2) {
+    const [sheetNaam, cel1] = sheetCel1.split('!');
+    const cel2 = sheetCel2.includes('!') ? sheetCel2.split('!')[1] : sheetCel2;
+    const bestand = await this._laadSheetXml(sheetNaam);
+    let xml = this.sheetXmlPerBestand[bestand];
+    const ref = `${cel1}:${cel2}`;
+
+    const mergeBlockMatch = xml.match(/<mergeCells count="(\d+)">([\s\S]*?)<\/mergeCells>/);
+    if (mergeBlockMatch) {
+      const nieuwAantal = Number(mergeBlockMatch[1]) + 1;
+      xml = xml.replace(
+        mergeBlockMatch[0],
+        `<mergeCells count="${nieuwAantal}">${mergeBlockMatch[2]}<mergeCell ref="${ref}"/></mergeCells>`
+      );
+    } else {
+      xml = xml.replace('</sheetData>', `</sheetData><mergeCells count="1"><mergeCell ref="${ref}"/></mergeCells>`);
+    }
+    this.sheetXmlPerBestand[bestand] = xml;
+
+    if (this._mergesPerBestand[bestand]) {
+      const p1 = ontleedCelRef(cel1);
+      const p2 = ontleedCelRef(cel2);
+      this._mergesPerBestand[bestand].push({
+        c1: Math.min(p1.col, p2.col), r1: Math.min(p1.row, p2.row),
+        c2: Math.max(p1.col, p2.col), r2: Math.max(p1.row, p2.row),
+      });
+    }
+  }
+
   async _laadSheetXml(sheetNaam) {
     const bestand = this.sheetNaarBestand[sheetNaam];
     if (!bestand) throw new Error(`Onbekend tabblad: ${sheetNaam}`);
@@ -708,6 +741,58 @@ class StylesManager {
     return nieuweXfIdx;
   }
 
+  /**
+   * Geeft de stijlindex terug voor "dezelfde stijl als sourceStyleIdx, maar
+   * met vulling `fillXml`". Zelfde logica als de Node-versie in
+   * xlsx-direct.js -- moet in sync blijven.
+   */
+  voegVulkleurToe(sourceStyleIdx, fillXml) {
+    const cellXfsSectie = this._haalSectie('cellXfs');
+    const xfs = this._splitsElementen(cellXfsSectie.inhoud, 'xf');
+    const bronXf = xfs[sourceStyleIdx];
+    if (!bronXf) throw new Error(`Stijlindex ${sourceStyleIdx} bestaat niet`);
+
+    const fillsSectie = this._haalSectie('fills');
+    const fills = this._splitsElementen(fillsSectie.inhoud, 'fill');
+
+    let nieuweFillId = fills.findIndex(f => f === fillXml);
+    let fillsGewijzigd = false;
+    if (nieuweFillId === -1) {
+      fills.push(fillXml);
+      nieuweFillId = fills.length - 1;
+      fillsGewijzigd = true;
+    }
+
+    const nieuweXf = /fillId="\d+"/.test(bronXf)
+      ? bronXf.replace(/fillId="\d+"/, `fillId="${nieuweFillId}"`)
+      : bronXf.replace('<xf ', `<xf fillId="${nieuweFillId}" `);
+
+    let nieuweXfIdx = xfs.findIndex(x => x === nieuweXf);
+    let xfsGewijzigd = false;
+    if (nieuweXfIdx === -1) {
+      xfs.push(nieuweXf);
+      nieuweXfIdx = xfs.length - 1;
+      xfsGewijzigd = true;
+    }
+
+    if (fillsGewijzigd) {
+      const nieuweInhoud = fills.join('');
+      this.xml = this.xml.replace(
+        fillsSectie.volledigeMatch,
+        `<fills count="${fills.length}">${nieuweInhoud}</fills>`
+      );
+    }
+    if (xfsGewijzigd) {
+      const nieuweInhoud = xfs.join('');
+      this.xml = this.xml.replace(
+        cellXfsSectie.volledigeMatch,
+        `<cellXfs count="${xfs.length}">${nieuweInhoud}</cellXfs>`
+      );
+    }
+
+    return nieuweXfIdx;
+  }
+
   finalize() {
     this.zip.file('xl/styles.xml', this.xml);
   }
@@ -1174,6 +1259,76 @@ function kolomNummerNaarLetter(num) {
   return letters;
 }
 
+// Vullingen voor de dry hop g/l-totalen -- zelfde kleuren als de
+// Timing-kolom zelf. Zelfde logica als generate-batchrapport.js -- moet in
+// sync blijven.
+const VULLING_WARM = '<fill><patternFill patternType="solid"><fgColor theme="5" tint="0.3999"/><bgColor rgb="FFC9C9C9"/></patternFill></fill>';
+const VULLING_COLD = '<fill><patternFill patternType="solid"><fgColor theme="4" tint="0.5999"/><bgColor rgb="FFC9C9C9"/></patternFill></fill>';
+const VULLING_NEUTRAAL = '<fill><patternFill patternType="solid"><fgColor theme="0"/><bgColor rgb="FFF2F2F2"/></patternFill></fill>';
+
+/**
+ * Dry hop g/l-totaal per toevoegmoment. Zelfde logica als
+ * vulDryHopGlTotalen() in generate-batchrapport.js -- moet in sync blijven.
+ */
+async function brVulDryHopGlTotalen(writer, stylesManager, bundel, overloop) {
+  const { n0, nHop } = overloop;
+  const dryHopEersteRij = RIJ_DRYHOP_EERSTE + n0 + nHop;
+  const vasteSloten = RIJ_DRYHOP_LAATSTE - RIJ_DRYHOP_EERSTE + 1;
+  const dryHopRijen = sorteerHopgiften(bundel.recipe_ingredients.filter(r => r.rol === 'dry_hop'), 'dry_hop');
+  const brouwselHl = bundel.recipes.brouwsel_hl !== null && bundel.recipes.brouwsel_hl !== undefined
+    ? Number(bundel.recipes.brouwsel_hl) : null;
+  const totaalRijen = Math.max(dryHopRijen.length, vasteSloten);
+
+  const groepen = [];
+  for (let i = 0; i < dryHopRijen.length; i++) {
+    const vorige = groepen[groepen.length - 1];
+    if (vorige && String(dryHopRijen[i].tijdstip) === String(dryHopRijen[vorige.start].tijdstip)) {
+      vorige.eind = i;
+    } else {
+      groepen.push({ start: i, eind: i });
+    }
+  }
+
+  for (let i = 0; i < totaalRijen; i++) {
+    const cel = `Recept-voorblad!J${dryHopEersteRij + i}`;
+    try {
+      await writer.setCelWaarde(cel, null);
+      const huidigeStijl = await writer.haalStijlIndexOp(cel);
+      const nieuweStijl = stylesManager.voegVulkleurToe(huidigeStijl, VULLING_NEUTRAAL);
+      await writer.zetOfMaakCelStijl(cel, nieuweStijl);
+    } catch (e) {
+      // Cel bestond niet -- zou niet moeten gebeuren, overslaan.
+    }
+  }
+
+  for (const groep of groepen) {
+    const { categorie } = ontleedDryHopTijdstip(dryHopRijen[groep.start].tijdstip);
+    const totaalGewicht = dryHopRijen.slice(groep.start, groep.eind + 1)
+      .reduce((som, r) => som + (Number(r.hoeveelheid) || 0), 0);
+    const totaalGl = (brouwselHl !== null && brouwselHl > 0) ? totaalGewicht / (brouwselHl * 100) : null;
+
+    const eersteRijGroep = dryHopEersteRij + groep.start;
+    const laatsteRijGroep = dryHopEersteRij + groep.eind;
+    const cel = `Recept-voorblad!J${eersteRijGroep}`;
+
+    await writer.setCelWaarde(cel, totaalGl);
+    try {
+      const huidigeStijl = await writer.haalStijlIndexOp(cel);
+      const fillXml = categorie === 'warm' ? VULLING_WARM : (categorie === 'cold' ? VULLING_COLD : null);
+      if (fillXml) {
+        const nieuweStijl = stylesManager.voegVulkleurToe(huidigeStijl, fillXml);
+        await writer.zetOfMaakCelStijl(cel, nieuweStijl);
+      }
+    } catch (e) {
+      // Stijl kon niet gezet worden -- waarde staat er in ieder geval wel.
+    }
+
+    if (groep.eind > groep.start) {
+      await writer.voegMergeToe(cel, `Recept-voorblad!J${laatsteRijGroep}`);
+    }
+  }
+}
+
 async function brZetHopGroepRanden(writer, stylesManager, bundel, overloop) {
   const { n0, nHop, nDryHop } = overloop;
   const hopEersteRij = RIJ_HOP_EERSTE + n0;
@@ -1285,6 +1440,7 @@ async function genereerEnDownloadBatchrapport(supabase, batchnummer, ingredientO
   await brVulFormaten(writer, bundel, formatenMap);
   await brVulHopRendementEnEbu(writer, bundel, overloop);
   await brZetHopGroepRanden(writer, stylesManager, bundel, overloop);
+  await brVulDryHopGlTotalen(writer, stylesManager, bundel, overloop);
 
   await writer.setCelWaarde('Recept-voorblad!K3', bundel.batch.batchnummer);
   // Fallback naar 1 (niet null/blank): elke "Totaal gram"-cel op dit tabblad
