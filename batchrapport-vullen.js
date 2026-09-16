@@ -674,6 +674,40 @@ class StylesManager {
     return nieuweXfIdx;
   }
 
+  /**
+   * Geeft de stijlindex terug voor "dezelfde stijl als sourceStyleIdx, maar
+   * met een ander numFmtId". Zelfde logica als de Node-versie in
+   * xlsx-direct.js -- moet in sync blijven.
+   */
+  vervangNumFmt(sourceStyleIdx, nieuweNumFmtId) {
+    const cellXfsSectie = this._haalSectie('cellXfs');
+    const xfs = this._splitsElementen(cellXfsSectie.inhoud, 'xf');
+    const bronXf = xfs[sourceStyleIdx];
+    if (!bronXf) throw new Error(`Stijlindex ${sourceStyleIdx} bestaat niet`);
+
+    const nieuweXf = /numFmtId="\d+"/.test(bronXf)
+      ? bronXf.replace(/numFmtId="\d+"/, `numFmtId="${nieuweNumFmtId}"`)
+      : bronXf.replace('<xf ', `<xf numFmtId="${nieuweNumFmtId}" `);
+
+    let nieuweXfIdx = xfs.findIndex(x => x === nieuweXf);
+    let xfsGewijzigd = false;
+    if (nieuweXfIdx === -1) {
+      xfs.push(nieuweXf);
+      nieuweXfIdx = xfs.length - 1;
+      xfsGewijzigd = true;
+    }
+
+    if (xfsGewijzigd) {
+      const nieuweInhoud = xfs.join('');
+      this.xml = this.xml.replace(
+        cellXfsSectie.volledigeMatch,
+        `<cellXfs count="${xfs.length}">${nieuweInhoud}</cellXfs>`
+      );
+    }
+
+    return nieuweXfIdx;
+  }
+
   finalize() {
     this.zip.file('xl/styles.xml', this.xml);
   }

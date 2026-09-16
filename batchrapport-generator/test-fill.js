@@ -116,6 +116,14 @@ async function test() {
   console.log('A44 border (moet WEL dikke rand -- laatste van groep 45min, vlak boven witregel):', JSON.stringify(ws.getCell('A44').border));
   console.log('A45 border (witregel, geen dikke rand):', JSON.stringify(ws.getCell('A45').border));
   console.log('A46 border (moet WEL dikke rand -- laatste rij Hop boil):', JSON.stringify(ws.getCell('A46').border));
+  // Amerikaanse datumnotatie (numFmtId 166, m/d/yyyy) mag nergens meer
+  // voorkomen -- moet overal d/mm/yy (numFmtId 171) zijn.
+  console.log('Recept-voorblad!K7 numFmt (moet d/mm/yy zijn, GEEN m/d/yyyy):', ws.getCell('K7').numFmt);
+  const wsBrouwen = wb.getWorksheet('Brouwen');
+  console.log('Brouwen!N5 numFmt (moet d/mm/yy zijn, GEEN m/d/yyyy):', wsBrouwen.getCell('N5').numFmt);
+  console.log('Brouwen!N50 numFmt (moet d/mm/yy zijn, GEEN m/d/yyyy):', wsBrouwen.getCell('N50').numFmt);
+  const wsGistkaart = wb.getWorksheet('Gistkaart Invoer');
+  console.log('Gistkaart Invoer!H4 numFmt (TODAY(), moet d/mm/yy zijn):', wsGistkaart.getCell('H4').numFmt);
 }
 
 test().catch(e => { console.error(e); process.exit(1); });
