@@ -271,7 +271,7 @@
           <div class="vp-groep">
             <div class="vp-groep-titel">${ROL_LABEL[rol] || rol}</div>
             <table class="vp-tabel">
-              <thead><tr><th>Ingredient</th><th>Total needed</th>${toonTotaalKolom ? '<th>Total (kg/L)</th>' : ''}</tr></thead>
+              <thead><tr><th>Ingredient</th><th>Total needed</th>${toonTotaalKolom ? '<th>Total (Kg or L)</th>' : ''}</tr></thead>
               <tbody>
                 ${rijen.map((r, i) => {
                   const kgOfL = toonTotaalKolom ? naarKgOfL(r.eenheid, r.totaal) : null;
