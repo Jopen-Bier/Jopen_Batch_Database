@@ -150,13 +150,18 @@
     };
     const ROL_VOLGORDE = ['hoofdmout', 'hops', 'toegift_brouwerij', 'gist', 'toegift_kelder'];
 
-    // Eenheid -> kg, alleen voor de expliciete "Total (kg)"-kolom bij hop.
-    // Bewust voorzichtig: bij een onherkende eenheid gokken we niet, maar
-    // tonen we "—" zodat het opvalt en handmatig nagekeken kan worden.
-    function naarKg(eenheid, hoeveelheid) {
+    // Eenheid -> kg of L, voor de "Total (kg/L)"-kolom bij Hops, Brewing
+    // additions, Cellar additions en Yeast (allemaal ná de rate-naar-
+    // absoluut-omrekening in voorraad-forecast.js al in een schone
+    // basiseenheid: g, kg, ml of l). Bewust voorzichtig: bij een
+    // onherkende eenheid gokken we niet, maar tonen we "—" zodat het
+    // opvalt en handmatig nagekeken kan worden.
+    function naarKgOfL(eenheid, hoeveelheid) {
       const e = (eenheid || '').trim().toLowerCase();
-      if (['kg', 'kilogram', 'kilo'].includes(e)) return hoeveelheid;
-      if (['g', 'gr', 'gram', 'grams'].includes(e)) return hoeveelheid / 1000;
+      if (['kg', 'kilogram', 'kilo'].includes(e)) return { waarde: hoeveelheid, label: 'kg' };
+      if (['g', 'gr', 'gram', 'grams'].includes(e)) return { waarde: hoeveelheid / 1000, label: 'kg' };
+      if (['l', 'liter', 'litre', 'liters'].includes(e)) return { waarde: hoeveelheid, label: 'L' };
+      if (['ml', 'milliliter', 'millilitre', 'milliliters'].includes(e)) return { waarde: hoeveelheid / 1000, label: 'L' };
       return null;
     }
 
@@ -260,16 +265,16 @@
         if (ingredientZoekterm) rijen = rijen.filter(r => r.naam.toLowerCase().includes(ingredientZoekterm));
         if (rijen.length === 0) return;
         ietsGetoond = true;
-        const isHopsGroep = rol === 'hops';
+        const toonTotaalKolom = ['hops', 'toegift_brouwerij', 'toegift_kelder', 'gist'].includes(rol);
 
         html += `
           <div class="vp-groep">
             <div class="vp-groep-titel">${ROL_LABEL[rol] || rol}</div>
             <table class="vp-tabel">
-              <thead><tr><th>Ingredient</th><th>Total needed</th>${isHopsGroep ? '<th>Total (kg)</th>' : ''}</tr></thead>
+              <thead><tr><th>Ingredient</th><th>Total needed</th>${toonTotaalKolom ? '<th>Total (kg/L)</th>' : ''}</tr></thead>
               <tbody>
                 ${rijen.map((r, i) => {
-                  const kg = isHopsGroep ? naarKg(r.eenheid, r.totaal) : null;
+                  const kgOfL = toonTotaalKolom ? naarKgOfL(r.eenheid, r.totaal) : null;
                   const mixedBadge = r.mixedUnits
                     ? ` <span class="vp-mixed-badge" title="This ingredient has quantities recorded under more than one unit (check the ingredient card and recipe lines) — these are shown as separate rows and NOT added together, since that could combine incompatible units.">⚠ mixed units</span>`
                     : '';
@@ -280,10 +285,10 @@
                   <tr class="vp-rij-ingredient" data-detail="detail-${rol}-${i}">
                     <td>${escapeHtml(r.naam)}${mixedBadge}${missingHlBadge}</td>
                     <td>${formatGetal(r.totaal)}${r.eenheid ? ' ' + escapeHtml(r.eenheid) : ''}</td>
-                    ${isHopsGroep ? `<td>${kg !== null ? formatGetal(kg) + ' kg' : `<span title="Unit '${escapeHtml(r.eenheid || '')}' not recognized — check manually">—</span>`}</td>` : ''}
+                    ${toonTotaalKolom ? `<td>${kgOfL !== null ? formatGetal(kgOfL.waarde) + ' ' + kgOfL.label : `<span title="Unit '${escapeHtml(r.eenheid || '')}' not recognized — check manually">—</span>`}</td>` : ''}
                   </tr>
                   <tr class="vp-detail-rij" id="detail-${rol}-${i}">
-                    <td colspan="${isHopsGroep ? 3 : 2}">
+                    <td colspan="${toonTotaalKolom ? 3 : 2}">
                       Per recipe:
                       <ul>
                         ${Object.entries(r.perRecept).map(([naam, hoev]) =>
