@@ -165,6 +165,17 @@
       return null;
     }
 
+    // Yeast-afronding: naar boven afronden op de eerstvolgende 500 g (resp.
+    // 0,5 kg) -- dus 2400->2500, 3100->3500, 4800->5000, 2250->2500. Dit is
+    // een op-naar-boven-afronding (ceiling), geen afronding naar het
+    // dichtstbijzijnde tiental: 3100 ligt dichter bij 3000, maar rondt toch
+    // naar 3500 af (op verzoek, voor voldoende voorraad-marge).
+    function rondAfGist(hoeveelheid, eenheid) {
+      const e = (eenheid || '').trim().toLowerCase();
+      const stap = ['kg', 'kilogram', 'kilo'].includes(e) ? 0.5 : 500;
+      return Math.ceil(hoeveelheid / stap) * stap;
+    }
+
     let huidigJaar = new Date().getFullYear();
     let actieveRolFilter = 'alle';
     let laatsteResultaat = null; // { perRol: { rol: [{ingredientId, naam, eenheid, totaal, perRecept:[{naam,brouwsels,hoeveelheid}]}] }, aantalBrouwsels, aantalRecepten }
@@ -261,7 +272,20 @@
         const ingredientenVanRol = laatsteResultaat.perRol[rol];
         if (!ingredientenVanRol || Object.keys(ingredientenVanRol).length === 0) return;
 
-        let rijen = Object.values(ingredientenVanRol).sort((a, b) => b.totaal - a.totaal);
+        let rijen = Object.values(ingredientenVanRol).map(r => {
+          if (rol !== 'gist') return { ...r, weergaveTotaal: r.totaal };
+          // Yeast: elke per-recept-hoeveelheid naar boven afronden op 500 g
+          // (resp. 0,5 kg), en het getoonde totaal is de som van die
+          // afgeronde waarden -- niet de som van de werkelijke hoeveelheden.
+          const perRecipeAfgerond = {};
+          let totaalAfgerond = 0;
+          Object.entries(r.perRecept).forEach(([naam, hoev]) => {
+            const afgerond = rondAfGist(hoev, r.eenheid);
+            perRecipeAfgerond[naam] = afgerond;
+            totaalAfgerond += afgerond;
+          });
+          return { ...r, perRecipeAfgerond, weergaveTotaal: totaalAfgerond };
+        }).sort((a, b) => b.weergaveTotaal - a.weergaveTotaal);
         if (ingredientZoekterm) rijen = rijen.filter(r => r.naam.toLowerCase().includes(ingredientZoekterm));
         if (rijen.length === 0) return;
         ietsGetoond = true;
@@ -274,7 +298,7 @@
               <thead><tr><th>Ingredient</th><th>Total needed</th>${toonTotaalKolom ? '<th>Total (Kg or L)</th>' : ''}</tr></thead>
               <tbody>
                 ${rijen.map((r, i) => {
-                  const kgOfL = toonTotaalKolom ? naarKgOfL(r.eenheid, r.totaal) : null;
+                  const kgOfL = toonTotaalKolom ? naarKgOfL(r.eenheid, r.weergaveTotaal) : null;
                   const mixedBadge = r.mixedUnits
                     ? ` <span class="vp-mixed-badge" title="This ingredient has quantities recorded under more than one unit (check the ingredient card and recipe lines) — these are shown as separate rows and NOT added together, since that could combine incompatible units.">⚠ mixed units</span>`
                     : '';
@@ -284,7 +308,7 @@
                   return `
                   <tr class="vp-rij-ingredient" data-detail="detail-${rol}-${i}">
                     <td>${escapeHtml(r.naam)}${mixedBadge}${missingHlBadge}</td>
-                    <td>${formatGetal(r.totaal)}${r.eenheid ? ' ' + escapeHtml(r.eenheid) : ''}</td>
+                    <td>${formatGetal(r.weergaveTotaal)}${r.eenheid ? ' ' + escapeHtml(r.eenheid) : ''}${rol === 'gist' ? ' <span title="Sum of the per-recipe amounts, each rounded up to the nearest 500 g">(rounded)</span>' : ''}</td>
                     ${toonTotaalKolom ? `<td>${kgOfL !== null ? formatGetal(kgOfL.waarde) + ' ' + kgOfL.label : `<span title="Unit '${escapeHtml(r.eenheid || '')}' not recognized — check manually">—</span>`}</td>` : ''}
                   </tr>
                   <tr class="vp-detail-rij" id="detail-${rol}-${i}">
@@ -292,7 +316,9 @@
                       Per recipe:
                       <ul>
                         ${Object.entries(r.perRecept).map(([naam, hoev]) =>
-                          `<li>${escapeHtml(naam)}: ${formatGetal(hoev)}${r.eenheid ? ' ' + escapeHtml(r.eenheid) : ''}</li>`
+                          rol === 'gist'
+                            ? `<li>${escapeHtml(naam)}: ${formatGetal(hoev)} ${escapeHtml(r.eenheid || '')} - Rounded: ${formatGetal(r.perRecipeAfgerond[naam])} ${escapeHtml(r.eenheid || '')}</li>`
+                            : `<li>${escapeHtml(naam)}: ${formatGetal(hoev)}${r.eenheid ? ' ' + escapeHtml(r.eenheid) : ''}</li>`
                         ).join('')}
                       </ul>
                     </td>
