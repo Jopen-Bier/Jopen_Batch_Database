@@ -106,6 +106,9 @@
   .re-smaakwiel-chips .leeg { font-family: var(--mono); font-size: 12.5px; color: #a89f8e; }
 
   .re-param-columns { column-count: 2; column-gap: 28px; }
+  .re-param-columns-3 { column-count: 3; }
+  .re-brouw-algemeen .re-paramrow-simple { grid-template-columns: 260px 1fr; }
+  table.re-hoptotaal-table { max-width: 460px; }
   .re-paramrow {
     display: grid; grid-template-columns: 1fr 66px 74px; gap: 8px; align-items: center;
     padding: 5px 0; border-bottom: 1px solid #ece8dc; break-inside: avoid;
@@ -410,17 +413,18 @@
 
       <div class="re-section">
         <h2>End product specifications</h2>
-        <div class="re-param-columns" id="re-specs-grid"></div>
+        <div class="re-param-columns re-param-columns-3" id="re-specs-grid"></div>
       </div>
 
       <div class="re-section">
         <h2>Process parameters</h2>
-        <div class="re-param-columns" id="re-ferm-grid"></div>
+        <div class="re-param-columns re-param-columns-3" id="re-ferm-grid"></div>
       </div>
 
       <div class="re-section">
         <h2>Brewing parameters</h2>
-        <div class="re-param-columns" id="re-brouw-grid"></div>
+        <div class="re-brouw-algemeen" id="re-brouw-algemeen-grid"></div>
+        <div class="re-param-columns re-param-columns-3" id="re-brouw-grid"></div>
       </div>
 
       <div class="re-section">
@@ -499,6 +503,10 @@
       <div class="re-section">
         <h2>Additions Brewing</h2>
         <table class="re-ing-table">
+          <colgroup>
+            <col style="width:2.5%"><col style="width:27%"><col style="width:8%"><col style="width:11%">
+            <col style="width:10%"><col style="width:7%"><col style="width:11%"><col style="width:20%"><col style="width:3.5%">
+          </colgroup>
           <thead><tr><th></th><th>Ingredient</th><th>Amount</th><th>Unit</th><th>Weigh for this brew</th><th>All in brew 1?</th><th>Timing</th><th>Note</th><th></th></tr></thead>
           <tbody id="re-ing-brouwtoegift-tbody"></tbody>
         </table>
@@ -508,6 +516,10 @@
       <div class="re-section">
         <h2>Yeasts</h2>
         <table class="re-ing-table">
+          <colgroup>
+            <col style="width:3%"><col style="width:32%"><col style="width:12%"><col style="width:15%">
+            <col style="width:14%"><col style="width:20%"><col style="width:4%">
+          </colgroup>
           <thead><tr><th></th><th>Ingredient</th><th>Amount</th><th>Unit</th><th>Timing</th><th>Note</th><th></th></tr></thead>
           <tbody id="re-ing-gist-tbody"></tbody>
         </table>
@@ -517,6 +529,10 @@
       <div class="re-section">
         <h2>Additions Cellar</h2>
         <table class="re-ing-table">
+          <colgroup>
+            <col style="width:2.5%"><col style="width:30%"><col style="width:9%"><col style="width:12%">
+            <col style="width:11%"><col style="width:12%"><col style="width:20%"><col style="width:3.5%">
+          </colgroup>
           <thead><tr><th></th><th>Ingredient</th><th>Amount</th><th>Unit</th><th>Weigh for this brew</th><th>Timing</th><th>Note</th><th></th></tr></thead>
           <tbody id="re-ing-keldertoegift-tbody"></tbody>
         </table>
@@ -537,7 +553,7 @@
 
       <div class="re-section">
         <h2>Target water profile</h2>
-        <div class="re-param-columns" id="re-water-grid"></div>
+        <div class="re-param-columns re-param-columns-3" id="re-water-grid"></div>
       </div>
 
       <div class="re-section">
@@ -674,7 +690,10 @@ const FERM_FIELDS = [
   ['troebeling_na_sep', 'Turbidity after separation', 'EBC', 'number'],
   ['bitterheid_bh', 'Bitterness BH', 'EBU', 'number'],
 ];
-const BROUW_SECTIES = [
+// General/Milling krijgen een eigen, volle-breedte container met bredere
+// invoervelden (lange waarden als recept-/special bin-namen werden anders
+// afgekapt) -- de rest gaat in 3 kolommen, zie renderBrouwSecties-aanroepen.
+const BROUW_ALGEMEEN_SECTIES = [
   {
     titel: 'General',
     velden: [
@@ -689,6 +708,8 @@ const BROUW_SECTIES = [
       ['naam_special_bin', 'Special bin name (Software / Braukon)', '', 'text'],
     ],
   },
+];
+const BROUW_OVERIGE_SECTIES = [
   {
     titel: 'Mashing',
     velden: [
@@ -761,7 +782,7 @@ const BROUW_SECTIES = [
     ],
   },
 ];
-const BROUW_FIELDS = BROUW_SECTIES.flatMap(s => s.velden); // platte lijst, voor opslaan in recipe_brouwspecificaties
+const BROUW_FIELDS = [...BROUW_ALGEMEEN_SECTIES, ...BROUW_OVERIGE_SECTIES].flatMap(s => s.velden); // platte lijst, voor opslaan in recipe_brouwspecificaties
 const WATER_FIELDS = [
   ['ca', 'Ca', 'ppm', 'number'],
   ['mg', 'Mg', 'ppm', 'number'],
@@ -953,7 +974,7 @@ function leesCheckboxGrid(fields) {
 // Brouwparameters: zelfde compacte rij-stijl als renderVeldenGrid, maar dan
 // met subsectie-koppen (General/Milling/Mashing/...) ertussen, allemaal in
 // dezelfde twee-koloms flow.
-function renderBrouwSecties(containerId, secties, data) {
+function renderBrouwSecties(containerId, secties, data, toonComments = false) {
   const container = document.getElementById(containerId);
   container.innerHTML = secties.map(sectie => `
     <div class="re-subkop">${sectie.titel}</div>
@@ -962,14 +983,14 @@ function renderBrouwSecties(containerId, secties, data) {
         <label for="veld-${key}">${label}${unit ? ' (' + unit + ')' : ''}</label>
         <input type="${type}" id="veld-${key}" value="${data && data[key] !== null && data[key] !== undefined ? data[key] : ''}" />
       </div>`).join('')}
-  `).join('') + `
+  `).join('') + (toonComments ? `
     <div class="re-full-span">
       <div class="re-subkop">Comments</div>
       <div class="re-comment-row">
         <textarea id="veld-comments" style="min-height:70px;"></textarea>
       </div>
     </div>
-  `;
+  ` : '');
 }
 
 // Zelfde als hierboven, maar met een extra tolerantie-invoerveld (+/-) per
@@ -1520,7 +1541,7 @@ function herberekenHopgewichten() {
     <tr><td>${escapeHtml(t.naam)}</td><td>${t.totaal}${t.eenheid ? ' ' + escapeHtml(t.eenheid) : ''}</td></tr>`).join('');
 
   container.innerHTML = `
-    <table class="re-som-table">
+    <table class="re-som-table re-hoptotaal-table">
       <thead><tr><th>Hop / herb</th><th>Total amount</th></tr></thead>
       <tbody>${rijenHtml}</tbody>
     </table>`;
@@ -2151,7 +2172,8 @@ async function initReceptInvoer() {
 
   renderParamGrid('re-specs-grid', SPECS_FIELDS, null);
   renderParamGrid('re-ferm-grid', FERM_FIELDS, null);
-  renderBrouwSecties('re-brouw-grid', BROUW_SECTIES, null);
+  renderBrouwSecties('re-brouw-algemeen-grid', BROUW_ALGEMEEN_SECTIES, null);
+  renderBrouwSecties('re-brouw-grid', BROUW_OVERIGE_SECTIES, null, true);
   renderVeldenGrid('re-water-grid', WATER_FIELDS, null);
   renderVeldenGrid('re-verpakking-grid', VERPAKKING_FIELDS, null);
   renderFormatenCheckboxen('re-formaten-checkboxen', []);
@@ -2373,7 +2395,10 @@ document.getElementById('re-kopieer-btn').addEventListener('click', async () => 
 
   if (blokken.has('specs')) renderParamGrid('re-specs-grid', SPECS_FIELDS, specs.data || {});
   if (blokken.has('proces')) renderParamGrid('re-ferm-grid', FERM_FIELDS, ferm.data || {});
-  if (blokken.has('brouw')) renderBrouwSecties('re-brouw-grid', BROUW_SECTIES, brouw.data || {});
+  if (blokken.has('brouw')) {
+    renderBrouwSecties('re-brouw-algemeen-grid', BROUW_ALGEMEEN_SECTIES, brouw.data || {});
+    renderBrouwSecties('re-brouw-grid', BROUW_OVERIGE_SECTIES, brouw.data || {}, true);
+  }
   if (blokken.has('water')) renderVeldenGrid('re-water-grid', WATER_FIELDS, water.data || {});
   if (blokken.has('verpakking')) {
     renderVeldenGrid('re-verpakking-grid', VERPAKKING_FIELDS, verpakking.data || {});
@@ -2459,7 +2484,8 @@ async function laadBestaandRecept(id) {
 
   renderParamGrid('re-specs-grid', SPECS_FIELDS, specs.data || {});
   renderParamGrid('re-ferm-grid', FERM_FIELDS, ferm.data || {});
-  renderBrouwSecties('re-brouw-grid', BROUW_SECTIES, brouw.data || {});
+  renderBrouwSecties('re-brouw-algemeen-grid', BROUW_ALGEMEEN_SECTIES, brouw.data || {});
+  renderBrouwSecties('re-brouw-grid', BROUW_OVERIGE_SECTIES, brouw.data || {}, true);
   renderVeldenGrid('re-water-grid', WATER_FIELDS, water.data || {});
   renderVeldenGrid('re-verpakking-grid', VERPAKKING_FIELDS, verpakking.data || {});
   renderFormatenCheckboxen('re-formaten-checkboxen', (verpakking.data && verpakking.data.formaten) || []);
