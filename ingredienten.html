@@ -322,6 +322,7 @@
   .ps-dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; }
   .ps-dot.groen { background: #4c6b4f; }
   .ps-dot.rood { background: #a33f2c; }
+  .ps-dot.leeg { background: transparent; border: 1.5px solid #b8b1a0; box-sizing: border-box; }
   .ing-doc-status-samenvatting {
     display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 2px 0 14px;
     padding: 8px 10px; border: 1px solid var(--line); border-radius: 4px; background: #faf8f2;
@@ -394,6 +395,16 @@
             <button type="button" data-actie="none">Clear</button>
           </div>
           <div id="dd-ing-status-options"></div>
+        </div>
+      </div>
+      <div class="dd-filter" id="dd-ing-productsheet">
+        <button type="button" class="dd-filter-btn" id="dd-ing-productsheet-btn">Product Sheet <span class="dd-filter-caret">&#9662;</span><span class="dd-filter-mark" id="dd-ing-productsheet-mark" style="display:none;"></span></button>
+        <div class="dd-filter-panel" id="dd-ing-productsheet-panel" style="display:none;">
+          <div class="dd-filter-panel-header">
+            <button type="button" data-actie="all">Select all</button>
+            <button type="button" data-actie="none">Clear</button>
+          </div>
+          <div id="dd-ing-productsheet-options"></div>
         </div>
       </div>
       <div class="ing-count" id="ing-result-count"></div>
@@ -686,14 +697,15 @@ const ING_FILTER_OPSLAG_KEY = 'jopen_ingredienten_filters_v1';
 function laadOpgeslagenIngFilters() {
   try {
     const ruw = localStorage.getItem(ING_FILTER_OPSLAG_KEY);
-    if (!ruw) return { status: null, categorie: null };
+    if (!ruw) return { status: null, categorie: null, productsheet: null };
     const parsed = JSON.parse(ruw);
     return {
       status: Array.isArray(parsed.status) ? parsed.status : null,
       categorie: Array.isArray(parsed.categorie) ? parsed.categorie : null,
+      productsheet: Array.isArray(parsed.productsheet) ? parsed.productsheet : null,
     };
   } catch (e) {
-    return { status: null, categorie: null };
+    return { status: null, categorie: null, productsheet: null };
   }
 }
 
@@ -702,12 +714,14 @@ function bewaarIngFilters() {
     localStorage.setItem(ING_FILTER_OPSLAG_KEY, JSON.stringify({
       status: [...geselecteerdeIngStatussen],
       categorie: [...geselecteerdeIngCategorieen],
+      productsheet: [...geselecteerdeIngProductSheetStatussen],
     }));
   } catch (e) { /* localStorage niet beschikbaar */ }
 }
 
 let geselecteerdeIngStatussen = new Set();
 let geselecteerdeIngCategorieen = new Set();
+let geselecteerdeIngProductSheetStatussen = new Set();
 
 async function initIngredientenPagina() {
   const gebruiker = await getHuidigeGebruiker();
@@ -840,13 +854,15 @@ async function laadIngredienten() {
   alleIngredienten = (ingResult.data || []).map(i => ({
     ...i,
     gebruikt_in_aantal: receptenPerIngredient[i.id] || 0,
-    product_sheet_status: productSheetDotStatus(productSheetDatumPerIngredient[i.id]),
+    product_sheet_status: productSheetDotStatus(productSheetDatumPerIngredient[i.id]) || 'leeg',
   }));
 
   const opgeslagen = laadOpgeslagenIngFilters();
   const alleStatussen = [...new Set(alleIngredienten.map(i => i.status).filter(Boolean))];
   geselecteerdeIngStatussen = new Set(opgeslagen.status ? opgeslagen.status.filter(s => alleStatussen.includes(s)) : alleStatussen);
   geselecteerdeIngCategorieen = new Set(opgeslagen.categorie ? opgeslagen.categorie.filter(c => alleCategorieen.some(cat => String(cat.id) === c)) : alleCategorieen.map(c => String(c.id)));
+  const alleProductSheetStatussen = ['groen', 'rood', 'leeg'];
+  geselecteerdeIngProductSheetStatussen = new Set(opgeslagen.productsheet ? opgeslagen.productsheet.filter(s => alleProductSheetStatussen.includes(s)) : alleProductSheetStatussen);
 
   renderFilterToggles();
   pasFiltersToe();
@@ -903,6 +919,14 @@ function renderFilterToggles() {
     bewaarIngFilters();
     pasFiltersToe();
   });
+
+  const productSheetOpties = [
+    ['groen', 'Groen - Valid'], ['rood', 'Rood - Out of date'], ['leeg', 'Leeg - No product sheet'],
+  ];
+  setupDropdownFilter('ing-productsheet', productSheetOpties, geselecteerdeIngProductSheetStatussen, () => {
+    bewaarIngFilters();
+    pasFiltersToe();
+  });
 }
 
 // -- Dropdown open/dicht, buiten-klik sluit alles, één tegelijk open --
@@ -918,6 +942,7 @@ function toggleDropdownPanel(prefix) {
 }
 document.getElementById('dd-ing-status-btn').addEventListener('click', (e) => { e.stopPropagation(); toggleDropdownPanel('ing-status'); });
 document.getElementById('dd-ing-categorie-btn').addEventListener('click', (e) => { e.stopPropagation(); toggleDropdownPanel('ing-categorie'); });
+document.getElementById('dd-ing-productsheet-btn').addEventListener('click', (e) => { e.stopPropagation(); toggleDropdownPanel('ing-productsheet'); });
 document.querySelectorAll('.dd-filter-panel').forEach(p => p.addEventListener('click', e => e.stopPropagation()));
 document.addEventListener('click', () => {
   document.querySelectorAll('.dd-filter-panel').forEach(p => p.style.display = 'none');
@@ -966,7 +991,8 @@ function pasFiltersToe() {
       (i.leverancier_3 || '').toLowerCase().includes(zoek);
     const matchtCategorie = !i.category_id || geselecteerdeIngCategorieen.has(String(i.category_id));
     const matchtStatus = !i.status || geselecteerdeIngStatussen.has(i.status);
-    return matchtZoek && matchtCategorie && matchtStatus;
+    const matchtProductSheet = geselecteerdeIngProductSheetStatussen.has(i.product_sheet_status);
+    return matchtZoek && matchtCategorie && matchtStatus && matchtProductSheet;
   });
   laatstGefilterd = gefilterd;
   renderIngLijst(pasSorteringToe(gefilterd));
@@ -1009,7 +1035,7 @@ function renderIngLijst(ingredienten) {
       <td><span class="status-pill status-${i.status || 'onbekend'}">${escapeHtml(statusLabel(i.status))}</span></td>
       <td>${formatDatum(laatsteWijzigingPerIngredient[i.id] || i.gewijzigd_op || i.aangemaakt_op)}</td>
       <td class="ing-tabel-getal">${i.gebruikt_in_aantal}</td>
-      <td>${i.product_sheet_status ? `<span class="ps-dot ${i.product_sheet_status}" title="${i.product_sheet_status === 'groen' ? 'Valid' : 'Expired'}"></span>` : ''}</td>
+      <td>${i.product_sheet_status ? `<span class="ps-dot ${i.product_sheet_status}" title="${i.product_sheet_status === 'groen' ? 'Valid' : (i.product_sheet_status === 'rood' ? 'Expired' : 'No product sheet')}"></span>` : ''}</td>
       ${toonActiesKolom ? `<td>${ingRijActiesHtml(i)}</td>` : ''}
     </tr>`).join('');
 
