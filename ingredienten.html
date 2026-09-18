@@ -90,11 +90,13 @@
     display: grid; gap: 24px; align-items: start;
     grid-template-columns: minmax(260px, 400px) minmax(260px, 400px) minmax(260px, 400px);
     grid-template-areas:
+      "titel     titel      titel"
       "general   documents  used"
       "supplier  parameters used"
       "history   parameters used";
   }
   #ing-detail-container { display: contents; }
+  .ing-titelblok { grid-area: titel; }
   .ing-card-general { grid-area: general; }
   .ing-card-supplier { grid-area: supplier; }
   .ing-card-documents { grid-area: documents; }
@@ -105,6 +107,7 @@
     .ing-detail-grid {
       grid-template-columns: minmax(260px, 1fr) minmax(260px, 1fr);
       grid-template-areas:
+        "titel    titel"
         "general  documents"
         "supplier parameters"
         "history  parameters"
@@ -114,7 +117,7 @@
   @media (max-width: 720px) {
     .ing-detail-grid {
       grid-template-columns: 1fr;
-      grid-template-areas: "general" "supplier" "documents" "parameters" "history" "used";
+      grid-template-areas: "titel" "general" "supplier" "documents" "parameters" "history" "used";
     }
   }
 
@@ -1661,8 +1664,10 @@ function renderDetailAlleen(id) {
   parameterRows.push(['Minimum stock', i.minimum_voorraad, (i.eenheid || '').split('/')[0] || '']);
 
   container.innerHTML = `
-    <h2 class="ing-titel">${escapeHtml(i.naam)}</h2>
-    <div class="ing-meta">${escapeHtml(categorieNaam)} · v${i.versie_major ?? 1}.${i.versie_minor ?? 0}</div>
+    <div class="ing-titelblok">
+      <h2 class="ing-titel">${escapeHtml(i.naam)}</h2>
+      <div class="ing-meta">${escapeHtml(categorieNaam)} · v${i.versie_major ?? 1}.${i.versie_minor ?? 0}</div>
+    </div>
     <div class="ing-card ing-card-general">
       <div class="ing-card-titel">General</div>
       ${generalRows.map(kvRij).join('')}
@@ -1826,8 +1831,10 @@ function renderDetailBewerken(i) {  const container = document.getElementById('i
   ).join('');
 
   container.innerHTML = `
-    <h2 class="ing-titel">${escapeHtml(i.naam)}</h2>
-    <div class="ing-meta">Editing</div>
+    <div class="ing-titelblok">
+      <h2 class="ing-titel">${escapeHtml(i.naam)}</h2>
+      <div class="ing-meta">Editing</div>
+    </div>
     <div class="ing-card ing-card-general">
       <div class="ing-card-titel">General</div>
       <div class="ing-edit-row wide">
@@ -2236,8 +2243,10 @@ function toonNieuwFormulier() {
   const categorieOpties = alleCategorieen.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
 
   container.innerHTML = `
-    <h2 class="ing-titel">New ingredient</h2>
-    <div class="ing-meta">Required fields: name and category</div>
+    <div class="ing-titelblok">
+      <h2 class="ing-titel">New ingredient</h2>
+      <div class="ing-meta">Required fields: name and category</div>
+    </div>
     <div class="ing-card ing-card-general">
       <div class="ing-card-titel">General</div>
       <div class="ing-edit-row wide">
