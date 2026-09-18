@@ -81,8 +81,42 @@
   }
   .ing-back:hover { background: var(--hop-dark); color: #fff; text-decoration: none; }
 
-  .ing-detail-grid { display: grid; grid-template-columns: minmax(280px, 560px) minmax(280px, 420px); gap: 24px; align-items: start; }
-  @media (max-width: 820px) { .ing-detail-grid { grid-template-columns: 1fr; } }
+  /* -- Kaart-layout: General/Supplier/Version history links, Documents
+     rechts naast General met Parameters eronder, Used in recipes ernaast --
+     via named grid-areas zodat #ing-detail-container (display:contents)
+     zijn losse .ing-card's als losse grid-items aan de buitenste grid mag
+     afstaan, ieder met een eigen area-klasse hieronder. */
+  .ing-detail-grid {
+    display: grid; gap: 24px; align-items: start;
+    grid-template-columns: minmax(260px, 400px) minmax(260px, 400px) minmax(260px, 400px);
+    grid-template-areas:
+      "general   documents  used"
+      "supplier  parameters used"
+      "history   parameters used";
+  }
+  #ing-detail-container { display: contents; }
+  .ing-card-general { grid-area: general; }
+  .ing-card-supplier { grid-area: supplier; }
+  .ing-card-documents { grid-area: documents; }
+  .ing-card-parameters { grid-area: parameters; }
+  .ing-card-history { grid-area: history; }
+  .ing-used-in-panel { grid-area: used; }
+  @media (max-width: 1180px) {
+    .ing-detail-grid {
+      grid-template-columns: minmax(260px, 1fr) minmax(260px, 1fr);
+      grid-template-areas:
+        "general  documents"
+        "supplier parameters"
+        "history  parameters"
+        "used     used";
+    }
+  }
+  @media (max-width: 720px) {
+    .ing-detail-grid {
+      grid-template-columns: 1fr;
+      grid-template-areas: "general" "supplier" "documents" "parameters" "history" "used";
+    }
+  }
 
   .ing-used-in-panel {
     background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 20px 24px;
@@ -283,6 +317,39 @@
   }
   .ing-doc-upload-btn:hover { background: #f4f2ea; }
   .ing-doc-empty { font-size: 13px; color: #6b6355; margin: 0 0 10px; }
+
+  /* -- Product sheet-stoplicht + type/status-badges + filters -- */
+  .ps-dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; }
+  .ps-dot.groen { background: #4c6b4f; }
+  .ps-dot.rood { background: #a33f2c; }
+  .ing-doc-status-samenvatting {
+    display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 2px 0 14px;
+    padding: 8px 10px; border: 1px solid var(--line); border-radius: 4px; background: #faf8f2;
+  }
+  .ing-doc-filters { display: flex; gap: 8px; margin: 0 0 12px; }
+  .ing-doc-filters select {
+    padding: 6px 8px; border: 1px solid var(--line); border-radius: 4px; font-family: var(--serif);
+    font-size: 13px; background: #fff;
+  }
+  .ing-doc-type-pill, .ing-doc-status-pill {
+    font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+    padding: 2px 7px; border-radius: 20px; display: inline-block; margin-right: 6px;
+  }
+  .ing-doc-type-pill { background: #e6e2d8; color: #4c4535; }
+  .ing-doc-status-pill.status-actief { background: #e1ead9; color: var(--hop-dark); }
+  .ing-doc-status-pill.status-gearchiveerd { background: #e6e2d8; color: #7a7266; }
+  .ing-doc-edit-btn, .ing-doc-archive-btn, .ing-doc-restore-btn {
+    background: none; border: none; font-size: 12px; cursor: pointer; padding: 4px 6px; font-family: var(--mono);
+  }
+  .ing-doc-edit-btn { color: #8a6d1e; }
+  .ing-doc-archive-btn { color: #8a6d1e; }
+  .ing-doc-restore-btn { color: #2c4a3e; }
+  .ing-doc-edit-btn:hover, .ing-doc-archive-btn:hover, .ing-doc-restore-btn:hover { text-decoration: underline; }
+  .ing-modal select.ing-doc-veld-select {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 4px;
+    font-family: var(--serif); font-size: 14px; box-sizing: border-box; margin-bottom: 4px;
+  }
+
   .ing-modal label.ing-doc-veld-label {
     display: block; font-family: var(--mono); font-size: 11px; text-transform: uppercase;
     letter-spacing: 0.08em; color: #6b6355; margin: 14px 0 6px;
@@ -385,6 +452,8 @@
   <div class="ing-modal">
     <h2>Upload document</h2>
     <div class="ing-doc-bestandsnaam" id="ing-doc-modal-bestandsnaam"></div>
+    <label class="ing-doc-veld-label" for="ing-doc-veld-type">Document type *</label>
+    <select class="ing-doc-veld-select" id="ing-doc-veld-type" required></select>
     <label class="ing-doc-veld-label" for="ing-doc-veld-revisiedatum">Revision date of the document *</label>
     <input type="date" id="ing-doc-veld-revisiedatum" required>
     <div class="ing-modal-actions">
@@ -393,6 +462,22 @@
     </div>
   </div>
 </div>
+
+<div class="ing-modal-overlay" id="ing-doc-edit-modal-overlay" style="display:none;">
+  <div class="ing-modal">
+    <h2>Edit document</h2>
+    <div class="ing-doc-bestandsnaam" id="ing-doc-edit-modal-bestandsnaam"></div>
+    <label class="ing-doc-veld-label" for="ing-doc-edit-veld-type">Document type *</label>
+    <select class="ing-doc-veld-select" id="ing-doc-edit-veld-type" required></select>
+    <label class="ing-doc-veld-label" for="ing-doc-edit-veld-revisiedatum">Revision date of the document *</label>
+    <input type="date" id="ing-doc-edit-veld-revisiedatum" required>
+    <div class="ing-modal-actions">
+      <button type="button" class="ing-annuleer-btn" id="ing-doc-edit-modal-cancel-btn">Cancel</button>
+      <button type="button" class="ing-opslaan-btn" id="ing-doc-edit-modal-confirm-btn">Save</button>
+    </div>
+  </div>
+</div>
+
 
 <script src="config.js"></script>
 <script src="nav.js"></script>
@@ -406,6 +491,9 @@ let huidigeGebruiker = null;
 let magIngBewerken = false;   // rechten voor module 'ingredients', geladen in initIngredientenPagina
 let magIngVerwijderen = false;
 let laatsteWijzigingPerIngredient = {};
+let alleDocumenttypen = [];
+let ingDocFilterType = '';        // '' = alle types
+let ingDocFilterStatus = 'actief'; // default: alleen actieve documenten tonen
 
 // De 14 EU-gereguleerde allergenen (Verordening (EU) 1169/2011, bijlage II).
 // Sleutel wordt opgeslagen in ingredients.allergenen (jsonb array); label is
@@ -562,6 +650,36 @@ function formatDatum(iso) {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+// -- Product sheet-stoplicht: geldig tot revisiedatum + 3 jaar. --
+function productSheetTypeId() {
+  return alleDocumenttypen.find(t => t.code === 'product_sheet')?.id;
+}
+
+function productSheetVervaldatum(revisiedatum) {
+  const d = new Date(revisiedatum);
+  d.setFullYear(d.getFullYear() + 3);
+  return d;
+}
+
+// Geeft 'groen' | 'rood' | null (geen datum) terug voor één document.
+function productSheetDotStatus(revisiedatum) {
+  if (!revisiedatum) return null;
+  return new Date() < productSheetVervaldatum(revisiedatum) ? 'groen' : 'rood';
+}
+
+// Bepaalt de status voor een lijst documenten van één ingrediënt: kijkt
+// alleen naar actieve product sheets, neemt bij meerdere de nieuwste
+// revisiedatum. Retourneert { status: 'groen'|'rood'|null, revisiedatum }.
+function actieveProductSheetStatus(documenten) {
+  const psTypeId = productSheetTypeId();
+  const actieveSheets = (documenten || [])
+    .filter(d => String(d.document_type_id) === String(psTypeId) && d.status === 'actief')
+    .sort((a, b) => (b.revisiedatum || '').localeCompare(a.revisiedatum || ''));
+  if (actieveSheets.length === 0) return { status: null, revisiedatum: null };
+  const nieuwste = actieveSheets[0];
+  return { status: productSheetDotStatus(nieuwste.revisiedatum), revisiedatum: nieuwste.revisiedatum };
+}
+
 // -- Filter-status persistentie, zelfde patroon als receptoverzicht.html --
 const ING_FILTER_OPSLAG_KEY = 'jopen_ingredienten_filters_v1';
 
@@ -628,6 +746,13 @@ async function initIngredientenPagina() {
     .order('sort_order');
   if (!declaratieError) alleDeclaraties = declaratieData || [];
 
+  // Beheerbare documenttypenlijst uit Settings -> Document types.
+  const { data: documenttypeData, error: documenttypeError } = await supabaseClient
+    .from('document_typen')
+    .select('id, code, label, sort_order')
+    .order('sort_order');
+  if (!documenttypeError) alleDocumenttypen = documenttypeData || [];
+
   laadIngredienten();
 }
 
@@ -649,7 +774,8 @@ async function haalAlleRijenOp(query) {
 
 async function laadIngredienten() {
   const container = document.getElementById('ing-list-container');
-  const [ingResult, usageResult, revisieResult] = await Promise.all([
+  const psTypeId = productSheetTypeId();
+  const [ingResult, usageResult, revisieResult, productSheetResult] = await Promise.all([
     supabaseClient
       .from('ingredients')
       .select('id, naam, categorie, category_id, eenheid, prijs, prijs_per_kg, prijs_2, prijs_per_kg_2, eenheid_prijs_1, eenheid_prijs_2, extract_pct, alpha_pct, gistfactor, leverancier, leverancier_2, leverancier_3, prijs_3, prijs_per_kg_3, eenheid_prijs_3, kleur_ebc, allergenen, ingredient_declaratie, bewaartemperatuur, houdbaarheid, houdbaarheid_eenheid, houdbaarheid_na_openen, houdbaarheid_na_openen_eenheid, dichtheid, alcohol_pct, minimum_voorraad, status, versie_major, versie_minor, ingredient_group_id, versie_status, aangemaakt_op, gewijzigd_op, ingredient_categories(name, uses_alpha_pct, uses_extract_pct, uses_gistfactor)')
@@ -661,6 +787,12 @@ async function laadIngredienten() {
     // de belangrijkste reden dat deze pagina bijna 10s duurde om te laden.
     supabaseClient.from('ingredient_gebruik_counts').select('ingredient_id, aantal_recepten'),
     haalAlleRijenOp(supabaseClient.from('ingredient_revisies').select('ingredient_id, datum')),
+    // Alleen actieve product sheets nodig voor het stoplicht -- lichte
+    // aparte query i.p.v. alle documenten van alle ingrediënten op te halen.
+    psTypeId
+      ? supabaseClient.from('ingredient_documenten').select('ingredient_id, revisiedatum')
+          .eq('document_type_id', psTypeId).eq('status', 'actief')
+      : Promise.resolve({ data: [], error: null }),
   ]);
 
   if (ingResult.error) {
@@ -692,9 +824,23 @@ async function laadIngredienten() {
     console.error('Could not load ingredient revision dates:', revisieResult.error);
   }
 
+  // Nieuwste actieve product sheet-revisiedatum per ingrediënt, voor het
+  // stoplicht in de "Product Sheet"-kolom.
+  const productSheetDatumPerIngredient = {};
+  if (!productSheetResult.error) {
+    (productSheetResult.data || []).forEach(rij => {
+      if (rij.ingredient_id == null || !rij.revisiedatum) return;
+      const huidig = productSheetDatumPerIngredient[rij.ingredient_id];
+      if (!huidig || rij.revisiedatum > huidig) productSheetDatumPerIngredient[rij.ingredient_id] = rij.revisiedatum;
+    });
+  } else {
+    console.error('Could not load ingredient product sheet status:', productSheetResult.error);
+  }
+
   alleIngredienten = (ingResult.data || []).map(i => ({
     ...i,
     gebruikt_in_aantal: receptenPerIngredient[i.id] || 0,
+    product_sheet_status: productSheetDotStatus(productSheetDatumPerIngredient[i.id]),
   }));
 
   const opgeslagen = laadOpgeslagenIngFilters();
@@ -795,6 +941,7 @@ const SORT_KOLOMMEN = {
   status: i => (i.status || '').toLowerCase(),
   laatste_wijziging: i => laatsteWijzigingPerIngredient[i.id] || i.gewijzigd_op || i.aangemaakt_op || '',
   gebruikt_in_aantal: i => i.gebruikt_in_aantal || 0,
+  product_sheet: i => i.product_sheet_status === 'groen' ? 0 : (i.product_sheet_status === 'rood' ? 1 : 2),
 };
 
 function pasSorteringToe(lijst) {
@@ -862,13 +1009,14 @@ function renderIngLijst(ingredienten) {
       <td><span class="status-pill status-${i.status || 'onbekend'}">${escapeHtml(statusLabel(i.status))}</span></td>
       <td>${formatDatum(laatsteWijzigingPerIngredient[i.id] || i.gewijzigd_op || i.aangemaakt_op)}</td>
       <td class="ing-tabel-getal">${i.gebruikt_in_aantal}</td>
+      <td>${i.product_sheet_status ? `<span class="ps-dot ${i.product_sheet_status}" title="${i.product_sheet_status === 'groen' ? 'Valid' : 'Expired'}"></span>` : ''}</td>
       ${toonActiesKolom ? `<td>${ingRijActiesHtml(i)}</td>` : ''}
     </tr>`).join('');
 
   const kolommen = [
     ['naam', 'Name'], ['categorie', 'Category'], ['eenheid', 'Unit'],
     ['versie', 'Version'], ['status', 'Status'], ['laatste_wijziging', 'Last modified'],
-    ['gebruikt_in_aantal', 'Used in # recipes'],
+    ['gebruikt_in_aantal', 'Used in # recipes'], ['product_sheet', 'Product Sheet'],
   ];
 
   container.innerHTML = `
@@ -980,28 +1128,103 @@ async function laadIngredientDocumenten(ingredientId) {
 
   documentenVoorHuidigIngredient = error ? [] : (data || []);
   if (error) console.error('Kon documenten niet ophalen:', error);
+  vulDocumentTypeSelecten();
+  renderDocumentStatusSamenvatting();
   renderDocumentenLijst();
+}
+
+function documentTypeLabel(typeId) {
+  const t = alleDocumenttypen.find(t => String(t.id) === String(typeId));
+  return t ? (t.label || t.code) : 'Unknown type';
+}
+
+// Vult zowel het filter-select als de type-select in de upload/edit-modals,
+// telkens opnieuw omdat #ing-doc-lijst-houder-omgeving bij elk bezoek van
+// het detailscherm opnieuw wordt opgebouwd.
+function vulDocumentTypeSelecten() {
+  const opties = alleDocumenttypen.map(t => `<option value="${t.id}">${escapeHtml(t.label || t.code)}</option>`).join('');
+
+  const filterSelect = document.getElementById('ing-doc-filter-type');
+  if (filterSelect) {
+    filterSelect.innerHTML = `<option value="">All types</option>${opties}`;
+    filterSelect.value = ingDocFilterType;
+    filterSelect.onchange = (e) => { ingDocFilterType = e.target.value; renderDocumentenLijst(); };
+  }
+  const statusSelect = document.getElementById('ing-doc-filter-status');
+  if (statusSelect) {
+    statusSelect.value = ingDocFilterStatus;
+    statusSelect.onchange = (e) => { ingDocFilterStatus = e.target.value; renderDocumentenLijst(); };
+  }
+
+  const uploadTypeSelect = document.getElementById('ing-doc-veld-type');
+  if (uploadTypeSelect) uploadTypeSelect.innerHTML = opties;
+  const editTypeSelect = document.getElementById('ing-doc-edit-veld-type');
+  if (editTypeSelect) editTypeSelect.innerHTML = opties;
+}
+
+// Traffic light-samenvatting bovenaan het Documents-blok: groen/rood/geen
+// bolletje op basis van de nieuwste actieve product sheet.
+function renderDocumentStatusSamenvatting() {
+  const houder = document.getElementById('ing-doc-status-samenvatting');
+  if (!houder) return;
+  const { status, revisiedatum } = actieveProductSheetStatus(documentenVoorHuidigIngredient);
+  if (!status) {
+    houder.innerHTML = `<span>No active product sheet uploaded.</span>`;
+    return;
+  }
+  const vervaldatum = formatDatum(productSheetVervaldatum(revisiedatum));
+  const tekst = status === 'groen' ? `Product sheet valid until ${vervaldatum}` : `Product sheet expired on ${vervaldatum}`;
+  houder.innerHTML = `<span class="ps-dot ${status}"></span><span>${tekst}</span>`;
+}
+
+function gefilterdeDocumenten() {
+  return documentenVoorHuidigIngredient.filter(d => {
+    const matchtType = !ingDocFilterType || String(d.document_type_id) === String(ingDocFilterType);
+    const matchtStatus = ingDocFilterStatus === 'alle' || d.status === ingDocFilterStatus;
+    return matchtType && matchtStatus;
+  });
 }
 
 function renderDocumentenLijst() {
   const houder = document.getElementById('ing-doc-lijst-houder');
   if (!houder) return; // detailscherm inmiddels weer verlaten
 
-  if (documentenVoorHuidigIngredient.length === 0) {
-    houder.innerHTML = `<p class="ing-doc-empty">No documents uploaded yet.</p>`;
+  const psTypeId = productSheetTypeId();
+  const documenten = gefilterdeDocumenten();
+
+  if (documenten.length === 0) {
+    houder.innerHTML = documentenVoorHuidigIngredient.length === 0
+      ? `<p class="ing-doc-empty">No documents uploaded yet.</p>`
+      : `<p class="ing-doc-empty">No documents match the current filters.</p>`;
     return;
   }
 
-  houder.innerHTML = documentenVoorHuidigIngredient.map(doc => `
+  houder.innerHTML = documenten.map(doc => {
+    const isActieveProductSheet = String(doc.document_type_id) === String(psTypeId) && doc.status === 'actief';
+    const dotStatus = isActieveProductSheet ? productSheetDotStatus(doc.revisiedatum) : null;
+    const archiveerOfHerstelBtn = magIngBewerken
+      ? (doc.status === 'actief'
+          ? `<button type="button" class="ing-doc-archive-btn" data-actie="archiveer">Archive</button>`
+          : `<button type="button" class="ing-doc-restore-btn" data-actie="herstel">Restore</button>`)
+      : '';
+    return `
     <div class="ing-doc-rij" data-doc-id="${doc.id}">
+      ${dotStatus ? `<span class="ps-dot ${dotStatus}" title="${dotStatus === 'groen' ? 'Valid' : 'Expired'}"></span>` : ''}
       <div class="ing-doc-naam">
         <span class="ing-doc-naam-link" data-actie="bekijk">${escapeHtml(doc.bestandsnaam)}</span>
-        <div class="ing-doc-meta">Revision date: ${formatDatum(doc.revisiedatum)} &middot; uploaded ${formatDatum(doc.geupload_op)}</div>
+        <div class="ing-doc-meta">
+          <span class="ing-doc-type-pill">${escapeHtml(documentTypeLabel(doc.document_type_id))}</span>
+          <span class="ing-doc-status-pill status-${doc.status}">${doc.status === 'actief' ? 'Active' : 'Archived'}</span>
+          <div style="margin-top:4px;">Revision date: ${formatDatum(doc.revisiedatum)} &middot; uploaded ${formatDatum(doc.geupload_op)}</div>
+        </div>
       </div>
       <div class="ing-doc-acties">
+        ${magIngBewerken ? `<button type="button" class="ing-doc-edit-btn" data-actie="bewerk">Edit</button>` : ''}
+        ${archiveerOfHerstelBtn}
         ${magIngVerwijderen ? `<button type="button" class="ing-doc-verwijder-btn" data-actie="verwijder">Delete</button>` : ''}
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 
   houder.querySelectorAll('[data-actie="bekijk"]').forEach(el => {
     const doc = documentenVoorHuidigIngredient.find(d => String(d.id) === el.closest('.ing-doc-rij').dataset.docId);
@@ -1011,6 +1234,49 @@ function renderDocumentenLijst() {
     const doc = documentenVoorHuidigIngredient.find(d => String(d.id) === el.closest('.ing-doc-rij').dataset.docId);
     el.addEventListener('click', () => verwijderDocument(doc));
   });
+  houder.querySelectorAll('[data-actie="bewerk"]').forEach(el => {
+    const doc = documentenVoorHuidigIngredient.find(d => String(d.id) === el.closest('.ing-doc-rij').dataset.docId);
+    el.addEventListener('click', () => startDocumentEdit(doc));
+  });
+  houder.querySelectorAll('[data-actie="archiveer"]').forEach(el => {
+    const doc = documentenVoorHuidigIngredient.find(d => String(d.id) === el.closest('.ing-doc-rij').dataset.docId);
+    el.addEventListener('click', () => documentArchiveerOfHerstel(doc, 'gearchiveerd'));
+  });
+  houder.querySelectorAll('[data-actie="herstel"]').forEach(el => {
+    const doc = documentenVoorHuidigIngredient.find(d => String(d.id) === el.closest('.ing-doc-rij').dataset.docId);
+    el.addEventListener('click', () => documentArchiveerOfHerstel(doc, 'actief'));
+  });
+}
+
+async function documentArchiveerOfHerstel(doc, nieuweStatus) {
+  if (!doc) return;
+  if (nieuweStatus === 'gearchiveerd' && !confirm(`Archive "${doc.bestandsnaam}"?`)) return;
+
+  const { error } = await supabaseClient.from('ingredient_documenten').update({ status: nieuweStatus }).eq('id', doc.id);
+  if (error) {
+    alert('Could not update document status: ' + error.message);
+    return;
+  }
+  await laadIngredientDocumenten(doc.ingredient_id);
+}
+
+// Zet oudere actieve product sheets van hetzelfde ingrediënt op Archived
+// zodra een strikt nieuwere actieve product sheet is geüpload/bewerkt --
+// alleen voor het documenttype product_sheet; CoA's en gelijke/oudere
+// revisiedatums blijven met rust (dan archiveert de gebruiker zelf).
+async function archiveerOudereProductSheets(ingredientId, nieuwDocId, nieuweRevisiedatum) {
+  const psTypeId = productSheetTypeId();
+  const teArchiveren = documentenVoorHuidigIngredient.filter(d =>
+    String(d.ingredient_id) === String(ingredientId) &&
+    String(d.document_type_id) === String(psTypeId) &&
+    d.status === 'actief' &&
+    String(d.id) !== String(nieuwDocId) &&
+    d.revisiedatum < nieuweRevisiedatum
+  );
+  if (teArchiveren.length === 0) return;
+  await Promise.all(teArchiveren.map(d =>
+    supabaseClient.from('ingredient_documenten').update({ status: 'gearchiveerd' }).eq('id', d.id)
+  ));
 }
 
 async function bekijkDocument(doc) {
@@ -1066,6 +1332,9 @@ document.getElementById('ing-doc-file-input').addEventListener('change', (e) => 
 
   document.getElementById('ing-doc-modal-bestandsnaam').textContent = file.name;
   document.getElementById('ing-doc-veld-revisiedatum').value = '';
+  const typeSelect = document.getElementById('ing-doc-veld-type');
+  const psTypeId = productSheetTypeId();
+  if (psTypeId) typeSelect.value = psTypeId; // default: nieuwe upload is meestal een product sheet
   document.getElementById('ing-doc-modal-overlay').style.display = 'flex';
   document.getElementById('ing-doc-veld-revisiedatum').focus();
 });
@@ -1077,8 +1346,13 @@ document.getElementById('ing-doc-modal-cancel-btn').addEventListener('click', ()
 
 document.getElementById('ing-doc-modal-confirm-btn').addEventListener('click', async () => {
   const revisiedatum = document.getElementById('ing-doc-veld-revisiedatum').value;
+  const documentTypeId = document.getElementById('ing-doc-veld-type').value;
   if (!revisiedatum) {
     alert('Please enter the revision date of the document.');
+    return;
+  }
+  if (!documentTypeId) {
+    alert('Please choose a document type.');
     return;
   }
   const file = docUploadGekozenBestand;
@@ -1100,19 +1374,24 @@ document.getElementById('ing-doc-modal-confirm-btn').addEventListener('click', a
       .upload(storagePath, file);
     if (uploadError) throw uploadError;
 
-    const { error: insertError } = await supabaseClient.from('ingredient_documenten').insert({
+    const { data: nieuwDoc, error: insertError } = await supabaseClient.from('ingredient_documenten').insert({
       ingredient_id: ingredientId,
       bestandsnaam: file.name,
       storage_path: storagePath,
       grootte_bytes: file.size,
       revisiedatum: revisiedatum,
+      document_type_id: documentTypeId,
       geupload_door: huidigeGebruiker ? huidigeGebruiker.id : null,
-    });
+    }).select().single();
     if (insertError) {
       // Opruimen: geen wees-bestand achterlaten in storage als de metadata-insert faalt.
       await supabaseClient.storage.from('ingredient-documents').remove([storagePath]);
       throw insertError;
     }
+
+    // Nieuwere actieve product sheet? Dan oudere actieve product sheets van
+    // dit ingrediënt automatisch archiveren.
+    await archiveerOudereProductSheets(ingredientId, nieuwDoc.id, revisiedatum);
 
     document.getElementById('ing-doc-modal-overlay').style.display = 'none';
     docUploadGekozenBestand = null;
@@ -1122,6 +1401,59 @@ document.getElementById('ing-doc-modal-confirm-btn').addEventListener('click', a
   } finally {
     confirmBtn.disabled = false;
     confirmBtn.textContent = 'Upload';
+  }
+});
+
+// -- Edit-flow: bestaand document se revisiedatum/type aanpassen --
+let docEditHuidig = null;
+
+function startDocumentEdit(doc) {
+  if (!doc) return;
+  docEditHuidig = doc;
+  document.getElementById('ing-doc-edit-modal-bestandsnaam').textContent = doc.bestandsnaam;
+  document.getElementById('ing-doc-edit-veld-type').value = doc.document_type_id;
+  document.getElementById('ing-doc-edit-veld-revisiedatum').value = doc.revisiedatum;
+  document.getElementById('ing-doc-edit-modal-overlay').style.display = 'flex';
+}
+
+document.getElementById('ing-doc-edit-modal-cancel-btn').addEventListener('click', () => {
+  document.getElementById('ing-doc-edit-modal-overlay').style.display = 'none';
+  docEditHuidig = null;
+});
+
+document.getElementById('ing-doc-edit-modal-confirm-btn').addEventListener('click', async () => {
+  const revisiedatum = document.getElementById('ing-doc-edit-veld-revisiedatum').value;
+  const documentTypeId = document.getElementById('ing-doc-edit-veld-type').value;
+  if (!revisiedatum) { alert('Please enter the revision date of the document.'); return; }
+  if (!documentTypeId) { alert('Please choose a document type.'); return; }
+  const doc = docEditHuidig;
+  if (!doc) return;
+
+  const confirmBtn = document.getElementById('ing-doc-edit-modal-confirm-btn');
+  confirmBtn.disabled = true;
+  confirmBtn.textContent = 'Saving…';
+
+  try {
+    const { error } = await supabaseClient.from('ingredient_documenten')
+      .update({ revisiedatum, document_type_id: documentTypeId })
+      .eq('id', doc.id);
+    if (error) throw error;
+
+    // Zelfde auto-archivering als bij upload: als deze bewerking het document
+    // (nog steeds) een actieve product sheet maakt met de nieuwste datum,
+    // archiveer oudere actieve product sheets van dit ingrediënt.
+    if (String(documentTypeId) === String(productSheetTypeId()) && doc.status === 'actief') {
+      await archiveerOudereProductSheets(doc.ingredient_id, doc.id, revisiedatum);
+    }
+
+    document.getElementById('ing-doc-edit-modal-overlay').style.display = 'none';
+    docEditHuidig = null;
+    await laadIngredientDocumenten(doc.ingredient_id);
+  } catch (err) {
+    alert('Save failed: ' + (err.message || err));
+  } finally {
+    confirmBtn.disabled = false;
+    confirmBtn.textContent = 'Save';
   }
 });
 
@@ -1303,27 +1635,36 @@ function renderDetailAlleen(id) {
   container.innerHTML = `
     <h2 class="ing-titel">${escapeHtml(i.naam)}</h2>
     <div class="ing-meta">${escapeHtml(categorieNaam)} · v${i.versie_major ?? 1}.${i.versie_minor ?? 0}</div>
-    <div class="ing-card">
+    <div class="ing-card ing-card-general">
       <div class="ing-card-titel">General</div>
       ${generalRows.map(kvRij).join('')}
       <div class="ing-latest-revisie" id="ing-latest-revisie-houder" style="display:none;"></div>
       ${magIngBewerken ? `<button class="ing-bewerk-btn" id="ing-bewerk-btn">Edit</button>` : ''}
       ${magIngVerwijderen ? `<button class="ing-verwijder-knop" id="ing-verwijder-btn">Delete</button>` : ''}
     </div>
-    <div class="ing-card">
+    <div class="ing-card ing-card-supplier">
       <div class="ing-card-titel">Supplier information</div>
       ${supplierRows.map(kvRij).join('')}
     </div>
-    <div class="ing-card">
-      <div class="ing-card-titel">Parameters</div>
-      ${parameterRows.map(kvRij).join('')}
-    </div>
-    <div class="ing-card">
+    <div class="ing-card ing-card-documents">
       <div class="ing-card-titel">Documents</div>
+      <div class="ing-doc-status-samenvatting" id="ing-doc-status-samenvatting"></div>
+      <div class="ing-doc-filters">
+        <select id="ing-doc-filter-type"><option value="">All types</option></select>
+        <select id="ing-doc-filter-status">
+          <option value="actief">Active</option>
+          <option value="gearchiveerd">Archived</option>
+          <option value="alle">All</option>
+        </select>
+      </div>
       <div class="ing-doc-lijst" id="ing-doc-lijst-houder">Loading…</div>
       ${magIngBewerken ? `<button type="button" class="ing-doc-upload-btn" id="ing-doc-upload-btn">+ Upload document</button>` : ''}
     </div>
-    <div class="ing-card">
+    <div class="ing-card ing-card-parameters">
+      <div class="ing-card-titel">Parameters</div>
+      ${parameterRows.map(kvRij).join('')}
+    </div>
+    <div class="ing-card ing-card-history">
       <div class="ing-card-titel">Version history</div>
       <div id="ing-revisie-historie-houder">Loading…</div>
     </div>
@@ -1459,7 +1800,7 @@ function renderDetailBewerken(i) {  const container = document.getElementById('i
   container.innerHTML = `
     <h2 class="ing-titel">${escapeHtml(i.naam)}</h2>
     <div class="ing-meta">Editing</div>
-    <div class="ing-card">
+    <div class="ing-card ing-card-general">
       <div class="ing-card-titel">General</div>
       <div class="ing-edit-row wide">
         <label for="veld-naam">Name *</label>
@@ -1488,13 +1829,13 @@ function renderDetailBewerken(i) {  const container = document.getElementById('i
         </select>
       </div>
     </div>
-    <div class="ing-card">
+    <div class="ing-card ing-card-supplier">
       <div class="ing-card-titel">Supplier information</div>
       ${leverancierBlok(1, 'leverancier', 'prijs', 'eenheid_prijs_1', 'prijs_per_kg')}
       ${leverancierBlok(2, 'leverancier_2', 'prijs_2', 'eenheid_prijs_2', 'prijs_per_kg_2')}
       ${leverancierBlok(3, 'leverancier_3', 'prijs_3', 'eenheid_prijs_3', 'prijs_per_kg_3')}
     </div>
-    <div class="ing-card">
+    <div class="ing-card ing-card-parameters">
       <div class="ing-card-titel">Parameters</div>
       <div id="veld-alpha_pct-rij">${veld('Alpha %', 'alpha_pct', '%', 'number')}</div>
       <div id="veld-gistfactor-rij">${veld('Yeast factor', 'gistfactor', '', 'number')}</div>
@@ -1869,7 +2210,7 @@ function toonNieuwFormulier() {
   container.innerHTML = `
     <h2 class="ing-titel">New ingredient</h2>
     <div class="ing-meta">Required fields: name and category</div>
-    <div class="ing-card">
+    <div class="ing-card ing-card-general">
       <div class="ing-card-titel">General</div>
       <div class="ing-edit-row wide">
         <label for="nieuw-naam">Name *</label>
@@ -1897,13 +2238,13 @@ function toonNieuwFormulier() {
         </select>
       </div>
     </div>
-    <div class="ing-card">
+    <div class="ing-card ing-card-supplier">
       <div class="ing-card-titel">Supplier information</div>
       ${leverancierBlok(1, 'nieuw-leverancier', 'nieuw-prijs', 'nieuw-eenheid_prijs_1', 'nieuw-prijs_per_kg')}
       ${leverancierBlok(2, 'nieuw-leverancier_2', 'nieuw-prijs_2', 'nieuw-eenheid_prijs_2', 'nieuw-prijs_per_kg_2')}
       ${leverancierBlok(3, 'nieuw-leverancier_3', 'nieuw-prijs_3', 'nieuw-eenheid_prijs_3', 'nieuw-prijs_per_kg_3')}
     </div>
-    <div class="ing-card">
+    <div class="ing-card ing-card-parameters">
       <div class="ing-card-titel">Parameters</div>
       <div id="nieuw-alpha_pct-rij">${veld('Alpha %', 'nieuw-alpha_pct', '%', 'number')}</div>
       <div id="nieuw-gistfactor-rij">${veld('Yeast factor', 'nieuw-gistfactor', '', 'number')}</div>

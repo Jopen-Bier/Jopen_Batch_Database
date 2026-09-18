@@ -109,6 +109,25 @@
           <p id="eenheid-melding" class="jopen-form-melding"></p>
         </div>
 
+        <!-- Sectie: Document types -->
+        <div class="settings-sectie" id="sectie-documenttypen" data-titel="Document types">
+          <h2>Document types</h2>
+          <p class="uitleg">Fixed list of document types to choose from when uploading a document on the ingredient card. Drag rows by the handle to reorder them.</p>
+
+          <div id="documenttypen-lijst"><p class="jopen-subtitel">Loading…</p></div>
+
+          <table class="cat-tabel">
+            <tbody>
+              <tr class="cat-nieuw-rij">
+                <td><input type="text" id="documenttype-nieuw-code" placeholder="Code, e.g. 'coa'…" style="max-width:140px;" /></td>
+                <td><input type="text" id="documenttype-nieuw-label" placeholder="Label, e.g. 'Certificate of Analysis (CoA)'…" /></td>
+                <td><button id="documenttype-toevoegen-btn">Add</button></td>
+              </tr>
+            </tbody>
+          </table>
+          <p id="documenttype-melding" class="jopen-form-melding"></p>
+        </div>
+
         <!-- Sectie: Ingredient declarations -->
         <div class="settings-sectie" id="sectie-declaraties" data-titel="Ingredient declarations">
           <h2>Ingredient declarations</h2>
@@ -142,12 +161,14 @@
     const SETTINGS_SECTIES = [
       { id: 'categorieen', titel: 'Ingredient categories', laadFn: laadCategorieenSectie },
       { id: 'eenheden', titel: 'Units', laadFn: laadEenhedenSectie },
+      { id: 'documenttypen', titel: 'Document types', laadFn: laadDocumenttypenSectie },
       { id: 'declaraties', titel: 'Ingredient declarations', laadFn: laadDeclaratiesSectie },
     ];
 
     let alleCategorieen = [];
     let alleEenheden = [];
     let alleDeclaraties = [];
+    let alleDocumenttypen = [];
 
     function toonSectie(id) {
       document.querySelectorAll('.settings-sectie').forEach(el => el.classList.toggle('actief', el.id === `sectie-${id}`));
@@ -423,6 +444,165 @@
       document.getElementById('eenheid-nieuw-label').value = '';
       melding.textContent = 'Unit added.'; melding.className = 'jopen-form-melding ok';
       laadEenhedenSectie();
+    });
+
+    // ----------------------------------------------------------------
+    // Sectie: Document types
+    // Zelfde opbouw als Units hierboven (drag-herordenen, per-rij save/
+    // delete, nieuwe-rij toevoegen) -- alleen de tabelnaam verschilt.
+    // ----------------------------------------------------------------
+    async function laadDocumenttypenSectie() {
+      const container = document.getElementById('documenttypen-lijst');
+      const { data, error } = await supabaseClient
+        .from('document_typen').select('id, code, label, sort_order').order('sort_order');
+
+      if (error) {
+        container.innerHTML = `<p class="jopen-form-melding fout">Could not load document types: ${error.message}</p>`;
+        return;
+      }
+      alleDocumenttypen = data || [];
+      renderDocumenttypen();
+    }
+
+    function renderDocumenttypen() {
+      const container = document.getElementById('documenttypen-lijst');
+      if (alleDocumenttypen.length === 0) {
+        container.innerHTML = '<p class="jopen-subtitel">No document types yet.</p>';
+        return;
+      }
+      const rijen = alleDocumenttypen.map(t => `
+        <tr data-id="${t.id}">
+          <td class="eenheid-drag-handle" draggable="true" title="Drag to reorder">
+            <svg width="12" height="18" viewBox="0 0 12 18" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="3" cy="3" r="1.6"/><circle cx="9" cy="3" r="1.6"/>
+              <circle cx="3" cy="9" r="1.6"/><circle cx="9" cy="9" r="1.6"/>
+              <circle cx="3" cy="15" r="1.6"/><circle cx="9" cy="15" r="1.6"/>
+            </svg>
+          </td>
+          <td><input type="text" class="documenttype-code-veld" value="${escapeHtml(t.code)}" style="max-width:140px;" /></td>
+          <td><input type="text" class="documenttype-label-veld" value="${escapeHtml(t.label || '')}" /></td>
+          <td style="display:flex; gap:6px;">
+            <button class="documenttype-opslaan-rij-btn">Save</button>
+            <button class="rij-verwijder-btn documenttype-verwijder-btn">Delete</button>
+          </td>
+        </tr>`).join('');
+
+      container.innerHTML = `
+        <table class="cat-tabel">
+          <thead><tr><th></th><th>Code</th><th>Label</th><th></th></tr></thead>
+          <tbody id="documenttypen-tbody">${rijen}</tbody>
+        </table>`;
+
+      container.querySelectorAll('tr[data-id]').forEach(tr => {
+        tr.querySelector('.documenttype-opslaan-rij-btn').addEventListener('click', () => slaDocumenttypeOp(tr));
+        tr.querySelector('.documenttype-verwijder-btn').addEventListener('click', () => verwijderDocumenttype(tr));
+      });
+      maakDocumenttypenTabelSorteerbaar();
+    }
+
+    function maakDocumenttypenTabelSorteerbaar() {
+      const tbody = document.getElementById('documenttypen-tbody');
+      if (!tbody) return;
+      let dragSrcRow = null;
+
+      tbody.addEventListener('dragstart', (e) => {
+        const handle = e.target.closest('.eenheid-drag-handle');
+        if (!handle) { e.preventDefault(); return; }
+        dragSrcRow = handle.closest('tr');
+        dragSrcRow.classList.add('eenheid-slepend');
+        e.dataTransfer.effectAllowed = 'move';
+        try { e.dataTransfer.setData('text/plain', dragSrcRow.dataset.id); } catch (err) { /* Firefox vereist setData, verder genegeerd */ }
+        try { e.dataTransfer.setDragImage(dragSrcRow, 10, 10); } catch (err) { /* niet kritisch als dit faalt */ }
+      });
+
+      tbody.addEventListener('dragover', (e) => {
+        if (!dragSrcRow) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const overRow = e.target.closest('tr');
+        if (!overRow || overRow === dragSrcRow || !tbody.contains(overRow)) return;
+        const rect = overRow.getBoundingClientRect();
+        const naHelft = (e.clientY - rect.top) / rect.height > 0.5;
+        tbody.insertBefore(dragSrcRow, naHelft ? overRow.nextSibling : overRow);
+      });
+
+      tbody.addEventListener('drop', (e) => { e.preventDefault(); });
+
+      tbody.addEventListener('dragend', async () => {
+        if (dragSrcRow) dragSrcRow.classList.remove('eenheid-slepend');
+        dragSrcRow = null;
+        await slaDocumenttypenVolgordeOp(tbody);
+      });
+    }
+
+    async function slaDocumenttypenVolgordeOp(tbody) {
+      const melding = document.getElementById('documenttype-melding');
+      const nieuweVolgorde = Array.from(tbody.children).map((tr, i) => ({ id: tr.dataset.id, sort_order: i + 1 }));
+      const ongewijzigd = nieuweVolgorde.every((v, i) => String(alleDocumenttypen[i]?.id) === String(v.id));
+      if (ongewijzigd) return;
+
+      melding.textContent = 'Saving order…'; melding.className = 'jopen-form-melding';
+      const resultaten = await Promise.all(nieuweVolgorde.map(({ id, sort_order }) =>
+        supabaseClient.from('document_typen').update({ sort_order }).eq('id', id)
+      ));
+      const fout = resultaten.find(r => r.error);
+      if (fout) {
+        melding.textContent = 'Could not save order: ' + fout.error.message;
+        melding.className = 'jopen-form-melding fout';
+        laadDocumenttypenSectie();
+        return;
+      }
+      melding.textContent = 'Order saved.'; melding.className = 'jopen-form-melding ok';
+      laadDocumenttypenSectie();
+    }
+
+    async function slaDocumenttypeOp(tr) {
+      const id = tr.dataset.id;
+      const melding = document.getElementById('documenttype-melding');
+      const code = tr.querySelector('.documenttype-code-veld').value.trim();
+      const label = tr.querySelector('.documenttype-label-veld').value.trim() || null;
+      if (!code) { melding.textContent = 'Code cannot be empty.'; melding.className = 'jopen-form-melding fout'; return; }
+
+      const { error } = await supabaseClient.from('document_typen').update({ code, label }).eq('id', id);
+      if (error) { melding.textContent = 'Save failed: ' + error.message; melding.className = 'jopen-form-melding fout'; return; }
+      melding.textContent = 'Saved.'; melding.className = 'jopen-form-melding ok';
+      laadDocumenttypenSectie();
+    }
+
+    async function verwijderDocumenttype(tr) {
+      const id = tr.dataset.id;
+      const melding = document.getElementById('documenttype-melding');
+      if (!confirm('Delete this document type?')) return;
+      const { error } = await supabaseClient.from('document_typen').delete().eq('id', id);
+      if (error) {
+        melding.textContent = error.code === '23503'
+          ? 'Could not delete: this type is still used on one or more uploaded documents.'
+          : 'Delete failed: ' + error.message;
+        melding.className = 'jopen-form-melding fout';
+        return;
+      }
+      melding.textContent = 'Deleted.'; melding.className = 'jopen-form-melding ok';
+      laadDocumenttypenSectie();
+    }
+
+    document.getElementById('documenttype-toevoegen-btn').addEventListener('click', async () => {
+      const melding = document.getElementById('documenttype-melding');
+      const code = document.getElementById('documenttype-nieuw-code').value.trim();
+      const label = document.getElementById('documenttype-nieuw-label').value.trim() || null;
+      if (!code) { melding.textContent = 'Enter a code for the new document type.'; melding.className = 'jopen-form-melding fout'; return; }
+
+      const { error } = await supabaseClient.from('document_typen').insert({
+        code, label, sort_order: alleDocumenttypen.length + 1,
+      });
+      if (error) {
+        melding.textContent = error.code === '23505' ? 'That code already exists.' : 'Add failed: ' + error.message;
+        melding.className = 'jopen-form-melding fout';
+        return;
+      }
+      document.getElementById('documenttype-nieuw-code').value = '';
+      document.getElementById('documenttype-nieuw-label').value = '';
+      melding.textContent = 'Document type added.'; melding.className = 'jopen-form-melding ok';
+      laadDocumenttypenSectie();
     });
 
     // ----------------------------------------------------------------
