@@ -146,7 +146,8 @@
   .ing-meta { font-family: var(--mono); font-size: 13px; color: #6b6355; margin-bottom: 24px; }
 
   .ing-card { background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 20px 24px; max-width: 560px; }
-  .ing-card + .ing-card { margin-top: 18px; }
+  .ing-titelblok { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  .ing-titelblok-acties { display: flex; gap: 10px; }
   table.ing-table { width: 100%; border-collapse: collapse; font-size: 13px; }
   table.ing-table th, table.ing-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
   table.ing-table th { font-family: var(--mono); font-size: 11px; color: #6b6355; font-weight: normal; }
@@ -1665,15 +1666,19 @@ function renderDetailAlleen(id) {
 
   container.innerHTML = `
     <div class="ing-titelblok">
-      <h2 class="ing-titel">${escapeHtml(i.naam)}</h2>
-      <div class="ing-meta">${escapeHtml(categorieNaam)} · v${i.versie_major ?? 1}.${i.versie_minor ?? 0}</div>
+      <div>
+        <h2 class="ing-titel">${escapeHtml(i.naam)}</h2>
+        <div class="ing-meta">${escapeHtml(categorieNaam)} · v${i.versie_major ?? 1}.${i.versie_minor ?? 0}</div>
+      </div>
+      <div class="ing-titelblok-acties">
+        ${magIngBewerken ? `<button class="ing-bewerk-btn" id="ing-bewerk-btn" style="margin-top:0;">Edit</button>` : ''}
+        ${magIngVerwijderen ? `<button class="ing-verwijder-knop" id="ing-verwijder-btn" style="margin-top:0;">Delete</button>` : ''}
+      </div>
     </div>
     <div class="ing-card ing-card-general">
       <div class="ing-card-titel">General</div>
       ${generalRows.map(kvRij).join('')}
       <div class="ing-latest-revisie" id="ing-latest-revisie-houder" style="display:none;"></div>
-      ${magIngBewerken ? `<button class="ing-bewerk-btn" id="ing-bewerk-btn">Edit</button>` : ''}
-      ${magIngVerwijderen ? `<button class="ing-verwijder-knop" id="ing-verwijder-btn">Delete</button>` : ''}
     </div>
     <div class="ing-card ing-card-supplier">
       <div class="ing-card-titel">Supplier information</div>
