@@ -868,12 +868,12 @@ async function laadIngredienten() {
   pasFiltersToe();
 }
 
-function setupDropdownFilter(prefix, opties, geselecteerdSet, onChange) {
+function setupDropdownFilter(prefix, opties, geselecteerdSet, onChange, htmlLabels) {
   const optionsContainer = document.getElementById(`dd-${prefix}-options`);
   optionsContainer.innerHTML = opties.map(([waarde, label]) => `
     <label class="dd-filter-option">
       <input type="checkbox" value="${escapeHtml(String(waarde))}" ${geselecteerdSet.has(waarde) ? 'checked' : ''} />
-      ${escapeHtml(label)}
+      ${htmlLabels ? label : escapeHtml(label)}
     </label>
   `).join('');
 
@@ -921,12 +921,14 @@ function renderFilterToggles() {
   });
 
   const productSheetOpties = [
-    ['groen', 'Groen - Valid'], ['rood', 'Rood - Out of date'], ['leeg', 'Leeg - No product sheet'],
+    ['groen', '<span class="ps-dot groen"></span> Valid'],
+    ['rood', '<span class="ps-dot rood"></span> Out of date'],
+    ['leeg', '<span class="ps-dot leeg"></span> No product sheet'],
   ];
   setupDropdownFilter('ing-productsheet', productSheetOpties, geselecteerdeIngProductSheetStatussen, () => {
     bewaarIngFilters();
     pasFiltersToe();
-  });
+  }, true);
 }
 
 // -- Dropdown open/dicht, buiten-klik sluit alles, één tegelijk open --
