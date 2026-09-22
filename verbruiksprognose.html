@@ -176,6 +176,22 @@
       return Math.ceil(hoeveelheid / stap) * stap;
     }
 
+    // Gedeeld door renderResultaat() en exporteerNaarExcel() zodat het
+    // scherm en de Excel-export nooit uit elkaar kunnen lopen. Geeft de
+    // input ongewijzigd terug (met weergaveTotaal = r.totaal) voor elke
+    // andere rol dan Yeast.
+    function berekenGistWeergave(r, rol) {
+      if (rol !== 'gist') return { ...r, weergaveTotaal: r.totaal };
+      const perRecipeAfgerond = {};
+      let totaalAfgerond = 0;
+      Object.entries(r.perRecept).forEach(([naam, hoev]) => {
+        const afgerond = rondAfGist(hoev, r.eenheid);
+        perRecipeAfgerond[naam] = afgerond;
+        totaalAfgerond += afgerond;
+      });
+      return { ...r, perRecipeAfgerond, weergaveTotaal: totaalAfgerond };
+    }
+
     let huidigJaar = new Date().getFullYear();
     let actieveRolFilter = 'alle';
     let laatsteResultaat = null; // { perRol: { rol: [{ingredientId, naam, eenheid, totaal, perRecept:[{naam,brouwsels,hoeveelheid}]}] }, aantalBrouwsels, aantalRecepten }
@@ -272,20 +288,9 @@
         const ingredientenVanRol = laatsteResultaat.perRol[rol];
         if (!ingredientenVanRol || Object.keys(ingredientenVanRol).length === 0) return;
 
-        let rijen = Object.values(ingredientenVanRol).map(r => {
-          if (rol !== 'gist') return { ...r, weergaveTotaal: r.totaal };
-          // Yeast: elke per-recept-hoeveelheid naar boven afronden op 500 g
-          // (resp. 0,5 kg), en het getoonde totaal is de som van die
-          // afgeronde waarden -- niet de som van de werkelijke hoeveelheden.
-          const perRecipeAfgerond = {};
-          let totaalAfgerond = 0;
-          Object.entries(r.perRecept).forEach(([naam, hoev]) => {
-            const afgerond = rondAfGist(hoev, r.eenheid);
-            perRecipeAfgerond[naam] = afgerond;
-            totaalAfgerond += afgerond;
-          });
-          return { ...r, perRecipeAfgerond, weergaveTotaal: totaalAfgerond };
-        }).sort((a, b) => b.weergaveTotaal - a.weergaveTotaal);
+        let rijen = Object.values(ingredientenVanRol)
+          .map(r => berekenGistWeergave(r, rol))
+          .sort((a, b) => b.weergaveTotaal - a.weergaveTotaal);
         if (ingredientZoekterm) rijen = rijen.filter(r => r.naam.toLowerCase().includes(ingredientZoekterm));
         if (rijen.length === 0) return;
         ietsGetoond = true;
@@ -379,7 +384,8 @@
       const sheet = workbook.addWorksheet('Consumption Forecast');
       sheet.getColumn(1).width = 38;
       sheet.getColumn(2).width = 20;
-      sheet.getColumn(3).width = 14;
+      sheet.getColumn(3).width = 22;
+      sheet.getColumn(4).width = 14;
 
       const kopCel = sheet.getCell('A1');
       kopCel.value = `Selected weeks: wk ${van} - ${tot} (${jaar})`;
@@ -393,29 +399,37 @@
         const ingredientenVanRol = laatsteResultaat.perRol[rol];
         if (!ingredientenVanRol || Object.keys(ingredientenVanRol).length === 0) return;
 
-        const rijen = Object.values(ingredientenVanRol).sort((a, b) => b.totaal - a.totaal);
+        const rijen = Object.values(ingredientenVanRol)
+          .map(r => berekenGistWeergave(r, rol))
+          .sort((a, b) => b.weergaveTotaal - a.weergaveTotaal);
 
         const titelCel = sheet.getCell(`A${rijIndex}`);
         titelCel.value = ROL_LABEL[rol] || rol;
         titelCel.font = { bold: true, size: 12 };
         rijIndex += 1;
 
+        const isGist = rol === 'gist';
         const tabelStartRij = rijIndex;
         sheet.addTable({
           name: `Tabel_${rol}`,
           ref: `A${tabelStartRij}`,
           headerRow: true,
           style: { theme: 'TableStyleLight15', showRowStripes: true },
-          columns: [
-            { name: 'Ingredient' },
-            { name: 'Total needed' },
-            { name: 'Checked' },
-          ],
-          rows: rijen.map(r => [
-            r.naam,
-            `${formatGetal(r.totaal)}${r.eenheid ? ' ' + r.eenheid : ''}`,
-            null,
-          ]),
+          columns: isGist
+            ? [{ name: 'Ingredient' }, { name: 'Total needed' }, { name: 'Rounded (nearest 500 g)' }, { name: 'Checked' }]
+            : [{ name: 'Ingredient' }, { name: 'Total needed' }, { name: 'Checked' }],
+          rows: rijen.map(r => isGist
+            ? [
+                r.naam,
+                `${formatGetal(r.totaal)}${r.eenheid ? ' ' + r.eenheid : ''}`,
+                `${formatGetal(r.weergaveTotaal)}${r.eenheid ? ' ' + r.eenheid : ''}`,
+                null,
+              ]
+            : [
+                r.naam,
+                `${formatGetal(r.totaal)}${r.eenheid ? ' ' + r.eenheid : ''}`,
+                null,
+              ]),
         });
 
         tabellenGeschreven += 1;
