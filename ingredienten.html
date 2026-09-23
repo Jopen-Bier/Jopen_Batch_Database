@@ -324,6 +324,7 @@
   /* -- Product sheet-stoplicht + type/status-badges + filters -- */
   .ps-dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; }
   .ps-dot.groen { background: #4c6b4f; }
+  .ps-dot.oranje { background: var(--amber); }
   .ps-dot.rood { background: #a33f2c; }
   .ps-dot.leeg { background: transparent; border: 1.5px solid #b8b1a0; box-sizing: border-box; }
   .ing-doc-status-samenvatting {
@@ -675,15 +676,25 @@ function productSheetVervaldatum(revisiedatum) {
   return d;
 }
 
-// Geeft 'groen' | 'rood' | null (geen datum) terug voor één document.
+// Waarschuwingsgrens: 3 maanden vóór de vervaldatum wordt het bolletje oranje.
+function productSheetWaarschuwingsdatum(revisiedatum) {
+  const d = productSheetVervaldatum(revisiedatum);
+  d.setMonth(d.getMonth() - 3);
+  return d;
+}
+
+// Geeft 'groen' | 'oranje' | 'rood' | null (geen datum) terug voor één document.
 function productSheetDotStatus(revisiedatum) {
   if (!revisiedatum) return null;
-  return new Date() < productSheetVervaldatum(revisiedatum) ? 'groen' : 'rood';
+  const nu = new Date();
+  if (nu >= productSheetVervaldatum(revisiedatum)) return 'rood';
+  if (nu >= productSheetWaarschuwingsdatum(revisiedatum)) return 'oranje';
+  return 'groen';
 }
 
 // Bepaalt de status voor een lijst documenten van één ingrediënt: kijkt
 // alleen naar actieve product sheets, neemt bij meerdere de nieuwste
-// revisiedatum. Retourneert { status: 'groen'|'rood'|null, revisiedatum }.
+// revisiedatum. Retourneert { status: 'groen'|'oranje'|'rood'|null, revisiedatum }.
 function actieveProductSheetStatus(documenten) {
   const psTypeId = productSheetTypeId();
   const actieveSheets = (documenten || [])
@@ -692,6 +703,10 @@ function actieveProductSheetStatus(documenten) {
   if (actieveSheets.length === 0) return { status: null, revisiedatum: null };
   const nieuwste = actieveSheets[0];
   return { status: productSheetDotStatus(nieuwste.revisiedatum), revisiedatum: nieuwste.revisiedatum };
+}
+
+function productSheetDotTitel(status) {
+  return { groen: 'Valid', oranje: 'Expiring within 3 months', rood: 'Expired' }[status] || 'No product sheet';
 }
 
 // -- Filter-status persistentie, zelfde patroon als receptoverzicht.html --
@@ -869,7 +884,7 @@ async function laadIngredienten() {
   const alleStatussen = [...new Set(alleIngredienten.map(i => i.status).filter(Boolean))];
   geselecteerdeIngStatussen = new Set(opgeslagen.status ? opgeslagen.status.filter(s => alleStatussen.includes(s)) : alleStatussen);
   geselecteerdeIngCategorieen = new Set(opgeslagen.categorie ? opgeslagen.categorie.filter(c => alleCategorieen.some(cat => String(cat.id) === c)) : alleCategorieen.map(c => String(c.id)));
-  const alleProductSheetStatussen = ['groen', 'rood', 'leeg'];
+  const alleProductSheetStatussen = ['groen', 'oranje', 'rood', 'leeg'];
   geselecteerdeIngProductSheetStatussen = new Set(opgeslagen.productsheet ? opgeslagen.productsheet.filter(s => alleProductSheetStatussen.includes(s)) : alleProductSheetStatussen);
 
   renderFilterToggles();
@@ -930,6 +945,7 @@ function renderFilterToggles() {
 
   const productSheetOpties = [
     ['groen', '<span class="ps-dot groen"></span> Valid'],
+    ['oranje', '<span class="ps-dot oranje"></span> Expiring within 3 months'],
     ['rood', '<span class="ps-dot rood"></span> Out of date'],
     ['leeg', '<span class="ps-dot leeg"></span> No product sheet'],
   ];
@@ -976,7 +992,7 @@ const SORT_KOLOMMEN = {
   status: i => (i.status || '').toLowerCase(),
   laatste_wijziging: i => laatsteWijzigingPerIngredient[i.id] || i.gewijzigd_op || i.aangemaakt_op || '',
   gebruikt_in_aantal: i => i.gebruikt_in_aantal || 0,
-  product_sheet: i => i.product_sheet_status === 'groen' ? 0 : (i.product_sheet_status === 'rood' ? 1 : 2),
+  product_sheet: i => ({ groen: 0, oranje: 1, rood: 2, leeg: 3 }[i.product_sheet_status] ?? 3),
 };
 
 function pasSorteringToe(lijst) {
@@ -1045,7 +1061,7 @@ function renderIngLijst(ingredienten) {
       <td><span class="status-pill status-${i.status || 'onbekend'}">${escapeHtml(statusLabel(i.status))}</span></td>
       <td>${formatDatum(laatsteWijzigingPerIngredient[i.id] || i.gewijzigd_op || i.aangemaakt_op)}</td>
       <td class="ing-tabel-getal">${i.gebruikt_in_aantal}</td>
-      <td>${i.product_sheet_status ? `<span class="ps-dot ${i.product_sheet_status}" title="${i.product_sheet_status === 'groen' ? 'Valid' : (i.product_sheet_status === 'rood' ? 'Expired' : 'No product sheet')}"></span>` : ''}</td>
+      <td>${i.product_sheet_status ? `<span class="ps-dot ${i.product_sheet_status}" title="${productSheetDotTitel(i.product_sheet_status)}"></span>` : ''}</td>
       ${toonActiesKolom ? `<td>${ingRijActiesHtml(i)}</td>` : ''}
     </tr>`).join('');
 
@@ -1209,7 +1225,11 @@ function renderDocumentStatusSamenvatting() {
     return;
   }
   const vervaldatum = formatDatum(productSheetVervaldatum(revisiedatum));
-  const tekst = status === 'groen' ? `Product sheet valid until ${vervaldatum}` : `Product sheet expired on ${vervaldatum}`;
+  const tekst = status === 'rood'
+    ? `Product sheet expired on ${vervaldatum}`
+    : status === 'oranje'
+      ? `Product sheet expires soon — valid until ${vervaldatum}`
+      : `Product sheet valid until ${vervaldatum}`;
   houder.innerHTML = `<span class="ps-dot ${status}"></span><span>${tekst}</span>`;
 }
 
@@ -1245,7 +1265,7 @@ function renderDocumentenLijst() {
       : '';
     return `
     <div class="ing-doc-rij" data-doc-id="${doc.id}">
-      ${dotStatus ? `<span class="ps-dot ${dotStatus}" title="${dotStatus === 'groen' ? 'Valid' : 'Expired'}"></span>` : ''}
+      ${dotStatus ? `<span class="ps-dot ${dotStatus}" title="${productSheetDotTitel(dotStatus)}"></span>` : ''}
       <div class="ing-doc-naam">
         <span class="ing-doc-naam-link" data-actie="bekijk">${escapeHtml(doc.bestandsnaam)}</span>
         <div class="ing-doc-meta">
