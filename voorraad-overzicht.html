@@ -442,7 +442,7 @@
     if (vwWeek > vfIsoWeeksInJaar(huidige.jaar)) { vwJaar++; vwWeek = 1; }
     const volgendeWeekSleutel = vfWeekSleutel(vwJaar, vwWeek);
 
-    const kolommen = [['naam', 'Name'], ['categorie', 'Category'], ['eenheid', 'Unit'], ['voorraad', 'Current stock'], ['minimum', 'Minimum'], ['status', 'Status'], ['loopt_leeg', 'Runs out'], ['forecast', '']];
+    const kolommen = [['naam', 'Name'], ['categorie', 'Category'], ['eenheid', 'Unit'], ['voorraad', 'Current stock'], ['minimum', 'Minimum'], ['status', 'Status'], ['loopt_leeg', 'Runs out'], ['acties', '']];
 
     const rijenHtml = groepen.map(g => {
       const sleutel = `${g.ingredientId}|${g.eenheid}`;
@@ -465,6 +465,7 @@
         totWeek = (Number(lj) === huidige.jaar) ? Number(lw) : vfIsoWeeksInJaar(huidige.jaar);
       }
       const forecastUrl = `verbruiksprognose.html?ingredient=${g.ingredientId}&jaar=${totJaar}&van=${huidige.week}&tot=${totWeek}`;
+      const detailsUrl = `ingredienten.html?id=${g.ingredientId}`;
 
       let subrijHtml = '';
       if (uitgeklapt) {
@@ -508,7 +509,7 @@
           <td>${g.minimum != null ? vfmt(g.minimum) : '—'}</td>
           <td>${onderMin ? '<span class="status-pill status-onder-min">Below minimum</span>' : '<span class="status-pill status-ok">OK</span>'}</td>
           <td class="${g.loopLeegWeek ? 'vo-loopt-leeg-urgent' : ''}">${loopLeegTekst}</td>
-          <td><a href="${forecastUrl}" class="vo-forecast-btn">Forecast</a></td>
+          <td><a href="${forecastUrl}" target="_blank" rel="noopener" class="vo-forecast-btn">Forecast</a> <a href="${detailsUrl}" target="_blank" rel="noopener" class="vo-forecast-btn">Details</a></td>
         </tr>${subrijHtml}`;
     }).join('');
 

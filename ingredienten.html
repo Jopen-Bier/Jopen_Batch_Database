@@ -770,7 +770,12 @@ async function initIngredientenPagina() {
     .order('sort_order');
   if (!documenttypeError) alleDocumenttypen = documenttypeData || [];
 
-  laadIngredienten();
+  await laadIngredienten();
+
+  // Diepe link vanuit een andere pagina (bv. Stock overview's 'Details'-knop):
+  // ?id=<ingredient_id> opent de detailweergave van dat ingrediënt direct.
+  const idParam = new URLSearchParams(window.location.search).get('id');
+  if (idParam) toonDetail(idParam);
 }
 
 document.getElementById('ing-nieuw-btn').addEventListener('click', toonNieuwFormulier);
