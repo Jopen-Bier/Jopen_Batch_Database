@@ -160,6 +160,7 @@
       const e = (eenheid || '').trim().toLowerCase();
       if (['kg', 'kilogram', 'kilo'].includes(e)) return { waarde: hoeveelheid, label: 'kg' };
       if (['g', 'gr', 'gram', 'grams'].includes(e)) return { waarde: hoeveelheid / 1000, label: 'kg' };
+      if (['mg', 'milligram', 'milligrams'].includes(e)) return { waarde: hoeveelheid / 1000000, label: 'kg' };
       if (['l', 'liter', 'litre', 'liters'].includes(e)) return { waarde: hoeveelheid, label: 'L' };
       if (['ml', 'milliliter', 'millilitre', 'milliliters'].includes(e)) return { waarde: hoeveelheid / 1000, label: 'L' };
       return null;
