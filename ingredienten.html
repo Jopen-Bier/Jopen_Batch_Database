@@ -216,6 +216,11 @@
   }
   .ing-allergenen-btn:hover { border-color: var(--hop-dark); }
   .ing-allergenen-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; margin: 16px 0; }
+  .ing-allergenen-geen {
+    display: flex; align-items: center; gap: 8px; margin-top: 12px; padding: 9px 10px; font-size: 14px; cursor: pointer;
+    border: 1px solid var(--line); border-radius: 4px; background: #f7f5ef; font-weight: 600;
+  }
+  .ing-allergenen-uitleg { font-size: 12px; color: #6b6355; margin-top: 6px; }
   .ing-allergeen-optie {
     display: flex; align-items: center; gap: 8px; padding: 7px 4px; font-size: 14px; cursor: pointer;
     border-bottom: 1px solid #ece8dc;
@@ -453,6 +458,8 @@
 <div class="ing-modal-overlay" id="ing-allergenen-modal-overlay" style="display:none;">
   <div class="ing-modal">
     <h2>Allergens</h2>
+    <label class="ing-allergenen-geen"><input type="checkbox" id="ing-allergenen-geen-cb" /> Contains no allergens</label>
+    <div class="ing-allergenen-uitleg">Tick this to confirm the ingredient has been checked and contains none of the 14 EU allergens. Leaving everything unticked keeps the ingredient as "Not assessed".</div>
     <div class="ing-allergenen-grid" id="ing-allergenen-grid"></div>
     <div class="ing-modal-actions">
       <button type="button" class="ing-annuleer-btn" id="ing-allergenen-cancel-btn">Cancel</button>
@@ -530,9 +537,12 @@ const EU_ALLERGENEN = [
   ['molluscs', 'Molluscs'],
 ];
 
+// Drie toestanden: null = nog niet beoordeeld, [] = bewust "geen allergenen",
+// [..] = bevat deze allergenen.
 function allergenenLabel(keys) {
-  const set = new Set(keys || []);
-  if (set.size === 0) return 'None';
+  if (keys == null) return 'Not assessed';
+  const set = new Set(keys);
+  if (set.size === 0) return 'No allergens';
   return EU_ALLERGENEN.filter(([k]) => set.has(k)).map(([, label]) => label).join(', ');
 }
 
@@ -629,6 +639,16 @@ function openAllergenenPicker(huidigeKeys, onOpslaan) {
       ${escapeHtml(label)}
     </label>`).join('');
 
+  // "Contains no allergens" sluit de 14 losse allergenen uit en andersom.
+  const geenCb = document.getElementById('ing-allergenen-geen-cb');
+  geenCb.checked = Array.isArray(huidigeKeys) && huidigeKeys.length === 0;
+  geenCb.onchange = () => {
+    if (geenCb.checked) grid.querySelectorAll('input[type="checkbox"]').forEach(el => { el.checked = false; });
+  };
+  grid.querySelectorAll('input[type="checkbox"]').forEach(el => {
+    el.addEventListener('change', () => { if (el.checked) geenCb.checked = false; });
+  });
+
   const overlay = document.getElementById('ing-allergenen-modal-overlay');
   overlay.style.display = 'flex';
 
@@ -647,7 +667,9 @@ function openAllergenenPicker(huidigeKeys, onOpslaan) {
   nieuweOk.addEventListener('click', () => {
     const geselecteerd = Array.from(grid.querySelectorAll('input[type="checkbox"]:checked')).map(el => el.value);
     sluit();
-    onOpslaan(geselecteerd);
+    // Niets aangevinkt en "no allergens" ook niet -> null (niet beoordeeld).
+    if (geselecteerd.length > 0) onOpslaan(geselecteerd);
+    else onOpslaan(geenCb.checked ? [] : null);
   });
   nieuweCancel.addEventListener('click', sluit);
 }
@@ -1779,10 +1801,16 @@ async function verwijderIngredient(i) {
   pasFiltersToe();
 }
 
-let bewerkAllergenenState = [];
+let bewerkAllergenenState = null;
+
+// Tekst op de allergenen-knop in het bewerk-/nieuw-formulier.
+function allergenenKnopTekst(state) {
+  if (state == null) return 'Not assessed';
+  return state.length ? `${state.length} selected` : 'No allergens';
+}
 
 function renderDetailBewerken(i) {  const container = document.getElementById('ing-detail-container');
-  bewerkAllergenenState = i.allergenen || [];
+  bewerkAllergenenState = Array.isArray(i.allergenen) ? i.allergenen : null;
 
   const veld = (label, key, unit = '', type = 'text', wide = false) => {
     if (type === 'textarea') {
@@ -1919,8 +1947,7 @@ function renderDetailBewerken(i) {  const container = document.getElementById('i
   `;
 
   const werkAllergenenKnopBij = () => {
-    document.getElementById('veld-allergenen-btn').textContent =
-      bewerkAllergenenState.length ? `${bewerkAllergenenState.length} selected` : 'None selected';
+    document.getElementById('veld-allergenen-btn').textContent = allergenenKnopTekst(bewerkAllergenenState);
   };
   werkAllergenenKnopBij();
   document.getElementById('veld-allergenen-btn').addEventListener('click', () => {
@@ -2193,12 +2220,12 @@ async function slaIngredientOp(i, soort, wijziging) {
   }, 900);
 }
 
-let nieuwAllergenenState = [];
+let nieuwAllergenenState = null;
 
 function toonNieuwFormulier() {
   document.getElementById('ing-list-view').style.display = 'none';
   document.getElementById('ing-detail').classList.add('actief');
-  nieuwAllergenenState = [];
+  nieuwAllergenenState = null;
 
   const container = document.getElementById('ing-detail-container');
 
@@ -2316,7 +2343,7 @@ function toonNieuwFormulier() {
       ${veld('Colour', 'nieuw-kleur_ebc', 'EBC', 'number')}
       <div class="ing-edit-row">
         <label>Allergens</label>
-        <button type="button" class="ing-allergenen-btn" id="nieuw-allergenen-btn">None selected</button>
+        <button type="button" class="ing-allergenen-btn" id="nieuw-allergenen-btn">Not assessed</button>
       </div>
       ${declaratieVeldHtml('nieuw', '')}
       ${temperatuurVeld('Storage temperature', 'nieuw-bewaartemperatuur')}
@@ -2332,8 +2359,7 @@ function toonNieuwFormulier() {
   document.getElementById('nieuw-allergenen-btn').addEventListener('click', () => {
     openAllergenenPicker(nieuwAllergenenState, (geselecteerd) => {
       nieuwAllergenenState = geselecteerd;
-      document.getElementById('nieuw-allergenen-btn').textContent =
-        nieuwAllergenenState.length ? `${nieuwAllergenenState.length} selected` : 'None selected';
+      document.getElementById('nieuw-allergenen-btn').textContent = allergenenKnopTekst(nieuwAllergenenState);
     });
   });
   koppelDeclaratieVeldGedrag('nieuw');

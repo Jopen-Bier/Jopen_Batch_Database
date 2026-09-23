@@ -83,6 +83,18 @@
       </div>
     </div>
 
+    <!-- Alleen zichtbaar met view-recht op de module 'statistics' (rollenmatrix). -->
+    <div class="jopen-groep" id="groep-statistics" style="display:none;">
+      <h2 class="jopen-groep-titel">Statistics</h2>
+      <div class="jopen-tegels">
+        <a class="jopen-tegel" href="statistics.html">
+          <div class="jopen-tegel-titel">QA overview</div>
+          <p class="jopen-tegel-omschrijving">Ingredient product sheet status and allergen declarations at a glance.</p>
+          <span class="jopen-tegel-status actief">Active</span>
+        </a>
+      </div>
+    </div>
+
     <div class="jopen-groep">
       <h2 class="jopen-groep-titel">Documentation</h2>
       <div class="jopen-tegels">
@@ -98,5 +110,13 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="nav.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      const gebruiker = await getHuidigeGebruiker();
+      if (gebruiker && await magBekijkenModule('statistics')) {
+        document.getElementById('groep-statistics').style.display = '';
+      }
+    });
+  </script>
 </body>
 </html>

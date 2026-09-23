@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jopen — Statistics</title>
+<link rel="stylesheet" href="jopen-shared.css">
+<style>
+  /* Zelfde rustige kleurtaal als Recipes/Ingredients. */
+  :root {
+    --ink: #1c2b26;
+    --paper: #f6f4ee;
+    --line: #d8d2c4;
+    --hop: #4c6b4f;
+    --hop-dark: #33473a;
+    --amber: #b4772c;
+    --rood: #a33f2c;
+    --grijs: #b8b1a0;
+    --muted: #6b6355;
+  }
+  body { background: var(--paper); }
+  main.st-main { max-width: 1200px; margin: 0 auto; padding: 24px 32px 60px; color: var(--ink); }
+  .st-kop { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; margin-bottom: 4px; }
+  .st-kop h1 { margin: 0; }
+  .st-sub { color: var(--muted); font-size: 13px; margin: 0 0 18px; }
+
+  .st-tabs { display: flex; gap: 4px; border-bottom: 2px solid var(--hop-dark); margin-bottom: 18px; }
+  .st-tab {
+    padding: 9px 18px; border: 1px solid var(--line); border-bottom: none; border-radius: 6px 6px 0 0;
+    background: #ece8dc; color: var(--muted); font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+  .st-tab.actief { background: var(--hop-dark); color: #fff; border-color: var(--hop-dark); }
+
+  .st-toolbar {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 18px;
+    background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; font-size: 13px;
+  }
+  .st-toolbar .st-lbl { color: var(--muted); font-weight: 600; margin-right: 4px; }
+  .st-chip {
+    padding: 5px 12px; border-radius: 14px; border: 1px solid var(--line); background: #fff;
+    font-size: 13px; cursor: pointer; color: var(--ink);
+  }
+  .st-chip.actief { background: var(--hop); border-color: var(--hop); color: #fff; }
+  .st-toolbar .st-totaal { margin-left: auto; color: var(--muted); }
+
+  .st-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); gap: 18px; }
+  .st-kaart { background: #fff; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; }
+  .st-kaart-kop {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 12px 16px; border-bottom: 1px solid var(--line); background: #faf8f3;
+  }
+  .st-kaart-titel { font-weight: 700; font-size: 15px; }
+  .st-kaart-uitleg { font-size: 12px; color: var(--muted); margin-top: 2px; font-weight: normal; }
+  .st-export-btn {
+    padding: 7px 14px; border-radius: 6px; border: 1px solid var(--hop-dark); background: #fff;
+    color: var(--hop-dark); font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
+  }
+  .st-export-btn:hover { background: #e1ead9; }
+  .st-export-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .st-chart-rij { display: flex; align-items: center; gap: 24px; padding: 18px 20px; flex-wrap: wrap; }
+  .st-donut { width: 190px; height: 190px; flex-shrink: 0; }
+  .st-donut path { cursor: pointer; transition: opacity 0.15s; }
+  .st-donut path.gedimd { opacity: 0.28; }
+  .st-donut-getal { font-size: 30px; font-weight: 700; fill: var(--ink); }
+  .st-donut-label { font-size: 11px; fill: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+
+  .st-legenda { flex: 1; min-width: 200px; }
+  .st-leg-item {
+    display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 6px; cursor: pointer;
+    font-size: 14px; border: 1px solid transparent;
+  }
+  .st-leg-item:hover { background: #f6f4ee; }
+  .st-leg-item.actief { background: #f6f4ee; border-color: var(--line); }
+  .st-leg-item.gedimd { opacity: 0.45; }
+  .st-leg-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+  .st-leg-naam { flex: 1; }
+  .st-leg-getal { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .st-leg-pct { color: var(--muted); font-size: 12px; width: 44px; text-align: right; font-variant-numeric: tabular-nums; }
+
+  .st-lijst-kop {
+    display: flex; justify-content: space-between; align-items: center; padding: 8px 16px;
+    border-top: 1px solid var(--line); background: #faf8f3; font-size: 12px; color: var(--muted);
+  }
+  .st-lijst-kop button { background: none; border: none; color: var(--hop-dark); font-size: 12px; cursor: pointer; text-decoration: underline; }
+  .st-lijst { max-height: 320px; overflow-y: auto; }
+  table.st-tabel { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.st-tabel th {
+    position: sticky; top: 0; background: #fff; text-align: left; font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--muted); padding: 7px 12px; border-bottom: 2px solid var(--hop-dark);
+  }
+  table.st-tabel td { padding: 7px 12px; border-bottom: 1px solid #ece8dc; vertical-align: top; }
+  table.st-tabel td a { color: var(--hop-dark); font-weight: 600; text-decoration: none; }
+  table.st-tabel td a:hover { text-decoration: underline; }
+  .st-pil { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .st-leeg { padding: 20px; text-align: center; color: #999; font-size: 13px; }
+  .st-melding { padding: 40px; text-align: center; color: var(--muted); }
+  .st-fout { background: #fdecea; border: 1px solid #e0a39b; color: #a33f2c; padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; }
+</style>
+</head>
+<body>
+<div id="jopen-nav"></div>
+
+<main class="st-main">
+  <div class="st-kop"><h1>Statistics</h1></div>
+  <p class="st-sub">Dashboards per department — see at a glance what is missing or needs attention.</p>
+
+  <div id="st-toegang" class="st-melding">Checking access…</div>
+
+  <div id="st-inhoud" style="display:none;">
+    <div class="st-tabs" id="st-tabs"></div>
+    <div id="st-fout" class="st-fout" style="display:none;"></div>
+
+    <!-- QA overview -->
+    <section id="st-tab-qa" class="st-tab-paneel">
+      <div class="st-toolbar">
+        <span class="st-lbl">Ingredient status:</span>
+        <span id="st-status-chips"></span>
+        <span class="st-totaal" id="st-totaal">—</span>
+      </div>
+
+      <div class="st-grid">
+        <div class="st-kaart" id="kaart-productsheets">
+          <div class="st-kaart-kop">
+            <div>
+              <div class="st-kaart-titel">Ingredient product sheets</div>
+              <div class="st-kaart-uitleg">Valid for 3 years after the revision date; flagged 3 months before expiry.</div>
+            </div>
+            <button type="button" class="st-export-btn" data-export="productsheets" disabled>Export to Excel</button>
+          </div>
+          <div class="st-chart-rij">
+            <svg class="st-donut" viewBox="0 0 200 200" data-chart="productsheets"></svg>
+            <div class="st-legenda" data-legenda="productsheets"></div>
+          </div>
+          <div class="st-lijst-kop"><span data-lijst-titel="productsheets"></span><button type="button" data-reset="productsheets" style="display:none;">Show all</button></div>
+          <div class="st-lijst" data-lijst="productsheets"></div>
+        </div>
+
+        <div class="st-kaart" id="kaart-allergenen">
+          <div class="st-kaart-kop">
+            <div>
+              <div class="st-kaart-titel">Allergen declaration</div>
+              <div class="st-kaart-uitleg">"Not assessed" = nobody has confirmed the allergens (or their absence) yet.</div>
+            </div>
+            <button type="button" class="st-export-btn" data-export="allergenen" disabled>Export to Excel</button>
+          </div>
+          <div class="st-chart-rij">
+            <svg class="st-donut" viewBox="0 0 200 200" data-chart="allergenen"></svg>
+            <div class="st-legenda" data-legenda="allergenen"></div>
+          </div>
+          <div class="st-lijst-kop"><span data-lijst-titel="allergenen"></span><button type="button" data-reset="allergenen" style="display:none;">Show all</button></div>
+          <div class="st-lijst" data-lijst="allergenen"></div>
+        </div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<script src="config.js"></script>
+<script src="nav.js"></script>
+<script>
+// ============================================================================
+// statistics.html — dashboards per afdeling.
+// Nieuw tabblad toevoegen? Voeg een entry toe aan ST_TABS + een <section>
+// met id "st-tab-<key>" in de HTML hierboven.
+// Toegang via de rechtenmodule 'statistics' (rollenmatrix).
+// ============================================================================
+
+const ST_TABS = [
+  { key: 'qa', naam: 'QA overview' },
+];
+
+// -- Ingrediëntstatussen (zelfde labels als ingredienten.html) --
+const ST_ING_STATUSSEN = [
+  { key: 'actief', label: 'Active', standaard: true },
+  { key: 'uitfaserend', label: 'Phased out', standaard: false },
+  { key: 'concept', label: 'Draft', standaard: false },
+];
+
+// -- Categorieën per grafiek (volgorde = volgorde in legenda en export) --
+const ST_CATEGORIEEN = {
+  productsheets: [
+    { key: 'groen',  label: 'Valid',                     kleur: '#4c6b4f' },
+    { key: 'oranje', label: 'Expiring within 3 months',  kleur: '#b4772c' },
+    { key: 'rood',   label: 'Expired',                   kleur: '#a33f2c' },
+    { key: 'leeg',   label: 'Missing',                   kleur: '#b8b1a0' },
+  ],
+  allergenen: [
+    { key: 'bevat',  label: 'Contains allergens',        kleur: '#b4772c' },
+    { key: 'geen',   label: 'No allergens (confirmed)',  kleur: '#4c6b4f' },
+    { key: 'onbekend', label: 'Not assessed',            kleur: '#b8b1a0' },
+  ],
+};
+
+const EU_ALLERGENEN = {
+  gluten: 'Cereals containing gluten', crustaceans: 'Crustaceans', eggs: 'Eggs', fish: 'Fish',
+  peanuts: 'Peanuts', soybeans: 'Soybeans', milk: 'Milk (incl. lactose)', nuts: 'Tree nuts',
+  celery: 'Celery', mustard: 'Mustard', sesame: 'Sesame seeds', sulphites: 'Sulphur dioxide & sulphites',
+  lupin: 'Lupin', molluscs: 'Molluscs',
+};
+
+let alleIngredienten = [];                 // verrijkt met psStatus/psRevisiedatum/psVervaldatum/algStatus
+let geselecteerdeStatussen = new Set(ST_ING_STATUSSEN.filter(s => s.standaard).map(s => s.key));
+const gekozenSegment = { productsheets: null, allergenen: null };
+
+// ---------------------------------------------------------------------------
+// Product sheet-regels: 1-op-1 gelijk aan ingredienten.html, zodat het
+// dashboard en het stoplicht op de ingrediëntkaart nooit iets anders zeggen.
+// ---------------------------------------------------------------------------
+function productSheetVervaldatum(revisiedatum) {
+  const d = new Date(revisiedatum);
+  d.setFullYear(d.getFullYear() + 3);
+  return d;
+}
+function productSheetWaarschuwingsdatum(revisiedatum) {
+  const d = productSheetVervaldatum(revisiedatum);
+  d.setMonth(d.getMonth() - 3);
+  return d;
+}
+function productSheetDotStatus(revisiedatum) {
+  if (!revisiedatum) return 'leeg';
+  const nu = new Date();
+  if (nu >= productSheetVervaldatum(revisiedatum)) return 'rood';
+  if (nu >= productSheetWaarschuwingsdatum(revisiedatum)) return 'oranje';
+  return 'groen';
+}
+
+// null = niet beoordeeld, [] = bewust geen allergenen, [..] = bevat allergenen.
+function allergeenStatus(allergenen) {
+  if (!Array.isArray(allergenen)) return 'onbekend';
+  return allergenen.length === 0 ? 'geen' : 'bevat';
+}
+function allergenenTekst(allergenen) {
+  if (!Array.isArray(allergenen)) return 'Not assessed';
+  if (allergenen.length === 0) return 'None';
+  return allergenen.map(k => EU_ALLERGENEN[k] || k).join(', ');
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str ?? '';
+  return div.innerHTML;
+}
+function formatDatum(d) {
+  if (!d) return '—';
+  return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+function statusLabel(status) {
+  return (ST_ING_STATUSSEN.find(s => s.key === status) || {}).label || status || '—';
+}
+
+async function haalAlleRijenOp(query) {
+  const PAGINA = 1000;
+  let vanaf = 0;
+  let alles = [];
+  while (true) {
+    const { data, error } = await query.range(vanaf, vanaf + PAGINA - 1);
+    if (error) return { data: null, error };
+    alles = alles.concat(data || []);
+    if (!data || data.length < PAGINA) break;
+    vanaf += PAGINA;
+  }
+  return { data: alles, error: null };
+}
+
+// ---------------------------------------------------------------------------
+// Data laden
+// ---------------------------------------------------------------------------
+async function laadData() {
+  const { data: typen, error: typeFout } = await supabaseClient.from('document_typen').select('id, code');
+  if (typeFout) throw typeFout;
+  const psTypeId = (typen || []).find(t => t.code === 'product_sheet')?.id;
+
+  const [ingRes, docRes] = await Promise.all([
+    haalAlleRijenOp(supabaseClient
+      .from('ingredients')
+      .select('id, naam, categorie, leverancier, status, allergenen, ingredient_categories(name)')
+      .eq('versie_status', 'huidig')
+      .order('naam')),
+    psTypeId
+      ? haalAlleRijenOp(supabaseClient
+          .from('ingredient_documenten')
+          .select('ingredient_id, revisiedatum')
+          .eq('document_type_id', psTypeId)
+          .eq('status', 'actief'))
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  if (ingRes.error) throw ingRes.error;
+  if (docRes.error) throw docRes.error;
+
+  // Nieuwste actieve product sheet per ingrediënt.
+  const nieuwste = {};
+  (docRes.data || []).forEach(d => {
+    if (d.ingredient_id == null || !d.revisiedatum) return;
+    if (!nieuwste[d.ingredient_id] || d.revisiedatum > nieuwste[d.ingredient_id]) nieuwste[d.ingredient_id] = d.revisiedatum;
+  });
+
+  alleIngredienten = (ingRes.data || []).map(i => {
+    const rd = nieuwste[i.id] || null;
+    return {
+      ...i,
+      categorieNaam: i.ingredient_categories?.name || i.categorie || '',
+      psRevisiedatum: rd,
+      psVervaldatum: rd ? productSheetVervaldatum(rd) : null,
+      psStatus: productSheetDotStatus(rd),
+      algStatus: allergeenStatus(i.allergenen),
+    };
+  });
+}
+
+function gefilterdeIngredienten() {
+  return alleIngredienten.filter(i => geselecteerdeStatussen.has(i.status));
+}
+
+// ---------------------------------------------------------------------------
+// Donut (SVG, geen externe library)
+// ---------------------------------------------------------------------------
+function tekenDonut(svg, segmenten, totaal, gekozen, onKlik) {
+  const cx = 100, cy = 100, rBuiten = 92, rBinnen = 58;
+  const pt = (r, hoek) => [cx + r * Math.sin(hoek), cy - r * Math.cos(hoek)];
+  let html = '';
+  if (totaal === 0) {
+    html += `<circle cx="${cx}" cy="${cy}" r="${(rBuiten + rBinnen) / 2}" fill="none" stroke="#ece8dc" stroke-width="${rBuiten - rBinnen}"/>`;
+  } else {
+    let start = 0;
+    segmenten.forEach(s => {
+      if (s.aantal === 0) return;
+      const gedimd = gekozen && gekozen !== s.key ? ' gedimd' : '';
+      const titel = `<title>${escapeHtml(s.label)}: ${s.aantal}</title>`;
+      if (s.aantal === totaal) {
+        // Volledige ring: een arc van 360° is niet te tekenen, dus twee halve.
+        html += `<path class="${gedimd}" data-key="${s.key}" fill="${s.kleur}" fill-rule="evenodd" d="
+          M ${cx} ${cy - rBuiten} A ${rBuiten} ${rBuiten} 0 1 1 ${cx} ${cy + rBuiten} A ${rBuiten} ${rBuiten} 0 1 1 ${cx} ${cy - rBuiten} Z
+          M ${cx} ${cy - rBinnen} A ${rBinnen} ${rBinnen} 0 1 0 ${cx} ${cy + rBinnen} A ${rBinnen} ${rBinnen} 0 1 0 ${cx} ${cy - rBinnen} Z">${titel}</path>`;
+        return;
+      }
+      const eind = start + (s.aantal / totaal) * Math.PI * 2;
+      const groot = eind - start > Math.PI ? 1 : 0;
+      const [x1, y1] = pt(rBuiten, start), [x2, y2] = pt(rBuiten, eind);
+      const [x3, y3] = pt(rBinnen, eind), [x4, y4] = pt(rBinnen, start);
+      html += `<path class="${gedimd}" data-key="${s.key}" fill="${s.kleur}" stroke="#fff" stroke-width="1.5" d="
+        M ${x1} ${y1} A ${rBuiten} ${rBuiten} 0 ${groot} 1 ${x2} ${y2}
+        L ${x3} ${y3} A ${rBinnen} ${rBinnen} 0 ${groot} 0 ${x4} ${y4} Z">${titel}</path>`;
+      start = eind;
+    });
+  }
+  const midden = gekozen ? segmenten.find(s => s.key === gekozen) : null;
+  html += `<text class="st-donut-getal" x="${cx}" y="${cy + 4}" text-anchor="middle">${midden ? midden.aantal : totaal}</text>`;
+  html += `<text class="st-donut-label" x="${cx}" y="${cy + 22}" text-anchor="middle">${midden ? 'selected' : 'ingredients'}</text>`;
+  svg.innerHTML = html;
+  svg.querySelectorAll('path[data-key]').forEach(p => p.addEventListener('click', () => onKlik(p.dataset.key)));
+}
+
+// ---------------------------------------------------------------------------
+// Render
+// ---------------------------------------------------------------------------
+const ST_CONFIG = {
+  productsheets: {
+    statusVan: i => i.psStatus,
+    kolommen: ['Ingredient', 'Category', 'Supplier', 'Revision date', 'Valid until', 'Status'],
+    rij: i => [
+      `<a href="ingredienten.html?id=${i.id}">${escapeHtml(i.naam)}</a>`,
+      escapeHtml(i.categorieNaam || '—'),
+      escapeHtml(i.leverancier || '—'),
+      formatDatum(i.psRevisiedatum),
+      formatDatum(i.psVervaldatum),
+      segmentPil('productsheets', i.psStatus),
+    ],
+    lijstTitel: 'product sheet',
+  },
+  allergenen: {
+    statusVan: i => i.algStatus,
+    kolommen: ['Ingredient', 'Category', 'Supplier', 'Allergens'],
+    rij: i => [
+      `<a href="ingredienten.html?id=${i.id}">${escapeHtml(i.naam)}</a>`,
+      escapeHtml(i.categorieNaam || '—'),
+      escapeHtml(i.leverancier || '—'),
+      i.algStatus === 'bevat' ? escapeHtml(allergenenTekst(i.allergenen)) : segmentPil('allergenen', i.algStatus),
+    ],
+    lijstTitel: 'allergen status',
+  },
+};
+
+function segmentPil(grafiek, key) {
+  const c = ST_CATEGORIEEN[grafiek].find(x => x.key === key);
+  if (!c) return '—';
+  return `<span class="st-pil"><span class="st-leg-dot" style="background:${c.kleur}"></span>${escapeHtml(c.label)}</span>`;
+}
+
+function telSegmenten(grafiek, lijst) {
+  const statusVan = ST_CONFIG[grafiek].statusVan;
+  return ST_CATEGORIEEN[grafiek].map(c => ({ ...c, aantal: lijst.filter(i => statusVan(i) === c.key).length }));
+}
+
+function renderGrafiek(grafiek) {
+  const lijst = gefilterdeIngredienten();
+  const segmenten = telSegmenten(grafiek, lijst);
+  const totaal = lijst.length;
+  const gekozen = gekozenSegment[grafiek];
+  const kiesSegment = key => { gekozenSegment[grafiek] = gekozenSegment[grafiek] === key ? null : key; renderGrafiek(grafiek); };
+
+  tekenDonut(document.querySelector(`[data-chart="${grafiek}"]`), segmenten, totaal, gekozen, kiesSegment);
+
+  const legenda = document.querySelector(`[data-legenda="${grafiek}"]`);
+  legenda.innerHTML = segmenten.map(s => {
+    const pct = totaal ? Math.round((s.aantal / totaal) * 100) : 0;
+    const klasse = gekozen === s.key ? ' actief' : (gekozen ? ' gedimd' : '');
+    return `<div class="st-leg-item${klasse}" data-key="${s.key}">
+      <span class="st-leg-dot" style="background:${s.kleur}"></span>
+      <span class="st-leg-naam">${escapeHtml(s.label)}</span>
+      <span class="st-leg-getal">${s.aantal}</span>
+      <span class="st-leg-pct">${pct}%</span>
+    </div>`;
+  }).join('');
+  legenda.querySelectorAll('.st-leg-item').forEach(el => el.addEventListener('click', () => kiesSegment(el.dataset.key)));
+
+  // Lijst onder de grafiek: gekozen segment, of alles behalve de "goede" categorie.
+  const cfg = ST_CONFIG[grafiek];
+  const goedeKey = grafiek === 'productsheets' ? 'groen' : null;
+  const rijen = (gekozen
+    ? lijst.filter(i => cfg.statusVan(i) === gekozen)
+    : lijst.filter(i => cfg.statusVan(i) !== goedeKey))
+    .sort((a, b) => volgordeIndex(grafiek, cfg.statusVan(a)) - volgordeIndex(grafiek, cfg.statusVan(b)) || a.naam.localeCompare(b.naam));
+
+  const titelEl = document.querySelector(`[data-lijst-titel="${grafiek}"]`);
+  const gekozenLabel = gekozen ? ST_CATEGORIEEN[grafiek].find(c => c.key === gekozen).label : null;
+  titelEl.textContent = gekozen
+    ? `${rijen.length} ingredient${rijen.length === 1 ? '' : 's'} — ${gekozenLabel}`
+    : (goedeKey
+        ? `${rijen.length} ingredient${rijen.length === 1 ? '' : 's'} needing attention (click a segment to filter)`
+        : `${rijen.length} ingredient${rijen.length === 1 ? '' : 's'} (click a segment to filter)`);
+  document.querySelector(`[data-reset="${grafiek}"]`).style.display = gekozen ? 'inline' : 'none';
+
+  const lijstEl = document.querySelector(`[data-lijst="${grafiek}"]`);
+  lijstEl.innerHTML = rijen.length === 0
+    ? '<div class="st-leeg">Nothing here — all good.</div>'
+    : `<table class="st-tabel"><thead><tr>${cfg.kolommen.map(k => `<th>${k}</th>`).join('')}</tr></thead>
+       <tbody>${rijen.map(i => `<tr>${cfg.rij(i).map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+
+  document.querySelector(`[data-export="${grafiek}"]`).disabled = totaal === 0;
+}
+
+function volgordeIndex(grafiek, key) {
+  return ST_CATEGORIEEN[grafiek].findIndex(c => c.key === key);
+}
+
+function renderStatusChips() {
+  const el = document.getElementById('st-status-chips');
+  el.innerHTML = ST_ING_STATUSSEN.map(s => {
+    const n = alleIngredienten.filter(i => i.status === s.key).length;
+    return `<button type="button" class="st-chip${geselecteerdeStatussen.has(s.key) ? ' actief' : ''}" data-status="${s.key}">${s.label} (${n})</button>`;
+  }).join(' ');
+  el.querySelectorAll('.st-chip').forEach(btn => btn.addEventListener('click', () => {
+    const k = btn.dataset.status;
+    if (geselecteerdeStatussen.has(k)) geselecteerdeStatussen.delete(k); else geselecteerdeStatussen.add(k);
+    renderAlles();
+  }));
+}
+
+function renderAlles() {
+  renderStatusChips();
+  const n = gefilterdeIngredienten().length;
+  document.getElementById('st-totaal').textContent = `${n} ingredient${n === 1 ? '' : 's'} in scope`;
+  renderGrafiek('productsheets');
+  renderGrafiek('allergenen');
+}
+
+// ---------------------------------------------------------------------------
+// Excel-export: samenvatting bovenaan + één tabel met alle ingrediënten in
+// scope (met filterknoppen), gesorteerd op status.
+// ---------------------------------------------------------------------------
+async function exporteer(grafiek) {
+  const lijst = gefilterdeIngredienten();
+  const segmenten = telSegmenten(grafiek, lijst);
+  const cfg = ST_CONFIG[grafiek];
+  const titel = grafiek === 'productsheets' ? 'Ingredient product sheets' : 'Allergen declaration';
+  const vandaag = new Date();
+  const statusScope = ST_ING_STATUSSEN.filter(s => geselecteerdeStatussen.has(s.key)).map(s => s.label).join(', ');
+
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet(grafiek === 'productsheets' ? 'Product sheets' : 'Allergens');
+
+  ws.getCell('A1').value = `QA overview — ${titel}`;
+  ws.getCell('A1').font = { bold: true, size: 14 };
+  ws.getCell('A2').value = `Exported ${formatDatum(vandaag)} · Ingredient status: ${statusScope || '—'}`;
+  ws.getCell('A2').font = { italic: true, color: { argb: 'FF6B6355' } };
+
+  // Samenvatting
+  ws.addTable({
+    name: 'Samenvatting',
+    ref: 'A4',
+    headerRow: true,
+    totalsRow: true,
+    style: { theme: 'TableStyleLight15', showRowStripes: false },
+    columns: [
+      { name: 'Status', totalsRowLabel: 'Total' },
+      { name: 'Ingredients', totalsRowFunction: 'sum' },
+    ],
+    rows: segmenten.map(s => [s.label, s.aantal]),
+  });
+
+  const startRij = 4 + 1 + segmenten.length + 1 + 2;
+  ws.getCell(`A${startRij - 1}`).value = 'Ingredients';
+  ws.getCell(`A${startRij - 1}`).font = { bold: true, size: 12 };
+
+  const rijen = [...lijst].sort((a, b) =>
+    volgordeIndex(grafiek, cfg.statusVan(a)) - volgordeIndex(grafiek, cfg.statusVan(b)) || a.naam.localeCompare(b.naam));
+  const statusLabelVan = i => ST_CATEGORIEEN[grafiek].find(c => c.key === cfg.statusVan(i))?.label || '';
+
+  const kolommen = grafiek === 'productsheets'
+    ? ['Ingredient', 'Category', 'Supplier', 'Ingredient status', 'Revision date', 'Valid until', 'Product sheet status']
+    : ['Ingredient', 'Category', 'Supplier', 'Ingredient status', 'Allergen status', 'Allergens'];
+
+  const dataRijen = rijen.map(i => grafiek === 'productsheets'
+    ? [i.naam, i.categorieNaam, i.leverancier || '', statusLabel(i.status),
+       i.psRevisiedatum ? new Date(i.psRevisiedatum) : null, i.psVervaldatum, statusLabelVan(i)]
+    : [i.naam, i.categorieNaam, i.leverancier || '', statusLabel(i.status),
+       statusLabelVan(i), i.algStatus === 'bevat' ? allergenenTekst(i.allergenen) : '']);
+
+  ws.addTable({
+    name: 'Ingredienten',
+    ref: `A${startRij}`,
+    headerRow: true,
+    style: { theme: 'TableStyleLight15', showRowStripes: true },
+    columns: kolommen.map(k => ({ name: k, filterButton: true })),
+    rows: dataRijen.length ? dataRijen : [kolommen.map(() => null)],
+  });
+
+  const breedtes = grafiek === 'productsheets' ? [42, 22, 26, 16, 15, 15, 26] : [42, 22, 26, 16, 26, 50];
+  breedtes.forEach((b, idx) => { ws.getColumn(idx + 1).width = b; });
+  if (grafiek === 'productsheets') {
+    ws.getColumn(5).numFmt = 'dd-mm-yyyy';
+    ws.getColumn(6).numFmt = 'dd-mm-yyyy';
+  }
+
+  const buffer = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const iso = vandaag.toISOString().slice(0, 10);
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `QA overview - ${titel} ${iso}.xlsx`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(link.href);
+}
+
+// ---------------------------------------------------------------------------
+// Init
+// ---------------------------------------------------------------------------
+function renderTabs() {
+  const el = document.getElementById('st-tabs');
+  el.innerHTML = ST_TABS.map((t, idx) => `<button type="button" class="st-tab${idx === 0 ? ' actief' : ''}" data-tab="${t.key}">${escapeHtml(t.naam)}</button>`).join('');
+  el.querySelectorAll('.st-tab').forEach(btn => btn.addEventListener('click', () => {
+    el.querySelectorAll('.st-tab').forEach(b => b.classList.toggle('actief', b === btn));
+    document.querySelectorAll('.st-tab-paneel').forEach(p => { p.style.display = p.id === `st-tab-${btn.dataset.tab}` ? '' : 'none'; });
+  }));
+}
+
+async function initStatistics() {
+  const gebruiker = await getHuidigeGebruiker();
+  if (!gebruiker) return; // nav.js stuurt door naar login
+  const magZien = await magBekijkenModule('statistics');
+  const toegang = document.getElementById('st-toegang');
+  if (!magZien) {
+    toegang.textContent = 'Access denied — you do not have permission to view Statistics. Redirecting…';
+    setTimeout(() => { window.location.href = 'index.html'; }, 1500);
+    return;
+  }
+  toegang.textContent = 'Loading…';
+
+  renderTabs();
+  document.querySelectorAll('[data-reset]').forEach(btn => btn.addEventListener('click', () => {
+    gekozenSegment[btn.dataset.reset] = null;
+    renderGrafiek(btn.dataset.reset);
+  }));
+  document.querySelectorAll('[data-export]').forEach(btn => btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    try { await exporteer(btn.dataset.export); }
+    catch (e) { alert('Export failed: ' + (e.message || e)); }
+    finally { btn.disabled = false; }
+  }));
+
+  try {
+    await laadData();
+  } catch (e) {
+    const fout = document.getElementById('st-fout');
+    fout.textContent = 'Could not load data: ' + (e.message || e);
+    fout.style.display = 'block';
+  }
+  toegang.style.display = 'none';
+  document.getElementById('st-inhoud').style.display = 'block';
+  renderAlles();
+}
+
+document.addEventListener('DOMContentLoaded', initStatistics);
+</script>
+</body>
+</html>
