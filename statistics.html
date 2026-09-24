@@ -364,7 +364,7 @@ const ST_CONFIG = {
     statusVan: i => i.psStatus,
     kolommen: ['Ingredient', 'Category', 'Supplier', 'Revision date', 'Valid until', 'Status'],
     rij: i => [
-      `<a href="ingredienten.html?id=${i.id}">${escapeHtml(i.naam)}</a>`,
+      `<a href="ingredienten.html?id=${i.id}" target="_blank" rel="noopener">${escapeHtml(i.naam)}</a>`,
       escapeHtml(i.categorieNaam || '—'),
       escapeHtml(i.leverancier || '—'),
       formatDatum(i.psRevisiedatum),
@@ -377,7 +377,7 @@ const ST_CONFIG = {
     statusVan: i => i.algStatus,
     kolommen: ['Ingredient', 'Category', 'Supplier', 'Allergens'],
     rij: i => [
-      `<a href="ingredienten.html?id=${i.id}">${escapeHtml(i.naam)}</a>`,
+      `<a href="ingredienten.html?id=${i.id}" target="_blank" rel="noopener">${escapeHtml(i.naam)}</a>`,
       escapeHtml(i.categorieNaam || '—'),
       escapeHtml(i.leverancier || '—'),
       i.algStatus === 'bevat' ? escapeHtml(allergenenTekst(i.allergenen)) : segmentPil('allergenen', i.algStatus),
