@@ -1,32 +1,50 @@
-name: Restore test (eenmalig, handmatig)
+name: Restore test
 
-# ALLEEN handmatig te starten (workflow_dispatch), draait nooit vanzelf.
-# Bedoeld om één keer (of een enkele keer per jaar) te bevestigen dat een
-# backup-dump ook daadwerkelijk terug te zetten is -- niet alleen dat de
-# backup wordt gemaakt.
+# Controleert wekelijks dat de backup ook echt TERUG TE ZETTEN is, niet alleen
+# dat hij gemaakt wordt.
 #
-# Zet dit NOOIT tegen je echte productieproject -- gebruik een los,
-# wegwerpbaar test-project in Supabase (New project, gratis plan, later
-# gewoon weer te verwijderen).
+# Haalt een backup op uit de private backup-repo (zoals je dat in een echte
+# noodsituatie ook zou doen), zet hem terug in een wegwerp-Postgres 17 in
+# deze runner, en vergelijkt het aantal rijen per tabel met het manifest dat
+# bij die backup is gemaakt. Er is dus GEEN apart Supabase-testproject nodig,
+# en productie wordt nooit aangeraakt.
 #
-# Vereiste secret (Settings -> Secrets and variables -> Actions):
-#   RESTORE_TEST_DB_URL - Session pooler connection string van het
-#                          WEGWERP-testproject (niet van productie!).
+# Standaard: de nieuwste backup. Handmatig kan een datum gekozen worden.
+# Let op: alleen backups vanaf de invoering van de auth-dump + manifest
+# (oktober 2026) zijn met deze test te controleren.
 #
-# Hergebruikt de bestaande BACKUP_REPO_PAT/BACKUP_REPO secrets om het
-# dumpbestand op te halen uit de private backup-repo.
+# Hergebruikt de secrets BACKUP_REPO_PAT en BACKUP_REPO.
 
 on:
+  schedule:
+    - cron: '30 4 * * 1'   # elke maandag 04:30 UTC, na de nachtelijke backup
   workflow_dispatch:
     inputs:
-      dump_filename:
-        description: 'Bestandsnaam in dumps/, bv. jopen_backup_2026-07-31.dump'
-        required: true
+      datum:
+        description: 'Datum van de backup, bv. 2026-10-05 (leeg = nieuwste)'
+        required: false
+        default: ''
+
+env:
+  PG_BIN: /usr/lib/postgresql/17/bin
 
 jobs:
   restore-test:
     runs-on: ubuntu-latest
+    services:
+      testdb:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/backup
+
       - name: Install postgresql-client 17
         run: |
           sudo apt-get install -y postgresql-common
@@ -34,20 +52,38 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y postgresql-client-17
 
-      - name: Haal dumpbestand op uit backup-repo
+      - name: Haal backup op uit backup-repo
         env:
           BACKUP_REPO_PAT: ${{ secrets.BACKUP_REPO_PAT }}
           BACKUP_REPO: ${{ secrets.BACKUP_REPO }}
+          GEVRAAGD: ${{ github.event.inputs.datum }}
         run: |
-          git clone "https://x-access-token:${BACKUP_REPO_PAT}@github.com/${BACKUP_REPO}.git" backup-repo
-          test -f "backup-repo/dumps/${{ github.event.inputs.dump_filename }}" || (echo "Bestand niet gevonden in dumps/" && exit 1)
+          git clone --depth 1 "https://x-access-token:${BACKUP_REPO_PAT}@github.com/${BACKUP_REPO}.git" backup-repo
+          if [ -n "$GEVRAAGD" ]; then
+            DATUM="$GEVRAAGD"
+          else
+            DATUM=$(ls -1 backup-repo/manifests/jopen_backup_*.json 2>/dev/null | sort | tail -n 1 | sed -E 's/.*jopen_backup_(.*)\.json/\1/')
+          fi
+          [ -n "$DATUM" ] || { echo "::error::Geen backup met manifest gevonden in manifests/."; exit 1; }
+          for f in "dumps/jopen_backup_${DATUM}.dump" "dumps/jopen_auth_${DATUM}.dump" "manifests/jopen_backup_${DATUM}.json"; do
+            test -f "backup-repo/$f" || { echo "::error::Ontbreekt: $f (backups van vóór oktober 2026 hebben geen auth-dump/manifest)"; exit 1; }
+          done
+          echo "DATUM=${DATUM}" >> "$GITHUB_ENV"
+          echo "Te testen backup: ${DATUM}"
 
-      - name: Restore naar test-project
+      - name: Terugzetten
         env:
-          RESTORE_TEST_DB_URL: ${{ secrets.RESTORE_TEST_DB_URL }}
+          TEST_DB: postgresql://postgres:test@localhost:5432/postgres
         run: |
-          /usr/lib/postgresql/17/bin/pg_restore \
-            --clean --if-exists --no-owner --no-privileges \
-            -d "$RESTORE_TEST_DB_URL" \
-            "backup-repo/dumps/${{ github.event.inputs.dump_filename }}"
-          echo "Restore voltooid -- check het test-project in Supabase (Table Editor) om te bevestigen."
+          bash .github/backup/herstel.sh \
+            "backup-repo/dumps/jopen_backup_${DATUM}.dump" \
+            "backup-repo/dumps/jopen_auth_${DATUM}.dump" \
+            "$TEST_DB"
+
+      - name: Vergelijk met manifest
+        env:
+          TEST_DB: postgresql://postgres:test@localhost:5432/postgres
+        run: |
+          "$PG_BIN/psql" "$TEST_DB" -v ON_ERROR_STOP=1 -tA -f .github/backup/tel_rijen.sql > hersteld.json
+          python3 .github/backup/vergelijk_tellingen.py test \
+            --manifest "backup-repo/manifests/jopen_backup_${DATUM}.json" --hersteld hersteld.json
