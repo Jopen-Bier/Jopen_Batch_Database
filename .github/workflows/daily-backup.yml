@@ -1,81 +1,227 @@
 name: Daily Supabase backup
 
-# Draait elke nacht en zet een pg_dump van de Supabase-database weg in een
-# APARTE, PRIVATE repo (niet deze repo, want deze is public i.v.m. GitHub
-# Pages op het gratis plan). Zo staat er een kopie van de data die volledig
-# los staat van Supabase zelf: als het Supabase-project ooit stuk gaat, per
-# ongeluk verwijderd wordt, of een query iets sloopt, kun je hiermee terug.
+# Draait elke nacht en zet een backup van Supabase weg in APARTE, PRIVATE
+# repo's (niet deze repo, want deze is public i.v.m. GitHub Pages op het
+# gratis plan). Supabase zelf maakt op het Free plan géén backups, dus dit is
+# het enige vangnet.
 #
-# Vereiste secrets (Settings → Secrets and variables → Actions → New repository secret):
-#   SUPABASE_DB_URL   - de Postgres-connectionstring (met wachtwoord), te vinden
-#                        in Supabase Dashboard → Project Settings → Database →
-#                        Connection string → "URI" (gebruik de "Session pooler"
-#                        variant als de directe host geen IPv4 heeft/werkt).
-#   BACKUP_REPO_PAT   - fine-grained PAT met Contents: Read & Write op de
-#                        aparte private backup-repo (zie backup-repo hieronder).
-#   BACKUP_REPO       - bv. "Jopen-Bier/Jopen_Batch_Database_Backups"
+# Twee losse jobs, zodat een probleem in de ene de andere niet tegenhoudt:
 #
-# Let op: deze drie moeten nog worden aangemaakt/toegevoegd voordat dit script
-# voor het eerst succesvol draait.
+#   database  -> Jopen_Database_Backup (BACKUP_REPO)
+#     dumps/jopen_backup_<datum>.dump   public-schema (onze tabellen + data)
+#     dumps/jopen_auth_<datum>.dump     auth.users + auth.identities (de
+#                                        gebruikersaccounts; zonder deze
+#                                        falen de 9 foreign keys naar
+#                                        auth.users bij een restore)
+#     manifests/jopen_backup_<datum>.json  rij-aantallen per tabel
+#     Elke nacht wordt de dump ook meteen proef-teruggezet in een
+#     wegwerp-Postgres en geteld: een backup die niet terug te zetten is,
+#     maakt de run rood.
+#
+#   storage   -> Jopen_Storage_Backup (STORAGE_BACKUP_REPO)
+#     bestanden/<bucket>/<pad>          spiegel van alle Storage-buckets
+#     manifest.json                     wat er in de spiegel staat
+#     Incrementeel: alleen nieuwe/gewijzigde bestanden worden gedownload,
+#     zelfde pad = overschrijven, in de app verwijderd = uit de spiegel.
+#     Oude versies en verwijderde bestanden blijven in de git-historie.
+#
+# Secrets (Settings -> Secrets and variables -> Actions):
+#   SUPABASE_DB_URL            Postgres-connectionstring (Session pooler), met wachtwoord
+#   BACKUP_REPO_PAT            fine-grained PAT, Contents: Read & Write op BEIDE backup-repo's
+#   BACKUP_REPO                bv. "Jopen-Bier/Jopen_Database_Backup"
+#   STORAGE_BACKUP_REPO        bv. "Jopen-Bier/Jopen_Storage_Backup"     (storage-job)
+#   SUPABASE_SERVICE_ROLE_KEY  service_role key uit Project Settings -> API (storage-job)
+# Zolang de laatste twee ontbreken, slaat de storage-job zichzelf over.
+#
+# Restore-handleiding: .github/backup/RESTORE.md
 
 on:
   schedule:
     - cron: '0 3 * * *'   # 03:00 UTC = 04:00/05:00 NL-tijd, afhankelijk van zomer/wintertijd
   workflow_dispatch: {}    # handmatig te starten via de Actions-tab, voor een test
 
+env:
+  PG_BIN: /usr/lib/postgresql/17/bin
+  SUPABASE_URL: https://nrouqtxkeeoayqudkiud.supabase.co   # publiek, staat ook in config.js
+  BEWAAR_DAGEN: 30
+
 jobs:
-  backup:
+  database:
     runs-on: ubuntu-latest
+    services:
+      # Wegwerp-Postgres om elke dump meteen proef terug te zetten.
+      proefdb:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: proef
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/backup
+
       - name: Install postgresql-client 17
         # Ubuntu's eigen apt-pakket geeft alleen pg_dump 16, terwijl Supabase
         # Postgres 17 draait -- pg_dump weigert dan met een version-mismatch-
-        # fout. De officiële PGDG-repo toevoegen geeft wél versie 17. Let op:
-        # de generieke `pg_dump`-opdracht kan na installatie alsnog naar de
-        # oude v16-wrapper blijven wijzen, dus de dump-stap roept hierna het
-        # exacte pad naar de v17-binary aan i.p.v. de kale `pg_dump`-opdracht.
+        # fout. De officiële PGDG-repo toevoegen geeft wél versie 17. Daarom
+        # overal het exacte pad naar de v17-binaries ($PG_BIN).
         run: |
           sudo apt-get install -y postgresql-common
           sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
           sudo apt-get update
           sudo apt-get install -y postgresql-client-17
 
-      - name: Dump database
+      - name: Tel productie (vóór dump)
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
-          mkdir -p dump
+          mkdir -p werk dump
+          "$PG_BIN/psql" "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -tA -f .github/backup/tel_rijen.sql > werk/voor.json
+
+      - name: Dump database
+        id: dump
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
           STAMP=$(date -u +"%Y-%m-%d")
+          echo "STAMP=${STAMP}" >> "$GITHUB_ENV"
           # -Fc = custom format: gecomprimeerd, en herstelbaar met pg_restore
           # (ook gedeeltelijk herstelbaar, i.t.t. een platte .sql-dump).
-          # --schema=public: alleen ons eigen schema, NIET Supabase's interne
-          # auth/storage/realtime/extensions/cron/graphql-schema's -- die
-          # horen bij het Supabase-project zelf, niet bij onze data, en
-          # geven bij een restore in een ander project alleen maar
-          # onschuldige maar verwarrende "must be owner of..."-fouten.
-          /usr/lib/postgresql/17/bin/pg_dump "$SUPABASE_DB_URL" --schema=public -Fc -f "dump/jopen_backup_${STAMP}.dump"
-          echo "BACKUP_FILE=jopen_backup_${STAMP}.dump" >> "$GITHUB_ENV"
+          #
+          # public: ons eigen schema. De overige Supabase-schema's (storage,
+          # realtime, extensions, ...) horen bij het project zelf en geven bij
+          # een restore alleen "must be owner of..."-fouten.
+          "$PG_BIN/pg_dump" "$SUPABASE_DB_URL" --schema=public -Fc -f "dump/jopen_backup_${STAMP}.dump"
+          # auth: alléén de gebruikers en hun login-identiteiten. Nodig omdat
+          # gebruikers, recipes, ingredients, recipe_revisies, product_sheets
+          # en ingredient_documenten naar auth.users verwijzen. Wachtwoorden
+          # staan hierin alleen als bcrypt-hash; de backup-repo is privé.
+          "$PG_BIN/pg_dump" "$SUPABASE_DB_URL" --table=auth.users --table=auth.identities -Fc -f "dump/jopen_auth_${STAMP}.dump"
+          ls -l dump
 
-      - name: Push dump to private backup repo
+      - name: Tel productie (ná dump)
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          "$PG_BIN/psql" "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -tA -f .github/backup/tel_rijen.sql > werk/na.json
+
+      - name: Proef-restore en controle
+        id: controle
+        continue-on-error: true   # dumps worden hoe dan ook bewaard; de run wordt onderaan alsnog rood
+        env:
+          PROEF_DB: postgresql://postgres:proef@localhost:5432/postgres
+        run: |
+          bash .github/backup/herstel.sh "dump/jopen_backup_${STAMP}.dump" "dump/jopen_auth_${STAMP}.dump" "$PROEF_DB"
+          "$PG_BIN/psql" "$PROEF_DB" -v ON_ERROR_STOP=1 -tA -f .github/backup/tel_rijen.sql > werk/hersteld.json
+          python3 .github/backup/vergelijk_tellingen.py nacht \
+            --voor werk/voor.json --na werk/na.json --hersteld werk/hersteld.json \
+            --manifest "dump/jopen_backup_${STAMP}.json" --datum "${STAMP}"
+
+      - name: Push naar private backup-repo
+        if: always() && steps.dump.outcome == 'success'
         env:
           BACKUP_REPO_PAT: ${{ secrets.BACKUP_REPO_PAT }}
           BACKUP_REPO: ${{ secrets.BACKUP_REPO }}
         run: |
-          git clone "https://x-access-token:${BACKUP_REPO_PAT}@github.com/${BACKUP_REPO}.git" backup-repo
-          mkdir -p backup-repo/dumps
-          cp "dump/${BACKUP_FILE}" "backup-repo/dumps/${BACKUP_FILE}"
+          git clone --depth 1 "https://x-access-token:${BACKUP_REPO_PAT}@github.com/${BACKUP_REPO}.git" backup-repo
+          mkdir -p backup-repo/dumps backup-repo/manifests
+          cp dump/*.dump backup-repo/dumps/
+          if [ -f "dump/jopen_backup_${STAMP}.json" ]; then
+            cp "dump/jopen_backup_${STAMP}.json" backup-repo/manifests/
+          fi
           cd backup-repo
           git config user.name "jopen-backup-bot"
           git config user.email "backup-bot@users.noreply.github.com"
-          git add "dumps/${BACKUP_FILE}"
-          git commit -m "Backup ${BACKUP_FILE}" || echo "Niets om te committen"
-          git push
 
-          # Bewaar alleen de laatste 30 dagen aan dumps, zodat de backup-repo
-          # niet ongelimiteerd blijft groeien.
-          cd dumps
-          ls -1t | tail -n +31 | xargs -r rm --
-          cd ..
-          git add dumps
-          git commit -m "Opruimen dumps ouder dan 30 dagen" || echo "Niets op te ruimen"
-          git push
+          # Bewaar de laatste $BEWAAR_DAGEN van elk soort bestand in de werkmap.
+          # Sorteren op NAAM (de datum zit in de naam), niet op bestandsdatum:
+          # na een git clone hebben alle bestanden vrijwel dezelfde mtime.
+          # Oudere backups blijven terug te halen via de git-historie.
+          for patroon in "dumps/jopen_backup_*.dump" "dumps/jopen_auth_*.dump" "manifests/jopen_backup_*.json"; do
+            ls -1 $patroon 2>/dev/null | sort -r | tail -n +$((BEWAAR_DAGEN + 1)) | xargs -r git rm -q --
+          done
+
+          git add dumps manifests
+          git commit -q -m "Backup ${STAMP}" || echo "Niets om te committen"
+          git push -q
+
+      - name: Resultaat
+        if: always()
+        run: |
+          if [ "${{ steps.controle.outcome }}" != "success" ]; then
+            echo "::error::De backup van ${STAMP} is opgeslagen, maar de proef-restore of de controle is MISLUKT. Zie de stap 'Proef-restore en controle'."
+            exit 1
+          fi
+          echo "Backup ${STAMP} gemaakt, opgeslagen en succesvol proef-teruggezet."
+
+  storage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Controleer configuratie
+        id: config
+        env:
+          STORAGE_BACKUP_REPO: ${{ secrets.STORAGE_BACKUP_REPO }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          if [ -z "$STORAGE_BACKUP_REPO" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "::notice::Storage-backup overgeslagen: STORAGE_BACKUP_REPO en/of SUPABASE_SERVICE_ROLE_KEY ontbreekt nog."
+            echo "actief=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "actief=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.config.outputs.actief == 'true'
+        with:
+          sparse-checkout: .github/backup
+
+      - name: Install postgresql-client 17
+        if: steps.config.outputs.actief == 'true'
+        run: |
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
+
+      - name: Clone storage-backup-repo
+        if: steps.config.outputs.actief == 'true'
+        env:
+          BACKUP_REPO_PAT: ${{ secrets.BACKUP_REPO_PAT }}
+          STORAGE_BACKUP_REPO: ${{ secrets.STORAGE_BACKUP_REPO }}
+        run: |
+          # --depth 1: alleen de huidige stand is nodig; de historie (oude
+          # versies) blijft gewoon op GitHub staan.
+          git clone --depth 1 "https://x-access-token:${BACKUP_REPO_PAT}@github.com/${STORAGE_BACKUP_REPO}.git" storage-repo
+
+      - name: Sync Storage-buckets
+        id: sync
+        if: steps.config.outputs.actief == 'true'
+        continue-on-error: true   # gelukte downloads worden hoe dan ook bewaard
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          "$PG_BIN/psql" "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -tA -f .github/backup/storage_lijst.sql > objecten.json
+          python3 .github/backup/storage_sync.py --lijst objecten.json --doel storage-repo \
+            --samenvatting "$RUNNER_TEMP/samenvatting.txt"
+
+      - name: Push storage-spiegel
+        if: steps.config.outputs.actief == 'true' && always()
+        run: |
+          cd storage-repo
+          git config user.name "jopen-backup-bot"
+          git config user.email "backup-bot@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Geen wijzigingen in Storage sinds de vorige backup."
+          else
+            git commit -q -m "$(cat "$RUNNER_TEMP/samenvatting.txt" 2>/dev/null || echo 'Storage-sync')"
+            git push -q
+          fi
+          if [ "${{ steps.sync.outcome }}" = "failure" ]; then
+            echo "::error::Niet alle Storage-bestanden konden worden gedownload; ze worden de volgende nacht opnieuw geprobeerd."
+            exit 1
+          fi
