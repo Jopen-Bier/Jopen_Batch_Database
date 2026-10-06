@@ -20,7 +20,7 @@ const CELLEN = [
   'Gistkaart Invoer!H4',
   'Verwerking!S6', 'Verwerking!S7', 'Verwerking!S8', 'Verwerking!S9',
   'Verwerking!D14', 'Verwerking!D15', 'Verwerking!D16',
-  'Afvulverslag!D98',
+  'Afvulverslag!D97',
 ];
 
 const EUROPEES_NUMFMT_ID = 171; // 'd/mm/yy;@', al aanwezig in het sjabloon
