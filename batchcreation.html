@@ -67,7 +67,7 @@
   #bc-melding.ok { color: #2f7d3c; }
   #bc-geen-rechten { color: #6b6b6b; font-size: 0.9em; }
   .bc-lijst-box {
-    max-height: 260px; overflow-y: auto; border: 1px solid #eee; border-radius: 8px;
+    max-height: 420px; overflow-y: auto; border: 1px solid #eee; border-radius: 8px;
   }
   table.bc-lijst-table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
   table.bc-lijst-table th, table.bc-lijst-table td {
@@ -78,6 +78,22 @@
     position: sticky; top: 0; background: white;
   }
   .bc-skeleton { color: #bbb; }
+  .bc-filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 10px; }
+  .bc-filters .bc-f { display: flex; flex-direction: column; }
+  .bc-filters label {
+    font-size: 0.75em; text-transform: uppercase; letter-spacing: 0.04em; color: #6b6b6b; margin-bottom: 3px;
+  }
+  .bc-filters input, .bc-filters select {
+    padding: 6px 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 0.9em; background: white;
+  }
+  .bc-filters .bc-f-zoek { flex: 1 1 220px; }
+  .bc-filters .bc-f-zoek input { width: 100%; box-sizing: border-box; }
+  #bc-filter-reset {
+    background: none; border: 1px solid #ccc; color: #555; border-radius: 6px;
+    padding: 6px 12px; cursor: pointer; font-size: 0.85em;
+  }
+  #bc-filter-reset:hover { border-color: var(--jopen-red); color: var(--jopen-red); }
+  #bc-lijst-teller { font-size: 0.8em; color: #6b6b6b; margin-bottom: 6px; }
 </style>
 </head>
 <body>
@@ -138,6 +154,30 @@
 
     <section class="bc-block">
       <h2>Recent batches</h2>
+      <div class="bc-filters">
+        <div class="bc-f bc-f-zoek">
+          <label for="bc-f-zoek">Search</label>
+          <input type="text" id="bc-f-zoek" placeholder="Batch number or recipe…" autocomplete="off" />
+        </div>
+        <div class="bc-f">
+          <label for="bc-f-locatie">Location</label>
+          <select id="bc-f-locatie"><option value="">All</option></select>
+        </div>
+        <div class="bc-f">
+          <label for="bc-f-door">Created by</label>
+          <select id="bc-f-door"><option value="">All</option></select>
+        </div>
+        <div class="bc-f">
+          <label for="bc-f-van">Created from</label>
+          <input type="date" id="bc-f-van" />
+        </div>
+        <div class="bc-f">
+          <label for="bc-f-tot">Created to</label>
+          <input type="date" id="bc-f-tot" />
+        </div>
+        <button type="button" id="bc-filter-reset">Clear</button>
+      </div>
+      <div id="bc-lijst-teller"></div>
       <div class="bc-lijst-box">
         <table class="bc-lijst-table">
           <thead><tr><th>Batch number</th><th>Recipe</th><th>Brews</th><th>Created</th><th>Created by</th><th></th></tr></thead>
@@ -317,71 +357,152 @@
       }
     });
 
+    // Alle batches worden één keer opgehaald en daarna in de browser
+    // gefilterd: het zijn er een paar honderd, dus zoeken/filteren blijft
+    // direct en er is geen extra query per toetsaanslag nodig.
+    let alleBatches = [];
+
     // Standaard het laatst aangemaakte bovenaan (op aanmaaktijdstip, niet op
     // batchnummer -- die twee lopen niet per se gelijk op).
     async function laadRecenteBatches() {
       const tbody = document.getElementById('bc-lijst-tbody');
-      const { data, error } = await supabaseClient
-        .from('batches')
-        .select('id, batchnummer, naam, aantal_brouwsels, aangemaakt_op, gebruikers(naam)')
-        // aangemaakt_op alone isn't a reliable sort key: rows inserted in the same
-        // statement (e.g. a bulk historical import) all share one timestamp, so ties
-        // need a tiebreaker. id (insertion order) does that cheaply.
-        .order('aangemaakt_op', { ascending: false })
-        .order('id', { ascending: false })
-        .limit(50);
+      const PAGINA = 1000;
+      let rijen = [];
+      for (let van = 0; ; van += PAGINA) {
+        const { data, error } = await supabaseClient
+          .from('batches')
+          .select('id, batchnummer, naam, aantal_brouwsels, aangemaakt_op, gebruikers(naam), recipes(locatie, bierstijl)')
+          // aangemaakt_op alone isn't a reliable sort key: rows inserted in the same
+          // statement (e.g. a bulk historical import) all share one timestamp, so ties
+          // need a tiebreaker. id (insertion order) does that cheaply.
+          .order('aangemaakt_op', { ascending: false })
+          .order('id', { ascending: false })
+          .range(van, van + PAGINA - 1);
+        if (error) {
+          tbody.innerHTML = `<tr><td colspan="6" style="color:#a33f2c;">Could not load batches: ${escapeHtml(error.message)}</td></tr>`;
+          document.getElementById('bc-lijst-teller').textContent = '';
+          return;
+        }
+        rijen = rijen.concat(data || []);
+        if (!data || data.length < PAGINA) break;
+      }
+      alleBatches = rijen;
+      vulFilterOpties();
+      toonBatches();
+    }
 
-      if (error) {
-        tbody.innerHTML = `<tr><td colspan="6" style="color:#a33f2c;">Could not load batches: ${escapeHtml(error.message)}</td></tr>`;
-        return;
-      }
-      if (!data || data.length === 0) {
+    // Keuzelijsten opbouwen uit de batches zelf; de huidige keuze blijft staan.
+    function vulFilterOpties() {
+      const vul = (id, waarden) => {
+        const sel = document.getElementById(id);
+        const huidig = sel.value;
+        sel.innerHTML = '<option value="">All</option>' +
+          waarden.map(w => `<option value="${escapeHtml(w)}">${escapeHtml(w)}</option>`).join('');
+        if (waarden.includes(huidig)) sel.value = huidig;
+      };
+      const uniek = (f) => [...new Set(alleBatches.map(f).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+      vul('bc-f-locatie', uniek(b => b.recipes?.locatie));
+      vul('bc-f-door', uniek(b => b.gebruikers?.naam));
+    }
+
+    // Lokale datum (yyyy-mm-dd) van een tijdstempel, voor vergelijking met <input type="date">.
+    function lokaleDatum(ts) {
+      const d = new Date(ts);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+
+    function gefilterdeBatches() {
+      const term = document.getElementById('bc-f-zoek').value.trim().toLowerCase();
+      const locatie = document.getElementById('bc-f-locatie').value;
+      const door = document.getElementById('bc-f-door').value;
+      const van = document.getElementById('bc-f-van').value;
+      const tot = document.getElementById('bc-f-tot').value;
+      return alleBatches.filter(b => {
+        if (term) {
+          const hooiberg = [b.batchnummer, b.naam, b.recipes?.bierstijl].map(v => String(v ?? '').toLowerCase());
+          if (!hooiberg.some(v => v.includes(term))) return false;
+        }
+        if (locatie && b.recipes?.locatie !== locatie) return false;
+        if (door && b.gebruikers?.naam !== door) return false;
+        if (van || tot) {
+          if (!b.aangemaakt_op) return false;
+          const dag = lokaleDatum(b.aangemaakt_op);
+          if (van && dag < van) return false;
+          if (tot && dag > tot) return false;
+        }
+        return true;
+      });
+    }
+
+    function toonBatches() {
+      const tbody = document.getElementById('bc-lijst-tbody');
+      const teller = document.getElementById('bc-lijst-teller');
+      if (alleBatches.length === 0) {
         tbody.innerHTML = '<tr><td colspan="6" class="bc-skeleton">No batches created yet.</td></tr>';
+        teller.textContent = '';
         return;
       }
-      tbody.innerHTML = data.map(b => `
+      const lijst = gefilterdeBatches();
+      teller.textContent = lijst.length === alleBatches.length
+        ? `${alleBatches.length} batches`
+        : `Showing ${lijst.length} of ${alleBatches.length} batches`;
+      if (lijst.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="bc-skeleton">No batches match the filters.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = lijst.map(b => `
         <tr>
           <td>${escapeHtml(String(b.batchnummer))}</td>
           <td>${escapeHtml(b.naam)}</td>
           <td>${b.aantal_brouwsels ?? '—'}</td>
           <td>${b.aangemaakt_op ? new Date(b.aangemaakt_op).toLocaleString() : '—'}</td>
           <td>${escapeHtml(b.gebruikers?.naam || '—')}</td>
-          <td><button type="button" class="bc-download-btn" data-batchnummer="${b.batchnummer}" style="background:none;border:1px solid var(--jopen-red);color:var(--jopen-red);border-radius:4px;padding:3px 10px;cursor:pointer;font-size:0.85em;">Download</button>${magVerwijderen ? `<button type="button" class="bc-verwijder-btn" data-batchnummer="${b.batchnummer}" style="background:none;border:1px solid #a33f2c;color:#a33f2c;border-radius:4px;padding:3px 10px;cursor:pointer;font-size:0.85em;margin-left:6px;">Delete</button>` : ''}</td>
+          <td style="white-space:nowrap;"><button type="button" class="bc-download-btn" data-batchnummer="${escapeHtml(String(b.batchnummer))}" style="background:none;border:1px solid var(--jopen-red);color:var(--jopen-red);border-radius:4px;padding:3px 10px;cursor:pointer;font-size:0.85em;">Download</button>${magVerwijderen ? `<button type="button" class="bc-verwijder-btn" data-batchnummer="${escapeHtml(String(b.batchnummer))}" style="background:none;border:1px solid #a33f2c;color:#a33f2c;border-radius:4px;padding:3px 10px;cursor:pointer;font-size:0.85em;margin-left:6px;">Delete</button>` : ''}</td>
         </tr>`).join('');
-
-      tbody.querySelectorAll('.bc-download-btn').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          const nr = Number(btn.dataset.batchnummer);
-          const origineleTekst = btn.textContent;
-          btn.textContent = 'Generating…';
-          btn.disabled = true;
-          try {
-            await genereerEnDownloadBatchrapport(supabaseClient, nr);
-          } catch (err) {
-            console.error(err);
-            alert('Could not generate report: ' + err.message);
-          } finally {
-            btn.textContent = origineleTekst;
-            btn.disabled = false;
-          }
-        });
-      });
-
-      tbody.querySelectorAll('.bc-verwijder-btn').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          const nr = Number(btn.dataset.batchnummer);
-          if (!confirm(`Delete batch ${nr}? This cannot be undone.`)) return;
-          btn.disabled = true;
-          const { error } = await supabaseClient.from('batches').delete().eq('batchnummer', nr);
-          if (error) {
-            alert('Could not delete batch: ' + error.message);
-            btn.disabled = false;
-            return;
-          }
-          laadRecenteBatches();
-        });
-      });
     }
+
+    // Eén click-handler op de tabel (event delegation), zodat filteren de
+    // knoppen niet telkens opnieuw hoeft te koppelen.
+    document.getElementById('bc-lijst-tbody').addEventListener('click', async (e) => {
+      const dl = e.target.closest('.bc-download-btn');
+      if (dl) {
+        const nr = Number(dl.dataset.batchnummer);
+        const origineleTekst = dl.textContent;
+        dl.textContent = 'Generating…';
+        dl.disabled = true;
+        try {
+          await genereerEnDownloadBatchrapport(supabaseClient, nr);
+        } catch (err) {
+          console.error(err);
+          alert('Could not generate report: ' + err.message);
+        } finally {
+          dl.textContent = origineleTekst;
+          dl.disabled = false;
+        }
+        return;
+      }
+      const del = e.target.closest('.bc-verwijder-btn');
+      if (del) {
+        const nr = Number(del.dataset.batchnummer);
+        if (!confirm(`Delete batch ${nr}? This cannot be undone.`)) return;
+        del.disabled = true;
+        const { error } = await supabaseClient.from('batches').delete().eq('batchnummer', nr);
+        if (error) {
+          alert('Could not delete batch: ' + error.message);
+          del.disabled = false;
+          return;
+        }
+        laadRecenteBatches();
+      }
+    });
+
+    document.getElementById('bc-f-zoek').addEventListener('input', toonBatches);
+    ['bc-f-locatie', 'bc-f-door', 'bc-f-van', 'bc-f-tot'].forEach(id =>
+      document.getElementById(id).addEventListener('change', toonBatches));
+    document.getElementById('bc-filter-reset').addEventListener('click', () => {
+      ['bc-f-zoek', 'bc-f-locatie', 'bc-f-door', 'bc-f-van', 'bc-f-tot'].forEach(id => { document.getElementById(id).value = ''; });
+      toonBatches();
+    });
 
     window.addEventListener('DOMContentLoaded', async () => {
       const gebruiker = await getHuidigeGebruiker();
