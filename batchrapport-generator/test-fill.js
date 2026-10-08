@@ -69,8 +69,8 @@ async function test() {
   await zetHopGroepRanden(writer, stylesManager, bundel, overloop);
   await vulDryHopGlTotalen(writer, stylesManager, bundel, overloop);
 
-  await writer.setCelWaarde('Recept-voorblad!K3', bundel.batch.batchnummer);
-  await writer.setCelWaarde('Recept-voorblad!Q1', 'WP ' + bundel.recipes.naam);
+  await writer.setCelWaarde('Recipe Sheet!K3', bundel.batch.batchnummer);
+  await writer.setCelWaarde('Recipe Sheet!Q1', 'WP ' + bundel.recipes.naam);
 
   stylesManager.finalize();
   await writer.finalize();
@@ -82,8 +82,8 @@ async function test() {
   const ExcelJS = require('exceljs');
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.readFile('./output/TEST-batch.xlsx');
-  const ws = wb.getWorksheet('Recept-voorblad');
-  const wsB = wb.getWorksheet('Brouwen');
+  const ws = wb.getWorksheet('Recipe Sheet');
+  const wsB = wb.getWorksheet('Brew Sheet');
   console.log('C3 (naam bier):', ws.getCell('C3').value);
   console.log('F12 (origineel extract spec):', ws.getCell('F12').value);
   console.log('E12 (tolerantie, was string "0.5" -- moet nu getal 0.5 zijn):', ws.getCell('E12').value, typeof ws.getCell('E12').value);
@@ -96,11 +96,11 @@ async function test() {
   console.log('D30 (mout 1 kg):', ws.getCell('D30').value);
   console.log('F40 (calculated color bijdrage-som, live formule):', ws.getCell('F40').value);
   console.log('M40 (calculated color, live formule):', ws.getCell('M40').value);
-  console.log('Brouwen!F8 (WP -> moet live formule zijn):', wsB.getCell('F8').value);
-  console.log('Brouwen!F9 (WP -> recept_naam_software):', wsB.getCell('F9').value);
-  console.log('Brouwen!F11 (altijd naam_special_bin):', wsB.getCell('F11').value);
-  console.log('Brouwen!M36 (Automatic dosing):', wsB.getCell('M36').value);
-  console.log('Brouwen!N8 (Gewenste stamwort, moet 16 zijn):', wsB.getCell('N8').value);
+  console.log('Brew Sheet!F8 (WP -> moet live formule zijn):', wsB.getCell('F8').value);
+  console.log('Brew Sheet!F9 (WP -> recept_naam_software):', wsB.getCell('F9').value);
+  console.log('Brew Sheet!F11 (altijd naam_special_bin):', wsB.getCell('F11').value);
+  console.log('Brew Sheet!M36 (Automatic dosing):', wsB.getCell('M36').value);
+  console.log('Brew Sheet!N8 (Gewenste stamwort, moet 16 zijn):', wsB.getCell('N8').value);
   // Nieuw: witregel tussen Hop boil-toevoegmomenten (i.p.v. dikke lijn per
   // groep). Testrecept: Magnum(45)+Saaz(45) -> witregel -> Citra CRYO(0).
   console.log('A43 (Magnum, 45 min):', ws.getCell('A43').value);
@@ -150,12 +150,12 @@ async function test() {
   console.log('A46 border (moet WEL dikke rand -- laatste rij Hop boil):', JSON.stringify(ws.getCell('A46').border));
   // Amerikaanse datumnotatie (numFmtId 166, m/d/yyyy) mag nergens meer
   // voorkomen -- moet overal d/mm/yy (numFmtId 171) zijn.
-  console.log('Recept-voorblad!K7 numFmt (moet d/mm/yy zijn, GEEN m/d/yyyy):', ws.getCell('K7').numFmt);
-  const wsBrouwen = wb.getWorksheet('Brouwen');
-  console.log('Brouwen!N5 numFmt (moet d/mm/yy zijn, GEEN m/d/yyyy):', wsBrouwen.getCell('N5').numFmt);
-  console.log('Brouwen!N50 numFmt (moet d/mm/yy zijn, GEEN m/d/yyyy):', wsBrouwen.getCell('N50').numFmt);
-  const wsGistkaart = wb.getWorksheet('Gistkaart Invoer');
-  console.log('Gistkaart Invoer!H4 numFmt (TODAY(), moet d/mm/yy zijn):', wsGistkaart.getCell('H4').numFmt);
+  console.log('Recipe Sheet!K7 numFmt (moet d/mm/yy zijn, GEEN m/d/yyyy):', ws.getCell('K7').numFmt);
+  const wsBrouwen = wb.getWorksheet('Brew Sheet');
+  console.log('Brew Sheet!N5 numFmt (moet d/mm/yy zijn, GEEN m/d/yyyy):', wsBrouwen.getCell('N5').numFmt);
+  console.log('Brew Sheet!N50 numFmt (moet d/mm/yy zijn, GEEN m/d/yyyy):', wsBrouwen.getCell('N50').numFmt);
+  const wsGistkaart = wb.getWorksheet('Fermentation Chart');
+  console.log('Fermentation Chart!H4 numFmt (TODAY(), moet d/mm/yy zijn):', wsGistkaart.getCell('H4').numFmt);
 }
 
 test().catch(e => { console.error(e); process.exit(1); });

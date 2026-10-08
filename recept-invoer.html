@@ -799,7 +799,7 @@ const ROL_LABELS = {
 
 // ---------------------------------------------------------------------------
 // Hop rendement (utilization) & EBU — 1-op-1 overgenomen uit Moederdata.xlsm,
-// tabblad "EBU Berekening" (T2:AF27) en de formule in Recept-voorblad!K43/K64.
+// tabblad "EBU Berekening" (T2:AF27) en de formule in Recipe Sheet!K43/K64.
 // Alleen van toepassing op rijen met rol "hopgift_kook" (Hop (boil)); dry hop
 // heeft geen kooktijd-in-minuten en krijgt dus geen rendement/EBU.
 // Bevestigd gedrag (bewust, geen bug): kooktijd 0 min krijgt ook al een
@@ -1459,7 +1459,7 @@ function herberekenMoutTotalen() {
   if (totaalCel) totaalCel.textContent = totaalKg.toFixed(1);
 
   // Calculated color: som van (kg * EBC * 0.08) / Brouwsel (hl) per moutregel,
-  // + 1.75. Excel: Recept-voorblad!F30:F40.
+  // + 1.75. Excel: Recipe Sheet!F30:F40.
   const brouwselHlEl = document.getElementById('veld-brouwsel_hl');
   const brouwselHl = brouwselHlEl && brouwselHlEl.value !== '' ? Number(brouwselHlEl.value) : null;
   const kleurCel = document.getElementById('re-mout-kleur-waarde');

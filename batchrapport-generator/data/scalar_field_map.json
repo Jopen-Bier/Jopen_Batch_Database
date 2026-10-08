@@ -2,7 +2,7 @@
  {
   "key": "ADF % +/-",
   "locaties": [
-   "Recept-voorblad!E18"
+   "Recipe Sheet!E18"
   ],
   "db_veld": "recipe_specificaties.adf_pct_tol",
   "categorie": "tolerantie"
@@ -10,7 +10,7 @@
  {
   "key": "ADF % Spec,",
   "locaties": [
-   "Recept-voorblad!F18"
+   "Recipe Sheet!F18"
   ],
   "db_veld": "recipe_specificaties.adf_pct",
   "categorie": "spec-waarde"
@@ -18,7 +18,7 @@
  {
   "key": "Alcohol +/-",
   "locaties": [
-   "Recept-voorblad!E14"
+   "Recipe Sheet!E14"
   ],
   "db_veld": "recipe_specificaties.alcohol_tol",
   "categorie": "tolerantie"
@@ -26,7 +26,7 @@
  {
   "key": "Alcohol Spec,",
   "locaties": [
-   "Recept-voorblad!F14"
+   "Recipe Sheet!F14"
   ],
   "db_veld": "recipe_specificaties.alcohol",
   "categorie": "spec-waarde"
@@ -34,7 +34,7 @@
  {
   "key": "Alkalinity (water)",
   "locaties": [
-   "Recept-voorblad!P99"
+   "Recipe Sheet!P99"
   ],
   "db_veld": "recipe_water.alkalinity",
   "categorie": "water"
@@ -42,7 +42,7 @@
  {
   "key": "Beluchting",
   "locaties": [
-   "Brouwen!N14"
+   "Brew Sheet!N14"
   ],
   "db_veld": "recipe_brouwspecificaties.beluchting",
   "categorie": "brouwspecificatie"
@@ -50,7 +50,7 @@
  {
   "key": "Bier Stijl",
   "locaties": [
-   "Recept-voorblad!C7"
+   "Recipe Sheet!C7"
   ],
   "db_veld": "recipes.bierstijl",
   "categorie": "recept-basis"
@@ -58,7 +58,7 @@
  {
   "key": "Bier risico",
   "locaties": [
-   "Recept-voorblad!N17"
+   "Recipe Sheet!N17"
   ],
   "db_veld": "recipe_fermentatie.bier_risico",
   "categorie": "recept-basis (verplaatst)"
@@ -66,7 +66,7 @@
  {
   "key": "Bier status",
   "locaties": [
-   "Recept-voorblad!N23"
+   "Recipe Sheet!N23"
   ],
   "db_veld": "recipe_fermentatie.bier_status",
   "categorie": "recept-basis (verplaatst)"
@@ -74,7 +74,7 @@
  {
   "key": "Bitterheid +/-",
   "locaties": [
-   "Recept-voorblad!E15"
+   "Recipe Sheet!E15"
   ],
   "db_veld": "recipe_specificaties.bitterheid_tol",
   "categorie": "tolerantie"
@@ -82,7 +82,7 @@
  {
   "key": "Bitterheid BH",
   "locaties": [
-   "Recept-voorblad!M26"
+   "Recipe Sheet!M26"
   ],
   "db_veld": "recipe_fermentatie.bitterheid_bh",
   "categorie": "spec-waarde (geen tol-paar)"
@@ -90,7 +90,7 @@
  {
   "key": "Bitterheid Spec,",
   "locaties": [
-   "Recept-voorblad!F15"
+   "Recipe Sheet!F15"
   ],
   "db_veld": "recipe_specificaties.bitterheid",
   "categorie": "spec-waarde"
@@ -98,7 +98,7 @@
  {
   "key": "Brouwsel (hl)",
   "locaties": [
-   "Recept-voorblad!C9"
+   "Recipe Sheet!C9"
   ],
   "db_veld": "recipes.brouwsel_hl",
   "categorie": "recept-basis"
@@ -106,7 +106,7 @@
  {
   "key": "CO2 Can +/-",
   "locaties": [
-   "Recept-voorblad!L14"
+   "Recipe Sheet!L14"
   ],
   "db_veld": "recipe_specificaties.co2_can_tol",
   "categorie": "tolerantie"
@@ -114,7 +114,7 @@
  {
   "key": "CO2 Can Spec,",
   "locaties": [
-   "Recept-voorblad!M14"
+   "Recipe Sheet!M14"
   ],
   "db_veld": "recipe_specificaties.co2_can",
   "categorie": "spec-waarde"
@@ -122,7 +122,7 @@
  {
   "key": "CO2 fles +/-",
   "locaties": [
-   "Recept-voorblad!L13"
+   "Recipe Sheet!L13"
   ],
   "db_veld": "recipe_specificaties.co2_fles_tol",
   "categorie": "tolerantie"
@@ -130,7 +130,7 @@
  {
   "key": "CO2 fles Spec,",
   "locaties": [
-   "Recept-voorblad!M13"
+   "Recipe Sheet!M13"
   ],
   "db_veld": "recipe_specificaties.co2_fles",
   "categorie": "spec-waarde"
@@ -138,7 +138,7 @@
  {
   "key": "CO2 fust +/-",
   "locaties": [
-   "Recept-voorblad!L15"
+   "Recipe Sheet!L15"
   ],
   "db_veld": "recipe_specificaties.co2_fust_tol",
   "categorie": "tolerantie"
@@ -146,7 +146,7 @@
  {
   "key": "CO2 fust Spec,",
   "locaties": [
-   "Recept-voorblad!M15"
+   "Recipe Sheet!M15"
   ],
   "db_veld": "recipe_specificaties.co2_fust",
   "categorie": "spec-waarde"
@@ -154,7 +154,7 @@
  {
   "key": "Ca (water)",
   "locaties": [
-   "Recept-voorblad!A99"
+   "Recipe Sheet!A99"
   ],
   "db_veld": "recipe_water.ca",
   "categorie": "water"
@@ -162,7 +162,7 @@
  {
   "key": "Cl (water)",
   "locaties": [
-   "Recept-voorblad!G99"
+   "Recipe Sheet!G99"
   ],
   "db_veld": "recipe_water.cl",
   "categorie": "water"
@@ -170,7 +170,7 @@
  {
   "key": "Comment verwerken",
   "locaties": [
-   "Verwerking!C28"
+   "Processing!C28"
   ],
   "db_veld": "recipe_processtappen.comment_verwerken",
   "categorie": "processtap"
@@ -178,7 +178,7 @@
  {
   "key": "Dissolved O2 +/-",
   "locaties": [
-   "Recept-voorblad!L17"
+   "Recipe Sheet!L17"
   ],
   "db_veld": "recipe_specificaties.dissolved_o2_tol",
   "categorie": "tolerantie"
@@ -186,7 +186,7 @@
  {
   "key": "Dissolved O2 Spec,",
   "locaties": [
-   "Recept-voorblad!M17"
+   "Recipe Sheet!M17"
   ],
   "db_veld": "recipe_specificaties.dissolved_o2",
   "categorie": "spec-waarde"
@@ -194,7 +194,7 @@
  {
   "key": "Dry Hop comment Koud 16C",
   "locaties": [
-   "Gistkaart Invoer!O22"
+   "Fermentation Chart!O22"
   ],
   "db_veld": "recipe_processtappen.dry_hop_comment_16c",
   "categorie": "processtap"
@@ -202,7 +202,7 @@
  {
   "key": "Dry hop comment warm",
   "locaties": [
-   "Gistkaart Invoer!O21"
+   "Fermentation Chart!O21"
   ],
   "db_veld": "recipe_processtappen.dry_hop_comment_warm",
   "categorie": "processtap"
@@ -210,7 +210,7 @@
  {
   "key": "Extract dry, Warm 1 +/-",
   "locaties": [
-   "Recept-voorblad!E25"
+   "Recipe Sheet!E25"
   ],
   "db_veld": "recipe_fermentatie.extract_dry_warm_1_tol",
   "categorie": "tolerantie"
@@ -218,7 +218,7 @@
  {
   "key": "Extract dry, Warm 1 Spec,",
   "locaties": [
-   "Recept-voorblad!F25"
+   "Recipe Sheet!F25"
   ],
   "db_veld": "recipe_fermentatie.extract_dry_warm_1",
   "categorie": "spec-waarde"
@@ -226,7 +226,7 @@
  {
   "key": "Extract dry, Warm 2 +/-",
   "locaties": [
-   "Recept-voorblad!E26"
+   "Recipe Sheet!E26"
   ],
   "db_veld": "recipe_fermentatie.extract_dry_warm_2_tol",
   "categorie": "tolerantie"
@@ -234,7 +234,7 @@
  {
   "key": "Extract dry, Warm 2 Spec,",
   "locaties": [
-   "Recept-voorblad!F26"
+   "Recipe Sheet!F26"
   ],
   "db_veld": "recipe_fermentatie.extract_dry_warm_2",
   "categorie": "spec-waarde"
@@ -242,7 +242,7 @@
  {
   "key": "Extract dry, Warm 3 +/-",
   "locaties": [
-   "Recept-voorblad!E27"
+   "Recipe Sheet!E27"
   ],
   "db_veld": "recipe_fermentatie.extract_dry_warm_3_tol",
   "categorie": "tolerantie"
@@ -250,7 +250,7 @@
  {
   "key": "Extract dry, Warm 3 Spec,",
   "locaties": [
-   "Recept-voorblad!F27"
+   "Recipe Sheet!F27"
   ],
   "db_veld": "recipe_fermentatie.extract_dry_warm_3",
   "categorie": "spec-waarde"
@@ -258,7 +258,7 @@
  {
   "key": "Gewenste verdamping",
   "locaties": [
-   "Brouwen!F20"
+   "Brew Sheet!F20"
   ],
   "db_veld": "recipe_brouwspecificaties.gewenste_verdamping",
   "categorie": "brouwspecificatie"
@@ -266,7 +266,7 @@
  {
   "key": "Headspace O2 +/-",
   "locaties": [
-   "Recept-voorblad!L16"
+   "Recipe Sheet!L16"
   ],
   "db_veld": "recipe_specificaties.headspace_o2_tol",
   "categorie": "tolerantie"
@@ -274,7 +274,7 @@
  {
   "key": "Headspace O2 Spec,",
   "locaties": [
-   "Recept-voorblad!M16"
+   "Recipe Sheet!M16"
   ],
   "db_veld": "recipe_specificaties.headspace_o2",
   "categorie": "spec-waarde"
@@ -282,7 +282,7 @@
  {
   "key": "Inmaischen temp",
   "locaties": [
-   "Brouwen!C24"
+   "Brew Sheet!C24"
   ],
   "db_veld": "recipe_brouwspecificaties.mash_inmaischen_temp",
   "categorie": "brouwspecificatie"
@@ -290,7 +290,7 @@
  {
   "key": "Inmaischen tijd",
   "locaties": [
-   "Brouwen!F24"
+   "Brew Sheet!F24"
   ],
   "db_veld": "recipe_brouwspecificaties.mash_inmaischen_tijd",
   "categorie": "brouwspecificatie"
@@ -298,7 +298,7 @@
  {
   "key": "Intensiteit koken",
   "locaties": [
-   "Brouwen!F21"
+   "Brew Sheet!F21"
   ],
   "db_veld": "recipe_brouwspecificaties.intensiteit_koken",
   "categorie": "brouwspecificatie"
@@ -306,7 +306,7 @@
  {
   "key": "Kleur +/-",
   "locaties": [
-   "Recept-voorblad!E16"
+   "Recipe Sheet!E16"
   ],
   "db_veld": "recipe_specificaties.kleur_tol",
   "categorie": "tolerantie"
@@ -314,7 +314,7 @@
  {
   "key": "Kleur Spec,",
   "locaties": [
-   "Recept-voorblad!F16"
+   "Recipe Sheet!F16"
   ],
   "db_veld": "recipe_specificaties.kleur",
   "categorie": "spec-waarde"
@@ -322,7 +322,7 @@
  {
   "key": "Lager temp, +/-",
   "locaties": [
-   "Recept-voorblad!L23"
+   "Recipe Sheet!L23"
   ],
   "db_veld": "recipe_fermentatie.lager_temp_tol",
   "categorie": "tolerantie"
@@ -330,7 +330,7 @@
  {
   "key": "Lager temp, Spec,",
   "locaties": [
-   "Recept-voorblad!M23"
+   "Recipe Sheet!M23"
   ],
   "db_veld": "recipe_fermentatie.lager_temp",
   "categorie": "spec-waarde"
@@ -338,7 +338,7 @@
  {
   "key": "Lagertijd +/-",
   "locaties": [
-   "Recept-voorblad!L22"
+   "Recipe Sheet!L22"
   ],
   "db_veld": "recipe_fermentatie.lagertijd_tol",
   "categorie": "tolerantie"
@@ -346,7 +346,7 @@
  {
   "key": "Lagertijd Spec,",
   "locaties": [
-   "Recept-voorblad!M22"
+   "Recipe Sheet!M22"
   ],
   "db_veld": "recipe_fermentatie.lagertijd",
   "categorie": "spec-waarde"
@@ -354,7 +354,7 @@
  {
   "key": "Main Ferm Temp +/-",
   "locaties": [
-   "Recept-voorblad!E22"
+   "Recipe Sheet!E22"
   ],
   "db_veld": "recipe_fermentatie.main_ferm_temp_tol",
   "categorie": "tolerantie"
@@ -362,7 +362,7 @@
  {
   "key": "Main Ferm Temp Spec,",
   "locaties": [
-   "Recept-voorblad!F22"
+   "Recipe Sheet!F22"
   ],
   "db_veld": "recipe_fermentatie.main_ferm_temp",
   "categorie": "spec-waarde"
@@ -370,7 +370,7 @@
  {
   "key": "Mg (water)",
   "locaties": [
-   "Recept-voorblad!C99"
+   "Recipe Sheet!C99"
   ],
   "db_veld": "recipe_water.mg",
   "categorie": "water"
@@ -378,7 +378,7 @@
  {
   "key": "Na (water)",
   "locaties": [
-   "Recept-voorblad!E99"
+   "Recipe Sheet!E99"
   ],
   "db_veld": "recipe_water.na",
   "categorie": "water"
@@ -386,7 +386,7 @@
  {
   "key": "Origineel extract +/-",
   "locaties": [
-   "Recept-voorblad!E12"
+   "Recipe Sheet!E12"
   ],
   "db_veld": "recipe_specificaties.origineel_extract_tol",
   "categorie": "tolerantie"
@@ -394,7 +394,7 @@
  {
   "key": "Origineel extract Spec,",
   "locaties": [
-   "Recept-voorblad!F12"
+   "Recipe Sheet!F12"
   ],
   "db_veld": "recipe_specificaties.origineel_extract",
   "categorie": "spec-waarde"
@@ -402,7 +402,7 @@
  {
   "key": "Pasteurisatie +/-",
   "locaties": [
-   "Recept-voorblad!L24"
+   "Recipe Sheet!L24"
   ],
   "db_veld": "recipe_fermentatie.pasteurisatie_tol",
   "categorie": "tolerantie"
@@ -410,7 +410,7 @@
  {
   "key": "Pasteurisatie Spec,",
   "locaties": [
-   "Recept-voorblad!M24"
+   "Recipe Sheet!M24"
   ],
   "db_veld": "recipe_fermentatie.pasteurisatie",
   "categorie": "spec-waarde"
@@ -418,7 +418,7 @@
  {
   "key": "Pitching Temp +/-",
   "locaties": [
-   "Recept-voorblad!E21"
+   "Recipe Sheet!E21"
   ],
   "db_veld": "recipe_fermentatie.pitching_temp_tol",
   "categorie": "tolerantie"
@@ -426,7 +426,7 @@
  {
   "key": "Pitching Temp Spec,",
   "locaties": [
-   "Recept-voorblad!F21"
+   "Recipe Sheet!F21"
   ],
   "db_veld": "recipe_fermentatie.pitching_temp",
   "categorie": "spec-waarde"
@@ -434,7 +434,7 @@
  {
   "key": "Ratio CL:SO4 (water)",
   "locaties": [
-   "Recept-voorblad!M99"
+   "Recipe Sheet!M99"
   ],
   "db_veld": "recipe_water.ratio_cl_so4",
   "categorie": "water"
@@ -442,7 +442,7 @@
  {
   "key": "Rest extract +/-",
   "locaties": [
-   "Recept-voorblad!E13"
+   "Recipe Sheet!E13"
   ],
   "db_veld": "recipe_specificaties.rest_extract_tol",
   "categorie": "tolerantie"
@@ -450,7 +450,7 @@
  {
   "key": "Rest extract Spec,",
   "locaties": [
-   "Recept-voorblad!F13"
+   "Recipe Sheet!F13"
   ],
   "db_veld": "recipe_specificaties.rest_extract",
   "categorie": "spec-waarde"
@@ -458,7 +458,7 @@
  {
   "key": "SO4 (water)",
   "locaties": [
-   "Recept-voorblad!J99"
+   "Recipe Sheet!J99"
   ],
   "db_veld": "recipe_water.so4",
   "categorie": "water"
@@ -466,7 +466,7 @@
  {
   "key": "T release, +/-",
   "locaties": [
-   "Recept-voorblad!E23"
+   "Recipe Sheet!E23"
   ],
   "db_veld": "recipe_fermentatie.t_release_tol",
   "categorie": "tolerantie"
@@ -474,7 +474,7 @@
  {
   "key": "T release, Spec,",
   "locaties": [
-   "Recept-voorblad!F23"
+   "Recipe Sheet!F23"
   ],
   "db_veld": "recipe_fermentatie.t_release",
   "categorie": "spec-waarde"
@@ -482,7 +482,7 @@
  {
   "key": "THT blik",
   "locaties": [
-   "Afvullen!C11"
+   "Filling!C11"
   ],
   "db_veld": "recipe_verpakking.tht_blik_maanden",
   "categorie": "verpakking"
@@ -490,7 +490,7 @@
  {
   "key": "THT fles",
   "locaties": [
-   "Afvullen!C10"
+   "Filling!C10"
   ],
   "db_veld": "recipe_verpakking.tht_fles_maanden",
   "categorie": "verpakking"
@@ -498,7 +498,7 @@
  {
   "key": "THT vat",
   "locaties": [
-   "Afvullen!C12"
+   "Filling!C12"
   ],
   "db_veld": "recipe_verpakking.tht_vat_maanden",
   "categorie": "verpakking"
@@ -506,7 +506,7 @@
  {
   "key": "Temp, Dry, Warm, +/-",
   "locaties": [
-   "Recept-voorblad!E24"
+   "Recipe Sheet!E24"
   ],
   "db_veld": "recipe_fermentatie.temp_dry_warm_tol",
   "categorie": "tolerantie"
@@ -514,7 +514,7 @@
  {
   "key": "Temp, Dry, Warm, Spec,",
   "locaties": [
-   "Recept-voorblad!F24"
+   "Recipe Sheet!F24"
   ],
   "db_veld": "recipe_fermentatie.temp_dry_warm",
   "categorie": "spec-waarde"
@@ -522,7 +522,7 @@
  {
   "key": "Troebeling (Lab) +/-",
   "locaties": [
-   "Recept-voorblad!L12"
+   "Recipe Sheet!L12"
   ],
   "db_veld": "recipe_specificaties.troebeling_lab_tol",
   "categorie": "tolerantie"
@@ -530,7 +530,7 @@
  {
   "key": "Troebeling (Lab) Spec,",
   "locaties": [
-   "Recept-voorblad!M12"
+   "Recipe Sheet!M12"
   ],
   "db_veld": "recipe_specificaties.troebeling_lab",
   "categorie": "spec-waarde"
@@ -538,7 +538,7 @@
  {
   "key": "Troebeling na Sep +/-",
   "locaties": [
-   "Recept-voorblad!L25"
+   "Recipe Sheet!L25"
   ],
   "db_veld": "recipe_fermentatie.troebeling_na_sep_tol",
   "categorie": "tolerantie"
@@ -546,7 +546,7 @@
  {
   "key": "Troebeling na Sep Spec,",
   "locaties": [
-   "Recept-voorblad!M25"
+   "Recipe Sheet!M25"
   ],
   "db_veld": "recipe_fermentatie.troebeling_na_sep",
   "categorie": "spec-waarde"
@@ -554,7 +554,7 @@
  {
   "key": "Uitmaischen temp",
   "locaties": [
-   "Brouwen!C29"
+   "Brew Sheet!C29"
   ],
   "db_veld": "recipe_brouwspecificaties.mash_uitmaischen_temp",
   "categorie": "brouwspecificatie"
@@ -562,7 +562,7 @@
  {
   "key": "Uitmaischen tijd",
   "locaties": [
-   "Brouwen!F29"
+   "Brew Sheet!F29"
   ],
   "db_veld": "recipe_brouwspecificaties.mash_uitmaischen_tijd",
   "categorie": "brouwspecificatie"
@@ -570,7 +570,7 @@
  {
   "key": "Vergistingstijd +/-",
   "locaties": [
-   "Recept-voorblad!L21"
+   "Recipe Sheet!L21"
   ],
   "db_veld": "recipe_fermentatie.vergistingstijd_tol",
   "categorie": "tolerantie"
@@ -578,7 +578,7 @@
  {
   "key": "Vergistingstijd Spec,",
   "locaties": [
-   "Recept-voorblad!M21"
+   "Recipe Sheet!M21"
   ],
   "db_veld": "recipe_fermentatie.vergistingstijd",
   "categorie": "spec-waarde"
@@ -586,7 +586,7 @@
  {
   "key": "Verwacht extract begin kook",
   "locaties": [
-   "Brouwen!F15"
+   "Brew Sheet!F15"
   ],
   "db_veld": "recipe_brouwspecificaties.verwacht_extract_begin_kook",
   "categorie": "brouwspecificatie"
@@ -594,7 +594,7 @@
  {
   "key": "Volume kook",
   "locaties": [
-   "Brouwen!F16"
+   "Brew Sheet!F16"
   ],
   "db_veld": "recipe_brouwspecificaties.volume_kook",
   "categorie": "brouwspecificatie"
@@ -602,7 +602,7 @@
  {
   "key": "WP / Cumm. Corp./sparging vol. /  ",
   "locaties": [
-   "Brouwen!F13"
+   "Brew Sheet!F13"
   ],
   "db_veld": "recipe_brouwspecificaties.cumm_sparging_vol",
   "categorie": "brouwspecificatie",
@@ -611,7 +611,7 @@
  {
   "key": "WP / Maischwater /  ",
   "locaties": [
-   "Brouwen!N10"
+   "Brew Sheet!N10"
   ],
   "db_veld": "recipe_brouwspecificaties.maischwater",
   "categorie": "brouwspecificatie",
@@ -620,7 +620,7 @@
  {
   "key": "WP Lekker in de Kauw (Bird) 40(NIET AF)",
   "locaties": [
-   "Recept-voorblad!C3"
+   "Recipe Sheet!C3"
   ],
   "db_veld": "recipes.naam",
   "categorie": "recept-basis"
@@ -628,7 +628,7 @@
  {
   "key": "Whirlpool rust",
   "locaties": [
-   "Brouwen!F22"
+   "Brew Sheet!F22"
   ],
   "db_veld": "recipe_brouwspecificaties.whirlpool_rust",
   "categorie": "brouwspecificatie"
@@ -636,7 +636,7 @@
  {
   "key": "Wortvoorkoeler temp",
   "locaties": [
-   "Brouwen!F17"
+   "Brew Sheet!F17"
   ],
   "db_veld": "recipe_brouwspecificaties.wortvoorkoeler_temp",
   "categorie": "brouwspecificatie"
@@ -644,7 +644,7 @@
  {
   "key": "pH +/-",
   "locaties": [
-   "Recept-voorblad!E17"
+   "Recipe Sheet!E17"
   ],
   "db_veld": "recipe_specificaties.ph_tol",
   "categorie": "tolerantie"
@@ -652,7 +652,7 @@
  {
   "key": "pH Eind Koken",
   "locaties": [
-   "Brouwen!N13"
+   "Brew Sheet!N13"
   ],
   "db_veld": "recipe_brouwspecificaties.ph_eind_koken",
   "categorie": "brouwspecificatie"
@@ -660,7 +660,7 @@
  {
   "key": "pH Maische",
   "locaties": [
-   "Brouwen!N11"
+   "Brew Sheet!N11"
   ],
   "db_veld": "recipe_brouwspecificaties.ph_maische",
   "categorie": "brouwspecificatie"
@@ -668,7 +668,7 @@
  {
   "key": "pH Spec,",
   "locaties": [
-   "Recept-voorblad!F17"
+   "Recipe Sheet!F17"
   ],
   "db_veld": "recipe_specificaties.ph",
   "categorie": "spec-waarde"
@@ -676,7 +676,7 @@
  {
   "key": "pH Start koken",
   "locaties": [
-   "Brouwen!N12"
+   "Brew Sheet!N12"
   ],
   "db_veld": "recipe_brouwspecificaties.ph_start_koken",
   "categorie": "brouwspecificatie"
@@ -684,7 +684,7 @@
  {
   "key": "verhogen 1 temp",
   "locaties": [
-   "Brouwen!C25"
+   "Brew Sheet!C25"
   ],
   "db_veld": "recipe_brouwspecificaties.mash_verhogen1_temp",
   "categorie": "brouwspecificatie"
@@ -692,7 +692,7 @@
  {
   "key": "verhogen 1 tijd",
   "locaties": [
-   "Brouwen!F25"
+   "Brew Sheet!F25"
   ],
   "db_veld": "recipe_brouwspecificaties.mash_verhogen1_tijd",
   "categorie": "brouwspecificatie"
@@ -700,7 +700,7 @@
  {
   "key": "verhogen 2 temp",
   "locaties": [
-   "Brouwen!C26"
+   "Brew Sheet!C26"
   ],
   "db_veld": "recipe_brouwspecificaties.mash_verhogen2_temp",
   "categorie": "brouwspecificatie"
@@ -708,7 +708,7 @@
  {
   "key": "verhogen 2 tijd",
   "locaties": [
-   "Brouwen!F26"
+   "Brew Sheet!F26"
   ],
   "db_veld": "recipe_brouwspecificaties.mash_verhogen2_tijd",
   "categorie": "brouwspecificatie"
@@ -716,7 +716,7 @@
  {
   "key": "verhogen 3 temp",
   "locaties": [
-   "Brouwen!C27"
+   "Brew Sheet!C27"
   ],
   "db_veld": "recipe_brouwspecificaties.mash_verhogen3_temp",
   "categorie": "brouwspecificatie"
@@ -724,7 +724,7 @@
  {
   "key": "verhogen 3 tijd",
   "locaties": [
-   "Brouwen!F27"
+   "Brew Sheet!F27"
   ],
   "db_veld": "recipe_brouwspecificaties.mash_verhogen3_tijd",
   "categorie": "brouwspecificatie"
@@ -732,7 +732,7 @@
  {
   "key": "verhogen 4 temp",
   "locaties": [
-   "Brouwen!C28"
+   "Brew Sheet!C28"
   ],
   "db_veld": "recipe_brouwspecificaties.mash_verhogen4_temp",
   "categorie": "brouwspecificatie"
@@ -740,7 +740,7 @@
  {
   "key": "verhogen 4 tijd",
   "locaties": [
-   "Brouwen!F28"
+   "Brew Sheet!F28"
   ],
   "db_veld": "recipe_brouwspecificaties.mash_verhogen4_tijd",
   "categorie": "brouwspecificatie"
@@ -748,7 +748,7 @@
  {
   "key": "Automatic dosing: Inmaischen Zuur [L]",
   "locaties": [
-   "Brouwen!M36"
+   "Brew Sheet!M36"
   ],
   "db_veld": "recipe_brouwspecificaties.inmaischen_zuur_l",
   "categorie": "brouwspecificatie",
@@ -757,7 +757,7 @@
  {
   "key": "Automatic dosing: Inmaischen Tannines [L]",
   "locaties": [
-   "Brouwen!N36"
+   "Brew Sheet!N36"
   ],
   "db_veld": "recipe_brouwspecificaties.inmaischen_tannines_l",
   "categorie": "brouwspecificatie",
@@ -766,7 +766,7 @@
  {
   "key": "Automatic dosing: Koken Zuur [L]",
   "locaties": [
-   "Brouwen!M37"
+   "Brew Sheet!M37"
   ],
   "db_veld": "recipe_brouwspecificaties.koken_zuur_l",
   "categorie": "brouwspecificatie",
@@ -775,7 +775,7 @@
  {
   "key": "Automatic dosing: Inline sparge Zuur [L]",
   "locaties": [
-   "Brouwen!M38"
+   "Brew Sheet!M38"
   ],
   "db_veld": "recipe_brouwspecificaties.inline_sparge_zuur_l",
   "categorie": "brouwspecificatie",

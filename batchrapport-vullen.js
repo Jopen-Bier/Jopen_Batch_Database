@@ -879,11 +879,11 @@ const RIJ_KELDER_LAATSTE = 95;      // = eerste + 5 sloten - 1
 const RIJ_KELDER_SJABLOON = 92;     // "gewone" middenrij
 
 /**
- * Voegt zo nodig extra rijen toe aan Recept-voorblad voor recepten met meer
+ * Voegt zo nodig extra rijen toe aan Recipe Sheet voor recepten met meer
  * regels dan een van de vaste blokken (Malt & grains, Hops boil, Dry hop,
  * Toegiften Brouwerij, Toegiften Kelder) van origine aankan, en levert
  * {n0..n2, verschuifRij, verschuifCel} -- een functie die voor ELKE andere
- * Recept-voorblad-cel (Gist, Water, Revisiehistorie, enz.) de juiste,
+ * Recipe Sheet-cel (Gist, Water, Revisiehistorie, enz.) de juiste,
  * mogelijk verschoven rij teruggeeft. Moet als allereerste worden
  * aangeroepen, vóór alle andere writer.setCelWaarde-aanroepen op dit
  * tabblad.
@@ -922,19 +922,19 @@ async function brVoegOverloopRijenToe(writer, bundel) {
   // Volgorde is belangrijk: van boven naar beneden, elk volgend inzetpunt
   // ligt zelf al verschoven door alle blokken erboven.
   if (n0 > 0) {
-    await writer.voegRijenToe('Recept-voorblad', RIJ_MOUT_LAATSTE, n0, RIJ_MOUT_SJABLOON);
+    await writer.voegRijenToe('Recipe Sheet', RIJ_MOUT_LAATSTE, n0, RIJ_MOUT_SJABLOON);
   }
   if (nHop > 0) {
-    await writer.voegRijenToe('Recept-voorblad', RIJ_HOP_LAATSTE + n0, nHop, RIJ_HOP_SJABLOON + n0);
+    await writer.voegRijenToe('Recipe Sheet', RIJ_HOP_LAATSTE + n0, nHop, RIJ_HOP_SJABLOON + n0);
   }
   if (nDryHop > 0) {
-    await writer.voegRijenToe('Recept-voorblad', RIJ_DRYHOP_LAATSTE + n0 + nHop, nDryHop, RIJ_DRYHOP_SJABLOON + n0 + nHop);
+    await writer.voegRijenToe('Recipe Sheet', RIJ_DRYHOP_LAATSTE + n0 + nHop, nDryHop, RIJ_DRYHOP_SJABLOON + n0 + nHop);
   }
   if (n1 > 0) {
-    await writer.voegRijenToe('Recept-voorblad', RIJ_BROUWHUIS_LAATSTE + n0 + nHop + nDryHop, n1, RIJ_BROUWHUIS_SJABLOON + n0 + nHop + nDryHop);
+    await writer.voegRijenToe('Recipe Sheet', RIJ_BROUWHUIS_LAATSTE + n0 + nHop + nDryHop, n1, RIJ_BROUWHUIS_SJABLOON + n0 + nHop + nDryHop);
   }
   if (n2 > 0) {
-    await writer.voegRijenToe('Recept-voorblad', RIJ_KELDER_LAATSTE + n0 + nHop + nDryHop + n1, n2, RIJ_KELDER_SJABLOON + n0 + nHop + nDryHop + n1);
+    await writer.voegRijenToe('Recipe Sheet', RIJ_KELDER_LAATSTE + n0 + nHop + nDryHop + n1, n2, RIJ_KELDER_SJABLOON + n0 + nHop + nDryHop + n1);
   }
 
   const verschuifRij = (origineleRij) => {
@@ -948,7 +948,7 @@ async function brVoegOverloopRijenToe(writer, bundel) {
   };
   const verschuifCel = (sheetCel) => {
     const [sheetNaam, cel] = sheetCel.split('!');
-    if (sheetNaam !== 'Recept-voorblad') return sheetCel;
+    if (sheetNaam !== 'Recipe Sheet') return sheetCel;
     const m = cel.match(/^([A-Z]+)(\d+)$/);
     if (!m) return sheetCel;
     return `${sheetNaam}!${m[1]}${verschuifRij(Number(m[2]))}`;
@@ -969,14 +969,14 @@ async function brVulScalaireVelden(writer, bundel, isWP, scalarMap, verschuifCel
 }
 
 const WP_KERK_VELDEN = [
-  { cel: 'Brouwen!F10', wp: 'stort_special_bin_kg', kerk: 'maischwater' },
-  { cel: 'Brouwen!F18', wp: 'volume_water_additie_terugkoeling', kerk: 'eindvolume_brouwsel' },
-  { cel: 'Brouwen!N17', wp: 'sparging_1e', kerk: 'eerste_afloop' },
-  { cel: 'Brouwen!N18', wp: 'sparging_2e', kerk: 'spoelwater' },
-  { cel: 'Brouwen!N19', wp: 'sparging_3e', kerk: 'spoel_afloop' },
-  { cel: 'Brouwen!N20', wp: 'sparging_4e', kerk: 'totaal_gefiltreerd_volume' },
-  { cel: 'Brouwen!I22', wp: 'kamers_mashfilter', kerk: 'lauterfactor' },
-  { cel: 'Recept-voorblad!K9', wp: 'kamers_mashfilter', kerk: 'walsenmolen' },
+  { cel: 'Brew Sheet!F10', wp: 'stort_special_bin_kg', kerk: 'maischwater' },
+  { cel: 'Brew Sheet!F18', wp: 'volume_water_additie_terugkoeling', kerk: 'eindvolume_brouwsel' },
+  { cel: 'Brew Sheet!N17', wp: 'sparging_1e', kerk: 'eerste_afloop' },
+  { cel: 'Brew Sheet!N18', wp: 'sparging_2e', kerk: 'spoelwater' },
+  { cel: 'Brew Sheet!N19', wp: 'sparging_3e', kerk: 'spoel_afloop' },
+  { cel: 'Brew Sheet!N20', wp: 'sparging_4e', kerk: 'totaal_gefiltreerd_volume' },
+  { cel: 'Brew Sheet!I22', wp: 'kamers_mashfilter', kerk: 'lauterfactor' },
+  { cel: 'Recipe Sheet!K9', wp: 'kamers_mashfilter', kerk: 'walsenmolen' },
 ];
 async function brVulWpKerkVelden(writer, bundel, isWP) {
   const bron = bundel.recipe_brouwspecificaties;
@@ -986,18 +986,18 @@ async function brVulWpKerkVelden(writer, bundel, isWP) {
 async function brVulReceptnaamKruisVelden(writer, bundel, isWP) {
   const bron = bundel.recipe_brouwspecificaties;
   if (isWP) {
-    await writer.setCelWaarde('Brouwen!F8', { formula: "'Recept-voorblad'!G7*Brouwen!F19" });
-    await writer.setCelWaarde('Brouwen!F9', bron.recept_naam_software ?? null);
+    await writer.setCelWaarde('Brew Sheet!F8', { formula: "'Recipe Sheet'!G7*'Brew Sheet'!F19" });
+    await writer.setCelWaarde('Brew Sheet!F9', bron.recept_naam_software ?? null);
   } else {
-    await writer.setCelWaarde('Brouwen!F8', bron.recept_naam_software ?? null);
-    await writer.setCelWaarde('Brouwen!F9', bron.naam_special_bin ?? null);
+    await writer.setCelWaarde('Brew Sheet!F8', bron.recept_naam_software ?? null);
+    await writer.setCelWaarde('Brew Sheet!F9', bron.naam_special_bin ?? null);
   }
-  await writer.setCelWaarde('Brouwen!F11', bron.naam_special_bin ?? null);
+  await writer.setCelWaarde('Brew Sheet!F11', bron.naam_special_bin ?? null);
 
   const origineelExtract = bundel.recipe_specificaties.origineel_extract;
   const stamwortCorrectie = bron.stamwort_correctie_brouwhuis;
   if (origineelExtract !== null && origineelExtract !== undefined) {
-    await writer.setCelWaarde('Brouwen!N8', Number(origineelExtract) + (stamwortCorrectie ? Number(stamwortCorrectie) : 0));
+    await writer.setCelWaarde('Brew Sheet!N8', Number(origineelExtract) + (stamwortCorrectie ? Number(stamwortCorrectie) : 0));
   }
 }
 
@@ -1124,7 +1124,7 @@ async function brVulIngredientRijen(writer, bundel, ingredientMap, overloop, sty
         const heelBatch = rol === 'toegift_brouwerij' && !!(regel && regel.alles_in_brouwsel_1);
         const aantalBrouwselsVoorRegel = (rol === 'toegift_kelder' || heelBatch) ? aantalBrouwselsBatch : 1;
         for (const attr in kolommen) {
-          const cel = `Recept-voorblad!${kolommen[attr]}${rij}`;
+          const cel = `Recipe Sheet!${kolommen[attr]}${rij}`;
           if (!regel) { await writer.setCelWaarde(cel, null); continue; }
           let waarde;
           if (attr === 'naam') {
@@ -1226,25 +1226,25 @@ async function brVulHopRendementEnEbu(writer, bundel, overloop) {
     const rij = eersteRij + i;
     const regel = hopRijen[i];
     if (!regel) {
-      await writer.setCelWaarde(`Recept-voorblad!I${rij}`, null);
-      await writer.setCelWaarde(`Recept-voorblad!K${rij}`, null);
+      await writer.setCelWaarde(`Recipe Sheet!I${rij}`, null);
+      await writer.setCelWaarde(`Recipe Sheet!K${rij}`, null);
       continue;
     }
     const kooktijd = regel.tijdstip !== null && regel.tijdstip !== undefined && regel.tijdstip !== ''
       ? Number(regel.tijdstip) : null;
     const rendement = (kooktijd !== null && og) ? bepaalHopRendement(kooktijd, og) : null;
 
-    await writer.setCelWaarde(`Recept-voorblad!I${rij}`, rendement !== null ? Number(rendement.toFixed(1)) : null);
+    await writer.setCelWaarde(`Recipe Sheet!I${rij}`, rendement !== null ? Number(rendement.toFixed(1)) : null);
     if (rendement !== null) {
-      await writer.setCelWaarde(`Recept-voorblad!K${rij}`, {
-        formula: `(E${rij}*1000)*(D${rij}/100)*(I${rij}/100)/('Brouwen'!$F$16*100)`,
+      await writer.setCelWaarde(`Recipe Sheet!K${rij}`, {
+        formula: `(E${rij}*1000)*(D${rij}/100)*(I${rij}/100)/('Brew Sheet'!$F$16*100)`,
       });
     } else {
-      await writer.setCelWaarde(`Recept-voorblad!K${rij}`, null);
+      await writer.setCelWaarde(`Recipe Sheet!K${rij}`, null);
     }
   }
   const laatsteRij = eersteRij + totaalRijen - 1;
-  await writer.setCelWaarde(verschuifCel('Recept-voorblad!K64'), {
+  await writer.setCelWaarde(verschuifCel('Recipe Sheet!K64'), {
     formula: `SUM(K${eersteRij}:K${laatsteRij})`,
   });
 }
@@ -1290,7 +1290,7 @@ async function brVulDryHopGlTotalen(writer, stylesManager, bundel, overloop) {
   }
 
   for (let i = 0; i < totaalRijen; i++) {
-    const cel = `Recept-voorblad!J${dryHopEersteRij + i}`;
+    const cel = `Recipe Sheet!J${dryHopEersteRij + i}`;
     try {
       await writer.setCelWaarde(cel, null);
       const huidigeStijl = await writer.haalStijlIndexOp(cel);
@@ -1309,7 +1309,7 @@ async function brVulDryHopGlTotalen(writer, stylesManager, bundel, overloop) {
 
     const eersteRijGroep = dryHopEersteRij + groep.start;
     const laatsteRijGroep = dryHopEersteRij + groep.eind;
-    const cel = `Recept-voorblad!J${eersteRijGroep}`;
+    const cel = `Recipe Sheet!J${eersteRijGroep}`;
 
     await writer.setCelWaarde(cel, totaalGl);
     try {
@@ -1324,7 +1324,7 @@ async function brVulDryHopGlTotalen(writer, stylesManager, bundel, overloop) {
     }
 
     if (groep.eind > groep.start) {
-      await writer.voegMergeToe(cel, `Recept-voorblad!J${laatsteRijGroep}`);
+      await writer.voegMergeToe(cel, `Recipe Sheet!J${laatsteRijGroep}`);
     }
   }
 }
@@ -1337,7 +1337,7 @@ async function brZetHopGroepRanden(writer, stylesManager, bundel, overloop) {
 
   async function zetRandOpRij(rijNr, kolomVan, kolomTot, stijl) {
     for (let col = kolomVan; col <= kolomTot; col++) {
-      const sheetCel = `Recept-voorblad!${kolomNummerNaarLetter(col)}${rijNr}`;
+      const sheetCel = `Recipe Sheet!${kolomNummerNaarLetter(col)}${rijNr}`;
       try {
         let basisStijl;
         if (await writer.celBestaat(sheetCel)) {
@@ -1425,7 +1425,7 @@ async function genereerEnDownloadBatchrapport(supabase, batchnummer, ingredientO
   const stylesManager = new StylesManager(zip);
   await stylesManager.init();
 
-  // Moet als allereerste, vóór alle andere schrijfacties op Recept-voorblad:
+  // Moet als allereerste, vóór alle andere schrijfacties op Recipe Sheet:
   // recepten met meer dan 10 Toegiften Brouwerij- en/of 5 Toegiften Kelder-
   // regels krijgen hier zo nodig extra rijen, en alle latere writer.setCelWaarde-
   // aanroepen op dit tabblad moeten via verschuifCel() de eventueel verschoven
@@ -1442,12 +1442,12 @@ async function genereerEnDownloadBatchrapport(supabase, batchnummer, ingredientO
   await brZetHopGroepRanden(writer, stylesManager, bundel, overloop);
   await brVulDryHopGlTotalen(writer, stylesManager, bundel, overloop);
 
-  await writer.setCelWaarde('Recept-voorblad!K3', bundel.batch.batchnummer);
+  await writer.setCelWaarde('Recipe Sheet!K3', bundel.batch.batchnummer);
   // Fallback naar 1 (niet null/blank): elke "Totaal gram"-cel op dit tabblad
   // is E-kolom * G7, dus een lege G7 zet stilzwijgend ALLE hoptotalen op 0
   // i.p.v. gewoon de waarde van 1 brouwsel te tonen. Zie ook generate-batchrapport.js.
-  await writer.setCelWaarde('Recept-voorblad!G7', bundel.batch.aantal_brouwsels ?? 1);
-  await writer.setCelWaarde('Recept-voorblad!Q1', `${vestigingsPrefix} ${naam}`);
+  await writer.setCelWaarde('Recipe Sheet!G7', bundel.batch.aantal_brouwsels ?? 1);
+  await writer.setCelWaarde('Recipe Sheet!Q1', `${vestigingsPrefix} ${naam}`);
 
   stylesManager.finalize();
   await writer.finalize();

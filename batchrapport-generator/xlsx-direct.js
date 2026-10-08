@@ -56,7 +56,7 @@ class XlsxDirectWriter {
   constructor(zip) {
     this.zip = zip;
     this.sheetXmlPerBestand = {}; // 'xl/worksheets/sheet1.xml' -> xml-string (gecached, wordt aan het eind teruggeschreven)
-    this.sheetNaarBestand = null; // 'Recept-voorblad' -> 'xl/worksheets/sheet1.xml'
+    this.sheetNaarBestand = null; // 'Recipe Sheet' -> 'xl/worksheets/sheet1.xml'
     this._mergesPerBestand = {}; // 'xl/worksheets/sheet1.xml' -> [{c1,r1,c2,r2}, ...]
   }
 
@@ -170,7 +170,7 @@ class XlsxDirectWriter {
   }
 
   /**
-   * Vervangt de inhoud van cel `sheetCel` (bv. "Recept-voorblad!F12") door
+   * Vervangt de inhoud van cel `sheetCel` (bv. "Recipe Sheet!F12") door
    * `waarde`, met behoud van de bestaande stijl (`s="..."`-attribuut).
    * - null/undefined -> lege cel (zelfsluitend, stijl blijft staan)
    * - number -> numerieke cel
@@ -294,7 +294,7 @@ class XlsxDirectWriter {
    * toevallig een bereik is dat over `voorRij` heen loopt (bv.
    * `SUM(D30:D39)` invoegen vóór rij 39 wordt correct `SUM(D30:D42)` i.p.v.
    * dat het hele bereik in zijn geheel verschuift). Een celverwijzing MET
-   * een ander tabblad ervoor (bv. `Brouwen!$F$16`) wordt met rust gelaten.
+   * een ander tabblad ervoor (bv. `Brew Sheet!$F$16`) wordt met rust gelaten.
    */
   async voegRijenToe(sheetNaam, voorRij, aantal, sjabloonRij) {
     if (!aantal || aantal <= 0) return;

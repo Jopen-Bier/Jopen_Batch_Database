@@ -44,7 +44,7 @@ const OUTPUT_DIR = path.join(__dirname, 'output');
 // ---------------------------------------------------------------------------
 // Hop rendement (utilization) & EBU — exact dezelfde tabel/logica als
 // recept-invoer.html / receptoverzicht.html (1-op-1 uit Moederdata.xlsm,
-// EBU Berekening!T2:AF27 + Recept-voorblad!K43). Bewust hier gedupliceerd
+// EBU Berekening!T2:AF27 + Recipe Sheet!K43). Bewust hier gedupliceerd
 // i.p.v. gedeeld via een <script>-bestand, omdat dit script in Node draait
 // en de webpagina's in de browser — zie qua onderhoud: als de tabel ooit
 // verandert, moet dat op ALLE drie plekken (hier, batchrapport-vullen.js,
@@ -203,19 +203,19 @@ async function voegOverloopRijenToe(writer, bundel) {
   const n2 = Math.max(0, kelderAantal - (RIJ_KELDER_LAATSTE - RIJ_KELDER_EERSTE + 1));
 
   if (n0 > 0) {
-    await writer.voegRijenToe('Recept-voorblad', RIJ_MOUT_LAATSTE, n0, RIJ_MOUT_SJABLOON);
+    await writer.voegRijenToe('Recipe Sheet', RIJ_MOUT_LAATSTE, n0, RIJ_MOUT_SJABLOON);
   }
   if (nHop > 0) {
-    await writer.voegRijenToe('Recept-voorblad', RIJ_HOP_LAATSTE + n0, nHop, RIJ_HOP_SJABLOON + n0);
+    await writer.voegRijenToe('Recipe Sheet', RIJ_HOP_LAATSTE + n0, nHop, RIJ_HOP_SJABLOON + n0);
   }
   if (nDryHop > 0) {
-    await writer.voegRijenToe('Recept-voorblad', RIJ_DRYHOP_LAATSTE + n0 + nHop, nDryHop, RIJ_DRYHOP_SJABLOON + n0 + nHop);
+    await writer.voegRijenToe('Recipe Sheet', RIJ_DRYHOP_LAATSTE + n0 + nHop, nDryHop, RIJ_DRYHOP_SJABLOON + n0 + nHop);
   }
   if (n1 > 0) {
-    await writer.voegRijenToe('Recept-voorblad', RIJ_BROUWHUIS_LAATSTE + n0 + nHop + nDryHop, n1, RIJ_BROUWHUIS_SJABLOON + n0 + nHop + nDryHop);
+    await writer.voegRijenToe('Recipe Sheet', RIJ_BROUWHUIS_LAATSTE + n0 + nHop + nDryHop, n1, RIJ_BROUWHUIS_SJABLOON + n0 + nHop + nDryHop);
   }
   if (n2 > 0) {
-    await writer.voegRijenToe('Recept-voorblad', RIJ_KELDER_LAATSTE + n0 + nHop + nDryHop + n1, n2, RIJ_KELDER_SJABLOON + n0 + nHop + nDryHop + n1);
+    await writer.voegRijenToe('Recipe Sheet', RIJ_KELDER_LAATSTE + n0 + nHop + nDryHop + n1, n2, RIJ_KELDER_SJABLOON + n0 + nHop + nDryHop + n1);
   }
 
   const verschuifRij = (origineleRij) => {
@@ -229,7 +229,7 @@ async function voegOverloopRijenToe(writer, bundel) {
   };
   const verschuifCel = (sheetCel) => {
     const [sheetNaam, cel] = sheetCel.split('!');
-    if (sheetNaam !== 'Recept-voorblad') return sheetCel;
+    if (sheetNaam !== 'Recipe Sheet') return sheetCel;
     const m = cel.match(/^([A-Z]+)(\d+)$/);
     if (!m) return sheetCel;
     return `${sheetNaam}!${m[1]}${verschuifRij(Number(m[2]))}`;
@@ -253,14 +253,14 @@ async function vulScalaireVelden(writer, bundel, isWP, verschuifCel) {
 }
 
 const WP_KERK_VELDEN = [
-  { cel: 'Brouwen!F10', wp: 'stort_special_bin_kg', kerk: 'maischwater' },
-  { cel: 'Brouwen!F18', wp: 'volume_water_additie_terugkoeling', kerk: 'eindvolume_brouwsel' },
-  { cel: 'Brouwen!N17', wp: 'sparging_1e', kerk: 'eerste_afloop' },
-  { cel: 'Brouwen!N18', wp: 'sparging_2e', kerk: 'spoelwater' },
-  { cel: 'Brouwen!N19', wp: 'sparging_3e', kerk: 'spoel_afloop' },
-  { cel: 'Brouwen!N20', wp: 'sparging_4e', kerk: 'totaal_gefiltreerd_volume' },
-  { cel: 'Brouwen!I22', wp: 'kamers_mashfilter', kerk: 'lauterfactor' },
-  { cel: 'Recept-voorblad!K9', wp: 'kamers_mashfilter', kerk: 'walsenmolen' },
+  { cel: 'Brew Sheet!F10', wp: 'stort_special_bin_kg', kerk: 'maischwater' },
+  { cel: 'Brew Sheet!F18', wp: 'volume_water_additie_terugkoeling', kerk: 'eindvolume_brouwsel' },
+  { cel: 'Brew Sheet!N17', wp: 'sparging_1e', kerk: 'eerste_afloop' },
+  { cel: 'Brew Sheet!N18', wp: 'sparging_2e', kerk: 'spoelwater' },
+  { cel: 'Brew Sheet!N19', wp: 'sparging_3e', kerk: 'spoel_afloop' },
+  { cel: 'Brew Sheet!N20', wp: 'sparging_4e', kerk: 'totaal_gefiltreerd_volume' },
+  { cel: 'Brew Sheet!I22', wp: 'kamers_mashfilter', kerk: 'lauterfactor' },
+  { cel: 'Recipe Sheet!K9', wp: 'kamers_mashfilter', kerk: 'walsenmolen' },
 ];
 async function vulWpKerkVelden(writer, bundel, isWP) {
   const bron = bundel.recipe_brouwspecificaties;
@@ -269,7 +269,7 @@ async function vulWpKerkVelden(writer, bundel, isWP) {
   }
 }
 
-// F8/F9/F11 in Brouwen wisselen van betekenis per vestiging:
+// F8/F9/F11 in Brew Sheet wisselen van betekenis per vestiging:
 // - F8: WP -> live formule (Aantal brouwsels * Eindvolume brouwsel). Kerk -> Receptnaam Software.
 // - F9: WP -> Receptnaam Software. Kerk -> Naam special bin storting.
 // - F11: altijd -> Naam special bin storting.
@@ -277,18 +277,18 @@ async function vulWpKerkVelden(writer, bundel, isWP) {
 async function vulReceptnaamKruisVelden(writer, bundel, isWP) {
   const bron = bundel.recipe_brouwspecificaties;
   if (isWP) {
-    await writer.setCelWaarde('Brouwen!F8', { formula: "'Recept-voorblad'!G7*Brouwen!F19" });
-    await writer.setCelWaarde('Brouwen!F9', bron.recept_naam_software ?? null);
+    await writer.setCelWaarde('Brew Sheet!F8', { formula: "'Recipe Sheet'!G7*'Brew Sheet'!F19" });
+    await writer.setCelWaarde('Brew Sheet!F9', bron.recept_naam_software ?? null);
   } else {
-    await writer.setCelWaarde('Brouwen!F8', bron.recept_naam_software ?? null);
-    await writer.setCelWaarde('Brouwen!F9', bron.naam_special_bin ?? null);
+    await writer.setCelWaarde('Brew Sheet!F8', bron.recept_naam_software ?? null);
+    await writer.setCelWaarde('Brew Sheet!F9', bron.naam_special_bin ?? null);
   }
-  await writer.setCelWaarde('Brouwen!F11', bron.naam_special_bin ?? null);
+  await writer.setCelWaarde('Brew Sheet!F11', bron.naam_special_bin ?? null);
 
   const origineelExtract = bundel.recipe_specificaties.origineel_extract;
   const stamwortCorrectie = bron.stamwort_correctie_brouwhuis;
   if (origineelExtract !== null && origineelExtract !== undefined) {
-    await writer.setCelWaarde('Brouwen!N8', Number(origineelExtract) + (stamwortCorrectie ? Number(stamwortCorrectie) : 0));
+    await writer.setCelWaarde('Brew Sheet!N8', Number(origineelExtract) + (stamwortCorrectie ? Number(stamwortCorrectie) : 0));
   }
 }
 
@@ -420,7 +420,7 @@ async function vulIngredientRijen(writer, bundel, overloop, stylesManager) {
         const heelBatch = rol === 'toegift_brouwerij' && !!(regel && regel.alles_in_brouwsel_1);
         const aantalBrouwselsVoorRegel = (rol === 'toegift_kelder' || heelBatch) ? aantalBrouwselsBatch : 1;
         for (const attr in kolommen) {
-          const cel = `Recept-voorblad!${kolommen[attr]}${rij}`;
+          const cel = `Recipe Sheet!${kolommen[attr]}${rij}`;
           if (!regel) { await writer.setCelWaarde(cel, null); continue; }
           let waarde;
           if (attr === 'naam') {
@@ -504,7 +504,7 @@ async function vulFormaten(writer, bundel) {
   }
 }
 
-// Rendement%/EBU per hopgift (Recept-voorblad!I43:I57 / K43:K57) + Calculated
+// Rendement%/EBU per hopgift (Recipe Sheet!I43:I57 / K43:K57) + Calculated
 // total EBU (K64).
 // - Rendement% (kolom I) blijft een GEPLAKTE waarde: die komt uit de JS-
 //   lookuptabel die het verwijderde EBU Berekening-tabblad vervangt, er is
@@ -514,7 +514,7 @@ async function vulFormaten(writer, bundel) {
 //   Reden: de operator vult tijdens/na het brouwen soms het werkelijke gewicht
 //   in kolom E bij (verschil t.o.v. het receptplan) — met een geplakt getal
 //   bleef de EBU dan het oude, geplande cijfer tonen i.p.v. mee te rekenen.
-//   Rendement% (I) en volume ('Brouwen'!F16) worden hierbij als celverwijzing
+//   Rendement% (I) en volume ('Brew Sheet'!F16) worden hierbij als celverwijzing
 //   gebruikt, niet opnieuw als los getal geplakt.
 async function vulHopRendementEnEbu(writer, bundel, overloop) {
   const { n0, verschuifCel } = overloop;
@@ -530,25 +530,25 @@ async function vulHopRendementEnEbu(writer, bundel, overloop) {
     const rij = eersteRij + i;
     const regel = hopRijen[i];
     if (!regel) {
-      await writer.setCelWaarde(`Recept-voorblad!I${rij}`, null);
-      await writer.setCelWaarde(`Recept-voorblad!K${rij}`, null);
+      await writer.setCelWaarde(`Recipe Sheet!I${rij}`, null);
+      await writer.setCelWaarde(`Recipe Sheet!K${rij}`, null);
       continue;
     }
     const kooktijd = regel.tijdstip !== null && regel.tijdstip !== undefined && regel.tijdstip !== ''
       ? Number(regel.tijdstip) : null;
     const rendement = (kooktijd !== null && og) ? bepaalHopRendement(kooktijd, og) : null;
 
-    await writer.setCelWaarde(`Recept-voorblad!I${rij}`, rendement !== null ? Number(rendement.toFixed(1)) : null);
+    await writer.setCelWaarde(`Recipe Sheet!I${rij}`, rendement !== null ? Number(rendement.toFixed(1)) : null);
     if (rendement !== null) {
-      await writer.setCelWaarde(`Recept-voorblad!K${rij}`, {
-        formula: `(E${rij}*1000)*(D${rij}/100)*(I${rij}/100)/('Brouwen'!$F$16*100)`,
+      await writer.setCelWaarde(`Recipe Sheet!K${rij}`, {
+        formula: `(E${rij}*1000)*(D${rij}/100)*(I${rij}/100)/('Brew Sheet'!$F$16*100)`,
       });
     } else {
-      await writer.setCelWaarde(`Recept-voorblad!K${rij}`, null);
+      await writer.setCelWaarde(`Recipe Sheet!K${rij}`, null);
     }
   }
   const laatsteRij = eersteRij + totaalRijen - 1;
-  await writer.setCelWaarde(verschuifCel('Recept-voorblad!K64'), {
+  await writer.setCelWaarde(verschuifCel('Recipe Sheet!K64'), {
     formula: `SUM(K${eersteRij}:K${laatsteRij})`,
   });
 }
@@ -563,7 +563,7 @@ function kolomNummerNaarLetter(num) {
   return letters;
 }
 
-// Randen in de Hops and Herbs-tabel (Recept-voorblad, rijen 43-63):
+// Randen in de Hops and Herbs-tabel (Recipe Sheet, rijen 43-63):
 // - Standaard een stippellijn onder elke rij (ook de nog ongebruikte
 //   hopslots), zodat losse toevoegingen binnen hetzelfde moment duidelijk
 //   maar licht gescheiden zijn.
@@ -589,7 +589,7 @@ async function zetHopGroepRanden(writer, stylesManager, bundel, overloop) {
   async function zetRandOpRij(rijNr, kolomVan, kolomTot, stijl) {
     for (let col = kolomVan; col <= kolomTot; col++) {
       const kolomLetter = kolomNummerNaarLetter(col);
-      const sheetCel = `Recept-voorblad!${kolomLetter}${rijNr}`;
+      const sheetCel = `Recipe Sheet!${kolomLetter}${rijNr}`;
       try {
         let basisStijl;
         if (await writer.celBestaat(sheetCel)) {
@@ -699,7 +699,7 @@ async function vulDryHopGlTotalen(writer, stylesManager, bundel, overloop) {
   }
 
   for (let i = 0; i < totaalRijen; i++) {
-    const cel = `Recept-voorblad!J${dryHopEersteRij + i}`;
+    const cel = `Recipe Sheet!J${dryHopEersteRij + i}`;
     try {
       await writer.setCelWaarde(cel, null);
       const huidigeStijl = await writer.haalStijlIndexOp(cel);
@@ -718,7 +718,7 @@ async function vulDryHopGlTotalen(writer, stylesManager, bundel, overloop) {
 
     const eersteRijGroep = dryHopEersteRij + groep.start;
     const laatsteRijGroep = dryHopEersteRij + groep.eind;
-    const cel = `Recept-voorblad!J${eersteRijGroep}`;
+    const cel = `Recipe Sheet!J${eersteRijGroep}`;
 
     await writer.setCelWaarde(cel, totaalGl);
     try {
@@ -733,7 +733,7 @@ async function vulDryHopGlTotalen(writer, stylesManager, bundel, overloop) {
     }
 
     if (groep.eind > groep.start) {
-      await writer.voegMergeToe(cel, `Recept-voorblad!J${laatsteRijGroep}`);
+      await writer.voegMergeToe(cel, `Recipe Sheet!J${laatsteRijGroep}`);
     }
   }
 }
@@ -766,13 +766,13 @@ async function genereerBatchrapportBuffer(bundel) {
   await zetHopGroepRanden(writer, stylesManager, bundel, overloop);
   await vulDryHopGlTotalen(writer, stylesManager, bundel, overloop);
 
-  await writer.setCelWaarde('Recept-voorblad!H3', 'Batch nr.:');
-  await writer.setCelWaarde('Recept-voorblad!K3', bundel.batch.batchnummer);
+  await writer.setCelWaarde('Recipe Sheet!H3', 'Batch No.:');
+  await writer.setCelWaarde('Recipe Sheet!K3', bundel.batch.batchnummer);
   // Fallback naar 1 (niet null/blank): elke "Totaal gram"-cel op dit tabblad
   // is E-kolom * G7, dus een lege G7 zet stilzwijgend ALLE hoptotalen op 0
   // i.p.v. gewoon de waarde van 1 brouwsel te tonen. Zie ook batchrapport-vullen.js.
-  await writer.setCelWaarde('Recept-voorblad!G7', bundel.batch.aantal_brouwsels ?? 1);
-  await writer.setCelWaarde('Recept-voorblad!Q1', `${vestigingsPrefix} ${naam}`);
+  await writer.setCelWaarde('Recipe Sheet!G7', bundel.batch.aantal_brouwsels ?? 1);
+  await writer.setCelWaarde('Recipe Sheet!Q1', `${vestigingsPrefix} ${naam}`);
 
   stylesManager.finalize();
   await writer.finalize();

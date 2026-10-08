@@ -1,282 +1,282 @@
 {
  "dry_hop": {
   "1": {
-   "naam": "Recept-voorblad!A58",
-   "hoeveelheid": "Recept-voorblad!E58",
-   "tijdstip": "Recept-voorblad!G58"
+   "naam": "Recipe Sheet!A58",
+   "hoeveelheid": "Recipe Sheet!E58",
+   "tijdstip": "Recipe Sheet!G58"
   },
   "2": {
-   "naam": "Recept-voorblad!A59",
-   "hoeveelheid": "Recept-voorblad!E59",
-   "tijdstip": "Recept-voorblad!G59"
+   "naam": "Recipe Sheet!A59",
+   "hoeveelheid": "Recipe Sheet!E59",
+   "tijdstip": "Recipe Sheet!G59"
   },
   "3": {
-   "naam": "Recept-voorblad!A60",
-   "hoeveelheid": "Recept-voorblad!E60",
-   "tijdstip": "Recept-voorblad!G60"
+   "naam": "Recipe Sheet!A60",
+   "hoeveelheid": "Recipe Sheet!E60",
+   "tijdstip": "Recipe Sheet!G60"
   },
   "4": {
-   "naam": "Recept-voorblad!A61",
-   "hoeveelheid": "Recept-voorblad!E61",
-   "tijdstip": "Recept-voorblad!G61"
+   "naam": "Recipe Sheet!A61",
+   "hoeveelheid": "Recipe Sheet!E61",
+   "tijdstip": "Recipe Sheet!G61"
   },
   "5": {
-   "naam": "Recept-voorblad!A62",
-   "hoeveelheid": "Recept-voorblad!E62",
-   "tijdstip": "Recept-voorblad!G62"
+   "naam": "Recipe Sheet!A62",
+   "hoeveelheid": "Recipe Sheet!E62",
+   "tijdstip": "Recipe Sheet!G62"
   },
   "6": {
-   "naam": "Recept-voorblad!A63",
-   "hoeveelheid": "Recept-voorblad!E63",
-   "tijdstip": "Recept-voorblad!G63"
+   "naam": "Recipe Sheet!A63",
+   "hoeveelheid": "Recipe Sheet!E63",
+   "tijdstip": "Recipe Sheet!G63"
   }
  },
  "gist": {
   "1": {
-   "hoeveelheid": "Recept-voorblad!G87",
-   "naam": "Recept-voorblad!A87"
+   "hoeveelheid": "Recipe Sheet!G87",
+   "naam": "Recipe Sheet!A87"
   },
   "2": {
-   "hoeveelheid": "Recept-voorblad!G88",
-   "naam": "Recept-voorblad!A88"
+   "hoeveelheid": "Recipe Sheet!G88",
+   "naam": "Recipe Sheet!A88"
   }
  },
  "hopgift_kook": {
   "1": {
-   "naam": "Recept-voorblad!A43",
-   "hdt": "Recept-voorblad!Q43",
-   "alpha_pct": "Recept-voorblad!D43",
-   "hoeveelheid": "Recept-voorblad!E43",
-   "tijdstip": "Recept-voorblad!G43"
+   "naam": "Recipe Sheet!A43",
+   "hdt": "Recipe Sheet!Q43",
+   "alpha_pct": "Recipe Sheet!D43",
+   "hoeveelheid": "Recipe Sheet!E43",
+   "tijdstip": "Recipe Sheet!G43"
   },
   "10": {
-   "naam": "Recept-voorblad!A52",
-   "hdt": "Recept-voorblad!Q52",
-   "alpha_pct": "Recept-voorblad!D52",
-   "hoeveelheid": "Recept-voorblad!E52",
-   "tijdstip": "Recept-voorblad!G52"
+   "naam": "Recipe Sheet!A52",
+   "hdt": "Recipe Sheet!Q52",
+   "alpha_pct": "Recipe Sheet!D52",
+   "hoeveelheid": "Recipe Sheet!E52",
+   "tijdstip": "Recipe Sheet!G52"
   },
   "11": {
-   "naam": "Recept-voorblad!A53",
-   "hdt": "Recept-voorblad!Q53",
-   "alpha_pct": "Recept-voorblad!D53",
-   "hoeveelheid": "Recept-voorblad!E53",
-   "tijdstip": "Recept-voorblad!G53"
+   "naam": "Recipe Sheet!A53",
+   "hdt": "Recipe Sheet!Q53",
+   "alpha_pct": "Recipe Sheet!D53",
+   "hoeveelheid": "Recipe Sheet!E53",
+   "tijdstip": "Recipe Sheet!G53"
   },
   "12": {
-   "naam": "Recept-voorblad!A54",
-   "hdt": "Recept-voorblad!Q54",
-   "alpha_pct": "Recept-voorblad!D54",
-   "hoeveelheid": "Recept-voorblad!E54",
-   "tijdstip": "Recept-voorblad!G54"
+   "naam": "Recipe Sheet!A54",
+   "hdt": "Recipe Sheet!Q54",
+   "alpha_pct": "Recipe Sheet!D54",
+   "hoeveelheid": "Recipe Sheet!E54",
+   "tijdstip": "Recipe Sheet!G54"
   },
   "13": {
-   "naam": "Recept-voorblad!A55",
-   "hdt": "Recept-voorblad!Q55",
-   "alpha_pct": "Recept-voorblad!D55",
-   "hoeveelheid": "Recept-voorblad!E55",
-   "tijdstip": "Recept-voorblad!G55"
+   "naam": "Recipe Sheet!A55",
+   "hdt": "Recipe Sheet!Q55",
+   "alpha_pct": "Recipe Sheet!D55",
+   "hoeveelheid": "Recipe Sheet!E55",
+   "tijdstip": "Recipe Sheet!G55"
   },
   "14": {
-   "naam": "Recept-voorblad!A56",
-   "hdt": "Recept-voorblad!Q56",
-   "alpha_pct": "Recept-voorblad!D56",
-   "hoeveelheid": "Recept-voorblad!E56",
-   "tijdstip": "Recept-voorblad!G56"
+   "naam": "Recipe Sheet!A56",
+   "hdt": "Recipe Sheet!Q56",
+   "alpha_pct": "Recipe Sheet!D56",
+   "hoeveelheid": "Recipe Sheet!E56",
+   "tijdstip": "Recipe Sheet!G56"
   },
   "15": {
-   "naam": "Recept-voorblad!A57",
-   "hdt": "Recept-voorblad!Q57",
-   "alpha_pct": "Recept-voorblad!D57",
-   "hoeveelheid": "Recept-voorblad!E57",
-   "tijdstip": "Recept-voorblad!G57"
+   "naam": "Recipe Sheet!A57",
+   "hdt": "Recipe Sheet!Q57",
+   "alpha_pct": "Recipe Sheet!D57",
+   "hoeveelheid": "Recipe Sheet!E57",
+   "tijdstip": "Recipe Sheet!G57"
   },
   "2": {
-   "naam": "Recept-voorblad!A44",
-   "hdt": "Recept-voorblad!Q44",
-   "alpha_pct": "Recept-voorblad!D44",
-   "hoeveelheid": "Recept-voorblad!E44",
-   "tijdstip": "Recept-voorblad!G44"
+   "naam": "Recipe Sheet!A44",
+   "hdt": "Recipe Sheet!Q44",
+   "alpha_pct": "Recipe Sheet!D44",
+   "hoeveelheid": "Recipe Sheet!E44",
+   "tijdstip": "Recipe Sheet!G44"
   },
   "3": {
-   "naam": "Recept-voorblad!A45",
-   "hdt": "Recept-voorblad!Q45",
-   "alpha_pct": "Recept-voorblad!D45",
-   "hoeveelheid": "Recept-voorblad!E45",
-   "tijdstip": "Recept-voorblad!G45"
+   "naam": "Recipe Sheet!A45",
+   "hdt": "Recipe Sheet!Q45",
+   "alpha_pct": "Recipe Sheet!D45",
+   "hoeveelheid": "Recipe Sheet!E45",
+   "tijdstip": "Recipe Sheet!G45"
   },
   "4": {
-   "naam": "Recept-voorblad!A46",
-   "hdt": "Recept-voorblad!Q46",
-   "alpha_pct": "Recept-voorblad!D46",
-   "hoeveelheid": "Recept-voorblad!E46",
-   "tijdstip": "Recept-voorblad!G46"
+   "naam": "Recipe Sheet!A46",
+   "hdt": "Recipe Sheet!Q46",
+   "alpha_pct": "Recipe Sheet!D46",
+   "hoeveelheid": "Recipe Sheet!E46",
+   "tijdstip": "Recipe Sheet!G46"
   },
   "5": {
-   "naam": "Recept-voorblad!A47",
-   "hdt": "Recept-voorblad!Q47",
-   "alpha_pct": "Recept-voorblad!D47",
-   "hoeveelheid": "Recept-voorblad!E47",
-   "tijdstip": "Recept-voorblad!G47"
+   "naam": "Recipe Sheet!A47",
+   "hdt": "Recipe Sheet!Q47",
+   "alpha_pct": "Recipe Sheet!D47",
+   "hoeveelheid": "Recipe Sheet!E47",
+   "tijdstip": "Recipe Sheet!G47"
   },
   "6": {
-   "naam": "Recept-voorblad!A48",
-   "hdt": "Recept-voorblad!Q48",
-   "alpha_pct": "Recept-voorblad!D48",
-   "hoeveelheid": "Recept-voorblad!E48",
-   "tijdstip": "Recept-voorblad!G48"
+   "naam": "Recipe Sheet!A48",
+   "hdt": "Recipe Sheet!Q48",
+   "alpha_pct": "Recipe Sheet!D48",
+   "hoeveelheid": "Recipe Sheet!E48",
+   "tijdstip": "Recipe Sheet!G48"
   },
   "7": {
-   "naam": "Recept-voorblad!A49",
-   "hdt": "Recept-voorblad!Q49",
-   "alpha_pct": "Recept-voorblad!D49",
-   "hoeveelheid": "Recept-voorblad!E49",
-   "tijdstip": "Recept-voorblad!G49"
+   "naam": "Recipe Sheet!A49",
+   "hdt": "Recipe Sheet!Q49",
+   "alpha_pct": "Recipe Sheet!D49",
+   "hoeveelheid": "Recipe Sheet!E49",
+   "tijdstip": "Recipe Sheet!G49"
   },
   "8": {
-   "naam": "Recept-voorblad!A50",
-   "hdt": "Recept-voorblad!Q50",
-   "alpha_pct": "Recept-voorblad!D50",
-   "hoeveelheid": "Recept-voorblad!E50",
-   "tijdstip": "Recept-voorblad!G50"
+   "naam": "Recipe Sheet!A50",
+   "hdt": "Recipe Sheet!Q50",
+   "alpha_pct": "Recipe Sheet!D50",
+   "hoeveelheid": "Recipe Sheet!E50",
+   "tijdstip": "Recipe Sheet!G50"
   },
   "9": {
-   "naam": "Recept-voorblad!A51",
-   "hdt": "Recept-voorblad!Q51",
-   "alpha_pct": "Recept-voorblad!D51",
-   "hoeveelheid": "Recept-voorblad!E51",
-   "tijdstip": "Recept-voorblad!G51"
+   "naam": "Recipe Sheet!A51",
+   "hdt": "Recipe Sheet!Q51",
+   "alpha_pct": "Recipe Sheet!D51",
+   "hoeveelheid": "Recipe Sheet!E51",
+   "tijdstip": "Recipe Sheet!G51"
   }
  },
  "hoofdmout": {
   "1": {
-   "naam": "Recept-voorblad!A30",
-   "hoeveelheid": "Recept-voorblad!D30",
-   "kleur_ebc": "Recept-voorblad!E30"
+   "naam": "Recipe Sheet!A30",
+   "hoeveelheid": "Recipe Sheet!D30",
+   "kleur_ebc": "Recipe Sheet!E30"
   },
   "10": {
-   "naam": "Recept-voorblad!A39",
-   "hoeveelheid": "Recept-voorblad!D39",
-   "kleur_ebc": "Recept-voorblad!E39"
+   "naam": "Recipe Sheet!A39",
+   "hoeveelheid": "Recipe Sheet!D39",
+   "kleur_ebc": "Recipe Sheet!E39"
   },
   "2": {
-   "naam": "Recept-voorblad!A31",
-   "hoeveelheid": "Recept-voorblad!D31",
-   "kleur_ebc": "Recept-voorblad!E31"
+   "naam": "Recipe Sheet!A31",
+   "hoeveelheid": "Recipe Sheet!D31",
+   "kleur_ebc": "Recipe Sheet!E31"
   },
   "3": {
-   "naam": "Recept-voorblad!A32",
-   "hoeveelheid": "Recept-voorblad!D32",
-   "kleur_ebc": "Recept-voorblad!E32"
+   "naam": "Recipe Sheet!A32",
+   "hoeveelheid": "Recipe Sheet!D32",
+   "kleur_ebc": "Recipe Sheet!E32"
   },
   "4": {
-   "naam": "Recept-voorblad!A33",
-   "hoeveelheid": "Recept-voorblad!D33",
-   "kleur_ebc": "Recept-voorblad!E33"
+   "naam": "Recipe Sheet!A33",
+   "hoeveelheid": "Recipe Sheet!D33",
+   "kleur_ebc": "Recipe Sheet!E33"
   },
   "5": {
-   "naam": "Recept-voorblad!A34",
-   "hoeveelheid": "Recept-voorblad!D34",
-   "kleur_ebc": "Recept-voorblad!E34"
+   "naam": "Recipe Sheet!A34",
+   "hoeveelheid": "Recipe Sheet!D34",
+   "kleur_ebc": "Recipe Sheet!E34"
   },
   "6": {
-   "naam": "Recept-voorblad!A35",
-   "hoeveelheid": "Recept-voorblad!D35",
-   "kleur_ebc": "Recept-voorblad!E35"
+   "naam": "Recipe Sheet!A35",
+   "hoeveelheid": "Recipe Sheet!D35",
+   "kleur_ebc": "Recipe Sheet!E35"
   },
   "7": {
-   "naam": "Recept-voorblad!A36",
-   "hoeveelheid": "Recept-voorblad!D36",
-   "kleur_ebc": "Recept-voorblad!E36"
+   "naam": "Recipe Sheet!A36",
+   "hoeveelheid": "Recipe Sheet!D36",
+   "kleur_ebc": "Recipe Sheet!E36"
   },
   "8": {
-   "naam": "Recept-voorblad!A37",
-   "hoeveelheid": "Recept-voorblad!D37",
-   "kleur_ebc": "Recept-voorblad!E37"
+   "naam": "Recipe Sheet!A37",
+   "hoeveelheid": "Recipe Sheet!D37",
+   "kleur_ebc": "Recipe Sheet!E37"
   },
   "9": {
-   "naam": "Recept-voorblad!A38",
-   "hoeveelheid": "Recept-voorblad!D38",
-   "kleur_ebc": "Recept-voorblad!E38"
+   "naam": "Recipe Sheet!A38",
+   "hoeveelheid": "Recipe Sheet!D38",
+   "kleur_ebc": "Recipe Sheet!E38"
   }
  },
  "toegift_brouwerij": {
   "1": {
-   "tijdstip": "Recept-voorblad!I73",
-   "hoeveelheid": "Recept-voorblad!E73",
-   "naam": "Recept-voorblad!A73"
+   "tijdstip": "Recipe Sheet!I73",
+   "hoeveelheid": "Recipe Sheet!E73",
+   "naam": "Recipe Sheet!A73"
   },
   "10": {
-   "tijdstip": "Recept-voorblad!I82",
-   "hoeveelheid": "Recept-voorblad!E82",
-   "naam": "Recept-voorblad!A82"
+   "tijdstip": "Recipe Sheet!I82",
+   "hoeveelheid": "Recipe Sheet!E82",
+   "naam": "Recipe Sheet!A82"
   },
   "2": {
-   "tijdstip": "Recept-voorblad!I74",
-   "hoeveelheid": "Recept-voorblad!E74",
-   "naam": "Recept-voorblad!A74"
+   "tijdstip": "Recipe Sheet!I74",
+   "hoeveelheid": "Recipe Sheet!E74",
+   "naam": "Recipe Sheet!A74"
   },
   "3": {
-   "tijdstip": "Recept-voorblad!I75",
-   "hoeveelheid": "Recept-voorblad!E75",
-   "naam": "Recept-voorblad!A75"
+   "tijdstip": "Recipe Sheet!I75",
+   "hoeveelheid": "Recipe Sheet!E75",
+   "naam": "Recipe Sheet!A75"
   },
   "4": {
-   "tijdstip": "Recept-voorblad!I76",
-   "hoeveelheid": "Recept-voorblad!E76",
-   "naam": "Recept-voorblad!A76"
+   "tijdstip": "Recipe Sheet!I76",
+   "hoeveelheid": "Recipe Sheet!E76",
+   "naam": "Recipe Sheet!A76"
   },
   "5": {
-   "tijdstip": "Recept-voorblad!I77",
-   "hoeveelheid": "Recept-voorblad!E77",
-   "naam": "Recept-voorblad!A77"
+   "tijdstip": "Recipe Sheet!I77",
+   "hoeveelheid": "Recipe Sheet!E77",
+   "naam": "Recipe Sheet!A77"
   },
   "6": {
-   "tijdstip": "Recept-voorblad!I78",
-   "hoeveelheid": "Recept-voorblad!E78",
-   "naam": "Recept-voorblad!A78"
+   "tijdstip": "Recipe Sheet!I78",
+   "hoeveelheid": "Recipe Sheet!E78",
+   "naam": "Recipe Sheet!A78"
   },
   "7": {
-   "tijdstip": "Recept-voorblad!I79",
-   "hoeveelheid": "Recept-voorblad!E79",
-   "naam": "Recept-voorblad!A79"
+   "tijdstip": "Recipe Sheet!I79",
+   "hoeveelheid": "Recipe Sheet!E79",
+   "naam": "Recipe Sheet!A79"
   },
   "8": {
-   "tijdstip": "Recept-voorblad!I80",
-   "hoeveelheid": "Recept-voorblad!E80",
-   "naam": "Recept-voorblad!A80"
+   "tijdstip": "Recipe Sheet!I80",
+   "hoeveelheid": "Recipe Sheet!E80",
+   "naam": "Recipe Sheet!A80"
   },
   "9": {
-   "tijdstip": "Recept-voorblad!I81",
-   "hoeveelheid": "Recept-voorblad!E81",
-   "naam": "Recept-voorblad!A81"
+   "tijdstip": "Recipe Sheet!I81",
+   "hoeveelheid": "Recipe Sheet!E81",
+   "naam": "Recipe Sheet!A81"
   }
  },
  "toegift_kelder": {
   "1": {
-   "tijdstip": "Recept-voorblad!I89",
-   "hoeveelheid": "Recept-voorblad!E89",
-   "naam": "Recept-voorblad!A89"
+   "tijdstip": "Recipe Sheet!I89",
+   "hoeveelheid": "Recipe Sheet!E89",
+   "naam": "Recipe Sheet!A89"
   },
   "2": {
-   "tijdstip": "Recept-voorblad!I90",
-   "hoeveelheid": "Recept-voorblad!E90",
-   "naam": "Recept-voorblad!A90"
+   "tijdstip": "Recipe Sheet!I90",
+   "hoeveelheid": "Recipe Sheet!E90",
+   "naam": "Recipe Sheet!A90"
   },
   "3": {
-   "tijdstip": "Recept-voorblad!I91",
-   "hoeveelheid": "Recept-voorblad!E91",
-   "naam": "Recept-voorblad!A91"
+   "tijdstip": "Recipe Sheet!I91",
+   "hoeveelheid": "Recipe Sheet!E91",
+   "naam": "Recipe Sheet!A91"
   },
   "4": {
-   "tijdstip": "Recept-voorblad!I92",
-   "hoeveelheid": "Recept-voorblad!E92",
-   "naam": "Recept-voorblad!A92"
+   "tijdstip": "Recipe Sheet!I92",
+   "hoeveelheid": "Recipe Sheet!E92",
+   "naam": "Recipe Sheet!A92"
   },
   "5": {
-   "tijdstip": "Recept-voorblad!I93",
-   "hoeveelheid": "Recept-voorblad!E93",
-   "naam": "Recept-voorblad!A93"
+   "tijdstip": "Recipe Sheet!I93",
+   "hoeveelheid": "Recipe Sheet!E93",
+   "naam": "Recipe Sheet!A93"
   }
  }
 }

@@ -80,7 +80,7 @@ plek komen, en leest de output terug met ExcelJS om waardes te verifiëren.
    - `revisie_field_map.json` — laatste 4 revisies
    - `formaten_field_map.json` — verpakkingsformaat-checkboxen
    - vestigingsafhankelijke (WP/Kerk) velden apart in de code (`WP_KERK_VELDEN`)
-   - F8/F9/F11/N8 in Brouwen: aparte kruislogica (`vulReceptnaamKruisVelden`)
+   - F8/F9/F11/N8 in Brew Sheet: aparte kruislogica (`vulReceptnaamKruisVelden`)
 4. Hop-rendement%/EBU per hopgift + Calculated total EBU herberekend (zelfde
    logica als `recept-invoer.html`) en als waarde geplakt
 5. Dikke scheidingslijnen tussen hop-groepen via `StylesManager`

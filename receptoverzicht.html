@@ -1134,7 +1134,7 @@ async function openDetail(id) {
   // ---------------------------------------------------------------------
   // Hop rendement (utilization) & EBU — zelfde logica als recept-invoer.html,
   // 1-op-1 overgenomen uit Moederdata.xlsm (EBU Berekening T2:AF27 +
-  // Recept-voorblad!K43/K64). Alleen voor rol "hopgift_kook" (Hop (boil)).
+  // Recipe Sheet!K43/K64). Alleen voor rol "hopgift_kook" (Hop (boil)).
   // ---------------------------------------------------------------------
   const HOP_SG_BUCKETS = [1.02, 1.03, 1.04, 1.05, 1.06, 1.07, 1.08, 1.09, 1.10, 1.11, 1.12, 1.13];
   const HOP_RENDEMENT_TABEL = [
@@ -1322,7 +1322,7 @@ async function openDetail(id) {
   }
 
   // Calculated color: som van (kg * EBC * 0.08) / Brouwsel (hl) per moutregel,
-  // + 1.75. Excel: Recept-voorblad!F30:F40.
+  // + 1.75. Excel: Recipe Sheet!F30:F40.
   function berekenMoutKleur() {
     const moutRijen = ings.filter(i => i.rol === 'hoofdmout');
     if (moutRijen.length === 0 || !r.brouwsel_hl) return null;

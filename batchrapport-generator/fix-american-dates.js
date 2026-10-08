@@ -14,13 +14,13 @@ const TEMPLATE_PATH = require('path').join(__dirname, 'Batchrapport_sjabloon.xls
 
 // Alle cellen die vooraf zijn opgespoord met numFmtId 166 (zie sessie-analyse).
 const CELLEN = [
-  'Recept-voorblad!K7',
-  'Brouwen!N5', 'Brouwen!N50', 'Brouwen!M57', 'Brouwen!M58', 'Brouwen!M59',
-  'Brouwen!M60', 'Brouwen!M61', 'Brouwen!M62', 'Brouwen!M63', 'Brouwen!M64', 'Brouwen!M65',
-  'Gistkaart Invoer!H4',
-  'Verwerking!S6', 'Verwerking!S7', 'Verwerking!S8', 'Verwerking!S9',
-  'Verwerking!D14', 'Verwerking!D15', 'Verwerking!D16',
-  'Afvulverslag!D99',
+  'Recipe Sheet!K7',
+  'Brew Sheet!N5', 'Brew Sheet!N50', 'Brew Sheet!M57', 'Brew Sheet!M58', 'Brew Sheet!M59',
+  'Brew Sheet!M60', 'Brew Sheet!M61', 'Brew Sheet!M62', 'Brew Sheet!M63', 'Brew Sheet!M64', 'Brew Sheet!M65',
+  'Fermentation Chart!H4',
+  'Processing!S6', 'Processing!S7', 'Processing!S8', 'Processing!S9',
+  'Processing!D14', 'Processing!D15', 'Processing!D16',
+  'Filling Report!D99',
 ];
 
 const EUROPEES_NUMFMT_ID = 171; // 'd/mm/yy;@', al aanwezig in het sjabloon
