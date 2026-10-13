@@ -40,6 +40,20 @@
     background: #fdecea; border-left-color: #a33f2c;
   }
   .bp-weekblok-over .bp-weeknr { color: #a33f2c; }
+  /* Huidige week: geel accent + rand rondom, zodat hij ook opvalt als de
+     week tegelijk over capaciteit (rood) is. */
+  .bp-weekblok.bp-weekblok-huidig {
+    background: #fff8dc; border-left-color: #e0a100;
+    box-shadow: inset 0 0 0 2px #e0a100; border-radius: 6px;
+  }
+  .bp-weekblok.bp-weekblok-huidig.bp-weekblok-over { background: #fdecea; }
+  .bp-weekblok-huidig .bp-weeknr { font-size: 1.15em; }
+  .bp-huidig-badge {
+    font-size: 0.72em; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+    color: #1f1f1f; background: #ffc928; padding: 2px 8px; border-radius: 10px;
+  }
+  .bp-weekblok-verleden .bp-weeknr, .bp-weekblok-verleden .bp-weekdatum { opacity: 0.55; }
+  #bp-huidige-week { cursor: pointer; text-decoration: underline dotted; }
   .bp-over-badge {
     font-size: 0.72em; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
     color: #fff; background: #a33f2c; padding: 2px 8px; border-radius: 10px;
@@ -944,6 +958,11 @@
       const totaalWeken = isoWeeksInYear(huidigJaar);
       let html = '';
 
+      // Huidige week (en verleden weken) alleen markeren in het lopende ISO-jaar;
+      // eerdere jaren zijn helemaal verleden, latere jaren helemaal toekomst.
+      const nu = huidigeIsoJaarEnWeek();
+      const nuWeek = huidigJaar === nu.jaar ? nu.week : (huidigJaar < nu.jaar ? totaalWeken + 1 : 0);
+
       for (let week = 1; week <= totaalWeken; week++) {
         const p = planningPerWeek[week] || { jk: [], wp_60hl: [], wp_120hl: [], wp_320hl: [] };
 
@@ -961,9 +980,10 @@
         const weekOver = jkOver || wpOver;
 
         html += `
-          <div class="bp-weekblok ${weekOver ? 'bp-weekblok-over' : ''}" id="bp-weekblok-${week}">
+          <div class="bp-weekblok ${weekOver ? 'bp-weekblok-over' : ''} ${week === nuWeek ? 'bp-weekblok-huidig' : ''} ${week < nuWeek ? 'bp-weekblok-verleden' : ''}" id="bp-weekblok-${week}">
             <div class="bp-weekkop">
               <span class="bp-weeknr">wk ${week}</span>
+              ${week === nuWeek ? '<span class="bp-huidig-badge">This week</span>' : ''}
               <span class="bp-weekdatum">${weekDatumRange(huidigJaar, week)}</span>
               <span class="bp-weekdatum">Total volume: ${formatHl(jkHl + wpHl)} hl</span>
               ${weekOver ? '<span class="bp-over-badge">Over capacity</span>' : ''}
@@ -1962,13 +1982,27 @@
       await laadRecepten();
       await laadEnRenderAlles();
 
-      if (huidigJaar === huidigIsoJaar) {
+      function scrollNaarHuidigeWeek() {
+        if (huidigJaar !== huidigIsoJaar) return;
         const doel = document.getElementById(`bp-weekblok-${huidigeWeek}`);
         const scrollContainer = document.getElementById('bp-scroll');
         if (doel && scrollContainer) {
           scrollContainer.scrollTop = doel.offsetTop - scrollContainer.offsetTop;
         }
       }
+      scrollNaarHuidigeWeek();
+
+      // Klik op "Current week" springt terug naar die week (zo nodig eerst het
+      // huidige jaar laden).
+      document.getElementById('bp-huidige-week').title = 'Go to current week';
+      document.getElementById('bp-huidige-week').addEventListener('click', async () => {
+        if (huidigJaar !== huidigIsoJaar) {
+          document.getElementById('bp-jaar').value = String(huidigIsoJaar);
+          huidigJaar = huidigIsoJaar;
+          await laadEnRenderAlles();
+        }
+        scrollNaarHuidigeWeek();
+      });
     })();
   </script>
 </body>
