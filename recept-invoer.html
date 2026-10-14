@@ -284,6 +284,8 @@
     display: inline-flex; align-items: center; gap: 8px;
   }
   .re-wz-open-btn:hover { background: #a3651f; }
+  input.re-via-calculator { background: #f3f1ea; color: #4a4a44; cursor: default; }
+  .re-water-hint { font-family: var(--mono); font-size: 12px; color: #6b6355; margin: 10px 0 0; }
   .re-wz-overlay { align-items: flex-start; padding: 32px 20px; overflow-y: auto; }
   .re-wz-modal { max-width: 1180px; padding: 0; max-height: none; overflow: hidden; }
   .re-wz-kop { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--hop-dark); color: #fff; padding: 14px 16px 14px 28px; }
@@ -609,6 +611,7 @@
           </button>
         </h2>
         <div class="re-param-columns re-param-columns-3" id="re-water-grid"></div>
+        <p class="re-water-hint">Ca, Mg, Na, Cl, SO₄ and the ratio are set by the Water salts calculator, together with the salts in Additions Brewing.</p>
       </div>
 
       <div class="re-section">
@@ -722,7 +725,7 @@
     <div class="re-wz-voet">
       <span class="melding" id="re-wz-melding"></span>
       <button type="button" class="re-btn secundair" id="re-wz-sluit-btn">Close</button>
-      <button type="button" class="re-btn opslaan" id="re-wz-overnemen-btn">Copy to Additions Brewing</button>
+      <button type="button" class="re-btn opslaan" id="re-wz-overnemen-btn">Apply to recipe</button>
     </div>
   </div>
 </div>
@@ -991,13 +994,21 @@ function urlParam(naam) {
   return new URLSearchParams(window.location.search).get(naam);
 }
 
+// Waterprofiel: deze velden zijn alleen via de Water salts calculator te
+// wijzigen (die past tegelijk de zouten aan), dus hier alleen-lezen.
+const WATER_VIA_CALCULATOR = new Set(['ca', 'mg', 'na', 'cl', 'so4', 'ratio_cl_so4']);
+
 function renderVeldenGrid(containerId, fields, data) {
   const container = document.getElementById(containerId);
-  container.innerHTML = fields.map(([key, label, unit, type]) => `
+  const isWater = containerId === 're-water-grid';
+  container.innerHTML = fields.map(([key, label, unit, type]) => {
+    const alleenLezen = isWater && WATER_VIA_CALCULATOR.has(key);
+    return `
     <div class="re-paramrow-simple">
       <label for="veld-${key}">${label}${unit ? ' (' + unit + ')' : ''}</label>
-      <input type="${type}" id="veld-${key}" value="${data && data[key] !== null && data[key] !== undefined ? data[key] : ''}" />
-    </div>`).join('');
+      <input type="${type}" id="veld-${key}" value="${data && data[key] !== null && data[key] !== undefined ? data[key] : ''}"${alleenLezen ? ' readonly class="re-via-calculator" title="Set via the Water salts calculator"' : ''} />
+    </div>`;
+  }).join('');
 }
 
 function leesVeldenGrid(fields) {
@@ -3179,7 +3190,11 @@ function wzNaarAdditions() {
   });
   herNummerVolgorde(tbody);
   herberekenAfweegHoeveelheden();
-  melding.textContent = `Additions Brewing updated (${n} line${n === 1 ? '' : 's'}). Save the recipe to keep the change.`;
+  // Waterprofiel van het recept = het resulterende profiel van deze zouten.
+  const zet = (k, v) => { const el = document.getElementById('veld-' + k); if (el) el.value = v; };
+  ['ca', 'mg', 'na', 'cl', 'so4'].forEach((k) => zet(k, Math.round(r.resultaat[k])));
+  zet('ratio_cl_so4', r.ratio === null ? '' : Math.round(r.ratio * 100) / 100);
+  melding.textContent = `Additions Brewing and water profile updated (${n} salt line${n === 1 ? '' : 's'}). Save the recipe to keep the change.`;
   melding.className = 'melding';
 }
 
