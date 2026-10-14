@@ -276,6 +276,52 @@
   .re-modal-radio-option .sub { display: block; color: #6b6355; font-size: 12px; margin-top: 2px; }
   .re-modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
 
+  /* ---------- Water salts calculator (popup) ---------- */
+  .re-section h2.re-h2-met-knop { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 8px; padding-bottom: 8px; }
+  .re-wz-open-btn {
+    background: var(--amber); color: #fff; border: none; border-radius: 4px; padding: 7px 14px; cursor: pointer;
+    font-family: var(--mono); font-size: 12px; font-weight: 700; letter-spacing: 0; text-transform: none;
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .re-wz-open-btn:hover { background: #a3651f; }
+  .re-wz-overlay { align-items: flex-start; padding: 32px 20px; overflow-y: auto; }
+  .re-wz-modal { max-width: 1180px; padding: 0; max-height: none; overflow: hidden; }
+  .re-wz-kop { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--hop-dark); color: #fff; padding: 14px 16px 14px 28px; }
+  .re-wz-kop .titel { font-size: 18px; font-weight: 700; }
+  .re-wz-kop .sub { font-size: 13px; color: #dfe7da; }
+  .re-wz-sluit { background: transparent; border: 1px solid rgba(255,255,255,.35); color: #fff; border-radius: 6px; width: 40px; height: 40px; cursor: pointer; font-size: 22px; line-height: 1; }
+  .re-wz-body { padding: 22px 28px; display: flex; flex-direction: column; gap: 20px; }
+  .re-wz-rij { display: flex; gap: 16px; flex-wrap: wrap; align-items: stretch; }
+  .re-wz-bron { flex: 1 1 380px; background: var(--paper); border: 1px solid #e6e0d3; border-radius: 6px; padding: 12px 16px; font-size: 13px; display: flex; flex-direction: column; gap: 6px; }
+  .re-wz-bron .waarden { display: flex; gap: 18px; flex-wrap: wrap; }
+  .re-wz-lbl { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: #6b6355; }
+  .re-wz-veld { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--hop-dark); }
+  .re-wz-veld input { padding: 8px 10px; border: 1px solid var(--line); border-radius: 4px; font-size: 15px; color: var(--ink); width: 100%; box-sizing: border-box; }
+  .re-wz-doelen { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px 14px; }
+  .re-wz-split { grid-column: span 2; display: flex; align-items: center; gap: 10px; align-self: end; min-height: 40px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 4px; background: var(--paper); font-size: 14px; color: var(--ink); cursor: pointer; }
+  .re-wz-split input { width: 18px; height: 18px; accent-color: var(--hop-dark); }
+  .re-wz-kolommen { display: flex; gap: 24px; flex-wrap: wrap; }
+  .re-wz-kolommen > div { flex: 1 1 420px; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+  .re-wz-kolommen h3 { margin: 0; font-size: 15px; }
+  .re-wz-tabelbox { overflow-x: auto; border: 1px solid #e6e0d3; border-radius: 6px; }
+  .re-wz-tabel { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .re-wz-tabel th { background: var(--paper); padding: 9px 12px; font-size: 12px; color: #6b6355; text-align: right; }
+  .re-wz-tabel th:first-child, .re-wz-tabel td:first-child { text-align: left; }
+  .re-wz-tabel td { border-top: 1px solid #eee; padding: 9px 12px; text-align: right; font-variant-numeric: tabular-nums; }
+  .re-wz-tabel td.groot { font-weight: 700; font-size: 18px; white-space: nowrap; }
+  .re-wz-tabel .klein { font-size: 12px; color: #6b6355; }
+  .re-wz-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: 700; }
+  .re-wz-badge.ok { background: #e3f0e3; color: #24602e; }
+  .re-wz-badge.hoog, .re-wz-badge.cap { background: #fdf1d8; color: #7a4b10; }
+  .re-wz-badge.laag { background: #fbe4e6; color: #8a1020; }
+  .re-wz-badge.info { background: #eeeeea; color: #4a4a44; font-weight: 400; }
+  .re-wz-meldingen { display: flex; flex-direction: column; gap: 6px; background: #fdf1d8; border: 1px solid #ecd7a8; border-radius: 6px; padding: 10px 14px; font-size: 13px; }
+  .re-wz-uitleg { font-size: 13px; color: var(--hop-dark); background: var(--paper); border-radius: 6px; padding: 10px 14px; }
+  .re-wz-uitleg ol { margin: 8px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+  .re-wz-voet { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex-wrap: wrap; border-top: 1px solid #e6e0d3; padding: 14px 28px; background: #faf9f6; }
+  .re-wz-voet .melding { margin-right: auto; font-size: 13px; color: #2f7d3c; }
+  .re-wz-voet .melding.fout { color: #a33f2c; }
+
   .re-melding { margin-top: 14px; font-size: 13px; font-family: var(--mono); }
   .re-melding.fout { color: #a33f2c; }
   .re-melding.ok { color: var(--hop-dark); }
@@ -556,7 +602,12 @@
       </div>
 
       <div class="re-section">
-        <h2>Target water profile</h2>
+        <h2 class="re-h2-met-knop">Target water profile
+          <button type="button" class="re-wz-open-btn" id="re-wz-open-btn">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"></rect><path d="M8 6h8M8 11h2M14 11h2M8 15h2M14 15h2M8 19h2M14 19h2"></path></svg>
+            Water salts calculator
+          </button>
+        </h2>
         <div class="re-param-columns re-param-columns-3" id="re-water-grid"></div>
       </div>
 
@@ -661,8 +712,24 @@
   </div>
 </div>
 
+<div class="re-modal-overlay re-wz-overlay" id="re-wz-overlay" style="display:none;">
+  <div class="re-modal re-wz-modal" role="dialog" aria-modal="true" aria-labelledby="re-wz-titel">
+    <div class="re-wz-kop">
+      <div><div class="titel" id="re-wz-titel">Water salts calculator</div><div class="sub" id="re-wz-subtitel"></div></div>
+      <button type="button" class="re-wz-sluit" id="re-wz-sluit-x" aria-label="Close">&times;</button>
+    </div>
+    <div class="re-wz-body" id="re-wz-body"></div>
+    <div class="re-wz-voet">
+      <span class="melding" id="re-wz-melding"></span>
+      <button type="button" class="re-btn secundair" id="re-wz-sluit-btn">Close</button>
+      <button type="button" class="re-btn opslaan" id="re-wz-overnemen-btn">Copy to Additions Brewing</button>
+    </div>
+  </div>
+</div>
+
 <script src="config.js"></script>
 <script src="nav.js"></script>
+<script src="waterzouten.js"></script>
 <script>
 const SPECS_FIELDS = [
   ['origineel_extract', 'Original extract', '°P', 'number'],
@@ -2921,6 +2988,208 @@ function escapeHtml(str) {
   div.textContent = str;
   return div.innerHTML;
 }
+
+// ============================================================================
+// Water salts calculator (popup). Rekenkern: waterzouten.js. Bronwater en caps:
+// tabel water_instellingen (Settings › Water). "Copy to Additions Brewing"
+// vult alleen het formulier; opslaan gaat via de normale receptflow.
+// ============================================================================
+const WZ_INVOER = [['ca', 'Ca – Calcium'], ['mg', 'Mg – Magnesium'], ['na', 'Na – Sodium'], ['cl', 'Cl – Chloride'], ['so4', 'SO₄ – Sulfate']];
+const wzStaat = { water: null, doel: {}, hl: null, split: true, laatste: null };
+
+function wzFmt(x, dec = 0) {
+  if (x === null || x === undefined || !Number.isFinite(Number(x))) return '–';
+  return Number(x).toLocaleString('en-GB', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+}
+
+async function openWaterZoutenModal() {
+  const melding = document.getElementById('re-wz-melding');
+  melding.textContent = ''; melding.className = 'melding';
+  const { data, error } = await supabaseClient.from('water_instellingen').select('*').eq('id', 1).maybeSingle();
+  if (error || !data) {
+    alert('Could not load the source water profile (Settings › Water)' + (error ? ': ' + error.message : '.'));
+    return;
+  }
+  wzStaat.water = data;
+  // Doelen en brouwselgrootte uit het formulier (niet uit de database): zo
+  // rekent de popup met wat er nu in het recept staat, ook als dat nog niet
+  // opgeslagen is.
+  wzStaat.doel = {};
+  ['ca', 'mg', 'na', 'cl', 'so4', 'ratio_cl_so4'].forEach((k) => {
+    const el = document.getElementById('veld-' + k);
+    wzStaat.doel[k] = el ? el.value : '';
+  });
+  wzStaat.hl = document.getElementById('veld-brouwsel_hl').value;
+  const naam = (document.getElementById('veld-naam') || {}).value || '';
+  const locatie = (document.getElementById('veld-locatie') || {}).value || '';
+  document.getElementById('re-wz-subtitel').textContent = [naam, locatie].filter(Boolean).join(' · ');
+  renderWaterZouten(true);
+  document.getElementById('re-wz-overlay').style.display = 'flex';
+}
+
+function sluitWaterZoutenModal() {
+  document.getElementById('re-wz-overlay').style.display = 'none';
+}
+
+function wzBerekenHuidig() {
+  const w = wzStaat.water;
+  return wzBereken({
+    bron: { ca: w.ca, mg: w.mg, na: w.na, cl: w.cl, so4: w.so4, alkalinity: w.alkalinity },
+    caps: { ca: w.max_ca, mg: w.max_mg, cl: w.max_cl, so4: w.max_so4 },
+    doel: { ca: wzStaat.doel.ca, mg: wzStaat.doel.mg, na: wzStaat.doel.na, cl: wzStaat.doel.cl, so4: wzStaat.doel.so4, ratio: wzStaat.doel.ratio_cl_so4 },
+    hl: wzStaat.hl, split: wzStaat.split,
+  });
+}
+
+function wzBadge(status, regel) {
+  const t = {
+    ok: ['ok', 'On target'], cap: ['cap', 'At cap'], none: ['info', 'No target'], unchanged: ['info', 'Not changed by salts'],
+    above: ['hoog', (regel && regel.afwijking !== null) ? '+' + wzFmt(regel.afwijking) + ' above' : 'Above target'],
+    below: ['laag', (regel && regel.afwijking !== null) ? '−' + wzFmt(-regel.afwijking) + ' below' : 'Below target'],
+  }[status] || ['info', status];
+  if (regel && regel.key === 'ratio' && (status === 'above' || status === 'below')) t[1] = status === 'above' ? 'Above target' : 'Below target';
+  return `<span class="re-wz-badge ${t[0]}">${t[1]}</span>`;
+}
+
+// volledig = ook de invoervelden opnieuw opbouwen (alleen bij openen), anders
+// alleen de resultaten -- zodat de cursor in een invoerveld blijft staan.
+function renderWaterZouten(volledig) {
+  const w = wzStaat.water;
+  const r = wzBerekenHuidig();
+  wzStaat.laatste = r;
+  const body = document.getElementById('re-wz-body');
+  if (volledig) {
+    const gemeten = w.gemeten_op ? ' · measured ' + new Date(w.gemeten_op).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+    body.innerHTML = `
+      <div class="re-wz-rij">
+        <div class="re-wz-bron">
+          <div class="re-wz-lbl">Source water · ${escapeHtml(w.omschrijving || '')}</div>
+          <div class="waarden">
+            <span><b>Ca</b> ${wzFmt(w.ca, 1)}</span><span><b>Mg</b> ${wzFmt(w.mg, 1)}</span><span><b>Na</b> ${wzFmt(w.na, 1)}</span>
+            <span><b>Cl</b> ${wzFmt(w.cl, 1)}</span><span><b>SO₄</b> ${wzFmt(w.so4, 1)}</span><span><b>Alk</b> ${wzFmt(w.alkalinity, 1)}</span>
+          </div>
+          <div style="color:#6b6355;">ppm${gemeten} · change in Settings › Water</div>
+        </div>
+        <label class="re-wz-veld" style="flex:0 1 200px;"><span class="re-wz-lbl">Brew size (hl)</span>
+          <input type="number" step="0.5" id="re-wz-hl" value="${escapeHtml(String(wzStaat.hl ?? ''))}" />
+          <span style="font-size:12px; color:#6b6355;">From the recipe; change for a one-off brew.</span>
+        </label>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <div class="re-wz-lbl">Target (from the recipe's water profile — adjust to try)</div>
+        <div class="re-wz-doelen">
+          ${WZ_INVOER.map(([k, l]) => `<label class="re-wz-veld">${l}<input type="number" step="1" data-wz-doel="${k}" value="${escapeHtml(String(wzStaat.doel[k] ?? ''))}" /></label>`).join('')}
+          <label class="re-wz-split"><input type="checkbox" id="re-wz-split" ${wzStaat.split ? 'checked' : ''} /> Split salts over Mash and Boil? <span style="font-size:12px; color:#6b6355;">⅔ mash · ⅓ boil</span></label>
+        </div>
+      </div>
+      <div id="re-wz-resultaat"></div>
+      <details class="re-wz-uitleg">
+        <summary style="cursor:pointer; font-weight:700;">How the calculator decides</summary>
+        <ol>
+          <li><b>Chloride first.</b> Chloride comes from Natrium Chloride and Calcium Chloride. Natrium Chloride is the only sodium source, so its dose follows from the sodium target — but never so much that chloride passes its target. Calcium Chloride supplies the rest of the chloride and also adds calcium.</li>
+          <li><b>Sulfate second.</b> The remaining sulfate comes from Calcium Sulfaat (also adds calcium) and/or Magnesium Sulfaat (also adds magnesium).</li>
+          <li><b>Calcium third.</b> Calcium Sulfaat is used up to the calcium target; the sulfate still missing comes from Magnesium Sulfaat.</li>
+          <li><b>Caps</b> (Settings › Water): calcium ${wzFmt(w.max_ca)}, magnesium ${wzFmt(w.max_mg)}, chloride ${wzFmt(w.max_cl)}, sulfate ${wzFmt(w.max_so4)} ppm are never exceeded — a cap wins over the order above.</li>
+          <li>Salts only add: a target below the source water cannot be reached. Alkalinity is not changed by these salts.</li>
+          <li><b>Control.</b> The Cl:SO₄ ratio is checked afterwards against the recipe's ratio (or chloride target ÷ sulfate target if the recipe has none).</li>
+        </ol>
+      </details>`;
+    body.querySelector('#re-wz-hl').addEventListener('input', (e) => { wzStaat.hl = e.target.value; wzNaWijziging(); });
+    body.querySelectorAll('[data-wz-doel]').forEach((el) => el.addEventListener('input', (e) => { wzStaat.doel[el.dataset.wzDoel] = e.target.value; wzNaWijziging(); }));
+    body.querySelector('#re-wz-split').addEventListener('change', (e) => { wzStaat.split = e.target.checked; wzNaWijziging(); });
+  }
+  const split = r.split;
+  const zoutRijen = r.zouten.map((z) => `
+    <tr>
+      <td><b>${z.naam}</b><div class="klein">${z.formule} · adds ${z.levert}</div></td>
+      ${split ? `<td class="groot">${wzFmt(z.mash)} g</td><td class="groot">${wzFmt(z.boil)} g</td>` : `<td class="groot">${wzFmt(z.perBrouwsel)} g</td>`}
+      <td class="klein">${wzFmt(z.gphl, 2)}</td>
+    </tr>`).join('');
+  const profielRijen = r.profiel.map((p) => {
+    const dec = p.key === 'ratio' ? 2 : 0;
+    const plus = p.key === 'ratio' ? '' : (p.plus > 0.5 ? '+' + wzFmt(p.plus) : '–');
+    return `<tr>
+      <td><b>${p.label}</b> <span class="klein">${p.prio}</span></td>
+      <td>${wzFmt(p.bron, dec)}</td><td class="klein">${plus}</td><td><b>${wzFmt(p.resultaat, dec)}</b></td>
+      <td>${p.doel === null ? '–' : wzFmt(p.doel, dec)}</td><td style="text-align:left;">${wzBadge(p.status, p)}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('re-wz-resultaat').innerHTML = `
+    <div class="re-wz-kolommen">
+      <div>
+        <h3>Weigh per brew</h3>
+        <div class="re-wz-tabelbox"><table class="re-wz-tabel">
+          <thead><tr><th>Salt</th>${split ? '<th>Mashing</th><th>Boiling</th>' : '<th>Per brew</th>'}<th>= g/hl</th></tr></thead>
+          <tbody>${zoutRijen}</tbody>
+        </table></div>
+        <p class="klein" style="margin:0; font-size:12px; color:#6b6355;">${split
+          ? 'Mashing (⅔) and Boiling (⅓) are each rounded to 10 g; the resulting profile uses their sum.'
+          : 'Rounded to 10 g for weighing. The resulting profile is calculated with these rounded amounts.'}</p>
+      </div>
+      <div>
+        <h3>Resulting water profile</h3>
+        <div class="re-wz-tabelbox"><table class="re-wz-tabel">
+          <thead><tr><th>ppm</th><th>Source</th><th>+ Salts</th><th>Result</th><th>Target</th><th style="text-align:left;">Status</th></tr></thead>
+          <tbody>${profielRijen}</tbody>
+        </table></div>
+        ${r.meldingen.length ? `<div class="re-wz-meldingen">${r.meldingen.map((m) => `<div>${escapeHtml(m)}</div>`).join('')}</div>` : ''}
+      </div>
+    </div>`;
+}
+
+function wzNaWijziging() {
+  document.getElementById('re-wz-melding').textContent = '';
+  renderWaterZouten(false);
+}
+
+// Zet de berekende zouten in Additions Brewing (g/hl, moment Mash/Boil).
+// Bestaande regels van deze vier zouten worden eerst verwijderd.
+function wzNaarAdditions() {
+  const r = wzStaat.laatste;
+  const melding = document.getElementById('re-wz-melding');
+  if (!r || !(Number(r.hl) > 0)) {
+    melding.textContent = 'Enter a brew size first.'; melding.className = 'melding fout'; return;
+  }
+  const ids = {};
+  const ontbrekend = [];
+  r.zouten.forEach((z) => {
+    const ing = alleIngredientenLijst.find((i) => i.naam === z.naam);
+    if (ing) ids[z.key] = ing.id; else if (z.perBrouwsel > 0) ontbrekend.push(z.naam);
+  });
+  if (ontbrekend.length) {
+    melding.textContent = 'Ingredient not found: ' + ontbrekend.join(', '); melding.className = 'melding fout'; return;
+  }
+  const tbodyId = 're-ing-brouwtoegift-tbody';
+  const tbody = document.getElementById(tbodyId);
+  const zoutIds = new Set(Object.values(ids).map(String));
+  tbody.querySelectorAll('tr').forEach((tr) => {
+    const el = tr.querySelector('.re-ing-ingredient');
+    if (el && zoutIds.has(String(el.value))) tr.remove();
+  });
+  const rond6 = (x) => Math.round(x * 1e6) / 1e6;
+  let n = 0;
+  r.zouten.forEach((z) => {
+    if (!ids[z.key]) return;
+    const delen = r.split ? [['Mash', z.gphlMash], ['Boil', z.gphlBoil]] : [['', z.gphl]];
+    delen.forEach(([moment, gphl]) => {
+      if (!(gphl > 0)) return;
+      voegIngredientRegelToe(tbodyId, ['toegift_brouwerij'], { rol: 'toegift_brouwerij', ingredient_id: ids[z.key], hoeveelheid: rond6(gphl), eenheid: 'g/hl', tijdstip: moment });
+      n++;
+    });
+  });
+  herNummerVolgorde(tbody);
+  herberekenAfweegHoeveelheden();
+  melding.textContent = `Additions Brewing updated (${n} line${n === 1 ? '' : 's'}). Save the recipe to keep the change.`;
+  melding.className = 'melding';
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('re-wz-open-btn').addEventListener('click', openWaterZoutenModal);
+  document.getElementById('re-wz-sluit-btn').addEventListener('click', sluitWaterZoutenModal);
+  document.getElementById('re-wz-sluit-x').addEventListener('click', sluitWaterZoutenModal);
+  document.getElementById('re-wz-overnemen-btn').addEventListener('click', wzNaarAdditions);
+  document.getElementById('re-wz-overlay').addEventListener('click', (e) => { if (e.target.id === 're-wz-overlay') sluitWaterZoutenModal(); });
+});
 
 document.addEventListener('DOMContentLoaded', initReceptInvoer);
 </script>
