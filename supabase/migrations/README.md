@@ -14,6 +14,16 @@ productie-wijziging zodra dit gepusht wordt.
   **nooit** zomaar pushen. Eerst expliciet voorleggen wat er gaat gebeuren en
   op akkoord wachten, ook als het voor de hand lijkt te liggen.
 
+## Belangrijk: ook rechtstreeks uitgevoerde migraties hier vastleggen
+Supabase's GitHub-integratie weigert **alle** nieuwe migraties zodra de
+database een migratieversie kent die niet als bestand in deze map staat
+("Remote migration versions not found in local migrations directory").
+Wordt een migratie toch rechtstreeks uitgevoerd (MCP `apply_migration` of de
+SQL Editor), zet dan direct een bestand met **exact dezelfde versie en naam**
+(zie `supabase_migrations.schema_migrations`) in deze map. Op 14 oktober 2026
+zijn de 50 ontbrekende migraties zo uit de database overgenomen, en is
+`20260918072509_…` hernoemd naar de geregistreerde versie `20260918072457_…`.
+
 ## Conventie
 - Bestandsnaam: `YYYYMMDDHHMMSS_korte_beschrijving.sql` (UTC-timestamp,
   oplopend/chronologisch — dat bepaalt de uitvoervolgorde).
