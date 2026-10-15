@@ -94,7 +94,10 @@
   #config button:hover { background: var(--hop); }
   #config .hint { font-size: 12px; color: #7a7266; margin-top: 10px; line-height: 1.5; }
 
-  main { display: none; padding: 24px 32px 60px; max-width: 1100px; margin: 0 auto; }
+  main { display: none; padding: 24px 32px 60px; }
+  /* Lijst gebruikt de volle breedte (zoals Ingredients); alleen de receptkaart blijft begrensd. */
+  #detail-view { max-width: 1100px; margin: 0 auto; }
+  td.rcp-naam { white-space: nowrap; }
   main.active { display: block; }
 
   .toolbar { display: flex; gap: 12px; align-items: center; margin-bottom: 18px; flex-wrap: wrap; }
@@ -633,7 +636,7 @@ function renderList(recipes) {
 
   const rows = recipes.map(r => `
     <tr data-id="${r.id}">
-      <td>${escapeHtml(r.naam)}</td>
+      <td class="rcp-naam">${escapeHtml(r.naam)}</td>
       <td>${escapeHtml(r.bierstijl || '—')}</td>
       <td>${escapeHtml(locatieLabel(r.locatie))}</td>
       <td>v${r.versie_major ?? 1}.${r.versie_minor ?? 0}</td>
