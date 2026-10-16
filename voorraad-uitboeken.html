@@ -236,6 +236,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="jopen-utils.js"></script>
+  <script src="db-legacy-names.js"></script>
   <script src="nav.js"></script>
   <script>
     let alleIngredienten = [];       // {id, naam, dichtheid, usesAlphaPct}
@@ -330,9 +331,9 @@
     async function laadIngredienten() {
       const { data, error } = await supabaseClient
         .from('ingredients')
-        .select('id, naam, category_id, eenheid, dichtheid, ingredient_categories(uses_alpha_pct)')
-        .eq('versie_status', 'huidig')
-        .order('naam');
+        .select('id, naam:name, category_id, eenheid:unit, dichtheid:density, ingredient_categories(uses_alpha_pct)')
+        .eq('version_status', 'current')
+        .order('name');
       if (error) { console.error('Kon ingrediënten niet laden:', error); return; }
       alleIngredienten = (data || []).map(i => ({
         id: i.id, naam: i.naam, eenheid: i.eenheid,
@@ -397,9 +398,9 @@
       const select = document.getElementById('vr-manu-lot');
       select.innerHTML = '<option value="">Loading…</option>';
       const [lotsRes, mutRes] = await Promise.all([
-        supabaseClient.from('grondstof_lots').select('id, lotcode, hoeveelheid_ontvangen, eenheid')
-          .eq('ingredient_id', ingredientId).eq('status', 'actief').order('ontvangstdatum'),
-        supabaseClient.from('voorraad_mutaties').select('lot_id, hoeveelheid').eq('type', 'uitboeking'),
+        supabaseClient.from('lots').select('id, lotcode:lot_code, hoeveelheid_ontvangen:quantity_received, eenheid:unit')
+          .eq('ingredient_id', ingredientId).eq('status', 'active').order('received_date'),
+        supabaseClient.from('stock_movements').select('lot_id, hoeveelheid:quantity').eq('movement_type', 'consumption'),
       ]);
       const uitgeboekt = {};
       (mutRes.data || []).forEach(m => { if (m.lot_id != null) uitgeboekt[m.lot_id] = (uitgeboekt[m.lot_id] || 0) + Number(m.hoeveelheid || 0); });
@@ -482,9 +483,9 @@
       }
 
       melding.textContent = 'Saving…'; melding.className = 'vr-melding';
-      const { error } = await supabaseClient.from('voorraad_mutaties').insert({
+      const { error } = await supabaseClient.from('stock_movements').insert(toDb('stock_movements', {
         lot_id: Number(lotId),
-        type: 'uitboeking',
+        type: 'consumption',
         hoeveelheid: hoeveelheidInLotEenheid,
         ingevoerde_hoeveelheid: isConversie ? ingevoerdeHoeveelheid : null,
         ingevoerde_eenheid: isConversie ? ingevoerdeEenheid : null,
@@ -499,7 +500,7 @@
         // Create batch (rechtstreeks uit het recept) slaat dit over.
         geboekt_in_boekhouding: false,
         aangemaakt_door: session?.user?.id ?? null,
-      });
+      }));
 
       if (error) {
         melding.textContent = 'Could not save: ' + error.message;
@@ -557,14 +558,14 @@
       inhoud.innerHTML = '<div class="vr-skeleton">Loading…</div>';
 
       const { data, error } = await supabaseClient
-        .from('voorraad_mutaties')
-        .select(`id, aangemaakt_op, notitie, hoeveelheid, off_recipe, is_spoilage, is_correction,
-          ingevoerde_hoeveelheid, ingevoerde_eenheid, geboekt_in_boekhouding, geboekt_op,
-          batches(batchnummer, naam), grondstof_lots(lotcode, eenheid, ingredients(id, naam)),
-          users!voorraad_mutaties_aangemaakt_door_fkey(name),
-          geboekt_door_gebruiker:users!voorraad_mutaties_geboekt_door_fkey(name)`)
-        .eq('type', 'uitboeking')
-        .order('aangemaakt_op', { ascending: false });
+        .from('stock_movements')
+        .select(`id, aangemaakt_op:created_at, notitie:note, hoeveelheid:quantity, off_recipe, is_spoilage, is_correction,
+          ingevoerde_hoeveelheid:entered_quantity, ingevoerde_eenheid:entered_unit, geboekt_in_boekhouding:booked_in_accounting, geboekt_op:booked_at,
+          batches(batchnummer, naam), grondstof_lots:lots(lotcode:lot_code, eenheid:unit, ingredients(id, naam:name)),
+          users!stock_movements_created_by_fkey(name),
+          geboekt_door_gebruiker:users!stock_movements_booked_by_fkey(name)`)
+        .eq('movement_type', 'consumption')
+        .order('created_at', { ascending: false });
 
       if (error) {
         inhoud.innerHTML = `<div style="color:#a33f2c;">Could not load: ${escapeHtml(error.message)}</div>`;
@@ -726,7 +727,7 @@
           e.stopPropagation();
           if (!confirm('Delete this booking permanently? This cannot be undone.')) return;
           btn.disabled = true;
-          const { error } = await supabaseClient.from('voorraad_mutaties').delete().eq('id', btn.dataset.id);
+          const { error } = await supabaseClient.from('stock_movements').delete().eq('id', btn.dataset.id);
           if (error) { alert('Could not delete booking: ' + error.message); btn.disabled = false; return; }
           laadBoekhouding();
         });
@@ -741,11 +742,11 @@
           if (!confirm(`Mark all ${teAftekenen.length} pending booking(s) of "${groep.naam}" this month as signed off?`)) return;
           btn.disabled = true;
           const { data: { session } } = await supabaseClient.auth.getSession();
-          const { error: updErr } = await supabaseClient.from('voorraad_mutaties').update({
+          const { error: updErr } = await supabaseClient.from('stock_movements').update(toDb('stock_movements', {
             geboekt_in_boekhouding: true,
             geboekt_door: session?.user?.id ?? null,
             geboekt_op: new Date().toISOString(),
-          }).in('id', teAftekenen);
+          })).in('id', teAftekenen);
           if (updErr) { alert('Could not sign off: ' + updErr.message); btn.disabled = false; return; }
           laadBoekhouding();
         });

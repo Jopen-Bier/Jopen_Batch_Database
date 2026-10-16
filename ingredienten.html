@@ -51,8 +51,8 @@
     font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
     padding: 3px 9px; border-radius: 20px; display: inline-block;
   }
-  .status-actief { background: #e1ead9; color: var(--hop-dark); }
-  .status-inactief, .status-uitgefaseerd, .status-uitfaserend { background: #e6e2d8; color: #7a7266; }
+  .status-active { background: #e1ead9; color: var(--hop-dark); }
+  .status-phasing_out { background: #e6e2d8; color: #7a7266; }
 
   /* Row-level quick actions (Edit / Archive / Delete) on the overview table --
      additive next to the existing detail-view Edit/Delete, for fast bulk
@@ -350,8 +350,8 @@
     padding: 2px 7px; border-radius: 20px; display: inline-block; margin-right: 6px;
   }
   .ing-doc-type-pill { background: #e6e2d8; color: #4c4535; }
-  .ing-doc-status-pill.status-actief { background: #e1ead9; color: var(--hop-dark); }
-  .ing-doc-status-pill.status-gearchiveerd { background: #e6e2d8; color: #7a7266; }
+  .ing-doc-status-pill.status-active { background: #e1ead9; color: var(--hop-dark); }
+  .ing-doc-status-pill.status-archived { background: #e6e2d8; color: #7a7266; }
   .ing-doc-edit-btn, .ing-doc-archive-btn, .ing-doc-restore-btn {
     background: none; border: none; font-size: 12px; cursor: pointer; padding: 4px 6px; font-family: var(--mono);
   }
@@ -507,6 +507,7 @@
 
 <script src="config.js"></script>
 <script src="jopen-utils.js"></script>
+<script src="db-legacy-names.js"></script>
 <script src="nav.js"></script>
 <script>
 let alleIngredienten = [];
@@ -520,7 +521,7 @@ let magIngVerwijderen = false;
 let laatsteWijzigingPerIngredient = {};
 let alleDocumenttypen = [];
 let ingDocFilterType = '';        // '' = alle types
-let ingDocFilterStatus = 'actief'; // default: alleen actieve documenten tonen
+let ingDocFilterStatus = 'active'; // default: only active documents
 
 // De 14 EU-gereguleerde allergenen (Verordening (EU) 1169/2011, bijlage II).
 // Sleutel wordt opgeslagen in ingredients.allergenen (jsonb array); label is
@@ -679,11 +680,9 @@ function openAllergenenPicker(huidigeKeys, onOpslaan) {
   nieuweCancel.addEventListener('click', sluit);
 }
 
-// Display-only translation of the status values as stored in the database
-// (Dutch: actief/inactief/uitgefaseerd) — the stored value itself is left
-// unchanged, only what's shown to the user is translated.
+// Display label for the ingredient status as stored in the database.
 function statusLabel(status) {
-  const labels = { concept: 'Draft', actief: 'Active', inactief: 'Inactive', uitgefaseerd: 'Phased out', uitfaserend: 'Phased out' };
+  const labels = { draft: 'Draft', active: 'Active', phasing_out: 'Phased out' };
   return labels[status] || status || 'Unknown';
 }
 
@@ -720,7 +719,7 @@ function productSheetDotStatus(revisiedatum) {
 function actieveProductSheetStatus(documenten) {
   const psTypeId = productSheetTypeId();
   const actieveSheets = (documenten || [])
-    .filter(d => String(d.document_type_id) === String(psTypeId) && d.status === 'actief')
+    .filter(d => String(d.document_type_id) === String(psTypeId) && d.status === 'active')
     .sort((a, b) => (b.revisiedatum || '').localeCompare(a.revisiedatum || ''));
   if (actieveSheets.length === 0) return { status: null, revisiedatum: null };
   const nieuwste = actieveSheets[0];
@@ -776,7 +775,7 @@ async function initIngredientenPagina() {
 
   const { data: categorieData, error: categorieError } = await supabaseClient
     .from('ingredient_categories')
-    .select('id, name, uses_alpha_pct, uses_extract_pct, uses_gistfactor')
+    .select('id, name, uses_alpha_pct, uses_extract_pct, uses_gistfactor:uses_yeast_factor')
     .order('sort_order');
   if (!categorieError) alleCategorieen = categorieData || [];
 
@@ -795,8 +794,8 @@ async function initIngredientenPagina() {
   // ontsnapping voor eenmalige waarden (kruiden/fruit/extracten) via de
   // "Other" optie in declaratieOpties().
   const { data: declaratieData, error: declaratieError } = await supabaseClient
-    .from('ingredient_declaraties')
-    .select('id, naam, is_geen_declaratie, sort_order')
+    .from('ingredient_declarations')
+    .select('id, naam:name, is_geen_declaratie:not_declarable, sort_order')
     .order('sort_order');
   if (!declaratieError) alleDeclaraties = declaratieData || [];
 
@@ -823,20 +822,20 @@ async function laadIngredienten() {
   const [ingResult, usageResult, revisieResult, productSheetResult] = await Promise.all([
     supabaseClient
       .from('ingredients')
-      .select('id, naam, categorie, category_id, eenheid, prijs, prijs_per_kg, prijs_2, prijs_per_kg_2, eenheid_prijs_1, eenheid_prijs_2, extract_pct, alpha_pct, gistfactor, leverancier, leverancier_2, leverancier_3, prijs_3, prijs_per_kg_3, eenheid_prijs_3, kleur_ebc, allergenen, ingredient_declaratie, bewaartemperatuur, houdbaarheid, houdbaarheid_eenheid, houdbaarheid_na_openen, houdbaarheid_na_openen_eenheid, dichtheid, alcohol_pct, minimum_voorraad, status, versie_major, versie_minor, ingredient_group_id, versie_status, aangemaakt_op, gewijzigd_op, ingredient_categories(name, uses_alpha_pct, uses_extract_pct, uses_gistfactor)')
-      .eq('versie_status', 'huidig')
-      .order('naam'),
+      .select('id, naam:name, category_id, eenheid:unit, prijs:price, prijs_per_kg:price_per_kg, prijs_2:price_2, prijs_per_kg_2:price_per_kg_2, eenheid_prijs_1:price_unit_1, eenheid_prijs_2:price_unit_2, extract_pct, alpha_pct, gistfactor:yeast_factor, leverancier:supplier, leverancier_2:supplier_2, leverancier_3:supplier_3, prijs_3:price_3, prijs_per_kg_3:price_per_kg_3, eenheid_prijs_3:price_unit_3, kleur_ebc:color_ebc, allergenen:allergens, ingredient_declaratie:ingredient_declaration, bewaartemperatuur:storage_temperature, houdbaarheid:shelf_life, houdbaarheid_eenheid:shelf_life_unit, houdbaarheid_na_openen:shelf_life_after_opening, houdbaarheid_na_openen_eenheid:shelf_life_after_opening_unit, dichtheid:density, alcohol_pct, minimum_voorraad:minimum_stock, status, versie_major:version_major, versie_minor:version_minor, ingredient_group_id, versie_status:version_status, aangemaakt_op:created_at, gewijzigd_op:updated_at, ingredient_categories(name, uses_alpha_pct, uses_extract_pct, uses_gistfactor:uses_yeast_factor)')
+      .eq('version_status', 'current')
+      .order('name'),
     // Server-side geaggregeerd (ingredient_gebruik_counts-view) i.p.v. alle
     // 8000+ recipe_ingredients-rijen client-side op te halen en te tellen --
     // dat laatste kostte alleen al een stuk of 9 gepagineerde requests en was
     // de belangrijkste reden dat deze pagina bijna 10s duurde om te laden.
-    supabaseClient.from('ingredient_gebruik_counts').select('ingredient_id, aantal_recepten'),
-    fetchAllRows(supabaseClient.from('ingredient_revisies').select('ingredient_id, datum')),
+    supabaseClient.from('ingredient_usage_counts').select('ingredient_id, aantal_recepten:recipe_count'),
+    fetchAllRows(supabaseClient.from('ingredient_revisions').select('ingredient_id, datum:date')),
     // Alleen actieve product sheets nodig voor het stoplicht -- lichte
     // aparte query i.p.v. alle documenten van alle ingrediënten op te halen.
     psTypeId
-      ? supabaseClient.from('ingredient_documenten').select('ingredient_id, revisiedatum')
-          .eq('document_type_id', psTypeId).eq('status', 'actief')
+      ? supabaseClient.from('ingredient_documents').select('ingredient_id, revisiedatum:revision_date')
+          .eq('document_type_id', psTypeId).eq('status', 'active')
       : Promise.resolve({ data: [], error: null }),
   ]);
 
@@ -890,7 +889,8 @@ async function laadIngredienten() {
 
   const opgeslagen = laadOpgeslagenIngFilters();
   const alleStatussen = [...new Set(alleIngredienten.map(i => i.status).filter(Boolean))];
-  geselecteerdeIngStatussen = new Set(opgeslagen.status ? opgeslagen.status.filter(s => alleStatussen.includes(s)) : alleStatussen);
+  const bewaardeStatussen = opgeslagen.status ? opgeslagen.status.filter(s => alleStatussen.includes(s)) : [];
+  geselecteerdeIngStatussen = new Set(bewaardeStatussen.length ? bewaardeStatussen : alleStatussen);
   geselecteerdeIngCategorieen = new Set(opgeslagen.categorie ? opgeslagen.categorie.filter(c => alleCategorieen.some(cat => String(cat.id) === c)) : alleCategorieen.map(c => String(c.id)));
   const alleProductSheetStatussen = ['groen', 'oranje', 'rood', 'leeg'];
   geselecteerdeIngProductSheetStatussen = new Set(opgeslagen.productsheet ? opgeslagen.productsheet.filter(s => alleProductSheetStatussen.includes(s)) : alleProductSheetStatussen);
@@ -1100,7 +1100,7 @@ function renderIngLijst(ingredienten) {
 // exactly as it was; these are a faster alternative for going through many
 // ingredients during a cleanup pass.
 function ingRijActiesHtml(i) {
-  const alGearchiveerd = i.status === 'uitfaserend';
+  const alGearchiveerd = i.status === 'phasing_out';
   const editIcon = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M13.5 3.5l3 3L6 17H3v-3L13.5 3.5z"/></svg>`;
   const archiveIcon = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="14" height="3.2" rx="0.8"/><path d="M4.5 7.2V16a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1V7.2"/><path d="M8.2 10.8h3.6"/></svg>`;
   const deleteIcon = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 5.5h12"/><path d="M8 5.5V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5"/><path d="M5.5 5.5 6.2 16a1 1 0 0 0 1 1h5.6a1 1 0 0 0 1-1l0.7-10.5"/></svg>`;
@@ -1117,14 +1117,14 @@ function ingRijActiesHtml(i) {
   return `<span class="row-actions">${editBtn}${archiveBtn}${deleteBtn}</span>`;
 }
 
-// Quick archive: directly sets status to 'uitfaserend' (Phased out) --
-// ingredients have no direct 'gearchiveerd' status value (that's reserved
+// Quick archive: directly sets status to 'phasing_out' (Phased out) --
+// ingredients have no direct 'archived' status value (that's reserved
 // for versie_status, a separate version-history concept). This leaves
 // versie_status untouched.
 async function ingRijArchiveer(id, naam, btn) {
   if (!confirm(`Archive "${naam}"?\n\nThis sets status to "Phased out". It does not affect version history.`)) return;
   btn.disabled = true;
-  const { error } = await supabaseClient.from('ingredients').update({ status: 'uitfaserend' }).eq('id', id);
+  const { error } = await supabaseClient.from('ingredients').update(toDb('ingredients', { status: 'phasing_out' })).eq('id', id);
   if (error) {
     alert('Could not archive: ' + error.message);
     btn.disabled = false;
@@ -1170,10 +1170,10 @@ let documentenVoorHuidigIngredient = [];
 
 async function laadIngredientDocumenten(ingredientId) {
   const { data, error } = await supabaseClient
-    .from('ingredient_documenten')
-    .select('*')
+    .from('ingredient_documents')
+    .select('id, ingredient_id, bestandsnaam:file_name, storage_path, grootte_bytes:size_bytes, revisiedatum:revision_date, geupload_door:uploaded_by, geupload_op:uploaded_at, document_type_id, status')
     .eq('ingredient_id', ingredientId)
-    .order('revisiedatum', { ascending: false })
+    .order('revision_date', { ascending: false })
     .order('id', { ascending: false });
 
   documentenVoorHuidigIngredient = error ? [] : (data || []);
@@ -1254,10 +1254,10 @@ function renderDocumentenLijst() {
   }
 
   houder.innerHTML = documenten.map(doc => {
-    const isActieveProductSheet = String(doc.document_type_id) === String(psTypeId) && doc.status === 'actief';
+    const isActieveProductSheet = String(doc.document_type_id) === String(psTypeId) && doc.status === 'active';
     const dotStatus = isActieveProductSheet ? productSheetDotStatus(doc.revisiedatum) : null;
     const archiveerOfHerstelBtn = magIngBewerken
-      ? (doc.status === 'actief'
+      ? (doc.status === 'active'
           ? `<button type="button" class="ing-doc-archive-btn" data-actie="archiveer">Archive</button>`
           : `<button type="button" class="ing-doc-restore-btn" data-actie="herstel">Restore</button>`)
       : '';
@@ -1268,7 +1268,7 @@ function renderDocumentenLijst() {
         <span class="ing-doc-naam-link" data-actie="bekijk">${escapeHtml(doc.bestandsnaam)}</span>
         <div class="ing-doc-meta">
           <span class="ing-doc-type-pill">${escapeHtml(documentTypeLabel(doc.document_type_id))}</span>
-          <span class="ing-doc-status-pill status-${doc.status}">${doc.status === 'actief' ? 'Active' : 'Archived'}</span>
+          <span class="ing-doc-status-pill status-${doc.status}">${doc.status === 'active' ? 'Active' : 'Archived'}</span>
           <div style="margin-top:4px;">Revision date: ${formatDate(doc.revisiedatum)} &middot; uploaded ${formatDate(doc.geupload_op)}</div>
         </div>
       </div>
@@ -1294,19 +1294,19 @@ function renderDocumentenLijst() {
   });
   houder.querySelectorAll('[data-actie="archiveer"]').forEach(el => {
     const doc = documentenVoorHuidigIngredient.find(d => String(d.id) === el.closest('.ing-doc-rij').dataset.docId);
-    el.addEventListener('click', () => documentArchiveerOfHerstel(doc, 'gearchiveerd'));
+    el.addEventListener('click', () => documentArchiveerOfHerstel(doc, 'archived'));
   });
   houder.querySelectorAll('[data-actie="herstel"]').forEach(el => {
     const doc = documentenVoorHuidigIngredient.find(d => String(d.id) === el.closest('.ing-doc-rij').dataset.docId);
-    el.addEventListener('click', () => documentArchiveerOfHerstel(doc, 'actief'));
+    el.addEventListener('click', () => documentArchiveerOfHerstel(doc, 'active'));
   });
 }
 
 async function documentArchiveerOfHerstel(doc, nieuweStatus) {
   if (!doc) return;
-  if (nieuweStatus === 'gearchiveerd' && !confirm(`Archive "${doc.bestandsnaam}"?`)) return;
+  if (nieuweStatus === 'archived' && !confirm(`Archive "${doc.bestandsnaam}"?`)) return;
 
-  const { error } = await supabaseClient.from('ingredient_documenten').update({ status: nieuweStatus }).eq('id', doc.id);
+  const { error } = await supabaseClient.from('ingredient_documents').update(toDb('ingredient_documents', { status: nieuweStatus })).eq('id', doc.id);
   if (error) {
     alert('Could not update document status: ' + error.message);
     return;
@@ -1323,13 +1323,13 @@ async function archiveerOudereProductSheets(ingredientId, nieuwDocId, nieuweRevi
   const teArchiveren = documentenVoorHuidigIngredient.filter(d =>
     String(d.ingredient_id) === String(ingredientId) &&
     String(d.document_type_id) === String(psTypeId) &&
-    d.status === 'actief' &&
+    d.status === 'active' &&
     String(d.id) !== String(nieuwDocId) &&
     d.revisiedatum < nieuweRevisiedatum
   );
   if (teArchiveren.length === 0) return;
   await Promise.all(teArchiveren.map(d =>
-    supabaseClient.from('ingredient_documenten').update({ status: 'gearchiveerd' }).eq('id', d.id)
+    supabaseClient.from('ingredient_documents').update(toDb('ingredient_documents', { status: 'archived' })).eq('id', d.id)
   ));
 }
 
@@ -1358,7 +1358,7 @@ async function verwijderDocument(doc) {
     return;
   }
 
-  const { error } = await supabaseClient.from('ingredient_documenten').delete().eq('id', doc.id);
+  const { error } = await supabaseClient.from('ingredient_documents').delete().eq('id', doc.id);
   if (error) {
     alert('File was removed from storage, but could not remove the record: ' + error.message);
     return;
@@ -1428,7 +1428,7 @@ document.getElementById('ing-doc-modal-confirm-btn').addEventListener('click', a
       .upload(storagePath, file);
     if (uploadError) throw uploadError;
 
-    const { data: nieuwDoc, error: insertError } = await supabaseClient.from('ingredient_documenten').insert({
+    const { data: nieuwDoc, error: insertError } = await supabaseClient.from('ingredient_documents').insert(toDb('ingredient_documents', {
       ingredient_id: ingredientId,
       bestandsnaam: file.name,
       storage_path: storagePath,
@@ -1436,7 +1436,7 @@ document.getElementById('ing-doc-modal-confirm-btn').addEventListener('click', a
       revisiedatum: revisiedatum,
       document_type_id: documentTypeId,
       geupload_door: huidigeGebruiker ? huidigeGebruiker.id : null,
-    }).select().single();
+    })).select('id, ingredient_id, bestandsnaam:file_name, storage_path, grootte_bytes:size_bytes, revisiedatum:revision_date, geupload_door:uploaded_by, geupload_op:uploaded_at, document_type_id, status').single();
     if (insertError) {
       // Opruimen: geen wees-bestand achterlaten in storage als de metadata-insert faalt.
       await supabaseClient.storage.from('ingredient-documents').remove([storagePath]);
@@ -1488,15 +1488,15 @@ document.getElementById('ing-doc-edit-modal-confirm-btn').addEventListener('clic
   confirmBtn.textContent = 'Saving…';
 
   try {
-    const { error } = await supabaseClient.from('ingredient_documenten')
-      .update({ revisiedatum, document_type_id: documentTypeId })
+    const { error } = await supabaseClient.from('ingredient_documents')
+      .update(toDb('ingredient_documents', { revisiedatum, document_type_id: documentTypeId }))
       .eq('id', doc.id);
     if (error) throw error;
 
     // Zelfde auto-archivering als bij upload: als deze bewerking het document
     // (nog steeds) een actieve product sheet maakt met de nieuwste datum,
     // archiveer oudere actieve product sheets van dit ingrediënt.
-    if (String(documentTypeId) === String(productSheetTypeId()) && doc.status === 'actief') {
+    if (String(documentTypeId) === String(productSheetTypeId()) && doc.status === 'active') {
       await archiveerOudereProductSheets(doc.ingredient_id, doc.id, revisiedatum);
     }
 
@@ -1513,11 +1513,11 @@ document.getElementById('ing-doc-edit-modal-confirm-btn').addEventListener('clic
 
 async function laadIngredientRevisies(ingredientId) {
   const { data, error } = await supabaseClient
-    .from('ingredient_revisies')
-    .select('*')
+    .from('ingredient_revisions')
+    .select('id, ingredient_id, versie_major:version_major, versie_minor:version_minor, datum:date, door:changed_by_name, wijziging:change_description, gebruiker_id:user_id, aangemaakt_op:created_at')
     .eq('ingredient_id', ingredientId)
-    .order('versie_major', { ascending: false })
-    .order('versie_minor', { ascending: false })
+    .order('version_major', { ascending: false })
+    .order('version_minor', { ascending: false })
     .order('id', { ascending: false });
 
   revisiesVoorHuidigIngredient = error ? [] : (data || []);
@@ -1710,8 +1710,8 @@ function renderDetailAlleen(id) {
       <div class="ing-doc-filters">
         <select id="ing-doc-filter-type"><option value="">All types</option></select>
         <select id="ing-doc-filter-status">
-          <option value="actief">Active</option>
-          <option value="gearchiveerd">Archived</option>
+          <option value="active">Active</option>
+          <option value="archived">Archived</option>
           <option value="alle">All</option>
         </select>
       </div>
@@ -1889,9 +1889,9 @@ function renderDetailBewerken(i) {  const container = document.getElementById('i
       <div class="ing-edit-row">
         <label for="veld-status">Status</label>
         <select id="veld-status" style="width:160px;">
-          <option value="concept" ${i.status === 'concept' ? 'selected' : ''}>Draft</option>
-          <option value="actief" ${i.status === 'actief' ? 'selected' : ''}>Active</option>
-          <option value="uitfaserend" ${i.status === 'uitfaserend' ? 'selected' : ''}>Phased out</option>
+          <option value="draft" ${i.status === 'draft' ? 'selected' : ''}>Draft</option>
+          <option value="active" ${i.status === 'active' ? 'selected' : ''}>Active</option>
+          <option value="phasing_out" ${i.status === 'phasing_out' ? 'selected' : ''}>Phased out</option>
         </select>
       </div>
     </div>
@@ -2082,7 +2082,7 @@ async function slaIngredientOp(i, soort, wijziging) {
     // bedoeld voor het snel rechtzetten van kleine foutjes.
     const { error } = await supabaseClient
       .from('ingredients')
-      .update({ ...basis, gewijzigd_door: gebruikerId })
+      .update(toDb('ingredients', { ...basis, gewijzigd_door: gebruikerId }))
       .eq('id', i.id);
 
     if (error) {
@@ -2103,7 +2103,7 @@ async function slaIngredientOp(i, soort, wijziging) {
 
     const { error } = await supabaseClient
       .from('ingredients')
-      .update({ ...basis, versie_minor: nieuweMinor, gewijzigd_door: gebruikerId })
+      .update(toDb('ingredients', { ...basis, versie_minor: nieuweMinor, gewijzigd_door: gebruikerId }))
       .eq('id', i.id);
 
     if (error) {
@@ -2112,7 +2112,7 @@ async function slaIngredientOp(i, soort, wijziging) {
       return;
     }
 
-    await supabaseClient.from('ingredient_revisies').insert({
+    await supabaseClient.from('ingredient_revisions').insert(toDb('ingredient_revisions', {
       ingredient_id: i.id,
       versie_major: i.versie_major ?? 1,
       versie_minor: nieuweMinor,
@@ -2120,7 +2120,7 @@ async function slaIngredientOp(i, soort, wijziging) {
       door: huidigeGebruiker?.name,
       wijziging,
       gebruiker_id: gebruikerId,
-    });
+    }));
 
     melding.textContent = `Saved as v${i.versie_major ?? 1}.${nieuweMinor}.`;
     melding.className = 'ing-melding ok';
@@ -2135,7 +2135,7 @@ async function slaIngredientOp(i, soort, wijziging) {
   // recept-invoer.html's major-version-opslaan.
   const { error: archiveerErr } = await supabaseClient
     .from('ingredients')
-    .update({ versie_status: 'gearchiveerd', gewijzigd_door: gebruikerId })
+    .update(toDb('ingredients', { versie_status: 'archived', gewijzigd_door: gebruikerId }))
     .eq('id', i.id);
 
   if (archiveerErr) {
@@ -2148,16 +2148,16 @@ async function slaIngredientOp(i, soort, wijziging) {
 
   const { data: nieuw, error: insertErr } = await supabaseClient
     .from('ingredients')
-    .insert({
+    .insert(toDb('ingredients', {
       ...basis,
       versie_major: nieuweMajor,
       versie_minor: 0,
-      versie_status: 'huidig',
+      versie_status: 'current',
       ingredient_group_id: i.ingredient_group_id,
       aangemaakt_door: gebruikerId,
       gewijzigd_door: gebruikerId,
-    })
-    .select('id, naam, categorie, category_id, eenheid, prijs, prijs_per_kg, prijs_2, prijs_per_kg_2, eenheid_prijs_1, eenheid_prijs_2, extract_pct, alpha_pct, gistfactor, leverancier, leverancier_2, leverancier_3, prijs_3, prijs_per_kg_3, eenheid_prijs_3, kleur_ebc, allergenen, ingredient_declaratie, bewaartemperatuur, houdbaarheid, houdbaarheid_eenheid, houdbaarheid_na_openen, houdbaarheid_na_openen_eenheid, dichtheid, alcohol_pct, minimum_voorraad, status, versie_major, versie_minor, ingredient_group_id, versie_status, aangemaakt_op, gewijzigd_op, ingredient_categories(name, uses_alpha_pct, uses_extract_pct, uses_gistfactor)')
+    }))
+    .select('id, naam:name, category_id, eenheid:unit, prijs:price, prijs_per_kg:price_per_kg, prijs_2:price_2, prijs_per_kg_2:price_per_kg_2, eenheid_prijs_1:price_unit_1, eenheid_prijs_2:price_unit_2, extract_pct, alpha_pct, gistfactor:yeast_factor, leverancier:supplier, leverancier_2:supplier_2, leverancier_3:supplier_3, prijs_3:price_3, prijs_per_kg_3:price_per_kg_3, eenheid_prijs_3:price_unit_3, kleur_ebc:color_ebc, allergenen:allergens, ingredient_declaratie:ingredient_declaration, bewaartemperatuur:storage_temperature, houdbaarheid:shelf_life, houdbaarheid_eenheid:shelf_life_unit, houdbaarheid_na_openen:shelf_life_after_opening, houdbaarheid_na_openen_eenheid:shelf_life_after_opening_unit, dichtheid:density, alcohol_pct, minimum_voorraad:minimum_stock, status, versie_major:version_major, versie_minor:version_minor, ingredient_group_id, versie_status:version_status, aangemaakt_op:created_at, gewijzigd_op:updated_at, ingredient_categories(name, uses_alpha_pct, uses_extract_pct, uses_gistfactor:uses_yeast_factor)')
     .single();
 
   if (insertErr) {
@@ -2166,7 +2166,7 @@ async function slaIngredientOp(i, soort, wijziging) {
     return;
   }
 
-  await supabaseClient.from('ingredient_revisies').insert({
+  await supabaseClient.from('ingredient_revisions').insert(toDb('ingredient_revisions', {
     ingredient_id: nieuw.id,
     versie_major: nieuweMajor,
     versie_minor: 0,
@@ -2174,14 +2174,14 @@ async function slaIngredientOp(i, soort, wijziging) {
     door: huidigeGebruiker?.name,
     wijziging: `Major revision from v${i.versie_major ?? 1}.${i.versie_minor ?? 0}: ${wijziging}`,
     gebruiker_id: gebruikerId,
-  });
+  }));
 
   melding.textContent = `Saved as new version v${nieuweMajor}.0.`;
   melding.className = 'ing-melding ok';
 
   // Nieuwe versie toevoegen aan de lokale lijst, oude rij bijwerken naar
   // gearchiveerd, filters/overzicht verversen.
-  i.versie_status = 'gearchiveerd';
+  i.versie_status = 'archived';
   nieuw.gebruikt_in_aantal = i.gebruikt_in_aantal;
   alleIngredienten.push(nieuw);
   alleIngredienten.sort((a, b) => (a.naam || '').localeCompare(b.naam || ''));
@@ -2299,9 +2299,9 @@ function toonNieuwFormulier() {
       <div class="ing-edit-row">
         <label for="nieuw-status">Status</label>
         <select id="nieuw-status" style="width:160px;">
-          <option value="actief" selected>Active</option>
-          <option value="inactief">Inactive</option>
-          <option value="uitgefaseerd">Phased out</option>
+          <option value="draft">Draft</option>
+          <option value="active" selected>Active</option>
+          <option value="phasing_out">Phased out</option>
         </select>
       </div>
     </div>
@@ -2418,15 +2418,15 @@ async function slaNieuwIngredientOp() {
     status: document.getElementById('nieuw-status').value,
     versie_major: 1,
     versie_minor: 0,
-    versie_status: 'huidig',
+    versie_status: 'current',
     aangemaakt_door: gebruikerId,
     gewijzigd_door: gebruikerId,
   };
 
   const { data, error } = await supabaseClient
     .from('ingredients')
-    .insert(nieuw)
-    .select('id, naam, categorie, category_id, eenheid, prijs, prijs_per_kg, prijs_2, prijs_per_kg_2, eenheid_prijs_1, eenheid_prijs_2, extract_pct, alpha_pct, gistfactor, leverancier, leverancier_2, leverancier_3, prijs_3, prijs_per_kg_3, eenheid_prijs_3, kleur_ebc, allergenen, ingredient_declaratie, bewaartemperatuur, houdbaarheid, houdbaarheid_eenheid, houdbaarheid_na_openen, houdbaarheid_na_openen_eenheid, dichtheid, alcohol_pct, minimum_voorraad, status, versie_major, versie_minor, ingredient_group_id, versie_status, aangemaakt_op, gewijzigd_op, ingredient_categories(name, uses_alpha_pct, uses_extract_pct, uses_gistfactor)')
+    .insert(toDb('ingredients', nieuw))
+    .select('id, naam:name, category_id, eenheid:unit, prijs:price, prijs_per_kg:price_per_kg, prijs_2:price_2, prijs_per_kg_2:price_per_kg_2, eenheid_prijs_1:price_unit_1, eenheid_prijs_2:price_unit_2, extract_pct, alpha_pct, gistfactor:yeast_factor, leverancier:supplier, leverancier_2:supplier_2, leverancier_3:supplier_3, prijs_3:price_3, prijs_per_kg_3:price_per_kg_3, eenheid_prijs_3:price_unit_3, kleur_ebc:color_ebc, allergenen:allergens, ingredient_declaratie:ingredient_declaration, bewaartemperatuur:storage_temperature, houdbaarheid:shelf_life, houdbaarheid_eenheid:shelf_life_unit, houdbaarheid_na_openen:shelf_life_after_opening, houdbaarheid_na_openen_eenheid:shelf_life_after_opening_unit, dichtheid:density, alcohol_pct, minimum_voorraad:minimum_stock, status, versie_major:version_major, versie_minor:version_minor, ingredient_group_id, versie_status:version_status, aangemaakt_op:created_at, gewijzigd_op:updated_at, ingredient_categories(name, uses_alpha_pct, uses_extract_pct, uses_gistfactor:uses_yeast_factor)')
     .single();
 
   if (error) {
@@ -2435,7 +2435,7 @@ async function slaNieuwIngredientOp() {
     return;
   }
 
-  await supabaseClient.from('ingredient_revisies').insert({
+  await supabaseClient.from('ingredient_revisions').insert(toDb('ingredient_revisions', {
     ingredient_id: data.id,
     versie_major: 1,
     versie_minor: 0,
@@ -2443,7 +2443,7 @@ async function slaNieuwIngredientOp() {
     door: huidigeGebruiker?.name,
     wijziging: 'Initial version',
     gebruiker_id: gebruikerId,
-  });
+  }));
 
   data.gebruikt_in_aantal = 0;
   alleIngredienten.push(data);

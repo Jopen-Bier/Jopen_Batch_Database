@@ -38,6 +38,7 @@ config.js                  Supabase client + auth helpers — loaded on EVERY pa
 nav.js                     navigation, login guard, permission helpers — EVERY page
 jopen-shared.css           shared styles
 jopen-utils.js             shared generic helpers (escapeHtml, fetchAllRows, …)
+db-legacy-names.js         translation layer for not-yet-translated pages (generated; §6a)
 waterzouten.js             water-salts calculation (shared module, has a test)
 voorraad-forecast.js       consumption calculation (shared module)
 productsheet-*.js          product-sheet generation (browser)
@@ -204,8 +205,8 @@ Agreed table and column names per table: `supabase/rename-map.json`.
 | `brouwplanning.html` | brewing_planning | brew_planning (+ splits, history), brew_capacity |
 | `verbruiksprognose.html` | brewing_planning (via menu) | ingredients (+ voorraad-forecast.js) |
 | `batchcreation.html` | batches | batches, recipes |
-| `voorraad-overzicht/inboeken/uitboeken.html` | inventory | grondstof_lots, voorraad_mutaties |
-| `statistics.html` | statistics | ingredients, ingredient_documenten |
+| `voorraad-overzicht/inboeken/uitboeken.html` | inventory | lots, stock_movements, ingredients |
+| `statistics.html` | statistics | ingredients, ingredient_documents |
 | `settings.html` | settings | reference tables, water_instellingen |
 | `gebruikers.html` | admin only | users, roles |
 | `rollen.html` | admin only | roles, role_permissions, permission_modules |
@@ -268,6 +269,26 @@ Agreed table and column names per table: `supabase/rename-map.json`.
 | Restore manual | `.github/backup/RESTORE.md` |
 
 ---
+
+## 6a. Translation layer (transition)
+
+The database is English; a lot of page code is still Dutch. Instead of
+rewriting every page at once, the boundary between the two is the query:
+
+- **Reading:** select strings alias English columns to the old property
+  name, so the page logic is untouched:
+  `.from('lots').select('id, lotcode:lot_code, eenheid:unit')`.
+  Renamed embedded tables are aliased the same way:
+  `grondstof_lots:lots(lotcode:lot_code)`.
+- **Filters / order:** always the English column and English values:
+  `.eq('version_status', 'current')`.
+- **Writing:** payloads built with Dutch keys go through
+  `toDb('<table>', row)` from `db-legacy-names.js` (generated from
+  `supabase/rename-map.json`; load it on pages that write).
+- **Status values** are English everywhere (data, filters, comparisons).
+- When a page is translated to English, its aliases and `toDb()` calls go
+  away. Search for `toDb(` and `:` aliases to find what is left.
+- New code never uses the layer: English names end to end.
 
 ## 7. Language of code
 

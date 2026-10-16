@@ -533,7 +533,7 @@
       if (vanParam) document.getElementById('vp-van').value = vanParam;
       if (totParam) document.getElementById('vp-tot').value = Math.min(Number(totParam), isoWeeksInYear(Number(jaarParam || nuJaar)));
       if (ingredientParam) {
-        const { data } = await supabaseClient.from('ingredients').select('naam').eq('id', ingredientParam).eq('versie_status', 'huidig').single();
+        const { data } = await supabaseClient.from('ingredients').select('naam:name').eq('id', ingredientParam).eq('version_status', 'current').single();
         if (data) document.getElementById('vp-ingredient-filter').value = data.naam;
       }
 

@@ -859,7 +859,7 @@ async function openDetail(id) {
     supabaseClient.from('recipe_processtappen').select('*').eq('recipe_id', id).maybeSingle(),
     supabaseClient.from('recipe_comments').select('*').eq('recipe_id', id).maybeSingle(),
     supabaseClient.from('recipe_kosten').select('*').eq('recipe_id', id).maybeSingle(),
-    supabaseClient.from('recipe_ingredients').select('rol, hoeveelheid, eenheid, tijdstip, volgorde, hdt, alpha_pct, kleur_ebc, notitie, ingredients(naam, categorie)').eq('recipe_id', id).order('rol').order('volgorde'),
+    supabaseClient.from('recipe_ingredients').select('rol, hoeveelheid, eenheid, tijdstip, volgorde, hdt, alpha_pct, kleur_ebc, notitie, ingredients(naam:name)').eq('recipe_id', id).order('rol').order('volgorde'),
     supabaseClient.from('recipe_revisies').select('*').eq('recipe_id', id).order('versie_major', { ascending: false }).order('versie_minor', { ascending: false }).order('id', { ascending: false }),
   ]);
 

@@ -221,6 +221,7 @@
 
 <script src="config.js"></script>
 <script src="jopen-utils.js"></script>
+<script src="db-legacy-names.js"></script>
 <script src="nav.js"></script>
 <script src="voorraad-forecast.js"></script>
 <script>
@@ -251,12 +252,12 @@
 
     const [ingrRes, lotsRes, mutRes, forecastRes] = await Promise.all([
       supabaseClient.from('ingredients')
-        .select('id, naam, eenheid, minimum_voorraad, category_id, ingredient_categories(name)')
-        .eq('versie_status', 'huidig'),
-      supabaseClient.from('grondstof_lots')
-        .select('id, ingredient_id, lotcode, leverancier, ontvangstdatum, hoeveelheid_ontvangen, eenheid, tht_datum, locatie, status')
-        .eq('status', 'actief'),
-      supabaseClient.from('voorraad_mutaties').select('lot_id, hoeveelheid').eq('type', 'uitboeking'),
+        .select('id, naam:name, eenheid:unit, minimum_voorraad:minimum_stock, category_id, ingredient_categories(name)')
+        .eq('version_status', 'current'),
+      supabaseClient.from('lots')
+        .select('id, ingredient_id, lotcode:lot_code, leverancier:supplier, ontvangstdatum:received_date, hoeveelheid_ontvangen:quantity_received, eenheid:unit, tht_datum:best_before_date, locatie:location, status')
+        .eq('status', 'active'),
+      supabaseClient.from('stock_movements').select('lot_id, hoeveelheid:quantity').eq('movement_type', 'consumption'),
       vfBerekenVerbruik(supabaseClient, vfVooruitkijkPeriodes(WEKEN_VOORUITKIJK)),
     ]);
 
@@ -479,7 +480,7 @@
                         <td>${vfmt(l.resterend)} ${escapeHtml(l.eenheid || '')}</td>
                         <td>${l.tht_datum || '—'}</td>
                         <td>${escapeHtml(l.locatie || '—')}</td>
-                        <td><span class="status-pill ${l.status === 'actief' ? 'status-ok' : ''}">${escapeHtml(l.status)}</span></td>
+                        <td><span class="status-pill ${l.status === 'active' ? 'status-ok' : ''}">${escapeHtml(l.status)}</span></td>
                       </tr>`).join('')}
                   </tbody>
                 </table>`}
@@ -531,10 +532,10 @@
         btn.textContent = 'Loading…';
         const g = vrGroepen.find(x => `${x.ingredientId}|${x.eenheid}` === key);
         if (!vrHistorieCache[key]) {
-          const { data, error } = await supabaseClient.from('grondstof_lots')
-            .select('id, ingredient_id, lotcode, leverancier, ontvangstdatum, hoeveelheid_ontvangen, eenheid, tht_datum, locatie, status')
-            .eq('ingredient_id', g.ingredientId).eq('eenheid', g.eenheid).neq('status', 'actief')
-            .order('ontvangstdatum', { ascending: false });
+          const { data, error } = await supabaseClient.from('lots')
+            .select('id, ingredient_id, lotcode:lot_code, leverancier:supplier, ontvangstdatum:received_date, hoeveelheid_ontvangen:quantity_received, eenheid:unit, tht_datum:best_before_date, locatie:location, status')
+            .eq('ingredient_id', g.ingredientId).eq('unit', g.eenheid).neq('status', 'active')
+            .order('received_date', { ascending: false });
           if (error) { alert('Could not load lot history: ' + error.message); return; }
           vrHistorieCache[key] = (data || []).map(l => ({ ...l, resterend: 0 }));
         }
@@ -591,10 +592,10 @@
     const container = document.getElementById('vo-lot-detail-batches');
     container.innerHTML = '<span class="vo-loading" style="padding:10px 0;">Loading…</span>';
     const { data, error } = await supabaseClient
-      .from('voorraad_mutaties')
-      .select('hoeveelheid, aangemaakt_op, batches(batchnummer, naam)')
-      .eq('lot_id', lotId).eq('type', 'uitboeking').not('batch_id', 'is', null)
-      .order('aangemaakt_op', { ascending: true });
+      .from('stock_movements')
+      .select('hoeveelheid:quantity, aangemaakt_op:created_at, batches(batchnummer, naam)')
+      .eq('lot_id', lotId).eq('movement_type', 'consumption').not('batch_id', 'is', null)
+      .order('created_at', { ascending: true });
     if (error) { container.innerHTML = `<span style="color:#a3492f;">Could not load: ${escapeHtml(error.message)}</span>`; return; }
     if (!data || data.length === 0) { container.innerHTML = '<span class="vo-loading" style="padding:10px 0;">Not used in any batch yet.</span>'; return; }
     container.innerHTML = data.map(m => `
@@ -618,13 +619,13 @@
     btn.textContent = 'Saving…';
     const { data: { session } } = await supabaseClient.auth.getSession();
 
-    const { error: mutErr } = await supabaseClient.from('voorraad_mutaties').insert({
-      lot_id: l.id, type: 'uitboeking', hoeveelheid: l.resterend,
+    const { error: mutErr } = await supabaseClient.from('stock_movements').insert(toDb('stock_movements', {
+      lot_id: l.id, type: 'consumption', hoeveelheid: l.resterend,
       notitie: 'Lot marked empty from Stock overview', is_correction: true,
       geboekt_in_boekhouding: false, aangemaakt_door: session?.user?.id ?? null,
-    });
+    }));
     if (mutErr) { alert('Could not book out this lot: ' + mutErr.message); btn.disabled = false; btn.textContent = 'Mark lot as empty'; return; }
-    const { error: lotErr } = await supabaseClient.from('grondstof_lots').update({ status: 'leeg' }).eq('id', l.id);
+    const { error: lotErr } = await supabaseClient.from('lots').update(toDb('lots', { status: 'empty' })).eq('id', l.id);
     if (lotErr) alert('Booked out, but could not update the lot status: ' + lotErr.message);
     document.getElementById('vo-lot-detail-overlay').style.display = 'none';
     laadStockOverview();

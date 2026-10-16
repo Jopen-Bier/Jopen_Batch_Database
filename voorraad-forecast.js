@@ -101,8 +101,7 @@ async function vfBerekenVerbruik(supabaseClient, periodes) {
   // 3. Namen van recepten (+ brouwsel_hl) en ingrediënten erbij.
   const [{ data: recepten }, { data: ingredienten }] = await Promise.all([
     supabaseClient.from('recipes').select('id, naam, brouwsel_hl').in('id', receptIds),
-    supabaseClient.from('ingredients').select('id, naam, eenheid').in(
-      'id', [...new Set((ingredientRegels || []).map(r => r.ingredient_id).filter(x => x != null))]
+    supabaseClient.from('ingredients').select('id, naam:name, eenheid:unit').in('id', [...new Set((ingredientRegels || []).map(r => r.ingredient_id).filter(x => x != null))]
     ),
   ]);
   const receptNaamMap = {};

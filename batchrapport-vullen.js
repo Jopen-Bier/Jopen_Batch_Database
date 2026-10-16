@@ -829,7 +829,7 @@ async function haalBatchDataOpBrowser(supabase, batchnummer) {
       supabase.from('recipe_revisies').select('*').eq('recipe_id', recipeId)
         .order('versie_major', { ascending: false }).order('versie_minor', { ascending: false }).order('id', { ascending: false })
         .limit(4),
-      supabase.from('ingredients').select('id, naam'),
+      supabase.from('ingredients').select('id, naam:name'),
     ]);
 
   if (recipe.error || !recipe.data) throw new Error(`Recept ${recipeId} niet gevonden: ${recipe.error?.message || ''}`);

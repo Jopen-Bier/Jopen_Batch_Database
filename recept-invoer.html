@@ -2236,8 +2236,8 @@ async function initReceptInvoer() {
 
   const { data: ingData, error: ingError } = await supabaseClient
     .from('ingredients')
-    .select('id, naam, eenheid, ingredient_categories(name)')
-    .order('naam');
+    .select('id, naam:name, eenheid:unit, ingredient_categories(name)')
+    .order('name');
   if (!ingError) {
     alleIngredientenLijst = (ingData || []).map(i => ({ id: i.id, naam: i.naam, eenheid: i.eenheid, categorie_naam: i.ingredient_categories?.name }));
   }
