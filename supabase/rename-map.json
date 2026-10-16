@@ -1,0 +1,1045 @@
+{
+ "_uitleg": "Vastgestelde NL->EN mapping (Jaap, 16-10-2026). Bron voor de migraties van stap 6-9 en het omzetten van de code. \"drop\" = kolom vervalt.",
+ "tables": {
+  "gebruikers": {
+   "schema": "core",
+   "name": "users",
+   "kind": "tabel",
+   "columns": {
+    "id": "id",
+    "naam": "name",
+    "rol": "drop",
+    "actief": "is_active",
+    "aangemaakt_op": "created_at",
+    "laatst_ingelogd": "last_login_at",
+    "role_id": "role_id"
+   },
+   "notes": {
+    "rol": "Dubbel met role_id (2 sync-triggers houden ze gelijk). Voorstel: kolom + triggers weg, alles via role_id."
+   }
+  },
+  "roles": {
+   "schema": "core",
+   "name": "roles",
+   "kind": "tabel",
+   "columns": {
+    "id": "id",
+    "naam": "name",
+    "is_systeemrol": "is_system_role",
+    "aangemaakt_op": "created_at"
+   }
+  },
+  "role_permissions": {
+   "schema": "core",
+   "name": "role_permissions",
+   "kind": "tabel",
+   "columns": {
+    "role_id": "role_id",
+    "module_key": "module_key",
+    "can_view": "can_view",
+    "can_edit": "can_edit",
+    "can_delete": "can_delete"
+   }
+  },
+  "permission_modules": {
+   "schema": "core",
+   "name": "permission_modules",
+   "kind": "tabel",
+   "columns": {
+    "module_key": "module_key",
+    "naam": "name",
+    "volgorde": "sort_order"
+   }
+  },
+  "eenheden": {
+   "schema": "core",
+   "name": "units",
+   "kind": "tabel",
+   "columns": {
+    "id": "id",
+    "code": "code",
+    "label": "label",
+    "sort_order": "sort_order",
+    "aangemaakt_op": "created_at"
+   }
+  },
+  "document_typen": {
+   "schema": "core",
+   "name": "document_types",
+   "kind": "tabel",
+   "columns": {
+    "id": "id",
+    "code": "code",
+    "label": "label",
+    "sort_order": "sort_order",
+    "aangemaakt_op": "created_at"
+   }
+  },
+  "ingredients": {
+   "schema": "inventory",
+   "name": "ingredients",
+   "kind": "tabel",
+   "columns": {
+    "id": "id",
+    "naam": "name",
+    "categorie": "drop",
+    "eenheid": "unit",
+    "prijs": "price",
+    "extract_pct": "extract_pct",
+    "alpha_pct": "alpha_pct",
+    "gistfactor": "yeast_factor",
+    "leverancier": "supplier",
+    "status": "status",
+    "created_at": "drop",
+    "aangemaakt_door": "created_by",
+    "gewijzigd_door": "updated_by",
+    "gewijzigd_op": "updated_at",
+    "category_id": "category_id",
+    "versie_major": "version_major",
+    "versie_minor": "version_minor",
+    "ingredient_group_id": "ingredient_group_id",
+    "versie_status": "version_status",
+    "aangemaakt_op": "created_at",
+    "leverancier_2": "supplier_2",
+    "prijs_2": "price_2",
+    "eenheid_prijs_1": "price_unit_1",
+    "eenheid_prijs_2": "price_unit_2",
+    "kleur_ebc": "color_ebc",
+    "allergenen": "allergens",
+    "ingredient_declaratie": "ingredient_declaration",
+    "bewaartemperatuur": "storage_temperature",
+    "houdbaarheid": "shelf_life",
+    "houdbaarheid_na_openen": "shelf_life_after_opening",
+    "dichtheid": "density",
+    "alcohol_pct": "alcohol_pct",
+    "houdbaarheid_eenheid": "shelf_life_unit",
+    "houdbaarheid_na_openen_eenheid": "shelf_life_after_opening_unit",
+    "leverancier_3": "supplier_3",
+    "prijs_3": "price_3",
+    "eenheid_prijs_3": "price_unit_3",
+    "prijs_per_kg": "price_per_kg",
+    "prijs_per_kg_2": "price_per_kg_2",
+    "prijs_per_kg_3": "price_per_kg_3",
+    "minimum_voorraad": "minimum_stock"
+   },
+   "notes": {
+    "categorie": "Oude tekstkolom (graan/hop/gist/additief), vervangen door category_id (609 gevuld vs 535). Voorstel: weg na controle dat de code alleen category_id leest.",
+    "created_at": "Er zijn twee aanmaakdatums: created_at én aangemaakt_op, en die verschillen bij 589 van de 615 rijen. Welke is de echte? Voorstel: aangemaakt_op wordt created_at, de andere vervalt (of wordt imported_at als hij de importdatum is).",
+    "versie_status": "Waarden: huidig→current, gearchiveerd→archived",
+    "allergenen": "Inhoud is al Engels (gluten, milk)."
+   }
+  },
+  "ingredient_categories": {
+   "schema": "inventory",
+   "name": "ingredient_categories",
+   "kind": "tabel",
+   "columns": {
+    "id": "id",
+    "name": "name",
+    "uses_alpha_pct": "uses_alpha_pct",
+    "uses_extract_pct": "uses_extract_pct",
+    "uses_gistfactor": "uses_yeast_factor",
+    "sort_order": "sort_order",
+    "created_at": "created_at"
+   }
+  },
+  "ingredient_revisies": {
+   "schema": "inventory",
+   "name": "ingredient_revisions",
+   "kind": "tabel",
+   "columns": {
+    "id": "id",
+    "ingredient_id": "ingredient_id",
+    "versie_major": "version_major",
+    "versie_minor": "version_minor",
+    "datum": "date",
+    "door": "changed_by_name",
+    "wijziging": "change_description",
+    "gebruiker_id": "user_id",
+    "aangemaakt_op": "created_at"
+   }
+  },
+  "ingredient_documenten": {
+   "schema": "inventory",
+   "name": "ingredient_documents",
+   "kind": "tabel",
+   "columns": {
+    "id": "id",
+    "ingredient_id": "ingredient_id",
+    "bestandsnaam": "file_name",
+    "storage_path": "storage_path",
+    "grootte_bytes": "size_bytes",
+    "revisiedatum": "revision_date",
+    "geupload_door": "uploaded_by",
+    "geupload_op": "uploaded_at",
+    "document_type_id": "document_type_id",
+    "status": "status"
+   }
+  },
+  "ingredient_declaraties": {
+   "schema": "inventory",
+   "name": "ingredient_declarations",
+   "kind": "tabel",
+   "columns": {
+    "id": "id",
+    "naam": "name",
+    "is_geen_declaratie": "not_declarable",
+    "sort_order": "sort_order",
+    "aangemaakt_op": "created_at"
+   },
+   "notes": {
+    "is_geen_declaratie": "Besluit Jaap 16-10"
+   }
+  },
+  "grondstof_lots": {
+   "schema": "inventory",
+   "name": "lots",
+   "kind": "tabel",
+   "columns": {
+    "id": "id",
+    "ingredient_id": "ingredient_id",
+    "leverancier": "supplier",
+    "lotcode": "lot_code",
+    "ontvangstdatum": "received_date",
+    "hoeveelheid_ontvangen": "quantity_received",
+    "eenheid": "unit",
+    "aantal_colli": "package_count",
+    "locatie": "location",
+    "ontvangstcontrole": "receiving_check",
+    "ingangscontrole": "incoming_inspection",
+    "tht_datum": "best_before_date",
+    "alpha_pct": "alpha_pct",
+    "status": "status",
+    "document_pad": "document_path",
+    "notitie": "note",
+    "aangemaakt_door": "created_by",
+    "aangemaakt_op": "created_at",
+    "ontvangen_door": "received_by"
+   },
+   "notes": {
+    "aantal_colli": "Is tekst; bewust zo laten?",
+    "ontvangstcontrole": "Besluit Jaap 16-10; UI: Receiving check done",
+    "ingangscontrole": "Besluit Jaap 16-10; UI: Incoming check done"
+   }
+  },
+  "voorraad_mutaties": {
+   "schema": "inventory",
+   "name": "stock_movements",
+   "kind": "tabel",
+   "columns": {
+    "id": "id",
+    "lot_id": "lot_id",
+    "type": "movement_type",
+    "hoeveelheid": "quantity",
+    "batch_id": "batch_id",
+    "recipe_ingredient_id": "recipe_ingredient_id",
+    "notitie": "note",
+    "geboekt_in_boekhouding": "booked_in_accounting",
+    "geboekt_door": "booked_by",
+    "geboekt_op": "booked_at",
+    "aangemaakt_door": "created_by",
+    "aangemaakt_op": "created_at",
+    "off_recipe": "off_recipe",
+    "ingevoerde_hoeveelheid": "entered_quantity",
+    "ingevoerde_eenheid": "entered_unit",
+    "is_spoilage": "is_spoilage",
+    "is_correction": "is_correction"
+   },
+   "notes": {
+    "type": "Waarden: ontvangst→receipt, reservering→reservation, uitboeking→issue, correctie→correction"
+   }
+  },
+  "ingredient_gebruik_counts": {
+   "schema": "inventory",
+   "name": "ingredient_usage_counts",
+   "kind": "view",
+   "columns": {
+    "ingredient_id": "ingredient_id",
+    "aantal_recepten": "recipe_count"
+   }
+  },
+  "recipes": {
+   "schema": "recipe",
+   "name": "recipes",
+   "kind": "tabel",
+   "columns": {
+    "id": "id",
+    "naam": "name",
+    "bierstijl": "beer_style",
+    "locatie": "location",
+    "huidige_versie": "drop",
+    "status": "status",
+    "created_at": "created_at",
+    "versie_major": "version_major",
+    "versie_minor": "version_minor",
+    "aangemaakt_door": "created_by",
+    "gewijzigd_door": "updated_by",
+    "gewijzigd_op": "updated_at",
+    "recipe_group_id": "recipe_group_id",
+    "brouwsel_hl": "brew_volume_hl",
+    "kleur": "recipe_color",
+    "smaakomschrijving": "flavor_description",
+    "smaak_keywords": "flavor_keywords",
+    "aanbevolen_schenktemperatuur": "serving_temperature",
+    "kleur_srm": "color_srm",
+    "kleur_vrije_tekst": "color_free_text"
+   },
+   "notes": {
+    "huidige_versie": "Besluit Jaap 16-10: vervalt; code omzetten naar version_major/minor",
+    "kleur": "Besluit Jaap 16-10: weergavekleur van het recept in de planning, niet de bierkleur"
+   }
+  },
+  "recipe_brouwspecificaties": {
+   "schema": "recipe",
+   "name": "recipe_brewing_specs",
+   "kind": "tabel",
+   "columns": {
+    "recipe_id": "recipe_id",
+    "kamers_mashfilter": "mash_filter_chambers",
+    "walsenmolen": "roller_mill",
+    "beslag_dikte": "mash_thickness",
+    "volume_kook": "boil_volume",
+    "wortvoorkoeler_temp": "wort_precooler_temp",
+    "eindvolume_brouwsel": "brew_final_volume",
+    "gewenste_verdamping": "target_evaporation",
+    "intensiteit_koken": "boil_intensity",
+    "whirlpool_rust": "whirlpool_rest",
+    "lauterfactor": "lauter_factor",
+    "recept_naam_software": "brewhouse_recipe_name_wp + brewhouse_recipe_name_jk",
+    "stort_special_bin_kg": "special_bin_load_kg",
+    "naam_special_bin": "special_bin_name",
+    "mash_inmaischen_temp": "mash_in_temp",
+    "mash_inmaischen_tijd": "mash_in_time",
+    "mash_verhogen1_temp": "mash_step1_temp",
+    "mash_verhogen1_tijd": "mash_step1_time",
+    "mash_verhogen2_temp": "mash_step2_temp",
+    "mash_verhogen2_tijd": "mash_step2_time",
+    "mash_verhogen3_temp": "mash_step3_temp",
+    "mash_verhogen3_tijd": "mash_step3_time",
+    "mash_verhogen4_temp": "mash_step4_temp",
+    "mash_verhogen4_tijd": "mash_step4_time",
+    "mash_uitmaischen_temp": "mash_out_temp",
+    "mash_uitmaischen_tijd": "mash_out_time",
+    "cumm_sparging_vol": "cumulative_sparge_volume",
+    "verwacht_extract_begin_kook": "expected_extract_boil_start",
+    "volume_water_additie_terugkoeling": "water_addition_volume_cooling",
+    "sparging_1e": "sparge_1",
+    "sparging_2e": "sparge_2",
+    "sparging_3e": "sparge_3",
+    "sparging_4e": "sparge_4",
+    "eerste_afloop": "first_wort",
+    "spoelwater": "sparge_water",
+    "spoel_afloop": "sparge_runoff",
+    "totaal_gefiltreerd_volume": "total_lautered_volume",
+    "inmaischen_zuur_l": "mash_in_acid_l",
+    "inmaischen_tannines_l": "mash_in_tannins_l",
+    "koken_zuur_l": "boil_acid_l",
+    "inline_sparge_zuur_l": "inline_sparge_acid_l",
+    "maischwater": "mash_water",
+    "ph_maische": "ph_mash",
+    "ph_start_koken": "ph_boil_start",
+    "ph_eind_koken": "ph_boil_end",
+    "beluchting": "aeration",
+    "stamwort_correctie_brouwhuis": "original_gravity_correction_brewhouse"
+   },
+   "notes": {
+    "kamers_mashfilter": "UI: Mash filter chambers",
+    "walsenmolen": "UI: Roller mill",
+    "beslag_dikte": "UI: Mash thickness",
+    "wortvoorkoeler_temp": "UI: Wort pre-cooler temp",
+    "recept_naam_software": "Besluit Jaap 16-10: twee kolommen, een recept kan in beide vestigingen lopen. Bestaande waarde gaat naar _wp of _jk op basis van recipes.location.",
+    "stort_special_bin_kg": "Besluit Jaap 16-10",
+    "mash_verhogen1_temp": "verhogen = rust na verwarmen; step past bij rust-schema",
+    "cumm_sparging_vol": "Tikfout cumm hersteld",
+    "volume_water_additie_terugkoeling": "Besluit Jaap 16-10",
+    "maischwater": "Besluit Jaap 16-10: brouwspecificatie is leidend (511 gevuld); lege kopie in recipe_water vervalt.",
+    "ph_maische": "Leidend; tekst (bereiken als \"5,4 - 5,6\")",
+    "ph_start_koken": "Leidend",
+    "ph_eind_koken": "Leidend",
+    "beluchting": "Leidend",
+    "stamwort_correctie_brouwhuis": "Besluit Jaap 16-10"
+   }
+  },
+  "recipe_comments": {
+   "schema": "recipe",
+   "name": "recipe_comments",
+   "kind": "tabel",
+   "columns": {
+    "recipe_id": "recipe_id",
+    "comments": "comments"
+   }
+  },
+  "recipe_fermentatie": {
+   "schema": "recipe",
+   "name": "recipe_fermentation",
+   "kind": "tabel",
+   "columns": {
+    "recipe_id": "recipe_id",
+    "pitching_temp": "pitching_temp",
+    "main_ferm_temp": "main_ferm_temp",
+    "t_release": "release_temp",
+    "temp_dry_warm": "dry_hop_warm_temp",
+    "extract_dry_warm_1": "dry_hop_warm_extract_1",
+    "extract_dry_warm_2": "dry_hop_warm_extract_2",
+    "extract_dry_warm_3": "dry_hop_warm_extract_3",
+    "vergistingstijd": "fermentation_time",
+    "lagertijd": "lagering_time",
+    "lager_temp": "lagering_temp",
+    "pasteurisatie": "pasteurization",
+    "troebeling_na_sep": "turbidity_after_separation",
+    "bier_risico": "beer_risk",
+    "bier_status": "beer_status",
+    "pitching_temp_tol": "pitching_temp_tol",
+    "main_ferm_temp_tol": "main_ferm_temp_tol",
+    "t_release_tol": "release_temp_tol",
+    "temp_dry_warm_tol": "dry_hop_warm_temp_tol",
+    "extract_dry_warm_1_tol": "dry_hop_warm_extract_1_tol",
+    "extract_dry_warm_2_tol": "dry_hop_warm_extract_2_tol",
+    "extract_dry_warm_3_tol": "dry_hop_warm_extract_3_tol",
+    "vergistingstijd_tol": "fermentation_time_tol",
+    "lagertijd_tol": "lagering_time_tol",
+    "lager_temp_tol": "lagering_temp_tol",
+    "pasteurisatie_tol": "pasteurization_tol",
+    "troebeling_na_sep_tol": "turbidity_after_separation_tol",
+    "bitterheid_bh": "bitterness_brewhouse",
+    "bitterheid_bh_tol": "bitterness_brewhouse_tol"
+   },
+   "notes": {
+    "t_release": "Besluit Jaap 16-10",
+    "troebeling_na_sep": "UI: Turbidity after separation",
+    "bier_risico": "Waarden: zie tabblad Statuswaarden",
+    "bier_status": "Waarden: zie tabblad Statuswaarden"
+   }
+  },
+  "recipe_ingredients": {
+   "schema": "recipe",
+   "name": "recipe_ingredients",
+   "kind": "tabel",
+   "columns": {
+    "id": "id",
+    "recipe_id": "recipe_id",
+    "ingredient_id": "ingredient_id",
+    "rol": "addition_type",
+    "hoeveelheid": "quantity",
+    "eenheid": "unit",
+    "tijdstip": "timing",
+    "volgorde": "sort_order",
+    "notitie": "note",
+    "hdt": "hop_dosing_tank",
+    "alpha_pct": "alpha_pct",
+    "kleur_ebc": "color_ebc",
+    "alles_in_brouwsel_1": "all_in_first_brew"
+   },
+   "notes": {
+    "rol": "Besluit Jaap 16-10",
+    "hdt": "Besluit Jaap 16-10: HDT = hop dosing tank"
+   }
+  },
+  "recipe_kosten": {
+   "schema": "recipe",
+   "name": "recipe_costs",
+   "kind": "tabel",
+   "columns": {
+    "recipe_id": "recipe_id",
+    "cost_clr_per_kge": "cost_cellar_per_kge",
+    "cost_bh_per_kge": "cost_brewhouse_per_kge",
+    "cost_grondstoffen_hl": "cost_ingredients_per_hl",
+    "bierverlies_pct": "beer_loss_pct"
+   },
+   "notes": {
+    "cost_clr_per_kge": "Besluit Jaap 16-10",
+    "cost_bh_per_kge": "Besluit Jaap 16-10"
+   }
+  },
+  "recipe_processtappen": {
+   "schema": "recipe",
+   "name": "recipe_process_steps",
+   "kind": "tabel",
+   "columns": {
+    "recipe_id": "recipe_id",
+    "dry_hop_warm": "dry_hop_warm",
+    "dry_hop_cold": "dry_hop_cold",
+    "hopsteiner": "hopsteiner",
+    "bevasil": "bevasil",
+    "nagardo": "nagardo",
+    "gluten_test": "gluten_test",
+    "sample_to_lab": "sample_to_lab",
+    "fuge_after_cooling": "fuge_after_cooling",
+    "cool_to_7c": "cool_to_7c",
+    "cool_to_0c": "cool_to_0c",
+    "check_hbt_addition": "check_hbt_addition",
+    "keldersplitsing": "cellar_split",
+    "cellar_add_1": "cellar_add_1",
+    "cellar_add_2": "cellar_add_2",
+    "cellar_add_3": "cellar_add_3",
+    "cellar_add_4": "cellar_add_4",
+    "dry_hop_0c": "dry_hop_0c",
+    "dry_hop_comment_warm": "dry_hop_comment_warm",
+    "dry_hop_methode_warm": "dry_hop_method_warm",
+    "dry_hop_comment_16c": "dry_hop_comment_16c",
+    "dry_hop_methode_16c": "dry_hop_method_16c",
+    "dry_hop_1_dag": "dry_hop_1_day",
+    "dry_hop_2_dag": "dry_hop_2_day",
+    "kelder_toevoeging_dag": "cellar_addition_day",
+    "comment_verwerken": "processing_comment",
+    "total_wp_hop": "total_wp_hop",
+    "total_dry_hop": "total_dry_hop"
+   }
+  },
+  "recipe_revisies": {
+   "schema": "recipe",
+   "name": "recipe_revisions",
+   "kind": "tabel",
+   "columns": {
+    "id": "id",
+    "recipe_id": "recipe_id",
+    "versienummer": "drop",
+    "datum": "date",
+    "door": "changed_by_name",
+    "wijziging": "change_description",
+    "versie_major": "version_major",
+    "versie_minor": "version_minor",
+    "gebruiker_id": "user_id"
+   },
+   "notes": {
+    "versienummer": "Besluit Jaap 16-10: vervalt"
+   }
+  },
+  "recipe_specificaties": {
+   "schema": "recipe",
+   "name": "recipe_specs",
+   "kind": "tabel",
+   "columns": {
+    "recipe_id": "recipe_id",
+    "origineel_extract": "original_extract",
+    "rest_extract": "final_extract",
+    "alcohol": "alcohol",
+    "bitterheid": "bitterness",
+    "kleur": "color",
+    "ph": "ph",
+    "adf_pct": "adf_pct",
+    "troebeling_lab": "turbidity_lab",
+    "co2_fles": "co2_bottle",
+    "co2_can": "co2_can",
+    "co2_fust": "co2_keg",
+    "headspace_o2": "headspace_o2",
+    "dissolved_o2": "dissolved_o2",
+    "origineel_extract_tol": "original_extract_tol",
+    "rest_extract_tol": "final_extract_tol",
+    "alcohol_tol": "alcohol_tol",
+    "bitterheid_tol": "bitterness_tol",
+    "kleur_tol": "color_tol",
+    "ph_tol": "ph_tol",
+    "adf_pct_tol": "adf_pct_tol",
+    "troebeling_lab_tol": "turbidity_lab_tol",
+    "co2_fles_tol": "co2_bottle_tol",
+    "co2_can_tol": "co2_can_tol",
+    "co2_fust_tol": "co2_keg_tol",
+    "headspace_o2_tol": "headspace_o2_tol",
+    "dissolved_o2_tol": "dissolved_o2_tol"
+   },
+   "notes": {
+    "origineel_extract": "UI: Original extract",
+    "rest_extract": "UI: Final extract"
+   }
+  },
+  "recipe_verpakking": {
+   "schema": "recipe",
+   "name": "recipe_packaging",
+   "kind": "tabel",
+   "columns": {
+    "recipe_id": "recipe_id",
+    "ean_fles": "ean_bottle",
+    "tht_fles_maanden": "best_before_bottle_months",
+    "tht_vat_maanden": "best_before_keg_months",
+    "tht_blik_maanden": "best_before_can_months",
+    "alc_pct": "abv_pct",
+    "formaten": "formats",
+    "tpo_spec": "tpo_spec",
+    "hso_spec": "hso_spec",
+    "do_spec": "do_spec",
+    "co2_fles_can_spec": "co2_bottle_can_spec",
+    "co2_fles_can_tolerantie": "co2_bottle_can_tolerance",
+    "co2_fust_spec": "co2_keg_spec",
+    "co2_fust_tolerantie": "co2_keg_tolerance",
+    "zuurstof_fust_spec": "o2_keg_spec"
+   },
+   "notes": {
+    "alc_pct": "Voorlopig; tabel wordt later herzien (Jaap 16-10)",
+    "formaten": "Inhoud (20L keykeg e.d.) blijft; is al Engels."
+   }
+  },
+  "recipe_water": {
+   "schema": "recipe",
+   "name": "recipe_water",
+   "kind": "tabel",
+   "columns": {
+    "recipe_id": "recipe_id",
+    "ca": "ca",
+    "mg": "mg",
+    "na": "na",
+    "cl": "cl",
+    "so4": "so4",
+    "ratio_cl_so4": "ratio_cl_so4",
+    "alkalinity": "alkalinity",
+    "maischwater": "drop",
+    "ph_maische": "drop",
+    "ph_start_koken": "drop",
+    "ph_eind_koken": "drop",
+    "beluchting": "drop"
+   },
+   "notes": {
+    "maischwater": "Lege kopie (0 gevuld); brouwspecificatie is leidend (Jaap 16-10)",
+    "ph_maische": "Lege kopie (0 gevuld)",
+    "ph_start_koken": "Lege kopie (0 gevuld)",
+    "ph_eind_koken": "Lege kopie (0 gevuld)",
+    "beluchting": "Lege kopie (0 gevuld)"
+   }
+  },
+  "product_sheets": {
+   "schema": "recipe",
+   "name": "product_sheets",
+   "kind": "tabel",
+   "columns": {
+    "id": "id",
+    "recipe_group_id": "recipe_group_id",
+    "status": "status",
+    "huidige_versie": "current_version",
+    "excise_tax_category": "excise_tax_category",
+    "vat_gerijpt_hl": "barrel_aged_hl",
+    "vat_type": "barrel_type",
+    "vat_dagen": "barrel_days",
+    "energie_kj": "energy_kj",
+    "energie_kcal": "energy_kcal",
+    "vet_g": "fat_g",
+    "koolhydraten_g": "carbohydrates_g",
+    "eiwit_g": "protein_g",
+    "zout_g": "salt_g",
+    "opmerkingen": "remarks",
+    "sync_snapshot": "sync_snapshot",
+    "bijgewerkt_obv_versie_major": "based_on_version_major",
+    "bijgewerkt_obv_versie_minor": "based_on_version_minor",
+    "bijgewerkt_op": "updated_at",
+    "bijgewerkt_door": "updated_by",
+    "aangemaakt_op": "created_at",
+    "aangemaakt_door": "created_by"
+   },
+   "notes": {
+    "vat_gerijpt_hl": "vat = houten vat, niet btw"
+   }
+  },
+  "product_sheet_revisies": {
+   "schema": "recipe",
+   "name": "product_sheet_revisions",
+   "kind": "tabel",
+   "columns": {
+    "id": "id",
+    "product_sheet_id": "product_sheet_id",
+    "versie": "version",
+    "recipe_versie_major": "recipe_version_major",
+    "recipe_versie_minor": "recipe_version_minor",
+    "datum": "date",
+    "door": "changed_by_name",
+    "wijzigingen": "change_description",
+    "created_at": "created_at"
+   }
+  },
+  "product_sheet_status": {
+   "schema": "recipe",
+   "name": "product_sheet_status",
+   "kind": "view",
+   "columns": {
+    "product_sheet_id": "product_sheet_id",
+    "recipe_group_id": "recipe_group_id",
+    "status": "status",
+    "huidige_versie": "current_version",
+    "bijgewerkt_op": "updated_at",
+    "bijgewerkt_obv_versie_major": "based_on_version_major",
+    "bijgewerkt_obv_versie_minor": "based_on_version_minor",
+    "opgeslagen_hash": "stored_hash",
+    "huidige_hash": "current_hash",
+    "in_sync": "in_sync"
+   }
+  },
+  "hop_utilisatie_curve": {
+   "schema": "recipe",
+   "name": "hop_utilization_curve",
+   "kind": "tabel",
+   "columns": {
+    "kooktijd_min": "boil_time_min",
+    "rendement_pct": "utilization_pct"
+   }
+  },
+  "water_instellingen": {
+   "schema": "recipe",
+   "name": "water_settings",
+   "kind": "tabel",
+   "columns": {
+    "id": "id",
+    "omschrijving": "description",
+    "gemeten_op": "measured_on",
+    "ca": "ca",
+    "mg": "mg",
+    "na": "na",
+    "cl": "cl",
+    "so4": "so4",
+    "alkalinity": "alkalinity",
+    "max_ca": "max_ca",
+    "max_mg": "max_mg",
+    "max_cl": "max_cl",
+    "max_so4": "max_so4",
+    "gewijzigd_op": "updated_at",
+    "gewijzigd_door": "updated_by"
+   }
+  },
+  "water_instellingen_historie": {
+   "schema": "recipe",
+   "name": "water_settings_history",
+   "kind": "tabel",
+   "columns": {
+    "id": "id",
+    "geldig_vanaf": "valid_from",
+    "gewijzigd_door": "updated_by",
+    "gegevens": "data"
+   },
+   "notes": {
+    "gegevens": "JSON-sleutels in bestaande rijen worden mee vertaald."
+   }
+  },
+  "batches": {
+   "schema": "production",
+   "name": "batches",
+   "kind": "tabel",
+   "columns": {
+    "id": "id",
+    "batchnummer": "batch_number",
+    "recipe_id": "recipe_id",
+    "aantal_brouwsels": "brew_count",
+    "brouwdatum": "brew_date",
+    "status": "status",
+    "operator": "operator",
+    "gist_temp_start": "yeast_temp_start",
+    "gist_temp_max": "yeast_temp_max",
+    "giststam": "yeast_strain",
+    "gist_gerehydrateerd": "yeast_rehydrated",
+    "gist_gewicht": "yeast_weight",
+    "gist_bij_1e_brouwsel": "yeast_with_first_brew",
+    "gist_geent_op": "yeast_pitched_on",
+    "gist_door": "yeast_pitched_by",
+    "gist_programma_aan": "yeast_program_on",
+    "datum_orderpicken": "order_picking_date",
+    "extract": "extract",
+    "alcohol": "alcohol",
+    "bitterheid": "bitterness",
+    "kleur": "color",
+    "ph": "ph",
+    "glt_leeg": "glt_empty",
+    "totaal_eindvolume": "total_final_volume",
+    "created_at": "drop",
+    "naam": "name",
+    "aangemaakt_op": "created_at",
+    "aangemaakt_door": "created_by"
+   },
+   "notes": {
+    "gist_programma_aan": "Behouden (Jaap 16-10)",
+    "datum_orderpicken": "Behouden (Jaap 16-10)",
+    "glt_leeg": "Behouden (Jaap 16-10)",
+    "created_at": "Exact gelijk aan aangemaakt_op bij alle 349 batches. aangemaakt_op wordt created_at, deze vervalt."
+   }
+  },
+  "brew_capacity": {
+   "schema": "production",
+   "name": "brew_capacity",
+   "kind": "tabel",
+   "columns": {
+    "id": "id",
+    "capacity_group": "capacity_group",
+    "iso_year": "iso_year",
+    "week_number": "week_number",
+    "max_brouwsels": "max_brews",
+    "updated_by": "updated_by",
+    "updated_at": "updated_at"
+   }
+  },
+  "brew_planning": {
+   "schema": "production",
+   "name": "brew_planning",
+   "kind": "tabel",
+   "columns": {
+    "id": "id",
+    "plan_group": "plan_group",
+    "iso_year": "iso_year",
+    "week_number": "week_number",
+    "recipe_id": "recipe_id",
+    "aantal_brouwsels": "brew_count",
+    "hl": "hl",
+    "prio": "is_priority",
+    "sort_order": "sort_order",
+    "notities": "notes",
+    "aangemaakt_door": "created_by",
+    "aangemaakt_op": "created_at",
+    "bijgewerkt_op": "updated_at",
+    "recipe_group_id": "recipe_group_id"
+   }
+  },
+  "brew_planning_geschiedenis": {
+   "schema": "production",
+   "name": "brew_planning_history",
+   "kind": "tabel",
+   "columns": {
+    "id": "id",
+    "brew_planning_id": "brew_planning_id",
+    "actie": "action",
+    "voor": "before",
+    "na": "after",
+    "gewijzigd_door": "updated_by",
+    "gewijzigd_op": "updated_at"
+   },
+   "notes": {
+    "voor": "JSON-sleutels in bestaande rijen worden mee vertaald.",
+    "na": "JSON-sleutels in bestaande rijen worden mee vertaald."
+   }
+  },
+  "brew_planning_splits": {
+   "schema": "production",
+   "name": "brew_planning_splits",
+   "kind": "tabel",
+   "columns": {
+    "id": "id",
+    "brew_planning_id": "brew_planning_id",
+    "recipe_id": "recipe_id",
+    "recipe_group_id": "recipe_group_id",
+    "hl": "hl",
+    "sort_order": "sort_order",
+    "aangemaakt_op": "created_at"
+   }
+  },
+  "brew_planning_geschiedenis_verrijkt": {
+   "schema": "production",
+   "name": "brew_planning_history_detailed",
+   "kind": "view",
+   "columns": {
+    "id": "id",
+    "brew_planning_id": "brew_planning_id",
+    "actie": "action",
+    "voor": "before",
+    "na": "after",
+    "gewijzigd_door": "updated_by",
+    "gewijzigd_door_naam": "updated_by_name",
+    "gewijzigd_op": "updated_at"
+   }
+  },
+  "brew_planning_wijzigingen": {
+   "schema": "production",
+   "name": "brew_planning_changes",
+   "kind": "view",
+   "columns": {
+    "id": "id",
+    "brew_planning_id": "brew_planning_id",
+    "actie": "action",
+    "week_voor": "week_before",
+    "week_na": "week_after",
+    "jaar_voor": "year_before",
+    "jaar_na": "year_after",
+    "brouwsels_na": "brews_after",
+    "prio_na": "is_priority_after",
+    "plan_group_na": "plan_group_after",
+    "gewijzigd_door": "updated_by",
+    "gewijzigd_door_naam": "updated_by_name",
+    "gewijzigd_op": "updated_at"
+   }
+  }
+ },
+ "status_values": [
+  {
+   "column": "batches.status",
+   "old": "gepland",
+   "new": "planned"
+  },
+  {
+   "column": "batches.status",
+   "old": "brouwen",
+   "new": "brewing"
+  },
+  {
+   "column": "batches.status",
+   "old": "vergisting",
+   "new": "fermenting"
+  },
+  {
+   "column": "batches.status",
+   "old": "verwerking",
+   "new": "processing"
+  },
+  {
+   "column": "batches.status",
+   "old": "afvullen",
+   "new": "filling"
+  },
+  {
+   "column": "batches.status",
+   "old": "afgerond",
+   "new": "completed"
+  },
+  {
+   "column": "recipes.status / ingredients.status",
+   "old": "concept",
+   "new": "draft"
+  },
+  {
+   "column": "recipes.status / ingredients.status",
+   "old": "actief",
+   "new": "active"
+  },
+  {
+   "column": "recipes.status",
+   "old": "gearchiveerd",
+   "new": "archived"
+  },
+  {
+   "column": "ingredients.status",
+   "old": "uitfaserend",
+   "new": "phasing_out"
+  },
+  {
+   "column": "ingredients.versie_status",
+   "old": "huidig",
+   "new": "current"
+  },
+  {
+   "column": "ingredients.versie_status",
+   "old": "gearchiveerd",
+   "new": "archived"
+  },
+  {
+   "column": "ingredient_documenten.status",
+   "old": "actief",
+   "new": "active"
+  },
+  {
+   "column": "ingredient_documenten.status",
+   "old": "gearchiveerd",
+   "new": "archived"
+  },
+  {
+   "column": "grondstof_lots.status",
+   "old": "actief",
+   "new": "active"
+  },
+  {
+   "column": "grondstof_lots.status",
+   "old": "leeg",
+   "new": "empty"
+  },
+  {
+   "column": "grondstof_lots.status",
+   "old": "afgesloten",
+   "new": "closed"
+  },
+  {
+   "column": "voorraad_mutaties.type",
+   "old": "ontvangst",
+   "new": "receipt"
+  },
+  {
+   "column": "voorraad_mutaties.type",
+   "old": "reservering",
+   "new": "reservation"
+  },
+  {
+   "column": "voorraad_mutaties.type",
+   "old": "uitboeking",
+   "new": "consumption"
+  },
+  {
+   "column": "voorraad_mutaties.type",
+   "old": "correctie",
+   "new": "correction"
+  },
+  {
+   "column": "recipe_ingredients.rol",
+   "old": "hoofdmout",
+   "new": "malt"
+  },
+  {
+   "column": "recipe_ingredients.rol",
+   "old": "hopgift_kook",
+   "new": "boil_hop"
+  },
+  {
+   "column": "recipe_ingredients.rol",
+   "old": "dry_hop",
+   "new": "dry_hop"
+  },
+  {
+   "column": "recipe_ingredients.rol",
+   "old": "toegift_brouwerij",
+   "new": "brewhouse_addition"
+  },
+  {
+   "column": "recipe_ingredients.rol",
+   "old": "toegift_kelder",
+   "new": "cellar_addition"
+  },
+  {
+   "column": "recipe_ingredients.rol",
+   "old": "gist",
+   "new": "yeast"
+  },
+  {
+   "column": "recipe_fermentatie.bier_status",
+   "old": "Standaard",
+   "new": "standard"
+  },
+  {
+   "column": "recipe_fermentatie.bier_status",
+   "old": "NPI",
+   "new": "npi"
+  },
+  {
+   "column": "recipe_fermentatie.bier_status",
+   "old": "Te verbeteren",
+   "new": "to_improve"
+  },
+  {
+   "column": "recipe_fermentatie.bier_risico",
+   "old": "Standaard",
+   "new": "standard"
+  },
+  {
+   "column": "recipe_fermentatie.bier_risico",
+   "old": "Gevaarlijk",
+   "new": "dangerous"
+  },
+  {
+   "column": "recipe_fermentatie.bier_risico",
+   "old": "Suikerhoudend",
+   "new": "contains_sugar"
+  },
+  {
+   "column": "recipe_fermentatie.bier_risico",
+   "old": "Gevoelig",
+   "new": "sensitive"
+  },
+  {
+   "column": "recipes.locatie",
+   "old": "Waarderpolder",
+   "new": "wp"
+  },
+  {
+   "column": "recipes.locatie",
+   "old": "Jopen Kerk",
+   "new": "jk"
+  },
+  {
+   "column": "eenheden.code",
+   "old": "stuks",
+   "new": "pcs"
+  },
+  {
+   "column": "eenheden.code",
+   "old": "stuks/hl",
+   "new": "pcs/hl"
+  }
+ ]
+}
