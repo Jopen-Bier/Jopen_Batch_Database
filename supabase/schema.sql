@@ -196,7 +196,7 @@ CREATE FUNCTION public.product_sheet_relevant_hash(p_recipe_group_id uuid) RETUR
       from recipe_ingredients ri where ri.recipe_id = r.id
     ), '') || '|' ||
     coalesce((
-      select string_agg(coalesce(i.ingredient_declaratie,'') || ':' || coalesce(i.allergenen, '[]'::jsonb)::text, ',' order by i.id)
+      select string_agg(coalesce(i.ingredient_declaration,'') || ':' || coalesce(i.allergens, '[]'::jsonb)::text, ',' order by i.id)
       from recipe_ingredients ri2 join ingredients i on i.id = ri2.ingredient_id
       where ri2.recipe_id = r.id
     ), '')
@@ -236,20 +236,6 @@ $$;
 
 
 --
--- Name: set_ingredients_gewijzigd_op(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.set_ingredients_gewijzigd_op() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-begin
-  new.gewijzigd_op = now();
-  return new;
-end;
-$$;
-
-
---
 -- Name: set_last_login(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -259,6 +245,20 @@ CREATE FUNCTION public.set_last_login() RETURNS void
     AS $$
 begin
   update users set last_login_at = now() where id = auth.uid();
+end;
+$$;
+
+
+--
+-- Name: set_updated_at(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.set_updated_at() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+begin
+  new.updated_at := now();
+  return new;
 end;
 $$;
 
@@ -488,48 +488,6 @@ CREATE TABLE public.document_types (
 
 
 --
--- Name: grondstof_lots; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.grondstof_lots (
-    id bigint NOT NULL,
-    ingredient_id bigint NOT NULL,
-    leverancier text,
-    lotcode text,
-    ontvangstdatum date DEFAULT CURRENT_DATE NOT NULL,
-    hoeveelheid_ontvangen numeric NOT NULL,
-    eenheid text,
-    aantal_colli text,
-    locatie text,
-    ontvangstcontrole boolean DEFAULT false NOT NULL,
-    ingangscontrole boolean DEFAULT false NOT NULL,
-    tht_datum date,
-    alpha_pct numeric,
-    status text DEFAULT 'actief'::text NOT NULL,
-    document_pad text,
-    notitie text,
-    aangemaakt_door uuid,
-    aangemaakt_op timestamp with time zone DEFAULT now() NOT NULL,
-    ontvangen_door uuid,
-    CONSTRAINT grondstof_lots_status_check CHECK ((status = ANY (ARRAY['actief'::text, 'leeg'::text, 'afgesloten'::text])))
-);
-
-
---
--- Name: grondstof_lots_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-ALTER TABLE public.grondstof_lots ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
-    SEQUENCE NAME public.grondstof_lots_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1
-);
-
-
---
 -- Name: hop_utilisatie_curve; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -548,7 +506,7 @@ CREATE TABLE public.ingredient_categories (
     name text NOT NULL,
     uses_alpha_pct boolean DEFAULT false NOT NULL,
     uses_extract_pct boolean DEFAULT false NOT NULL,
-    uses_gistfactor boolean DEFAULT false NOT NULL,
+    uses_yeast_factor boolean DEFAULT false NOT NULL,
     sort_order integer DEFAULT 0 NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL
 );
@@ -569,43 +527,74 @@ ALTER TABLE public.ingredient_categories ALTER COLUMN id ADD GENERATED ALWAYS AS
 
 
 --
--- Name: ingredient_declaraties; Type: TABLE; Schema: public; Owner: -
+-- Name: ingredient_declarations; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.ingredient_declaraties (
+CREATE TABLE public.ingredient_declarations (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
-    naam text NOT NULL,
-    is_geen_declaratie boolean DEFAULT false NOT NULL,
+    name text NOT NULL,
+    not_declarable boolean DEFAULT false NOT NULL,
     sort_order integer DEFAULT 0 NOT NULL,
-    aangemaakt_op timestamp with time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 
 --
--- Name: ingredient_documenten; Type: TABLE; Schema: public; Owner: -
+-- Name: ingredient_documents; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.ingredient_documenten (
+CREATE TABLE public.ingredient_documents (
     id bigint NOT NULL,
     ingredient_id bigint NOT NULL,
-    bestandsnaam text NOT NULL,
+    file_name text NOT NULL,
     storage_path text NOT NULL,
-    grootte_bytes bigint,
-    revisiedatum date NOT NULL,
-    geupload_door uuid,
-    geupload_op timestamp with time zone DEFAULT now() NOT NULL,
+    size_bytes bigint,
+    revision_date date NOT NULL,
+    uploaded_by uuid,
+    uploaded_at timestamp with time zone DEFAULT now() NOT NULL,
     document_type_id uuid NOT NULL,
-    status text DEFAULT 'actief'::text NOT NULL,
-    CONSTRAINT ingredient_documenten_status_check CHECK ((status = ANY (ARRAY['actief'::text, 'gearchiveerd'::text])))
+    status text DEFAULT 'active'::text NOT NULL,
+    CONSTRAINT ingredient_documents_status_check CHECK ((status = ANY (ARRAY['active'::text, 'archived'::text])))
 );
 
 
 --
--- Name: ingredient_documenten_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+-- Name: ingredient_documents_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-ALTER TABLE public.ingredient_documenten ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
-    SEQUENCE NAME public.ingredient_documenten_id_seq
+ALTER TABLE public.ingredient_documents ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.ingredient_documents_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: ingredient_revisions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.ingredient_revisions (
+    id bigint NOT NULL,
+    ingredient_id bigint NOT NULL,
+    version_major integer NOT NULL,
+    version_minor integer NOT NULL,
+    date date DEFAULT CURRENT_DATE NOT NULL,
+    changed_by_name text,
+    change_description text,
+    user_id uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: ingredient_revisions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.ingredient_revisions ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.ingredient_revisions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -637,40 +626,102 @@ CREATE TABLE public.recipe_ingredients (
 
 
 --
--- Name: ingredient_gebruik_counts; Type: VIEW; Schema: public; Owner: -
+-- Name: ingredient_usage_counts; Type: VIEW; Schema: public; Owner: -
 --
 
-CREATE VIEW public.ingredient_gebruik_counts WITH (security_invoker='true') AS
+CREATE VIEW public.ingredient_usage_counts WITH (security_invoker='true') AS
  SELECT ingredient_id,
-    count(DISTINCT recipe_id) AS aantal_recepten
+    count(DISTINCT recipe_id) AS recipe_count
    FROM public.recipe_ingredients
   WHERE (ingredient_id IS NOT NULL)
   GROUP BY ingredient_id;
 
 
 --
--- Name: ingredient_revisies; Type: TABLE; Schema: public; Owner: -
+-- Name: ingredients; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.ingredient_revisies (
+CREATE TABLE public.ingredients (
     id bigint NOT NULL,
-    ingredient_id bigint NOT NULL,
-    versie_major integer NOT NULL,
-    versie_minor integer NOT NULL,
-    datum date DEFAULT CURRENT_DATE NOT NULL,
-    door text,
-    wijziging text,
-    gebruiker_id uuid,
-    aangemaakt_op timestamp with time zone DEFAULT now() NOT NULL
+    name text NOT NULL,
+    unit text,
+    price numeric,
+    extract_pct numeric,
+    alpha_pct numeric,
+    yeast_factor numeric,
+    supplier text,
+    status text DEFAULT 'active'::text NOT NULL,
+    created_by uuid,
+    updated_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    category_id bigint,
+    version_major integer DEFAULT 1 NOT NULL,
+    version_minor integer DEFAULT 0 NOT NULL,
+    ingredient_group_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    version_status text DEFAULT 'current'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    supplier_2 text,
+    price_2 numeric,
+    price_unit_1 text,
+    price_unit_2 text,
+    color_ebc numeric,
+    allergens jsonb,
+    ingredient_declaration text,
+    storage_temperature text,
+    shelf_life numeric,
+    shelf_life_after_opening numeric,
+    density numeric,
+    alcohol_pct numeric,
+    shelf_life_unit text,
+    shelf_life_after_opening_unit text,
+    supplier_3 text,
+    price_3 numeric,
+    price_unit_3 text,
+    price_per_kg numeric,
+    price_per_kg_2 numeric,
+    price_per_kg_3 numeric,
+    minimum_stock numeric,
+    CONSTRAINT ingredients_shelf_life_after_opening_unit_check CHECK (((shelf_life_after_opening_unit IS NULL) OR (shelf_life_after_opening_unit = ANY (ARRAY['hours'::text, 'days'::text, 'weeks'::text, 'months'::text, 'years'::text])))),
+    CONSTRAINT ingredients_shelf_life_unit_check CHECK (((shelf_life_unit IS NULL) OR (shelf_life_unit = ANY (ARRAY['hours'::text, 'days'::text, 'weeks'::text, 'months'::text, 'years'::text])))),
+    CONSTRAINT ingredients_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'active'::text, 'phasing_out'::text]))),
+    CONSTRAINT ingredients_version_status_check CHECK ((version_status = ANY (ARRAY['current'::text, 'archived'::text])))
 );
 
 
 --
--- Name: ingredient_revisies_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+-- Name: COLUMN ingredients.price_per_kg; Type: COMMENT; Schema: public; Owner: -
 --
 
-ALTER TABLE public.ingredient_revisies ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
-    SEQUENCE NAME public.ingredient_revisies_id_seq
+COMMENT ON COLUMN public.ingredients.price_per_kg IS 'Prijs per kg voor Supplier #1, los van prijs/eenheid_prijs_1 (die de doseereenheid volgt).';
+
+
+--
+-- Name: COLUMN ingredients.price_per_kg_2; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.ingredients.price_per_kg_2 IS 'Prijs per kg voor Supplier #2.';
+
+
+--
+-- Name: COLUMN ingredients.price_per_kg_3; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.ingredients.price_per_kg_3 IS 'Prijs per kg voor Supplier #3.';
+
+
+--
+-- Name: COLUMN ingredients.minimum_stock; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.ingredients.minimum_stock IS 'Ondergrens voor de Stock overview-pagina ("bijna leeg"-signaal). Eenheid wordt afgeleid uit ingredients.eenheid (het deel vóór een eventuele ''/'', dus g/hl -> g) -- geen apart eenheid-veld nodig.';
+
+
+--
+-- Name: ingredients_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.ingredients ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.ingredients_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -680,93 +731,39 @@ ALTER TABLE public.ingredient_revisies ALTER COLUMN id ADD GENERATED BY DEFAULT 
 
 
 --
--- Name: ingredients; Type: TABLE; Schema: public; Owner: -
+-- Name: lots; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.ingredients (
+CREATE TABLE public.lots (
     id bigint NOT NULL,
-    naam text NOT NULL,
-    categorie text,
-    eenheid text,
-    prijs numeric,
-    extract_pct numeric,
+    ingredient_id bigint NOT NULL,
+    supplier text,
+    lot_code text,
+    received_date date DEFAULT CURRENT_DATE NOT NULL,
+    quantity_received numeric NOT NULL,
+    unit text,
+    package_count text,
+    location text,
+    receiving_check boolean DEFAULT false NOT NULL,
+    incoming_inspection boolean DEFAULT false NOT NULL,
+    best_before_date date,
     alpha_pct numeric,
-    gistfactor numeric,
-    leverancier text,
-    status text DEFAULT 'actief'::text NOT NULL,
-    created_at timestamp with time zone DEFAULT now(),
-    aangemaakt_door uuid,
-    gewijzigd_door uuid,
-    gewijzigd_op timestamp with time zone DEFAULT now() NOT NULL,
-    category_id bigint,
-    versie_major integer DEFAULT 1 NOT NULL,
-    versie_minor integer DEFAULT 0 NOT NULL,
-    ingredient_group_id uuid DEFAULT gen_random_uuid() NOT NULL,
-    versie_status text DEFAULT 'huidig'::text NOT NULL,
-    aangemaakt_op timestamp with time zone DEFAULT now() NOT NULL,
-    leverancier_2 text,
-    prijs_2 numeric,
-    eenheid_prijs_1 text,
-    eenheid_prijs_2 text,
-    kleur_ebc numeric,
-    allergenen jsonb,
-    ingredient_declaratie text,
-    bewaartemperatuur text,
-    houdbaarheid numeric,
-    houdbaarheid_na_openen numeric,
-    dichtheid numeric,
-    alcohol_pct numeric,
-    houdbaarheid_eenheid text,
-    houdbaarheid_na_openen_eenheid text,
-    leverancier_3 text,
-    prijs_3 numeric,
-    eenheid_prijs_3 text,
-    prijs_per_kg numeric,
-    prijs_per_kg_2 numeric,
-    prijs_per_kg_3 numeric,
-    minimum_voorraad numeric,
-    CONSTRAINT ingredients_categorie_check CHECK ((categorie = ANY (ARRAY['graan'::text, 'hop'::text, 'gist'::text, 'additief'::text]))),
-    CONSTRAINT ingredients_houdbaarheid_eenheid_check CHECK (((houdbaarheid_eenheid IS NULL) OR (houdbaarheid_eenheid = ANY (ARRAY['hours'::text, 'days'::text, 'weeks'::text, 'months'::text, 'years'::text])))),
-    CONSTRAINT ingredients_houdbaarheid_na_openen_eenheid_check CHECK (((houdbaarheid_na_openen_eenheid IS NULL) OR (houdbaarheid_na_openen_eenheid = ANY (ARRAY['hours'::text, 'days'::text, 'weeks'::text, 'months'::text, 'years'::text])))),
-    CONSTRAINT ingredients_status_check CHECK ((status = ANY (ARRAY['concept'::text, 'actief'::text, 'uitfaserend'::text]))),
-    CONSTRAINT ingredients_versie_status_check CHECK ((versie_status = ANY (ARRAY['huidig'::text, 'gearchiveerd'::text])))
+    status text DEFAULT 'active'::text NOT NULL,
+    document_path text,
+    note text,
+    created_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    received_by uuid,
+    CONSTRAINT lots_status_check CHECK ((status = ANY (ARRAY['active'::text, 'empty'::text, 'closed'::text])))
 );
 
 
 --
--- Name: COLUMN ingredients.prijs_per_kg; Type: COMMENT; Schema: public; Owner: -
+-- Name: lots_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-COMMENT ON COLUMN public.ingredients.prijs_per_kg IS 'Prijs per kg voor Supplier #1, los van prijs/eenheid_prijs_1 (die de doseereenheid volgt).';
-
-
---
--- Name: COLUMN ingredients.prijs_per_kg_2; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.ingredients.prijs_per_kg_2 IS 'Prijs per kg voor Supplier #2.';
-
-
---
--- Name: COLUMN ingredients.prijs_per_kg_3; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.ingredients.prijs_per_kg_3 IS 'Prijs per kg voor Supplier #3.';
-
-
---
--- Name: COLUMN ingredients.minimum_voorraad; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.ingredients.minimum_voorraad IS 'Ondergrens voor de Stock overview-pagina ("bijna leeg"-signaal). Eenheid wordt afgeleid uit ingredients.eenheid (het deel vóór een eventuele ''/'', dus g/hl -> g) -- geen apart eenheid-veld nodig.';
-
-
---
--- Name: ingredients_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-ALTER TABLE public.ingredients ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
-    SEQUENCE NAME public.ingredients_id_seq
+ALTER TABLE public.lots ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.lots_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1248,6 +1245,46 @@ ALTER TABLE public.roles ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
 
 
 --
+-- Name: stock_movements; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.stock_movements (
+    id bigint NOT NULL,
+    lot_id bigint,
+    movement_type text NOT NULL,
+    quantity numeric NOT NULL,
+    batch_id bigint,
+    recipe_ingredient_id bigint,
+    note text,
+    booked_in_accounting boolean DEFAULT false NOT NULL,
+    booked_by uuid,
+    booked_at timestamp with time zone,
+    created_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    off_recipe boolean DEFAULT false NOT NULL,
+    entered_quantity numeric,
+    entered_unit text,
+    is_spoilage boolean DEFAULT false NOT NULL,
+    is_correction boolean DEFAULT false NOT NULL,
+    CONSTRAINT stock_movements_movement_type_check CHECK ((movement_type = ANY (ARRAY['receipt'::text, 'reservation'::text, 'consumption'::text, 'correction'::text])))
+);
+
+
+--
+-- Name: stock_movements_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.stock_movements ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.stock_movements_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
 -- Name: units; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1257,46 +1294,6 @@ CREATE TABLE public.units (
     label text,
     sort_order integer DEFAULT 0 NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL
-);
-
-
---
--- Name: voorraad_mutaties; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.voorraad_mutaties (
-    id bigint NOT NULL,
-    lot_id bigint,
-    type text NOT NULL,
-    hoeveelheid numeric NOT NULL,
-    batch_id bigint,
-    recipe_ingredient_id bigint,
-    notitie text,
-    geboekt_in_boekhouding boolean DEFAULT false NOT NULL,
-    geboekt_door uuid,
-    geboekt_op timestamp with time zone,
-    aangemaakt_door uuid,
-    aangemaakt_op timestamp with time zone DEFAULT now() NOT NULL,
-    off_recipe boolean DEFAULT false NOT NULL,
-    ingevoerde_hoeveelheid numeric,
-    ingevoerde_eenheid text,
-    is_spoilage boolean DEFAULT false NOT NULL,
-    is_correction boolean DEFAULT false NOT NULL,
-    CONSTRAINT voorraad_mutaties_type_check CHECK ((type = ANY (ARRAY['ontvangst'::text, 'reservering'::text, 'uitboeking'::text, 'correctie'::text])))
-);
-
-
---
--- Name: voorraad_mutaties_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-ALTER TABLE public.voorraad_mutaties ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
-    SEQUENCE NAME public.voorraad_mutaties_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1
 );
 
 
@@ -1423,14 +1420,6 @@ ALTER TABLE ONLY public.document_types
 
 
 --
--- Name: grondstof_lots grondstof_lots_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.grondstof_lots
-    ADD CONSTRAINT grondstof_lots_pkey PRIMARY KEY (id);
-
-
---
 -- Name: hop_utilisatie_curve hop_utilisatie_curve_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1455,43 +1444,43 @@ ALTER TABLE ONLY public.ingredient_categories
 
 
 --
--- Name: ingredient_declaraties ingredient_declaraties_naam_key; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: ingredient_declarations ingredient_declarations_name_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.ingredient_declaraties
-    ADD CONSTRAINT ingredient_declaraties_naam_key UNIQUE (naam);
-
-
---
--- Name: ingredient_declaraties ingredient_declaraties_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.ingredient_declaraties
-    ADD CONSTRAINT ingredient_declaraties_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.ingredient_declarations
+    ADD CONSTRAINT ingredient_declarations_name_key UNIQUE (name);
 
 
 --
--- Name: ingredient_documenten ingredient_documenten_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: ingredient_declarations ingredient_declarations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.ingredient_documenten
-    ADD CONSTRAINT ingredient_documenten_pkey PRIMARY KEY (id);
-
-
---
--- Name: ingredient_documenten ingredient_documenten_storage_path_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.ingredient_documenten
-    ADD CONSTRAINT ingredient_documenten_storage_path_key UNIQUE (storage_path);
+ALTER TABLE ONLY public.ingredient_declarations
+    ADD CONSTRAINT ingredient_declarations_pkey PRIMARY KEY (id);
 
 
 --
--- Name: ingredient_revisies ingredient_revisies_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: ingredient_documents ingredient_documents_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.ingredient_revisies
-    ADD CONSTRAINT ingredient_revisies_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.ingredient_documents
+    ADD CONSTRAINT ingredient_documents_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: ingredient_documents ingredient_documents_storage_path_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ingredient_documents
+    ADD CONSTRAINT ingredient_documents_storage_path_key UNIQUE (storage_path);
+
+
+--
+-- Name: ingredient_revisions ingredient_revisions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ingredient_revisions
+    ADD CONSTRAINT ingredient_revisions_pkey PRIMARY KEY (id);
 
 
 --
@@ -1500,6 +1489,14 @@ ALTER TABLE ONLY public.ingredient_revisies
 
 ALTER TABLE ONLY public.ingredients
     ADD CONSTRAINT ingredients_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: lots lots_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lots
+    ADD CONSTRAINT lots_pkey PRIMARY KEY (id);
 
 
 --
@@ -1639,6 +1636,14 @@ ALTER TABLE ONLY public.roles
 
 
 --
+-- Name: stock_movements stock_movements_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stock_movements
+    ADD CONSTRAINT stock_movements_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: units units_code_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1660,14 +1665,6 @@ ALTER TABLE ONLY public.units
 
 ALTER TABLE ONLY public.users
     ADD CONSTRAINT users_pkey PRIMARY KEY (id);
-
-
---
--- Name: voorraad_mutaties voorraad_mutaties_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.voorraad_mutaties
-    ADD CONSTRAINT voorraad_mutaties_pkey PRIMARY KEY (id);
 
 
 --
@@ -1750,38 +1747,24 @@ CREATE INDEX idx_brew_planning_year_week ON public.brew_planning USING btree (is
 
 
 --
--- Name: idx_grondstof_lots_ingredient; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_ingredient_documents_ing_status_type; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_grondstof_lots_ingredient ON public.grondstof_lots USING btree (ingredient_id);
-
-
---
--- Name: idx_grondstof_lots_status; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_grondstof_lots_status ON public.grondstof_lots USING btree (status);
+CREATE INDEX idx_ingredient_documents_ing_status_type ON public.ingredient_documents USING btree (ingredient_id, status, document_type_id);
 
 
 --
--- Name: idx_ingredient_documenten_ing_status_type; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_ingredient_documents_ingredient_id; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_ingredient_documenten_ing_status_type ON public.ingredient_documenten USING btree (ingredient_id, status, document_type_id);
-
-
---
--- Name: idx_ingredient_documenten_ingredient_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_ingredient_documenten_ingredient_id ON public.ingredient_documenten USING btree (ingredient_id);
+CREATE INDEX idx_ingredient_documents_ingredient_id ON public.ingredient_documents USING btree (ingredient_id);
 
 
 --
--- Name: idx_ingredient_revisies_ingredient_id; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_ingredient_revisions_ingredient_id; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_ingredient_revisies_ingredient_id ON public.ingredient_revisies USING btree (ingredient_id);
+CREATE INDEX idx_ingredient_revisions_ingredient_id ON public.ingredient_revisions USING btree (ingredient_id);
 
 
 --
@@ -1792,6 +1775,20 @@ CREATE INDEX idx_ingredients_group_id ON public.ingredients USING btree (ingredi
 
 
 --
+-- Name: idx_lots_ingredient; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_lots_ingredient ON public.lots USING btree (ingredient_id);
+
+
+--
+-- Name: idx_lots_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_lots_status ON public.lots USING btree (status);
+
+
+--
 -- Name: idx_recipes_recipe_group_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1799,24 +1796,24 @@ CREATE INDEX idx_recipes_recipe_group_id ON public.recipes USING btree (recipe_g
 
 
 --
--- Name: idx_voorraad_mutaties_batch; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_stock_movements_batch; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_voorraad_mutaties_batch ON public.voorraad_mutaties USING btree (batch_id);
-
-
---
--- Name: idx_voorraad_mutaties_lot; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_voorraad_mutaties_lot ON public.voorraad_mutaties USING btree (lot_id);
+CREATE INDEX idx_stock_movements_batch ON public.stock_movements USING btree (batch_id);
 
 
 --
--- Name: idx_voorraad_mutaties_type; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_stock_movements_lot; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_voorraad_mutaties_type ON public.voorraad_mutaties USING btree (type);
+CREATE INDEX idx_stock_movements_lot ON public.stock_movements USING btree (lot_id);
+
+
+--
+-- Name: idx_stock_movements_movement_type; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_stock_movements_movement_type ON public.stock_movements USING btree (movement_type);
 
 
 --
@@ -1841,10 +1838,10 @@ CREATE TRIGGER trg_brew_planning_geschiedenis AFTER INSERT OR DELETE OR UPDATE O
 
 
 --
--- Name: ingredients trg_ingredients_gewijzigd_op; Type: TRIGGER; Schema: public; Owner: -
+-- Name: ingredients trg_ingredients_updated_at; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER trg_ingredients_gewijzigd_op BEFORE UPDATE ON public.ingredients FOR EACH ROW EXECUTE FUNCTION public.set_ingredients_gewijzigd_op();
+CREATE TRIGGER trg_ingredients_updated_at BEFORE UPDATE ON public.ingredients FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
 
 --
@@ -1933,75 +1930,43 @@ ALTER TABLE ONLY public.brew_planning_splits
 
 
 --
--- Name: grondstof_lots grondstof_lots_aangemaakt_door_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: ingredient_documents ingredient_documents_document_type_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.grondstof_lots
-    ADD CONSTRAINT grondstof_lots_aangemaakt_door_fkey FOREIGN KEY (aangemaakt_door) REFERENCES public.users(id);
-
-
---
--- Name: grondstof_lots grondstof_lots_ingredient_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.grondstof_lots
-    ADD CONSTRAINT grondstof_lots_ingredient_id_fkey FOREIGN KEY (ingredient_id) REFERENCES public.ingredients(id);
+ALTER TABLE ONLY public.ingredient_documents
+    ADD CONSTRAINT ingredient_documents_document_type_id_fkey FOREIGN KEY (document_type_id) REFERENCES public.document_types(id);
 
 
 --
--- Name: grondstof_lots grondstof_lots_ontvangen_door_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: ingredient_documents ingredient_documents_ingredient_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.grondstof_lots
-    ADD CONSTRAINT grondstof_lots_ontvangen_door_fkey FOREIGN KEY (ontvangen_door) REFERENCES public.users(id);
-
-
---
--- Name: ingredient_documenten ingredient_documenten_document_type_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.ingredient_documenten
-    ADD CONSTRAINT ingredient_documenten_document_type_id_fkey FOREIGN KEY (document_type_id) REFERENCES public.document_types(id);
+ALTER TABLE ONLY public.ingredient_documents
+    ADD CONSTRAINT ingredient_documents_ingredient_id_fkey FOREIGN KEY (ingredient_id) REFERENCES public.ingredients(id) ON DELETE CASCADE;
 
 
 --
--- Name: ingredient_documenten ingredient_documenten_geupload_door_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: ingredient_documents ingredient_documents_uploaded_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.ingredient_documenten
-    ADD CONSTRAINT ingredient_documenten_geupload_door_fkey FOREIGN KEY (geupload_door) REFERENCES auth.users(id);
-
-
---
--- Name: ingredient_documenten ingredient_documenten_ingredient_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.ingredient_documenten
-    ADD CONSTRAINT ingredient_documenten_ingredient_id_fkey FOREIGN KEY (ingredient_id) REFERENCES public.ingredients(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.ingredient_documents
+    ADD CONSTRAINT ingredient_documents_uploaded_by_fkey FOREIGN KEY (uploaded_by) REFERENCES public.users(id);
 
 
 --
--- Name: ingredient_revisies ingredient_revisies_gebruiker_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: ingredient_revisions ingredient_revisions_ingredient_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.ingredient_revisies
-    ADD CONSTRAINT ingredient_revisies_gebruiker_id_fkey FOREIGN KEY (gebruiker_id) REFERENCES public.users(id);
-
-
---
--- Name: ingredient_revisies ingredient_revisies_ingredient_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.ingredient_revisies
-    ADD CONSTRAINT ingredient_revisies_ingredient_id_fkey FOREIGN KEY (ingredient_id) REFERENCES public.ingredients(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.ingredient_revisions
+    ADD CONSTRAINT ingredient_revisions_ingredient_id_fkey FOREIGN KEY (ingredient_id) REFERENCES public.ingredients(id) ON DELETE CASCADE;
 
 
 --
--- Name: ingredients ingredients_aangemaakt_door_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: ingredient_revisions ingredient_revisions_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.ingredients
-    ADD CONSTRAINT ingredients_aangemaakt_door_fkey FOREIGN KEY (aangemaakt_door) REFERENCES auth.users(id);
+ALTER TABLE ONLY public.ingredient_revisions
+    ADD CONSTRAINT ingredient_revisions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
 
 
 --
@@ -2013,11 +1978,43 @@ ALTER TABLE ONLY public.ingredients
 
 
 --
--- Name: ingredients ingredients_gewijzigd_door_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: ingredients ingredients_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.ingredients
-    ADD CONSTRAINT ingredients_gewijzigd_door_fkey FOREIGN KEY (gewijzigd_door) REFERENCES auth.users(id);
+    ADD CONSTRAINT ingredients_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
+
+
+--
+-- Name: ingredients ingredients_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ingredients
+    ADD CONSTRAINT ingredients_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id);
+
+
+--
+-- Name: lots lots_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lots
+    ADD CONSTRAINT lots_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
+
+
+--
+-- Name: lots lots_ingredient_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lots
+    ADD CONSTRAINT lots_ingredient_id_fkey FOREIGN KEY (ingredient_id) REFERENCES public.ingredients(id);
+
+
+--
+-- Name: lots lots_received_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lots
+    ADD CONSTRAINT lots_received_by_fkey FOREIGN KEY (received_by) REFERENCES public.users(id);
 
 
 --
@@ -2173,6 +2170,46 @@ ALTER TABLE ONLY public.role_permissions
 
 
 --
+-- Name: stock_movements stock_movements_batch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stock_movements
+    ADD CONSTRAINT stock_movements_batch_id_fkey FOREIGN KEY (batch_id) REFERENCES public.batches(id);
+
+
+--
+-- Name: stock_movements stock_movements_booked_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stock_movements
+    ADD CONSTRAINT stock_movements_booked_by_fkey FOREIGN KEY (booked_by) REFERENCES public.users(id);
+
+
+--
+-- Name: stock_movements stock_movements_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stock_movements
+    ADD CONSTRAINT stock_movements_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
+
+
+--
+-- Name: stock_movements stock_movements_lot_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stock_movements
+    ADD CONSTRAINT stock_movements_lot_id_fkey FOREIGN KEY (lot_id) REFERENCES public.lots(id);
+
+
+--
+-- Name: stock_movements stock_movements_recipe_ingredient_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stock_movements
+    ADD CONSTRAINT stock_movements_recipe_ingredient_id_fkey FOREIGN KEY (recipe_ingredient_id) REFERENCES public.recipe_ingredients(id);
+
+
+--
 -- Name: users users_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2186,46 +2223,6 @@ ALTER TABLE ONLY public.users
 
 ALTER TABLE ONLY public.users
     ADD CONSTRAINT users_role_id_fkey FOREIGN KEY (role_id) REFERENCES public.roles(id);
-
-
---
--- Name: voorraad_mutaties voorraad_mutaties_aangemaakt_door_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.voorraad_mutaties
-    ADD CONSTRAINT voorraad_mutaties_aangemaakt_door_fkey FOREIGN KEY (aangemaakt_door) REFERENCES public.users(id);
-
-
---
--- Name: voorraad_mutaties voorraad_mutaties_batch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.voorraad_mutaties
-    ADD CONSTRAINT voorraad_mutaties_batch_id_fkey FOREIGN KEY (batch_id) REFERENCES public.batches(id);
-
-
---
--- Name: voorraad_mutaties voorraad_mutaties_geboekt_door_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.voorraad_mutaties
-    ADD CONSTRAINT voorraad_mutaties_geboekt_door_fkey FOREIGN KEY (geboekt_door) REFERENCES public.users(id);
-
-
---
--- Name: voorraad_mutaties voorraad_mutaties_lot_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.voorraad_mutaties
-    ADD CONSTRAINT voorraad_mutaties_lot_id_fkey FOREIGN KEY (lot_id) REFERENCES public.grondstof_lots(id);
-
-
---
--- Name: voorraad_mutaties voorraad_mutaties_recipe_ingredient_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.voorraad_mutaties
-    ADD CONSTRAINT voorraad_mutaties_recipe_ingredient_id_fkey FOREIGN KEY (recipe_ingredient_id) REFERENCES public.recipe_ingredients(id);
 
 
 --
@@ -2428,40 +2425,6 @@ CREATE POLICY document_types_update ON public.document_types FOR UPDATE USING (p
 
 
 --
--- Name: grondstof_lots; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.grondstof_lots ENABLE ROW LEVEL SECURITY;
-
---
--- Name: grondstof_lots grondstof_lots_delete; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY grondstof_lots_delete ON public.grondstof_lots FOR DELETE USING (public.can_delete('inventory'::text));
-
-
---
--- Name: grondstof_lots grondstof_lots_insert; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY grondstof_lots_insert ON public.grondstof_lots FOR INSERT WITH CHECK (public.can_edit('inventory'::text));
-
-
---
--- Name: grondstof_lots grondstof_lots_select; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY grondstof_lots_select ON public.grondstof_lots FOR SELECT USING (public.can_view('inventory'::text));
-
-
---
--- Name: grondstof_lots grondstof_lots_update; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY grondstof_lots_update ON public.grondstof_lots FOR UPDATE USING (public.can_edit('inventory'::text)) WITH CHECK (public.can_edit('inventory'::text));
-
-
---
 -- Name: hop_utilisatie_curve; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -2530,91 +2493,91 @@ CREATE POLICY ingredient_categories_update ON public.ingredient_categories FOR U
 
 
 --
--- Name: ingredient_declaraties; Type: ROW SECURITY; Schema: public; Owner: -
+-- Name: ingredient_declarations; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
-ALTER TABLE public.ingredient_declaraties ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.ingredient_declarations ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: ingredient_declaraties ingredient_declaraties_delete; Type: POLICY; Schema: public; Owner: -
+-- Name: ingredient_declarations ingredient_declarations_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY ingredient_declaraties_delete ON public.ingredient_declaraties FOR DELETE USING (public.can_delete('settings'::text));
-
-
---
--- Name: ingredient_declaraties ingredient_declaraties_insert; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY ingredient_declaraties_insert ON public.ingredient_declaraties FOR INSERT WITH CHECK (public.can_edit('settings'::text));
+CREATE POLICY ingredient_declarations_delete ON public.ingredient_declarations FOR DELETE USING (public.can_delete('settings'::text));
 
 
 --
--- Name: ingredient_declaraties ingredient_declaraties_select; Type: POLICY; Schema: public; Owner: -
+-- Name: ingredient_declarations ingredient_declarations_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY ingredient_declaraties_select ON public.ingredient_declaraties FOR SELECT USING (true);
-
-
---
--- Name: ingredient_declaraties ingredient_declaraties_update; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY ingredient_declaraties_update ON public.ingredient_declaraties FOR UPDATE USING (public.can_edit('settings'::text)) WITH CHECK (public.can_edit('settings'::text));
+CREATE POLICY ingredient_declarations_insert ON public.ingredient_declarations FOR INSERT WITH CHECK (public.can_edit('settings'::text));
 
 
 --
--- Name: ingredient_documenten; Type: ROW SECURITY; Schema: public; Owner: -
+-- Name: ingredient_declarations ingredient_declarations_select; Type: POLICY; Schema: public; Owner: -
 --
 
-ALTER TABLE public.ingredient_documenten ENABLE ROW LEVEL SECURITY;
-
---
--- Name: ingredient_documenten ingredient_documenten_delete; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY ingredient_documenten_delete ON public.ingredient_documenten FOR DELETE USING (public.can_delete('ingredients'::text));
+CREATE POLICY ingredient_declarations_select ON public.ingredient_declarations FOR SELECT USING (true);
 
 
 --
--- Name: ingredient_documenten ingredient_documenten_insert; Type: POLICY; Schema: public; Owner: -
+-- Name: ingredient_declarations ingredient_declarations_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY ingredient_documenten_insert ON public.ingredient_documenten FOR INSERT WITH CHECK (public.can_edit('ingredients'::text));
-
-
---
--- Name: ingredient_documenten ingredient_documenten_select; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY ingredient_documenten_select ON public.ingredient_documenten FOR SELECT USING (public.can_view('ingredients'::text));
+CREATE POLICY ingredient_declarations_update ON public.ingredient_declarations FOR UPDATE USING (public.can_edit('settings'::text)) WITH CHECK (public.can_edit('settings'::text));
 
 
 --
--- Name: ingredient_documenten ingredient_documenten_update; Type: POLICY; Schema: public; Owner: -
+-- Name: ingredient_documents; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
-CREATE POLICY ingredient_documenten_update ON public.ingredient_documenten FOR UPDATE USING (public.can_edit('ingredients'::text)) WITH CHECK (public.can_edit('ingredients'::text));
-
-
---
--- Name: ingredient_revisies; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.ingredient_revisies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.ingredient_documents ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: ingredient_revisies ingredient_revisies_insert; Type: POLICY; Schema: public; Owner: -
+-- Name: ingredient_documents ingredient_documents_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY ingredient_revisies_insert ON public.ingredient_revisies FOR INSERT WITH CHECK (public.can_edit('ingredients'::text));
+CREATE POLICY ingredient_documents_delete ON public.ingredient_documents FOR DELETE USING (public.can_delete('ingredients'::text));
 
 
 --
--- Name: ingredient_revisies ingredient_revisies_select; Type: POLICY; Schema: public; Owner: -
+-- Name: ingredient_documents ingredient_documents_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY ingredient_revisies_select ON public.ingredient_revisies FOR SELECT USING (public.can_view('ingredients'::text));
+CREATE POLICY ingredient_documents_insert ON public.ingredient_documents FOR INSERT WITH CHECK (public.can_edit('ingredients'::text));
+
+
+--
+-- Name: ingredient_documents ingredient_documents_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY ingredient_documents_select ON public.ingredient_documents FOR SELECT USING (public.can_view('ingredients'::text));
+
+
+--
+-- Name: ingredient_documents ingredient_documents_update; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY ingredient_documents_update ON public.ingredient_documents FOR UPDATE USING (public.can_edit('ingredients'::text)) WITH CHECK (public.can_edit('ingredients'::text));
+
+
+--
+-- Name: ingredient_revisions; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.ingredient_revisions ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: ingredient_revisions ingredient_revisions_insert; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY ingredient_revisions_insert ON public.ingredient_revisions FOR INSERT WITH CHECK (public.can_edit('ingredients'::text));
+
+
+--
+-- Name: ingredient_revisions ingredient_revisions_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY ingredient_revisions_select ON public.ingredient_revisions FOR SELECT USING (public.can_view('ingredients'::text));
 
 
 --
@@ -2649,6 +2612,40 @@ CREATE POLICY ingredients_select ON public.ingredients FOR SELECT USING (public.
 --
 
 CREATE POLICY ingredients_update ON public.ingredients FOR UPDATE USING (public.can_edit('ingredients'::text)) WITH CHECK (public.can_edit('ingredients'::text));
+
+
+--
+-- Name: lots; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.lots ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: lots lots_delete; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY lots_delete ON public.lots FOR DELETE USING (public.can_delete('inventory'::text));
+
+
+--
+-- Name: lots lots_insert; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY lots_insert ON public.lots FOR INSERT WITH CHECK (public.can_edit('inventory'::text));
+
+
+--
+-- Name: lots lots_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY lots_select ON public.lots FOR SELECT USING (public.can_view('inventory'::text));
+
+
+--
+-- Name: lots lots_update; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY lots_update ON public.lots FOR UPDATE USING (public.can_edit('inventory'::text)) WITH CHECK (public.can_edit('inventory'::text));
 
 
 --
@@ -3133,6 +3130,40 @@ CREATE POLICY roles_write_admin ON public.roles USING (public.is_admin()) WITH C
 
 
 --
+-- Name: stock_movements; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.stock_movements ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: stock_movements stock_movements_delete; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY stock_movements_delete ON public.stock_movements FOR DELETE USING (public.can_delete('inventory'::text));
+
+
+--
+-- Name: stock_movements stock_movements_insert; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY stock_movements_insert ON public.stock_movements FOR INSERT WITH CHECK (public.can_edit('inventory'::text));
+
+
+--
+-- Name: stock_movements stock_movements_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY stock_movements_select ON public.stock_movements FOR SELECT USING (public.can_view('inventory'::text));
+
+
+--
+-- Name: stock_movements stock_movements_update; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY stock_movements_update ON public.stock_movements FOR UPDATE USING (public.can_edit('inventory'::text)) WITH CHECK (public.can_edit('inventory'::text));
+
+
+--
 -- Name: units; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -3184,40 +3215,6 @@ CREATE POLICY users_select ON public.users FOR SELECT TO authenticated USING (tr
 --
 
 CREATE POLICY users_write_admin ON public.users TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin());
-
-
---
--- Name: voorraad_mutaties; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.voorraad_mutaties ENABLE ROW LEVEL SECURITY;
-
---
--- Name: voorraad_mutaties voorraad_mutaties_delete; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY voorraad_mutaties_delete ON public.voorraad_mutaties FOR DELETE USING (public.can_delete('inventory'::text));
-
-
---
--- Name: voorraad_mutaties voorraad_mutaties_insert; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY voorraad_mutaties_insert ON public.voorraad_mutaties FOR INSERT WITH CHECK (public.can_edit('inventory'::text));
-
-
---
--- Name: voorraad_mutaties voorraad_mutaties_select; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY voorraad_mutaties_select ON public.voorraad_mutaties FOR SELECT USING (public.can_view('inventory'::text));
-
-
---
--- Name: voorraad_mutaties voorraad_mutaties_update; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY voorraad_mutaties_update ON public.voorraad_mutaties FOR UPDATE USING (public.can_edit('inventory'::text)) WITH CHECK (public.can_edit('inventory'::text));
 
 
 --
@@ -3343,18 +3340,18 @@ GRANT ALL ON FUNCTION public.set_gewijzigd_op() TO service_role;
 
 
 --
--- Name: FUNCTION set_ingredients_gewijzigd_op(); Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON FUNCTION public.set_ingredients_gewijzigd_op() TO service_role;
-
-
---
 -- Name: FUNCTION set_last_login(); Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON FUNCTION public.set_last_login() TO service_role;
 GRANT ALL ON FUNCTION public.set_last_login() TO authenticated;
+
+
+--
+-- Name: FUNCTION set_updated_at(); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION public.set_updated_at() TO service_role;
 
 
 --
@@ -3462,24 +3459,6 @@ GRANT ALL ON TABLE public.document_types TO service_role;
 
 
 --
--- Name: TABLE grondstof_lots; Type: ACL; Schema: public; Owner: -
---
-
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.grondstof_lots TO anon;
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.grondstof_lots TO authenticated;
-GRANT ALL ON TABLE public.grondstof_lots TO service_role;
-
-
---
--- Name: SEQUENCE grondstof_lots_id_seq; Type: ACL; Schema: public; Owner: -
---
-
-GRANT SELECT,USAGE ON SEQUENCE public.grondstof_lots_id_seq TO anon;
-GRANT SELECT,USAGE ON SEQUENCE public.grondstof_lots_id_seq TO authenticated;
-GRANT ALL ON SEQUENCE public.grondstof_lots_id_seq TO service_role;
-
-
---
 -- Name: TABLE hop_utilisatie_curve; Type: ACL; Schema: public; Owner: -
 --
 
@@ -3507,30 +3486,48 @@ GRANT ALL ON SEQUENCE public.ingredient_categories_id_seq TO service_role;
 
 
 --
--- Name: TABLE ingredient_declaraties; Type: ACL; Schema: public; Owner: -
+-- Name: TABLE ingredient_declarations; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ingredient_declaraties TO anon;
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ingredient_declaraties TO authenticated;
-GRANT ALL ON TABLE public.ingredient_declaraties TO service_role;
-
-
---
--- Name: TABLE ingredient_documenten; Type: ACL; Schema: public; Owner: -
---
-
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ingredient_documenten TO anon;
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ingredient_documenten TO authenticated;
-GRANT ALL ON TABLE public.ingredient_documenten TO service_role;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ingredient_declarations TO anon;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ingredient_declarations TO authenticated;
+GRANT ALL ON TABLE public.ingredient_declarations TO service_role;
 
 
 --
--- Name: SEQUENCE ingredient_documenten_id_seq; Type: ACL; Schema: public; Owner: -
+-- Name: TABLE ingredient_documents; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.ingredient_documenten_id_seq TO anon;
-GRANT SELECT,USAGE ON SEQUENCE public.ingredient_documenten_id_seq TO authenticated;
-GRANT ALL ON SEQUENCE public.ingredient_documenten_id_seq TO service_role;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ingredient_documents TO anon;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ingredient_documents TO authenticated;
+GRANT ALL ON TABLE public.ingredient_documents TO service_role;
+
+
+--
+-- Name: SEQUENCE ingredient_documents_id_seq; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,USAGE ON SEQUENCE public.ingredient_documents_id_seq TO anon;
+GRANT SELECT,USAGE ON SEQUENCE public.ingredient_documents_id_seq TO authenticated;
+GRANT ALL ON SEQUENCE public.ingredient_documents_id_seq TO service_role;
+
+
+--
+-- Name: TABLE ingredient_revisions; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ingredient_revisions TO anon;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ingredient_revisions TO authenticated;
+GRANT ALL ON TABLE public.ingredient_revisions TO service_role;
+
+
+--
+-- Name: SEQUENCE ingredient_revisions_id_seq; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,USAGE ON SEQUENCE public.ingredient_revisions_id_seq TO anon;
+GRANT SELECT,USAGE ON SEQUENCE public.ingredient_revisions_id_seq TO authenticated;
+GRANT ALL ON SEQUENCE public.ingredient_revisions_id_seq TO service_role;
 
 
 --
@@ -3543,30 +3540,12 @@ GRANT ALL ON TABLE public.recipe_ingredients TO service_role;
 
 
 --
--- Name: TABLE ingredient_gebruik_counts; Type: ACL; Schema: public; Owner: -
+-- Name: TABLE ingredient_usage_counts; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ingredient_gebruik_counts TO anon;
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ingredient_gebruik_counts TO authenticated;
-GRANT ALL ON TABLE public.ingredient_gebruik_counts TO service_role;
-
-
---
--- Name: TABLE ingredient_revisies; Type: ACL; Schema: public; Owner: -
---
-
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ingredient_revisies TO anon;
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ingredient_revisies TO authenticated;
-GRANT ALL ON TABLE public.ingredient_revisies TO service_role;
-
-
---
--- Name: SEQUENCE ingredient_revisies_id_seq; Type: ACL; Schema: public; Owner: -
---
-
-GRANT SELECT,USAGE ON SEQUENCE public.ingredient_revisies_id_seq TO anon;
-GRANT SELECT,USAGE ON SEQUENCE public.ingredient_revisies_id_seq TO authenticated;
-GRANT ALL ON SEQUENCE public.ingredient_revisies_id_seq TO service_role;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ingredient_usage_counts TO anon;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ingredient_usage_counts TO authenticated;
+GRANT ALL ON TABLE public.ingredient_usage_counts TO service_role;
 
 
 --
@@ -3585,6 +3564,24 @@ GRANT ALL ON TABLE public.ingredients TO service_role;
 GRANT SELECT,USAGE ON SEQUENCE public.ingredients_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.ingredients_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.ingredients_id_seq TO service_role;
+
+
+--
+-- Name: TABLE lots; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.lots TO anon;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.lots TO authenticated;
+GRANT ALL ON TABLE public.lots TO service_role;
+
+
+--
+-- Name: SEQUENCE lots_id_seq; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,USAGE ON SEQUENCE public.lots_id_seq TO anon;
+GRANT SELECT,USAGE ON SEQUENCE public.lots_id_seq TO authenticated;
+GRANT ALL ON SEQUENCE public.lots_id_seq TO service_role;
 
 
 --
@@ -3786,30 +3783,30 @@ GRANT ALL ON SEQUENCE public.roles_id_seq TO service_role;
 
 
 --
+-- Name: TABLE stock_movements; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.stock_movements TO anon;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.stock_movements TO authenticated;
+GRANT ALL ON TABLE public.stock_movements TO service_role;
+
+
+--
+-- Name: SEQUENCE stock_movements_id_seq; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,USAGE ON SEQUENCE public.stock_movements_id_seq TO anon;
+GRANT SELECT,USAGE ON SEQUENCE public.stock_movements_id_seq TO authenticated;
+GRANT ALL ON SEQUENCE public.stock_movements_id_seq TO service_role;
+
+
+--
 -- Name: TABLE units; Type: ACL; Schema: public; Owner: -
 --
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.units TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.units TO authenticated;
 GRANT ALL ON TABLE public.units TO service_role;
-
-
---
--- Name: TABLE voorraad_mutaties; Type: ACL; Schema: public; Owner: -
---
-
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.voorraad_mutaties TO anon;
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.voorraad_mutaties TO authenticated;
-GRANT ALL ON TABLE public.voorraad_mutaties TO service_role;
-
-
---
--- Name: SEQUENCE voorraad_mutaties_id_seq; Type: ACL; Schema: public; Owner: -
---
-
-GRANT SELECT,USAGE ON SEQUENCE public.voorraad_mutaties_id_seq TO anon;
-GRANT SELECT,USAGE ON SEQUENCE public.voorraad_mutaties_id_seq TO authenticated;
-GRANT ALL ON SEQUENCE public.voorraad_mutaties_id_seq TO service_role;
 
 
 --
