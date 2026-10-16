@@ -40,6 +40,7 @@ jopen-shared.css           shared styles
 jopen-utils.js             shared generic helpers (escapeHtml, fetchAllRows, …)
 db-legacy-names.js         translation layer for not-yet-translated pages (generated; §6a)
 waterzouten.js             water-salts calculation (shared module, has a test)
+recipe-values.js           recipe value lists (codes -> labels, colours, report text; has a test)
 voorraad-forecast.js       consumption calculation (shared module)
 productsheet-*.js          product-sheet generation (browser)
 batchrapport-vullen.js     batch report generation (browser)
@@ -280,14 +281,24 @@ rewriting every page at once, the boundary between the two is the query:
   `.from('lots').select('id, lotcode:lot_code, eenheid:unit')`.
   Renamed embedded tables are aliased the same way:
   `grondstof_lots:lots(lotcode:lot_code)`.
+- **Whole rows** (`select('*')`, or the row returned by `.insert().select()`):
+  rename the result back with `fromDb('<table>', row)` or, inside a
+  `Promise.all`, `.then(r => fromDbResult('<table>', r))`. Columns that
+  never had a Dutch name (e.g. `brewhouse_recipe_name_wp`) keep their
+  English key.
 - **Filters / order:** always the English column and English values:
   `.eq('version_status', 'current')`.
 - **Writing:** payloads built with Dutch keys go through
   `toDb('<table>', row)` from `db-legacy-names.js` (generated from
   `supabase/rename-map.json`; load it on pages that write).
-- **Status values** are English everywhere (data, filters, comparisons).
-- When a page is translated to English, its aliases and `toDb()` calls go
-  away. Search for `toDb(` and `:` aliases to find what is left.
+- **Status values** are English codes everywhere (data, filters,
+  comparisons). Users see labels; the recipe value lists and their labels
+  live in `recipe-values.js` (location, status, addition type, beer
+  risk/status). The Excel batch report still gets the Dutch beer risk/status
+  text, because the template's conditional formatting matches on it.
+- When a page is translated to English, its aliases and `toDb()`/`fromDb()`
+  calls go away. Search for `toDb(`, `fromDb` and `:` aliases to find what is
+  left.
 - New code never uses the layer: English names end to end.
 
 ## 7. Language of code
