@@ -8,7 +8,8 @@ name: Daily Supabase backup
 # Twee losse jobs, zodat een probleem in de ene de andere niet tegenhoudt:
 #
 #   database  -> Jopen_Database_Backup (BACKUP_REPO)
-#     dumps/jopen_backup_<datum>.dump   public-schema (onze tabellen + data)
+#     dumps/jopen_backup_<datum>.dump   al onze schema's (public, core, ...;
+#                                        zie .github/backup/eigen_schemas.sql)
 #     dumps/jopen_auth_<datum>.dump     auth.users + auth.identities (de
 #                                        gebruikersaccounts; zonder deze
 #                                        falen de 9 foreign keys naar
@@ -74,12 +75,23 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y postgresql-client-17
 
+      - name: Bepaal eigen schema's
+        # Welke schema's van ons zijn (public, core, recipe, ...) bepaalt
+        # eigen_schemas.sql. Een nieuw schema gaat zo automatisch mee.
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          EIGEN=$("$PG_BIN/psql" "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -tA -f .github/backup/eigen_schemas.sql)
+          [ -n "$EIGEN" ] || { echo "::error::Kon de eigen schema's niet bepalen."; exit 1; }
+          echo "EIGEN=${EIGEN}" >> "$GITHUB_ENV"
+          echo "Eigen schema's: ${EIGEN}"
+
       - name: Tel productie (vóór dump)
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
           mkdir -p werk dump
-          "$PG_BIN/psql" "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -tA -f .github/backup/tel_rijen.sql > werk/voor.json
+          "$PG_BIN/psql" "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -v eigen="$EIGEN" -tA -f .github/backup/tel_rijen.sql > werk/voor.json
 
       - name: Dump database
         id: dump
@@ -91,13 +103,16 @@ jobs:
           # -Fc = custom format: gecomprimeerd, en herstelbaar met pg_restore
           # (ook gedeeltelijk herstelbaar, i.t.t. een platte .sql-dump).
           #
-          # public: ons eigen schema. De overige Supabase-schema's (storage,
-          # realtime, extensions, ...) horen bij het project zelf en geven bij
-          # een restore alleen "must be owner of..."-fouten.
-          "$PG_BIN/pg_dump" "$SUPABASE_DB_URL" --schema=public -Fc -f "dump/jopen_backup_${STAMP}.dump"
+          # Alle eigen schema's (zie eigen_schemas.sql), in één dump. De
+          # Supabase-schema's (storage, realtime, extensions, ...) horen bij
+          # het project zelf en geven bij een restore alleen
+          # "must be owner of..."-fouten.
+          SCHEMA_ARGS=()
+          IFS=',' read -ra SCHEMAS <<< "$EIGEN"
+          for s in "${SCHEMAS[@]}"; do SCHEMA_ARGS+=(--schema="$s"); done
+          "$PG_BIN/pg_dump" "$SUPABASE_DB_URL" "${SCHEMA_ARGS[@]}" -Fc -f "dump/jopen_backup_${STAMP}.dump"
           # auth: alléén de gebruikers en hun login-identiteiten. Nodig omdat
-          # gebruikers, recipes, ingredients, recipe_revisies, product_sheets
-          # en ingredient_documenten naar auth.users verwijzen. Wachtwoorden
+          # een deel van onze tabellen naar auth.users verwijst. Wachtwoorden
           # staan hierin alleen als bcrypt-hash; de backup-repo is privé.
           "$PG_BIN/pg_dump" "$SUPABASE_DB_URL" --table=auth.users --table=auth.identities -Fc -f "dump/jopen_auth_${STAMP}.dump"
           ls -l dump
@@ -106,7 +121,7 @@ jobs:
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
-          "$PG_BIN/psql" "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -tA -f .github/backup/tel_rijen.sql > werk/na.json
+          "$PG_BIN/psql" "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -v eigen="$EIGEN" -tA -f .github/backup/tel_rijen.sql > werk/na.json
 
       - name: Proef-restore en controle
         id: controle
@@ -115,7 +130,7 @@ jobs:
           PROEF_DB: postgresql://postgres:proef@localhost:5432/postgres
         run: |
           bash .github/backup/herstel.sh "dump/jopen_backup_${STAMP}.dump" "dump/jopen_auth_${STAMP}.dump" "$PROEF_DB"
-          "$PG_BIN/psql" "$PROEF_DB" -v ON_ERROR_STOP=1 -tA -f .github/backup/tel_rijen.sql > werk/hersteld.json
+          "$PG_BIN/psql" "$PROEF_DB" -v ON_ERROR_STOP=1 -v eigen="$EIGEN" -tA -f .github/backup/tel_rijen.sql > werk/hersteld.json
           python3 .github/backup/vergelijk_tellingen.py nacht \
             --voor werk/voor.json --na werk/na.json --hersteld werk/hersteld.json \
             --manifest "dump/jopen_backup_${STAMP}.json" --datum "${STAMP}"

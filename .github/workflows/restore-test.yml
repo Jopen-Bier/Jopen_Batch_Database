@@ -84,6 +84,9 @@ jobs:
         env:
           TEST_DB: postgresql://postgres:test@localhost:5432/postgres
         run: |
-          "$PG_BIN/psql" "$TEST_DB" -v ON_ERROR_STOP=1 -tA -f .github/backup/tel_rijen.sql > hersteld.json
+          # Tel de schema's die in de teruggezette kopie zitten. Ontbreekt er
+          # één t.o.v. het manifest, dan ontbreken die tabellen en faalt de test.
+          EIGEN=$("$PG_BIN/psql" "$TEST_DB" -v ON_ERROR_STOP=1 -tA -f .github/backup/eigen_schemas.sql)
+          "$PG_BIN/psql" "$TEST_DB" -v ON_ERROR_STOP=1 -v eigen="$EIGEN" -tA -f .github/backup/tel_rijen.sql > hersteld.json
           python3 .github/backup/vergelijk_tellingen.py test \
             --manifest "backup-repo/manifests/jopen_backup_${DATUM}.json" --hersteld hersteld.json

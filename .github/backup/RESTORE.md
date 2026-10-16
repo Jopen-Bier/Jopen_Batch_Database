@@ -8,7 +8,7 @@ als de app zelf onbereikbaar is.
 
 | Wat | Waar | Hoe vaak | Bewaard |
 |---|---|---|---|
-| Onze tabellen (`public`) | `Jopen_Database_Backup` → `dumps/jopen_backup_<datum>.dump` | elke nacht | 30 dagen in de map, ouder via git-historie |
+| Onze tabellen (`public` en alle andere eigen schema's, zie `eigen_schemas.sql`) | `Jopen_Database_Backup` → `dumps/jopen_backup_<datum>.dump` | elke nacht | 30 dagen in de map, ouder via git-historie |
 | Gebruikersaccounts (`auth.users`, `auth.identities`) | `Jopen_Database_Backup` → `dumps/jopen_auth_<datum>.dump` | elke nacht | idem |
 | Rij-aantallen per tabel | `Jopen_Database_Backup` → `manifests/jopen_backup_<datum>.json` | elke nacht | idem |
 | Storage-bestanden (alle buckets) | `Jopen_Storage_Backup` → `bestanden/<bucket>/<pad>` | elke nacht, alleen wijzigingen | huidige stand in de map, oude/verwijderde versies via git-historie |
@@ -63,8 +63,9 @@ tegen een project dat nog in gebruik is.
      -L lijst.txt -d "$DB" dumps/jopen_backup_<datum>.dump
    ```
 
-6. **Controleren**: draai `.github/backup/tel_rijen.sql` tegen het nieuwe
-   project en vergelijk met `manifests/jopen_backup_<datum>.json`
+6. **Controleren**: bepaal de schema's met `.github/backup/eigen_schemas.sql`,
+   draai daarna `psql "$DB" -v eigen="<uitkomst>" -f .github/backup/tel_rijen.sql`
+   tegen het nieuwe project en vergelijk met `manifests/jopen_backup_<datum>.json`
    (of: `python3 .github/backup/vergelijk_tellingen.py test --manifest … --hersteld …`).
 7. **Storage-bestanden terugzetten**: maak in het nieuwe project dezelfde
    buckets aan (`ingredient-documents` privé, `Jopen art` publiek) en upload
@@ -74,6 +75,11 @@ tegen een project dat nog in gebruik is.
    opnieuw deployen, Auth → URL Configuration (Site URL + Redirect URLs
    inclusief `accept-invite.html`) opnieuw instellen, secrets van de
    workflows bijwerken.
+   Eigen schema's naast `public` (`core`, `recipe`, …): de restore gebeurt met
+   `--no-privileges`, dus zet daarna de rechten opnieuw
+   (`grant usage on schema <x> to anon, authenticated, service_role` plus de
+   tabelrechten, zie de migraties) en zet de schema's aan onder
+   Project Settings → Data API → Exposed schemas.
 
 Gebruikers kunnen daarna met hun bestaande wachtwoord inloggen (de hashes
 zitten in de auth-dump).

@@ -9,7 +9,7 @@
 #   1. supabase_stub.sql  - rollen, schema's en auth.uid()/jwt() die een echt
 #                           Supabase-project al heeft
 #   2. auth-dump          - auth.users + auth.identities (structuur + data)
-#   3. public-dump        - onze eigen tabellen; de 9 foreign keys naar
+#   3. public-dump        - al onze eigen schema's (public, core, ...); de 9 foreign keys naar
 #                           auth.users slagen alleen als stap 2 al gedaan is
 #
 # --exit-on-error: elke fout breekt de restore af. Vroeger werden fouten
@@ -35,7 +35,7 @@ echo "== auth.users / auth.identities terugzetten"
 "$PG_BIN/pg_restore" --no-owner --no-privileges --exit-on-error \
   -d "$DOEL" "$AUTH_DUMP"
 
-echo "== public terugzetten"
+echo "== eigen schema's terugzetten (public, core, ...)"
 "$PG_BIN/pg_restore" -l "$PUBLIC_DUMP" | grep -v ' SCHEMA - public ' > "$LIJST"
 "$PG_BIN/pg_restore" --no-owner --no-privileges --exit-on-error \
   -L "$LIJST" -d "$DOEL" "$PUBLIC_DUMP"
