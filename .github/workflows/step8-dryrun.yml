@@ -46,11 +46,14 @@ jobs:
           bash .github/backup/herstel.sh /tmp/d/public.dump /tmp/d/auth.dump "$TEST_DB"
           rm -rf /tmp/d
       - name: Before
-        run: "$PG_BIN/psql" "$TEST_DB" -v ON_ERROR_STOP=1 -f .github/dryrun/before.sql
+        run: |
+          "$PG_BIN/psql" "$TEST_DB" -v ON_ERROR_STOP=1 -f .github/dryrun/before.sql
       - name: Apply step 8 (one transaction)
-        run: "$PG_BIN/psql" "$TEST_DB" -v ON_ERROR_STOP=1 -1 -q -f supabase/migrations/20261016190000_recipe_english_names.sql
+        run: |
+          "$PG_BIN/psql" "$TEST_DB" -v ON_ERROR_STOP=1 -1 -q -f supabase/migrations/20261016190000_recipe_english_names.sql
       - name: After
-        run: "$PG_BIN/psql" "$TEST_DB" -v ON_ERROR_STOP=1 -f .github/dryrun/checks.sql
+        run: |
+          "$PG_BIN/psql" "$TEST_DB" -v ON_ERROR_STOP=1 -f .github/dryrun/checks.sql
       - name: Column list (for the static query check)
         run: |
           "$PG_BIN/psql" "$TEST_DB" -tA -c "select table_name||'.'||column_name from information_schema.columns where table_schema='public' order by 1" > columns.txt
