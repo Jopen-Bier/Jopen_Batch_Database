@@ -182,9 +182,9 @@ const ST_TABS = [
 
 // -- Ingrediëntstatussen (zelfde labels als ingredienten.html) --
 const ST_ING_STATUSSEN = [
-  { key: 'actief', label: 'Active', standaard: true },
-  { key: 'uitfaserend', label: 'Phased out', standaard: false },
-  { key: 'concept', label: 'Draft', standaard: false },
+  { key: 'active', label: 'Active', standaard: true },
+  { key: 'phasing_out', label: 'Phased out', standaard: false },
+  { key: 'draft', label: 'Draft', standaard: false },
 ];
 
 // -- Categorieën per grafiek (volgorde = volgorde in legenda en export) --
@@ -261,15 +261,15 @@ async function laadData() {
   const [ingRes, docRes] = await Promise.all([
     fetchAllRows(supabaseClient
       .from('ingredients')
-      .select('id, naam, categorie, leverancier, status, allergenen, ingredient_categories(name)')
-      .eq('versie_status', 'huidig')
-      .order('naam')),
+      .select('id, naam:name, leverancier:supplier, status, allergenen:allergens, ingredient_categories(name)')
+      .eq('version_status', 'current')
+      .order('name')),
     psTypeId
       ? fetchAllRows(supabaseClient
-          .from('ingredient_documenten')
-          .select('ingredient_id, revisiedatum')
+          .from('ingredient_documents')
+          .select('ingredient_id, revisiedatum:revision_date')
           .eq('document_type_id', psTypeId)
-          .eq('status', 'actief'))
+          .eq('status', 'active'))
       : Promise.resolve({ data: [], error: null }),
   ]);
   if (ingRes.error) throw ingRes.error;

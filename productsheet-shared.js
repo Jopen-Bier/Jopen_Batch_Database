@@ -190,7 +190,7 @@ async function psLaadReceptData(recipeGroupId) {
   const [{ data: specs, error: specsErr }, { data: ingredientRegels, error: ingErr }] = await Promise.all([
     supabaseClient.from('recipe_specificaties').select('*').eq('recipe_id', recipe.id).maybeSingle(),
     supabaseClient.from('recipe_ingredients')
-      .select('rol, hoeveelheid, eenheid, ingredients(naam, ingredient_declaratie, allergenen, dichtheid)')
+      .select('rol, hoeveelheid, eenheid, ingredients(naam:name, ingredient_declaratie:ingredient_declaration, allergenen:allergens, dichtheid:density)')
       .eq('recipe_id', recipe.id),
   ]);
   if (specsErr) throw specsErr;

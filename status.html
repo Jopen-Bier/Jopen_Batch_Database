@@ -210,7 +210,7 @@
 
       const { count: ingrFilled, error: e2 } = await supabaseClient
         .from('ingredients').select('*', { count: 'exact', head: true })
-        .not('eenheid', 'is', null).neq('eenheid', '');
+        .not('unit', 'is', null).neq('unit', '');
       if (e2) throw e2;
 
       const missing = (ingrTotal ?? 0) - (ingrFilled ?? 0);

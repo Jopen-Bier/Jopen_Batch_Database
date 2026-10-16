@@ -172,6 +172,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="jopen-utils.js"></script>
+  <script src="db-legacy-names.js"></script>
   <script src="nav.js"></script>
   <script src="waterzouten.js"></script>
   <script>
@@ -231,7 +232,7 @@
       const container = document.getElementById('cat-lijst');
       const { data, error } = await supabaseClient
         .from('ingredient_categories')
-        .select('id, name, uses_alpha_pct, uses_extract_pct, uses_gistfactor, sort_order')
+        .select('id, name, uses_alpha_pct, uses_extract_pct, uses_gistfactor:uses_yeast_factor, sort_order')
         .order('sort_order');
 
       if (error) {
@@ -273,7 +274,7 @@
         uses_extract_pct: tr.querySelector('.cat-extract-veld').checked,
         uses_gistfactor: tr.querySelector('.cat-gistfactor-veld').checked,
       };
-      const { error } = await supabaseClient.from('ingredient_categories').update(updateData).eq('id', id);
+      const { error } = await supabaseClient.from('ingredient_categories').update(toDb('ingredient_categories', updateData)).eq('id', id);
       if (error) { melding.textContent = 'Save failed: ' + error.message; melding.className = 'jopen-form-melding fout'; return; }
       melding.textContent = 'Saved.'; melding.className = 'jopen-form-melding ok';
       laadCategorieenSectie();
@@ -291,7 +292,7 @@
         uses_gistfactor: document.getElementById('cat-nieuw-gistfactor').checked,
         sort_order: alleCategorieen.length + 1,
       };
-      const { error } = await supabaseClient.from('ingredient_categories').insert(nieuw);
+      const { error } = await supabaseClient.from('ingredient_categories').insert(toDb('ingredient_categories', nieuw));
       if (error) { melding.textContent = 'Add failed: ' + error.message; melding.className = 'jopen-form-melding fout'; return; }
 
       document.getElementById('cat-nieuw-naam').value = '';
@@ -629,7 +630,7 @@
     async function laadDeclaratiesSectie() {
       const container = document.getElementById('declaraties-lijst');
       const { data, error } = await supabaseClient
-        .from('ingredient_declaraties').select('id, naam, is_geen_declaratie, sort_order').order('sort_order');
+        .from('ingredient_declarations').select('id, naam:name, is_geen_declaratie:not_declarable, sort_order').order('sort_order');
 
       if (error) {
         container.innerHTML = `<p class="jopen-form-melding fout">Could not load declarations: ${error.message}</p>`;
@@ -718,7 +719,7 @@
 
       melding.textContent = 'Saving order…'; melding.className = 'jopen-form-melding';
       const resultaten = await Promise.all(nieuweVolgorde.map(({ id, sort_order }) =>
-        supabaseClient.from('ingredient_declaraties').update({ sort_order }).eq('id', id)
+        supabaseClient.from('ingredient_declarations').update(toDb('ingredient_declarations', { sort_order })).eq('id', id)
       ));
       const fout = resultaten.find(r => r.error);
       if (fout) {
@@ -738,7 +739,7 @@
       const is_geen_declaratie = tr.querySelector('.declaratie-geen-veld').checked;
       if (!naam) { melding.textContent = 'Name cannot be empty.'; melding.className = 'jopen-form-melding fout'; return; }
 
-      const { error } = await supabaseClient.from('ingredient_declaraties').update({ naam, is_geen_declaratie }).eq('id', id);
+      const { error } = await supabaseClient.from('ingredient_declarations').update(toDb('ingredient_declarations', { naam, is_geen_declaratie })).eq('id', id);
       if (error) {
         melding.textContent = error.code === '23505' ? 'That name already exists.' : 'Save failed: ' + error.message;
         melding.className = 'jopen-form-melding fout';
@@ -752,7 +753,7 @@
       const id = tr.dataset.id;
       const melding = document.getElementById('declaratie-melding');
       if (!confirm('Delete this declaration? Ingredients currently using this text keep it as free text, they just lose the dropdown match.')) return;
-      const { error } = await supabaseClient.from('ingredient_declaraties').delete().eq('id', id);
+      const { error } = await supabaseClient.from('ingredient_declarations').delete().eq('id', id);
       if (error) { melding.textContent = 'Delete failed: ' + error.message; melding.className = 'jopen-form-melding fout'; return; }
       melding.textContent = 'Deleted.'; melding.className = 'jopen-form-melding ok';
       laadDeclaratiesSectie();
@@ -764,9 +765,9 @@
       const is_geen_declaratie = document.getElementById('declaratie-nieuw-geen').checked;
       if (!naam) { melding.textContent = 'Enter a name for the new declaration.'; melding.className = 'jopen-form-melding fout'; return; }
 
-      const { error } = await supabaseClient.from('ingredient_declaraties').insert({
+      const { error } = await supabaseClient.from('ingredient_declarations').insert(toDb('ingredient_declarations', {
         naam, is_geen_declaratie, sort_order: alleDeclaraties.length + 1,
-      });
+      }));
       if (error) {
         melding.textContent = error.code === '23505' ? 'That name already exists.' : 'Add failed: ' + error.message;
         melding.className = 'jopen-form-melding fout';

@@ -35,6 +35,11 @@ rules that must not be skipped.
   <bestand/blok>. Zal ik dat hele blok meteen naar het Engels vertalen?"*
   Only translate the whole block if he agrees.
 - UI labels in English; any doubtful translation goes to Jaap first.
+- Untranslated (Dutch) page code talks to the English database through the
+  translation layer (`ARCHITECTURE.md` §6a): aliases in selects, English
+  filters and values, `toDb()` for payloads. New code uses English names
+  directly. Regenerate `db-legacy-names.js` from `rename-map.json`, never
+  edit it by hand.
 - Generic helpers come from `jopen-utils.js` — never copy them into a page.
   A helper needed on a second page moves to `jopen-utils.js`.
 - A calculation needed in more than one place becomes its own module with a

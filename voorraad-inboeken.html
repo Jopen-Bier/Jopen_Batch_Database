@@ -149,6 +149,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="jopen-utils.js"></script>
+  <script src="db-legacy-names.js"></script>
   <script src="nav.js"></script>
   <script>
     let alleIngredienten = [];       // {id, naam, eenheid, leveranciers, usesAlphaPct}
@@ -169,9 +170,9 @@
     async function laadIngredienten() {
       const { data, error } = await supabaseClient
         .from('ingredients')
-        .select('id, naam, category_id, eenheid, leverancier, leverancier_2, leverancier_3, ingredient_categories(uses_alpha_pct)')
-        .eq('versie_status', 'huidig')
-        .order('naam');
+        .select('id, naam:name, category_id, eenheid:unit, leverancier:supplier, leverancier_2:supplier_2, leverancier_3:supplier_3, ingredient_categories(uses_alpha_pct)')
+        .eq('version_status', 'current')
+        .order('name');
       if (error) { console.error('Kon ingrediënten niet laden:', error); return; }
       alleIngredienten = (data || []).map(i => ({
         id: i.id, naam: i.naam, eenheid: i.eenheid,
@@ -252,7 +253,7 @@
       const { data: { session } } = await supabaseClient.auth.getSession();
 
       melding.textContent = 'Saving…'; melding.className = 'vr-melding';
-      const { error } = await supabaseClient.from('grondstof_lots').insert({
+      const { error } = await supabaseClient.from('lots').insert(toDb('lots', {
         ingredient_id: geselecteerdIngredientOntv.id,
         leverancier: document.getElementById('vr-ontv-leverancier').value.trim() || null,
         lotcode: document.getElementById('vr-ontv-lotcode').value.trim() || null,
@@ -270,7 +271,7 @@
         notitie: document.getElementById('vr-ontv-notitie').value.trim() || null,
         ontvangen_door: document.getElementById('vr-ontv-ontvangen-door').value || null,
         aangemaakt_door: session?.user?.id ?? null,
-      });
+      }));
 
       if (error) {
         melding.textContent = 'Could not save: ' + error.message;
