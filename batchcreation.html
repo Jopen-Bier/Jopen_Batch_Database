@@ -196,6 +196,8 @@
   <script src="config.js"></script>
   <script>document.write('<script src="batchrapport-vullen.js?t=' + Date.now() + '"><\/script>');</script>
   <script src="jopen-utils.js"></script>
+  <script src="db-legacy-names.js"></script>
+  <script src="recipe-values.js"></script>
   <script src="nav.js"></script>
   <script>
     let alleRecepten = [];
@@ -213,9 +215,9 @@
     async function laadRecepten() {
       const { data, error } = await supabaseClient
         .from('recipes')
-        .select('id, naam, bierstijl, locatie, brouwsel_hl, status, versie_major, versie_minor')
-        .neq('status', 'gearchiveerd')
-        .order('naam');
+        .select('id, naam:name, bierstijl:beer_style, locatie:location, brouwsel_hl:brew_volume_hl, status, versie_major:version_major, versie_minor:version_minor')
+        .neq('status', 'archived')
+        .order('name');
       if (error) {
         console.error('Kon recepten niet laden:', error);
         return;
@@ -252,16 +254,16 @@
 
       // Beer risk/status staan in recipe_fermentatie, niet op recipes zelf.
       const { data: ferm } = await supabaseClient
-        .from('recipe_fermentatie').select('bier_risico, bier_status').eq('recipe_id', recept.id).maybeSingle();
+        .from('recipe_fermentation').select('bier_risico:beer_risk, bier_status:beer_status').eq('recipe_id', recept.id).maybeSingle();
 
       document.getElementById('bc-preview-naam').textContent = recept.naam;
       document.getElementById('bc-preview-stijl').textContent = recept.bierstijl || '—';
-      document.getElementById('bc-preview-locatie').textContent = recept.locatie || '—';
+      document.getElementById('bc-preview-locatie').textContent = locationLabel(recept.locatie);
       document.getElementById('bc-preview-hl').textContent = recept.brouwsel_hl ?? '—';
       document.getElementById('bc-preview-versie').textContent = `v${recept.versie_major}.${recept.versie_minor}`;
       document.getElementById('bc-preview-status').textContent = recept.status;
-      document.getElementById('bc-preview-risico').textContent = (ferm && ferm.bier_risico) || '—';
-      document.getElementById('bc-preview-beerstatus').textContent = (ferm && ferm.bier_status) || '—';
+      document.getElementById('bc-preview-risico').textContent = valueLabel(BEER_RISK_LABELS, ferm && ferm.bier_risico);
+      document.getElementById('bc-preview-beerstatus').textContent = valueLabel(BEER_STATUS_LABELS, ferm && ferm.bier_status);
       document.getElementById('bc-geselecteerd').style.display = 'block';
 
       werkMaakKnopBij();
@@ -370,7 +372,7 @@
       for (let van = 0; ; van += PAGINA) {
         const { data, error } = await supabaseClient
           .from('batches')
-          .select('id, batchnummer, naam, aantal_brouwsels, aangemaakt_op, users(name), recipes(locatie, bierstijl)')
+          .select('id, batchnummer, naam, aantal_brouwsels, aangemaakt_op, users(name), recipes(locatie:location, bierstijl:beer_style)')
           // aangemaakt_op alone isn't a reliable sort key: rows inserted in the same
           // statement (e.g. a bulk historical import) all share one timestamp, so ties
           // need a tiebreaker. id (insertion order) does that cheaply.
@@ -392,15 +394,15 @@
 
     // Keuzelijsten opbouwen uit de batches zelf; de huidige keuze blijft staan.
     function vulFilterOpties() {
-      const vul = (id, waarden) => {
+      const vul = (id, waarden, label = (w) => w) => {
         const sel = document.getElementById(id);
         const huidig = sel.value;
         sel.innerHTML = '<option value="">All</option>' +
-          waarden.map(w => `<option value="${escapeHtml(w)}">${escapeHtml(w)}</option>`).join('');
+          waarden.map(w => `<option value="${escapeHtml(w)}">${escapeHtml(label(w))}</option>`).join('');
         if (waarden.includes(huidig)) sel.value = huidig;
       };
       const uniek = (f) => [...new Set(alleBatches.map(f).filter(Boolean))].sort((a, b) => a.localeCompare(b));
-      vul('bc-f-locatie', uniek(b => b.recipes?.locatie));
+      vul('bc-f-locatie', uniek(b => b.recipes?.locatie), locationLabel);
       vul('bc-f-door', uniek(b => b.users?.name));
     }
 

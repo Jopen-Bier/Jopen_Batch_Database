@@ -32,6 +32,8 @@ const fs = require('fs');
 const JSZip = require('jszip');
 const { createClient } = require('@supabase/supabase-js');
 const { XlsxDirectWriter, StylesManager } = require('./xlsx-direct');
+const { fromDb } = require('../db-legacy-names.js');
+const { BEER_RISK_REPORT_TEXT, BEER_STATUS_REPORT_TEXT } = require('../recipe-values.js');
 
 const SCALAR_MAP = require('./data/scalar_field_map.json');
 const INGREDIENT_MAP = require('./data/ingredient_field_map.json');
@@ -105,6 +107,15 @@ function bepaalHopEbu(gewichtGram, alphaPct, kooktijd, og, volumeKookHl) {
 // ---------------------------------------------------------------------------
 // Supabase ophalen
 // ---------------------------------------------------------------------------
+// Beer risk/status are stored as codes; the template's conditional formatting
+// matches the Dutch text, so the report gets that text (recipe-values.js).
+function reportFermentationText(row) {
+  const out = { ...row };
+  if (out.bier_risico) out.bier_risico = BEER_RISK_REPORT_TEXT[out.bier_risico] || out.bier_risico;
+  if (out.bier_status) out.bier_status = BEER_STATUS_REPORT_TEXT[out.bier_status] || out.bier_status;
+  return out;
+}
+
 async function haalBatchDataOp(supabase, batchnummer) {
   const { data: batch, error: batchErr } = await supabase
     .from('batches').select('*').eq('batchnummer', batchnummer).single();
@@ -114,16 +125,16 @@ async function haalBatchDataOp(supabase, batchnummer) {
   const [recipe, specs, ferm, brouw, water, verpakking, processtappen, comments, ingredients, revisies, alleIngredienten] =
     await Promise.all([
       supabase.from('recipes').select('*').eq('id', recipeId).single(),
-      supabase.from('recipe_specificaties').select('*').eq('recipe_id', recipeId).maybeSingle(),
-      supabase.from('recipe_fermentatie').select('*').eq('recipe_id', recipeId).maybeSingle(),
-      supabase.from('recipe_brouwspecificaties').select('*').eq('recipe_id', recipeId).maybeSingle(),
+      supabase.from('recipe_specs').select('*').eq('recipe_id', recipeId).maybeSingle(),
+      supabase.from('recipe_fermentation').select('*').eq('recipe_id', recipeId).maybeSingle(),
+      supabase.from('recipe_brewing_specs').select('*').eq('recipe_id', recipeId).maybeSingle(),
       supabase.from('recipe_water').select('*').eq('recipe_id', recipeId).maybeSingle(),
-      supabase.from('recipe_verpakking').select('*').eq('recipe_id', recipeId).maybeSingle(),
-      supabase.from('recipe_processtappen').select('*').eq('recipe_id', recipeId).maybeSingle(),
+      supabase.from('recipe_packaging').select('*').eq('recipe_id', recipeId).maybeSingle(),
+      supabase.from('recipe_process_steps').select('*').eq('recipe_id', recipeId).maybeSingle(),
       supabase.from('recipe_comments').select('*').eq('recipe_id', recipeId).maybeSingle(),
-      supabase.from('recipe_ingredients').select('*').eq('recipe_id', recipeId).order('rol').order('volgorde'),
-      supabase.from('recipe_revisies').select('*').eq('recipe_id', recipeId)
-        .order('versie_major', { ascending: false }).order('versie_minor', { ascending: false }).order('id', { ascending: false })
+      supabase.from('recipe_ingredients').select('*').eq('recipe_id', recipeId).order('addition_type').order('sort_order'),
+      supabase.from('recipe_revisions').select('*').eq('recipe_id', recipeId)
+        .order('version_major', { ascending: false }).order('version_minor', { ascending: false }).order('id', { ascending: false })
         .limit(4),
       supabase.from('ingredients').select('id, naam:name'),
     ]);
@@ -134,16 +145,20 @@ async function haalBatchDataOp(supabase, batchnummer) {
 
   return {
     batch,
-    recipes: recipe.data,
-    recipe_specificaties: specs.data || {},
-    recipe_fermentatie: ferm.data || {},
-    recipe_brouwspecificaties: brouw.data || {},
-    recipe_water: water.data || {},
-    recipe_verpakking: verpakking.data || {},
-    recipe_processtappen: processtappen.data || {},
-    recipe_comments: comments.data || {},
-    recipe_ingredients: ingredients.data || [],
-    recipe_revisies: revisies.data || [],
+    // Translation layer: the field maps (data/*.json) and this generator
+    // still use the old Dutch table/column names, so every row is renamed
+    // back with fromDb() (db-legacy-names.js). Columns without an old name
+    // (e.g. brewhouse_recipe_name_wp/_jk) keep their English key.
+    recipes: fromDb('recipes', recipe.data),
+    recipe_specificaties: fromDb('recipe_specs', specs.data || {}),
+    recipe_fermentatie: reportFermentationText(fromDb('recipe_fermentation', ferm.data || {})),
+    recipe_brouwspecificaties: fromDb('recipe_brewing_specs', brouw.data || {}),
+    recipe_water: fromDb('recipe_water', water.data || {}),
+    recipe_verpakking: fromDb('recipe_packaging', verpakking.data || {}),
+    recipe_processtappen: fromDb('recipe_process_steps', processtappen.data || {}),
+    recipe_comments: fromDb('recipe_comments', comments.data || {}),
+    recipe_ingredients: (ingredients.data || []).map(r => fromDb('recipe_ingredients', r)),
+    recipe_revisies: (revisies.data || []).map(r => fromDb('recipe_revisions', r)),
     ingredientNaam,
   };
 }
@@ -177,7 +192,7 @@ const RIJ_KELDER_SJABLOON = 92;
 // de rij-overloop-berekening hieronder. Nooit een scheidingsrij ná de
 // laatste groep (dat is de overgang naar Dry hop, ongewijzigd).
 function bouwHopKookLayout(bundel) {
-  const hopRijen = sorteerHopgiften(bundel.recipe_ingredients.filter(r => r.rol === 'hopgift_kook'), 'hopgift_kook');
+  const hopRijen = sorteerHopgiften(bundel.recipe_ingredients.filter(r => r.rol === 'boil_hop'), 'boil_hop');
   const layout = [];
   for (let i = 0; i < hopRijen.length; i++) {
     layout.push(hopRijen[i]);
@@ -190,11 +205,11 @@ function bouwHopKookLayout(bundel) {
 }
 
 async function voegOverloopRijenToe(writer, bundel) {
-  const moutAantal = bundel.recipe_ingredients.filter(r => r.rol === 'hoofdmout').length;
+  const moutAantal = bundel.recipe_ingredients.filter(r => r.rol === 'malt').length;
   const hopAantal = bouwHopKookLayout(bundel).length;
   const dryHopAantal = bundel.recipe_ingredients.filter(r => r.rol === 'dry_hop').length;
-  const brouwhuisAantal = bundel.recipe_ingredients.filter(r => r.rol === 'toegift_brouwerij').length;
-  const kelderAantal = bundel.recipe_ingredients.filter(r => r.rol === 'toegift_kelder').length;
+  const brouwhuisAantal = bundel.recipe_ingredients.filter(r => r.rol === 'brewhouse_addition').length;
+  const kelderAantal = bundel.recipe_ingredients.filter(r => r.rol === 'cellar_addition').length;
 
   const n0 = Math.max(0, moutAantal - (RIJ_MOUT_LAATSTE - RIJ_MOUT_EERSTE + 1));
   const nHop = Math.max(0, hopAantal - (RIJ_HOP_LAATSTE - RIJ_HOP_EERSTE + 1));
@@ -278,9 +293,9 @@ async function vulReceptnaamKruisVelden(writer, bundel, isWP) {
   const bron = bundel.recipe_brouwspecificaties;
   if (isWP) {
     await writer.setCelWaarde('Brew Sheet!F8', { formula: "'Recipe Sheet'!G7*'Brew Sheet'!F19" });
-    await writer.setCelWaarde('Brew Sheet!F9', bron.recept_naam_software ?? null);
+    await writer.setCelWaarde('Brew Sheet!F9', bron.brewhouse_recipe_name_wp ?? null);
   } else {
-    await writer.setCelWaarde('Brew Sheet!F8', bron.recept_naam_software ?? null);
+    await writer.setCelWaarde('Brew Sheet!F8', bron.brewhouse_recipe_name_jk ?? null);
     await writer.setCelWaarde('Brew Sheet!F9', bron.naam_special_bin ?? null);
   }
   await writer.setCelWaarde('Brew Sheet!F11', bron.naam_special_bin ?? null);
@@ -319,7 +334,7 @@ function formatDryHopTiming(tijdstip) {
   return tijdstip; // onbekende/vrije-tekstwaarde -- ongewijzigd tonen
 }
 function sorteerHopgiften(rijen, rol) {
-  if (rol === 'hopgift_kook') {
+  if (rol === 'boil_hop') {
     return [...rijen].sort((a, b) => (parseFloat(b.tijdstip) || -Infinity) - (parseFloat(a.tijdstip) || -Infinity));
   }
   if (rol === 'dry_hop') {
@@ -370,11 +385,11 @@ function formatRatio(regel) {
 async function vulIngredientRijen(writer, bundel, overloop, stylesManager) {
   const { n0, nHop, nDryHop, n1, verschuifCel } = overloop;
   const dynamischeBlokken = {
-    hoofdmout: {
+    malt: {
       eersteRij: RIJ_MOUT_EERSTE, vasteSloten: RIJ_MOUT_LAATSTE - RIJ_MOUT_EERSTE + 1,
       kolommen: { naam: 'A', hoeveelheid: 'D', kleur_ebc: 'E' },
     },
-    hopgift_kook: {
+    boil_hop: {
       eersteRij: RIJ_HOP_EERSTE + n0, vasteSloten: RIJ_HOP_LAATSTE - RIJ_HOP_EERSTE + 1,
       kolommen: { naam: 'A', hdt: 'Q', alpha_pct: 'D', hoeveelheid: 'E', tijdstip: 'G' },
     },
@@ -382,20 +397,20 @@ async function vulIngredientRijen(writer, bundel, overloop, stylesManager) {
       eersteRij: RIJ_DRYHOP_EERSTE + n0 + nHop, vasteSloten: RIJ_DRYHOP_LAATSTE - RIJ_DRYHOP_EERSTE + 1,
       kolommen: { naam: 'A', hoeveelheid: 'E', tijdstip: 'G' },
     },
-    toegift_brouwerij: {
+    brewhouse_addition: {
       eersteRij: RIJ_BROUWHUIS_EERSTE + n0 + nHop + nDryHop, vasteSloten: RIJ_BROUWHUIS_LAATSTE - RIJ_BROUWHUIS_EERSTE + 1,
       kolommen: { naam: 'A', ratio: 'E', hoeveelheid: 'G', tijdstip: 'I', heelBatchNotitie: 'Q' },
     },
-    toegift_kelder: {
+    cellar_addition: {
       eersteRij: RIJ_KELDER_EERSTE + n0 + nHop + nDryHop + n1, vasteSloten: RIJ_KELDER_LAATSTE - RIJ_KELDER_EERSTE + 1,
       kolommen: { naam: 'A', ratio: 'E', hoeveelheid: 'G', tijdstip: 'I' },
     },
   };
 
-  const rollen = ['hopgift_kook', 'dry_hop', 'hoofdmout', 'toegift_brouwerij', 'toegift_kelder', 'gist'];
+  const rollen = ['boil_hop', 'dry_hop', 'malt', 'brewhouse_addition', 'cellar_addition', 'yeast'];
   for (const rol of rollen) {
     const ongesorteerd = bundel.recipe_ingredients.filter(r => r.rol === rol);
-    const rijen = rol === 'hopgift_kook'
+    const rijen = rol === 'boil_hop'
       ? bouwHopKookLayout(bundel)
       : (rol === 'dry_hop'
         ? sorteerHopgiften(ongesorteerd, rol)
@@ -417,8 +432,8 @@ async function vulIngredientRijen(writer, bundel, overloop, stylesManager) {
       for (let i = 0; i < totaalRijen; i++) {
         const rij = eersteRij + i;
         const regel = rijen[i];
-        const heelBatch = rol === 'toegift_brouwerij' && !!(regel && regel.alles_in_brouwsel_1);
-        const aantalBrouwselsVoorRegel = (rol === 'toegift_kelder' || heelBatch) ? aantalBrouwselsBatch : 1;
+        const heelBatch = rol === 'brewhouse_addition' && !!(regel && regel.alles_in_brouwsel_1);
+        const aantalBrouwselsVoorRegel = (rol === 'cellar_addition' || heelBatch) ? aantalBrouwselsBatch : 1;
         for (const attr in kolommen) {
           const cel = `Recipe Sheet!${kolommen[attr]}${rij}`;
           if (!regel) { await writer.setCelWaarde(cel, null); continue; }
@@ -427,7 +442,7 @@ async function vulIngredientRijen(writer, bundel, overloop, stylesManager) {
             waarde = bundel.ingredientNaam.get(regel.ingredient_id) || regel.notitie || null;
           } else if (attr === 'ratio') {
             waarde = formatRatio(regel);
-          } else if (attr === 'hoeveelheid' && (rol === 'toegift_brouwerij' || rol === 'toegift_kelder')) {
+          } else if (attr === 'hoeveelheid' && (rol === 'brewhouse_addition' || rol === 'cellar_addition')) {
             waarde = berekenAfweegWaarde(regel, brouwselHl, aantalBrouwselsVoorRegel);
             if (heelBatch && waarde !== null && waarde !== undefined) {
               waarde = `${waarde}*`;
@@ -742,8 +757,7 @@ async function vulDryHopGlTotalen(writer, stylesManager, bundel, overloop) {
 // ---------------------------------------------------------------------------
 async function genereerBatchrapportBuffer(bundel) {
   const naam = bundel.recipes.naam || '';
-  const locatie = (bundel.recipes.locatie || '').toLowerCase();
-  const isWP = locatie.includes('waarderpolder');
+  const isWP = bundel.recipes.locatie === 'wp';
   const vestigingsPrefix = isWP ? 'WP' : 'JK';
 
   const templateBuffer = fs.readFileSync(TEMPLATE_PATH);

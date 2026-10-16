@@ -11,25 +11,26 @@
 const PS_BASISPAD = 'productsheet-generator/';
 
 // Menselijk leesbare labels voor de changelog-diff.
+// Keys are English (product_sheets.sync_snapshot is stored with these keys).
 const PS_SNAPSHOT_LABELS = {
-  origineel_extract: 'Original extract', origineel_extract_tol: 'Original extract tolerance',
-  rest_extract: 'Final extract', rest_extract_tol: 'Final extract tolerance',
+  original_extract: 'Original extract', original_extract_tol: 'Original extract tolerance',
+  final_extract: 'Final extract', final_extract_tol: 'Final extract tolerance',
   alcohol: 'Alcohol', alcohol_tol: 'Alcohol tolerance',
-  bitterheid: 'Bitterness', bitterheid_tol: 'Bitterness tolerance',
-  kleur_ebc: 'Color (EBC)', kleur_tol: 'Color tolerance',
+  bitterness: 'Bitterness', bitterness_tol: 'Bitterness tolerance',
+  color_ebc: 'Color (EBC)', color_tol: 'Color tolerance',
   ph: 'pH', ph_tol: 'pH tolerance',
-  troebeling_lab: 'Turbidity (lab)', troebeling_lab_tol: 'Turbidity tolerance',
-  co2_fles: 'CO2 bottle', co2_fles_tol: 'CO2 bottle tolerance',
+  turbidity_lab: 'Turbidity (lab)', turbidity_lab_tol: 'Turbidity tolerance',
+  co2_bottle: 'CO2 bottle', co2_bottle_tol: 'CO2 bottle tolerance',
   co2_can: 'CO2 can', co2_can_tol: 'CO2 can tolerance',
-  co2_fust: 'CO2 keg', co2_fust_tol: 'CO2 keg tolerance',
+  co2_keg: 'CO2 keg', co2_keg_tol: 'CO2 keg tolerance',
   headspace_o2: 'Headspace O2', headspace_o2_tol: 'Headspace O2 tolerance',
   dissolved_o2: 'Dissolved O2', dissolved_o2_tol: 'Dissolved O2 tolerance',
-  turbidity_label: 'Turbidity', smaakomschrijving: 'Flavor description',
-  smaak_keywords: 'Flavor keywords', kleur_vrije_tekst: 'Colour description',
-  aanbevolen_schenktemperatuur: 'Recommended drinking temperature',
-  allergenen_tekst: 'Allergies',
-  ingredienten_malt_label: 'Malt (name on label)', ingredienten_hop_label: 'Hop (name on label)',
-  ingredienten_additief_label: 'Additives (name on label)', ingredienten_gist_label: 'Yeast (name on label)',
+  turbidity_label: 'Turbidity', flavor_description: 'Flavor description',
+  flavor_keywords: 'Flavor keywords', color_free_text: 'Colour description',
+  serving_temperature: 'Recommended drinking temperature',
+  allergens_text: 'Allergies',
+  ingredients_malt_label: 'Malt (name on label)', ingredients_hop_label: 'Hop (name on label)',
+  ingredients_additive_label: 'Additives (name on label)', ingredients_yeast_label: 'Yeast (name on label)',
 };
 
 /** Bouwt de vlakke snapshot die zowel vergeleken als bewaard wordt. */
@@ -37,28 +38,28 @@ function psBouwSnapshot(live, hash) {
   const s = live.specs;
   return {
     hash,
-    origineel_extract: s.origineel_extract, origineel_extract_tol: s.origineel_extract_tol,
-    rest_extract: s.rest_extract, rest_extract_tol: s.rest_extract_tol,
+    original_extract: s.origineel_extract, original_extract_tol: s.origineel_extract_tol,
+    final_extract: s.rest_extract, final_extract_tol: s.rest_extract_tol,
     alcohol: s.alcohol, alcohol_tol: s.alcohol_tol,
-    bitterheid: s.bitterheid, bitterheid_tol: s.bitterheid_tol,
-    kleur_ebc: live.calcColor, kleur_tol: s.kleur_tol,
+    bitterness: s.bitterheid, bitterness_tol: s.bitterheid_tol,
+    color_ebc: live.calcColor, color_tol: s.kleur_tol,
     ph: s.ph, ph_tol: s.ph_tol,
-    troebeling_lab: s.troebeling_lab, troebeling_lab_tol: s.troebeling_lab_tol,
-    co2_fles: s.co2_fles, co2_fles_tol: s.co2_fles_tol,
+    turbidity_lab: s.troebeling_lab, turbidity_lab_tol: s.troebeling_lab_tol,
+    co2_bottle: s.co2_fles, co2_bottle_tol: s.co2_fles_tol,
     co2_can: s.co2_can, co2_can_tol: s.co2_can_tol,
-    co2_fust: s.co2_fust, co2_fust_tol: s.co2_fust_tol,
+    co2_keg: s.co2_fust, co2_keg_tol: s.co2_fust_tol,
     headspace_o2: s.headspace_o2, headspace_o2_tol: s.headspace_o2_tol,
     dissolved_o2: s.dissolved_o2, dissolved_o2_tol: s.dissolved_o2_tol,
     turbidity_label: live.turbidity,
-    smaakomschrijving: live.recipe.smaakomschrijving,
-    smaak_keywords: (live.recipe.smaak_keywords || []).join(', '),
-    kleur_vrije_tekst: live.recipe.kleur_vrije_tekst,
-    aanbevolen_schenktemperatuur: live.recipe.aanbevolen_schenktemperatuur,
-    allergenen_tekst: live.allergenenTekst,
-    ingredienten_malt_label: live.ingredientenBlok.malt.label,
-    ingredienten_hop_label: live.ingredientenBlok.hop.label,
-    ingredienten_additief_label: live.ingredientenBlok.additief.label,
-    ingredienten_gist_label: live.ingredientenBlok.gist.label,
+    flavor_description: live.recipe.smaakomschrijving,
+    flavor_keywords: (live.recipe.smaak_keywords || []).join(', '),
+    color_free_text: live.recipe.kleur_vrije_tekst,
+    serving_temperature: live.recipe.aanbevolen_schenktemperatuur,
+    allergens_text: live.allergenenTekst,
+    ingredients_malt_label: live.ingredientenBlok.malt.label,
+    ingredients_hop_label: live.ingredientenBlok.hop.label,
+    ingredients_additive_label: live.ingredientenBlok.additief.label,
+    ingredients_yeast_label: live.ingredientenBlok.gist.label,
   };
 }
 
@@ -173,6 +174,7 @@ async function psUpdate(recipeGroupId, gebruiker) {
   let { data: bestaande, error: bestErr } = await supabaseClient
     .from('product_sheets').select('*').eq('recipe_group_id', recipeGroupId).maybeSingle();
   if (bestErr) throw bestErr;
+  bestaande = fromDb('product_sheets', bestaande);
 
   let productSheetRow = bestaande;
   const wasNietInSync = !bestaande || !bestaande.sync_snapshot || bestaande.sync_snapshot.hash !== hash;
@@ -182,10 +184,10 @@ async function psUpdate(recipeGroupId, gebruiker) {
     // Sheet"), maar defensief: alsnog aanmaken i.p.v. te falen.
     const { data: nieuw, error: insErr } = await supabaseClient
       .from('product_sheets')
-      .insert({ recipe_group_id: recipeGroupId, huidige_versie: 1, aangemaakt_door: gebruiker?.id })
+      .insert(toDb('product_sheets', { recipe_group_id: recipeGroupId, huidige_versie: 1, aangemaakt_door: gebruiker?.id }))
       .select().single();
     if (insErr) throw insErr;
-    productSheetRow = nieuw;
+    productSheetRow = fromDb('product_sheets', nieuw);
   }
 
   if (!wasNietInSync) {
@@ -199,27 +201,27 @@ async function psUpdate(recipeGroupId, gebruiker) {
 
   const { data: bijgewerkt, error: updErr } = await supabaseClient
     .from('product_sheets')
-    .update({
+    .update(toDb('product_sheets', {
       huidige_versie: nieuweVersie,
       sync_snapshot: nieuweSnapshot,
       bijgewerkt_obv_versie_major: live.recipe.versie_major,
       bijgewerkt_obv_versie_minor: live.recipe.versie_minor,
       bijgewerkt_op: new Date().toISOString(),
       bijgewerkt_door: gebruiker?.id,
-    })
+    }))
     .eq('id', productSheetRow.id)
     .select().single();
   if (updErr) throw updErr;
-  productSheetRow = bijgewerkt;
+  productSheetRow = fromDb('product_sheets', bijgewerkt);
 
-  const { error: revErr } = await supabaseClient.from('product_sheet_revisies').insert({
+  const { error: revErr } = await supabaseClient.from('product_sheet_revisions').insert(toDb('product_sheet_revisions', {
     product_sheet_id: productSheetRow.id,
     versie: nieuweVersie,
     recipe_versie_major: live.recipe.versie_major,
     recipe_versie_minor: live.recipe.versie_minor,
     door: gebruiker?.name || '',
     wijzigingen: changelog,
-  });
+  }));
   if (revErr) throw revErr;
 
   return productSheetRow;
@@ -232,14 +234,16 @@ async function psUpdate(recipeGroupId, gebruiker) {
  */
 async function psDownload(recipeGroupId, gebruiker) {
   const live = await psLaadReceptData(recipeGroupId);
-  const { data: productSheetRow, error } = await supabaseClient
+  const { data: productSheetData, error } = await supabaseClient
     .from('product_sheets').select('*').eq('recipe_group_id', recipeGroupId).single();
   if (error) throw error;
+  const productSheetRow = fromDb('product_sheets', productSheetData);
 
-  const { data: laatsteRevisie } = await supabaseClient
-    .from('product_sheet_revisies').select('*')
+  const { data: laatsteRevisieData } = await supabaseClient
+    .from('product_sheet_revisions').select('*')
     .eq('product_sheet_id', productSheetRow.id)
-    .order('versie', { ascending: false }).limit(1).maybeSingle();
+    .order('version', { ascending: false }).limit(1).maybeSingle();
+  const laatsteRevisie = fromDb('product_sheet_revisions', laatsteRevisieData);
 
   productSheetRow._writtenByNaam = laatsteRevisie ? laatsteRevisie.door : (gebruiker?.name || '');
   productSheetRow._datum = laatsteRevisie ? laatsteRevisie.datum : ((productSheetRow.bijgewerkt_op || '').slice(0, 10) || new Date().toISOString().slice(0, 10));

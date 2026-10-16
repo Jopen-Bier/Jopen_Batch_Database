@@ -60,6 +60,7 @@
 <div id="jopen-nav"></div>
 <script src="config.js"></script>
 <script src="jopen-utils.js"></script>
+<script src="db-legacy-names.js"></script>
 <script src="nav.js"></script>
 <script src="productsheet-xlsx-writer.js"></script>
 <script src="productsheet-shared.js"></script>
@@ -100,8 +101,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     .from('recipes')
     .select('id')
     .eq('recipe_group_id', recipeGroupId)
-    .order('versie_major', { ascending: false })
-    .order('versie_minor', { ascending: false })
+    .order('version_major', { ascending: false })
+    .order('version_minor', { ascending: false })
     .limit(1)
     .maybeSingle();
   if (nieuwsteRecept) {
@@ -118,16 +119,18 @@ async function render() {
     const [live, status, revisies] = await Promise.all([
       psLaadReceptData(recipeGroupId),
       psLaadSyncStatus(recipeGroupId),
-      supabaseClient.from('product_sheet_revisies').select('*').order('versie', { ascending: false }),
+      supabaseClient.from('product_sheet_revisions').select('*').order('version', { ascending: false }),
     ]);
+    const revisieRijen = (revisies.data || []).map(r => fromDb('product_sheet_revisions', r));
 
     if (!status) {
       renderGeenSheet(live);
       return;
     }
 
-    const { data: productSheetRow } = await supabaseClient.from('product_sheets').select('*').eq('id', status.product_sheet_id).single();
-    const relevanteRevisies = (revisies.data || []).filter(r => r.product_sheet_id === status.product_sheet_id);
+    const { data: productSheetData } = await supabaseClient.from('product_sheets').select('*').eq('id', status.product_sheet_id).single();
+    const productSheetRow = fromDb('product_sheets', productSheetData);
+    const relevanteRevisies = revisieRijen.filter(r => r.product_sheet_id === status.product_sheet_id);
 
     renderSheet(live, status, productSheetRow, relevanteRevisies);
   } catch (e) {
@@ -147,7 +150,7 @@ function renderGeenSheet(live) {
   if (btn) btn.addEventListener('click', async () => {
     btn.disabled = true; btn.textContent = 'Creating…';
     try {
-      await supabaseClient.from('product_sheets').insert({ recipe_group_id: recipeGroupId, huidige_versie: 1, aangemaakt_door: huidigeGebruiker?.id });
+      await supabaseClient.from('product_sheets').insert(toDb('product_sheets', { recipe_group_id: recipeGroupId, huidige_versie: 1, aangemaakt_door: huidigeGebruiker?.id }));
       await render();
     } catch (e) {
       alert('Could not create product sheet: ' + (e.message || e));

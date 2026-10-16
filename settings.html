@@ -780,7 +780,7 @@
     });
 
     // ----------------------------------------------------------------
-    // Sectie: Water (water_instellingen, één rij id = 1)
+    // Section: Water (water_settings, one row id = 1)
     // ----------------------------------------------------------------
     const WATER_BRON_VELDEN = [['ca', 'Ca – Calcium'], ['mg', 'Mg – Magnesium'], ['na', 'Na – Sodium'], ['cl', 'Cl – Chloride'], ['so4', 'SO₄ – Sulfate'], ['alkalinity', 'Alkalinity (as CaCO₃)']];
     const WATER_CAP_VELDEN = [['max_ca', 'Ca – Calcium'], ['max_mg', 'Mg – Magnesium'], ['max_cl', 'Cl – Chloride'], ['max_so4', 'SO₄ – Sulfate']];
@@ -788,9 +788,9 @@
     async function laadWaterSectie() {
       const container = document.getElementById('water-inhoud');
       const [{ data: w, error }, magBewerken, { data: hist }] = await Promise.all([
-        supabaseClient.from('water_instellingen').select('*').eq('id', 1).maybeSingle(),
+        supabaseClient.from('water_settings').select('*').eq('id', 1).maybeSingle(),
         magBewerkenModule('settings'),
-        supabaseClient.from('water_instellingen_historie').select('geldig_vanaf, gegevens, gebruikers:gewijzigd_door(naam)').order('geldig_vanaf', { ascending: false }).limit(10),
+        supabaseClient.from('water_settings_history').select('valid_from, data, updated_by_user:users!water_settings_history_updated_by_fkey(name)').order('valid_from', { ascending: false }).limit(10),
       ]);
       if (error || !w) {
         container.innerHTML = `<p class="jopen-form-melding fout">Could not load the water profile${error ? ': ' + escapeHtml(error.message) : '.'}</p>`;
@@ -802,16 +802,16 @@
         <tr><td><b>${z.naam}</b><div style="font-size:0.85em; color:#6b6b6b;">${z.formule}</div></td>
         ${['ca', 'mg', 'na', 'so4', 'cl'].map(i => `<td style="text-align:right;">${z.ionen[i] !== undefined ? z.ionen[i].toFixed(2) : '–'}</td>`).join('')}</tr>`).join('');
       const histRijen = (hist || []).map(h => {
-        const g = h.gegevens || {};
-        return `<tr><td>${new Date(h.geldig_vanaf).toLocaleString('en-GB')}</td><td>${escapeHtml(h.gebruikers?.naam || '—')}</td>
+        const g = h.data || {};
+        return `<tr><td>${new Date(h.valid_from).toLocaleString('en-GB')}</td><td>${escapeHtml(h.updated_by_user?.name || '—')}</td>
           <td>Ca ${g.ca} · Mg ${g.mg} · Na ${g.na} · Cl ${g.cl} · SO₄ ${g.so4} · Alk ${g.alkalinity ?? '–'}</td>
           <td>caps ${g.max_ca}/${g.max_mg}/${g.max_cl}/${g.max_so4}</td></tr>`;
       }).join('');
       container.innerHTML = `
         <h3 class="water-sub">Source water</h3>
         <div class="water-raster">
-          <label style="grid-column: span 2;">Description<input type="text" data-water="omschrijving" value="${escapeHtml(w.omschrijving || '')}" ${dis} /></label>
-          <label>Measured on<input type="date" data-water="gemeten_op" value="${w.gemeten_op || ''}" ${dis} /></label>
+          <label style="grid-column: span 2;">Description<input type="text" data-water="description" value="${escapeHtml(w.description || '')}" ${dis} /></label>
+          <label>Measured on<input type="date" data-water="measured_on" value="${w.measured_on || ''}" ${dis} /></label>
         </div>
         <div class="water-raster">${WATER_BRON_VELDEN.map(f => veld(f, '0.1')).join('')}</div>
         <p style="font-size:0.82em; color:#6b6b6b; margin:4px 0 0;">All values in ppm (mg/L).</p>
@@ -840,15 +840,15 @@
       let fout = null;
       document.querySelectorAll('#water-inhoud [data-water]').forEach(el => {
         const k = el.dataset.water;
-        if (k === 'omschrijving') { upd[k] = el.value.trim() || 'Jopen ambient water'; return; }
-        if (k === 'gemeten_op') { upd[k] = el.value || null; return; }
+        if (k === 'description') { upd[k] = el.value.trim() || 'Jopen ambient water'; return; }
+        if (k === 'measured_on') { upd[k] = el.value || null; return; }
         if (el.value === '') { if (k === 'alkalinity') upd[k] = null; else fout = 'All values except alkalinity are required.'; return; }
         const n = Number(el.value);
         if (!Number.isFinite(n) || n < 0) { fout = 'Values must be positive numbers.'; return; }
         upd[k] = n;
       });
       if (fout) { melding.textContent = fout; melding.className = 'jopen-form-melding fout'; return; }
-      const { error } = await supabaseClient.from('water_instellingen').update(upd).eq('id', 1);
+      const { error } = await supabaseClient.from('water_settings').update(upd).eq('id', 1);
       if (error) { melding.textContent = 'Save failed: ' + error.message; melding.className = 'jopen-form-melding fout'; return; }
       melding.textContent = 'Saved.'; melding.className = 'jopen-form-melding ok';
       laadWaterSectie();

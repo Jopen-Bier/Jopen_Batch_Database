@@ -11,7 +11,7 @@
 // zodat een voorraadprojectie ("loopt leeg in week X") mogelijk is.
 
 function vfNaarWeergaveRol(rol) {
-  if (rol === 'hopgift_kook' || rol === 'dry_hop') return 'hops';
+  if (rol === 'boil_hop' || rol === 'dry_hop') return 'hops';
   return rol || 'overig';
 }
 
@@ -94,13 +94,13 @@ async function vfBerekenVerbruik(supabaseClient, periodes) {
 
   // 2. Receptregels (ingrediënten) van al die recepten in één keer ophalen.
   const { data: ingredientRegels, error: ingErr } = await vfHaalAlleRijenOp(
-    supabaseClient.from('recipe_ingredients').select('recipe_id, rol, ingredient_id, hoeveelheid, eenheid').in('recipe_id', receptIds)
+    supabaseClient.from('recipe_ingredients').select('recipe_id, rol:addition_type, ingredient_id, hoeveelheid:quantity, eenheid:unit').in('recipe_id', receptIds)
   );
   if (ingErr) return { error: ingErr };
 
   // 3. Namen van recepten (+ brouwsel_hl) en ingrediënten erbij.
   const [{ data: recepten }, { data: ingredienten }] = await Promise.all([
-    supabaseClient.from('recipes').select('id, naam, brouwsel_hl').in('id', receptIds),
+    supabaseClient.from('recipes').select('id, naam:name, brouwsel_hl:brew_volume_hl').in('id', receptIds),
     supabaseClient.from('ingredients').select('id, naam:name, eenheid:unit').in('id', [...new Set((ingredientRegels || []).map(r => r.ingredient_id).filter(x => x != null))]
     ),
   ]);

@@ -475,6 +475,7 @@
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <script src="config.js"></script>
   <script src="jopen-utils.js"></script>
+  <script src="db-legacy-names.js"></script>
   <script src="nav.js"></script>
   <script>
     // ------------------------------------------------------------------
@@ -571,8 +572,8 @@
       // staat los hiervan en blijft ongewijzigd verderop in de code.
       const { data, error } = await supabaseClient
         .from('recipes')
-        .select('id, naam, brouwsel_hl, status, kleur, locatie, recipe_group_id, versie_major, versie_minor')
-        .order('naam');
+        .select('id, naam:name, brouwsel_hl:brew_volume_hl, status, kleur:recipe_color, locatie:location, recipe_group_id, versie_major:version_major, versie_minor:version_minor')
+        .order('name');
       if (error) { console.error('Kon recepten niet laden:', error); return; }
       alleRecepten = data || [];
 
@@ -1096,7 +1097,7 @@
         if (term === '') { resultaten.style.display = 'none'; return; }
         const locatieGroep = huidigeModalLocatieGroep();
         const matches = alleRecepten.filter(r =>
-          r.status === 'actief' &&
+          r.status === 'active' &&
           receptPastBijLocatieGroep(r, locatieGroep) &&
           r.naam.toLowerCase().includes(term)
         ).slice(0, 20);
@@ -1186,7 +1187,7 @@
         const term = e.target.value.trim().toLowerCase();
         const resultaten = rij.querySelector('.bp-bier-resultaten');
         if (term === '') { resultaten.style.display = 'none'; return; }
-        const matches = alleRecepten.filter(r => r.status === 'actief' && r.naam.toLowerCase().includes(term)).slice(0, 20);
+        const matches = alleRecepten.filter(r => r.status === 'active' && r.naam.toLowerCase().includes(term)).slice(0, 20);
         resultaten.innerHTML = matches.length
           ? matches.map(r => `<div data-id="${r.id}">${escapeHtml(r.naam)}</div>`).join('')
           : '<div style="color:#999;">No matching recipes.</div>';
@@ -1292,12 +1293,10 @@
       return modalContext.group === 'jk' ? 'jk' : 'wp';
     }
 
-    // recipes.locatie is nu altijd gevuld (short_name-fallback is niet meer
-    // nodig en is verwijderd samen met de short_name-kolom zelf).
+    // recipes.location holds the plan-group code itself ('wp' / 'jk').
     function receptLocatieGroep(recept) {
-      if (recept.locatie === 'Jopen Kerk') return 'jk';
-      if (recept.locatie === 'Waarderpolder') return 'wp';
-      return null; // onbekend -> in beide filters tonen, niet onvindbaar maken
+      if (recept.locatie === 'jk' || recept.locatie === 'wp') return recept.locatie;
+      return null; // unknown -> show in both filters, never make it unfindable
     }
 
     function receptPastBijLocatieGroep(recept, locatieGroep) {

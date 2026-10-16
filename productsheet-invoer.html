@@ -37,6 +37,7 @@
 <div id="jopen-nav"></div>
 <script src="config.js"></script>
 <script src="jopen-utils.js"></script>
+<script src="db-legacy-names.js"></script>
 <script src="nav.js"></script>
 <main>
   <a class="back-link" id="terug-link" href="receptoverzicht.html">&larr; Back</a>
@@ -61,7 +62,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
   document.getElementById('terug-link').href = `productsheet.html?recipe_group_id=${recipeGroupId}`;
 
-  const { data: p, error } = await supabaseClient.from('product_sheets').select('*').eq('recipe_group_id', recipeGroupId).maybeSingle();
+  const { data: productSheetData, error } = await supabaseClient.from('product_sheets').select('*').eq('recipe_group_id', recipeGroupId).maybeSingle();
+  const p = fromDb('product_sheets', productSheetData);
   if (error) {
     document.getElementById('container').innerHTML = `<div class="error">${error.message}</div>`;
     return;
@@ -155,7 +157,7 @@ async function opslaan() {
     opmerkingen: tekst('f-opmerkingen'),
   };
 
-  const { error } = await supabaseClient.from('product_sheets').update(payload).eq('id', productSheetId);
+  const { error } = await supabaseClient.from('product_sheets').update(toDb('product_sheets', payload)).eq('id', productSheetId);
   if (error) {
     errEl.textContent = error.message;
     errEl.style.display = 'block';
