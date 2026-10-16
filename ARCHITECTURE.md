@@ -3,11 +3,11 @@
 The map of this system. Read it before adding a page, a table or a new app on
 the same database. The hard rules are summarised in `CLAUDE.md`.
 
-> **Transition in progress (Oct 2026).** The database is being moved from one
-> Dutch-named `public` schema to English names in domain schemas
-> (see *Database* below and `supabase/rename-map.json`). Until a domain has
-> been migrated, its tables still live in `public` under their old Dutch
-> names. Everything **new** follows the target conventions below.
+> **Transition in progress (Oct 2026).** Table and column names are being
+> renamed from Dutch to English, domain by domain (core → inventory →
+> recipe → production), following `supabase/rename-map.json`. Until a domain
+> has been renamed, its tables still carry their old Dutch names. Everything
+> **new** follows the conventions below.
 
 ---
 
@@ -68,29 +68,38 @@ tests/                     Node tests for shared modules
 
 ## 3. Database
 
-### 3.1 Schemas (target)
+### 3.1 Schemas
 
-| Schema | Owns | Shared? |
-|---|---|---|
-| `core` | users, roles, role_permissions, permission_modules, units, document_types, permission functions | Used by every app |
-| `inventory` | ingredients (master data), ingredient_categories/revisions/documents/declarations, lots, stock_movements | Used by recipe, production, future QA |
-| `recipe` | recipes + `recipe_*`, product_sheets, product_sheet_revisions, hop_utilization_curve, water_settings | |
-| `production` | batches, brew_planning (+ splits, history), brew_capacity; later the digital batch report tables | |
-| `qa`, `sensory`, `kpi` | future apps | |
+| Schema | Contains |
+|---|---|
+| `public` | **The brewery app** and the shared master data: users, roles, permissions, units, document types, ingredients, inventory, recipes, product sheets, planning, batches. |
+| `qa`, `sensory`, `kpi`, … | **Separate apps** on the same database (future). One schema per app. |
 
-Rules:
-- **A new app gets its own schema.** It may reference `core` and `inventory`
-  with foreign keys; it does not put tables in another app's schema.
-- Cross-domain read models (dashboards) are views in the schema of the app
-  that uses them.
-- `public` ends up empty except for temporary pass-through views during the
-  transition.
-- New schemas are picked up by the backup automatically
+Why the brewery app stays in one schema: its domains are tightly linked
+(batch → recipe → ingredients → lots → users) and the Supabase Data API
+(PostgREST) only embeds related tables **within the schema of the query**.
+Splitting the brewery app over schemas would break those joins. The real
+gain of schemas is separating *apps*, so that is where they are used.
+
+Domains inside `public` are recognisable by table name (`recipe_*`,
+`ingredient_*`, `brew_planning_*`, …) and by the grouping in §4 and
+`supabase/rename-map.json`.
+
+Rules for a new app schema:
+- It owns its own tables; it never puts tables in `public` or in another
+  app's schema.
+- It references shared data in `public` by foreign key (users, ingredients,
+  recipes, batches, …) — never copies it.
+- When it needs shared data in a single query (embedding), it defines
+  **explicit read views in its own schema** (e.g. `qa.users` as
+  `select id, name from public.users`). That list of views is the app's
+  documented dependency on the brewery app.
+- Add the schema under Supabase → Project Settings → Data API →
+  *Exposed schemas* and grant it (`grant usage on schema x to authenticated`
+  + table grants), otherwise the frontend cannot reach it.
+- Frontend access: `supabaseClient.schema('qa').from('actions')`.
+- The backup picks up new schemas automatically
   (`.github/backup/eigen_schemas.sql` uses an exclusion list).
-- A new schema must be added under Supabase → Project Settings → Data API →
-  *Exposed schemas*, and granted (`grant usage on schema x to authenticated`
-  plus table grants), otherwise the frontend cannot see it.
-- Frontend access: `supabaseClient.schema('recipe').from('recipes')`.
 
 ### 3.2 Naming conventions
 
@@ -102,7 +111,7 @@ Rules:
 | Primary key | `id` | |
 | Foreign key | `<entity>_id` | `recipe_id`, `lot_id` |
 | Timestamps | `created_at`, `updated_at` (`timestamptz`) | |
-| Who | `created_by`, `updated_by` → `core.users(id)` | |
+| Who | `created_by`, `updated_by` → `public.users(id)` | |
 | Booleans | `is_` / `has_` where it reads naturally | `is_active`, `is_spoilage` |
 | Units in name | suffix | `_pct`, `_hl`, `_kg`, `_min`, `_g` |
 | Tolerances | `_tol` suffix next to the value column | `ph`, `ph_tol` |
@@ -162,10 +171,11 @@ Agreed table and column names per table: `supabase/rename-map.json`.
 
 ### 3.4 Permissions (RLS)
 
-- Every table has RLS on. Policies call the generic helper functions
-  `mag_bekijken(module)`, `mag_bewerken(module)`, `mag_verwijderen(module)`
-  (to be renamed/moved to `core` in the transition), which read
-  `role_permissions` for the user's role.
+- Every table has RLS on. Policies call the helper functions
+  `can_view(module)`, `can_edit(module)`, `can_delete(module)`, which read
+  `role_permissions` for the role of the current user (`current_role_id()`).
+  `is_admin()` = active user whose role is named `admin`; admins may do
+  everything.
 - A **permission module** (`permission_modules.module_key`) groups tables that
   belong to one screen/function, e.g. `recipes`, `ingredients`, `inventory`.
   Roles get view/edit/delete per module in the role matrix (`rollen.html`).
@@ -173,9 +183,11 @@ Agreed table and column names per table: `supabase/rename-map.json`.
   deletes silently do nothing (Supabase reports success, 0 rows).
 - Reference tables that feed dropdowns everywhere (units, categories, …):
   read open to all logged-in users, write via the matrix.
-- Frontend: `magBekijkenModule / magBewerkenModule / magVerwijderenModule`
-  (in `nav.js`) hide or disable controls. The UI is a convenience; RLS is the
-  real guard.
+- Frontend: `getCurrentUser()` (in `config.js`) returns
+  `{ id, name, roleId, roleName, isActive, isAdmin }`;
+  `magBekijkenModule / magBewerkenModule / magVerwijderenModule` (in `nav.js`)
+  hide or disable controls. The UI is a convenience; RLS is the real guard.
+- Users, user roles and the status page are admin-only (`isAdmin`).
 
 ---
 
@@ -185,9 +197,9 @@ Agreed table and column names per table: `supabase/rename-map.json`.
 |---|---|---|
 | `index.html` | — (tiles per module) | |
 | `login.html`, `accept-invite.html` | — | auth |
-| `recept-invoer.html` | recipes | recipes, recipe_*, water_instellingen, eenheden |
+| `recept-invoer.html` | recipes | recipes, recipe_*, water_instellingen, units |
 | `receptoverzicht.html` | recipes | recipes, recipe_*, product_sheet_status, batches |
-| `ingredienten.html` | ingredients | ingredients + ingredient_*, document_typen |
+| `ingredienten.html` | ingredients | ingredients + ingredient_*, document_types |
 | `productsheet.html`, `productsheet-invoer.html` | product_sheets | product_sheets, product_sheet_revisies |
 | `brouwplanning.html` | brewing_planning | brew_planning (+ splits, history), brew_capacity |
 | `verbruiksprognose.html` | brewing_planning (via menu) | ingredients (+ voorraad-forecast.js) |
@@ -195,9 +207,9 @@ Agreed table and column names per table: `supabase/rename-map.json`.
 | `voorraad-overzicht/inboeken/uitboeken.html` | inventory | grondstof_lots, voorraad_mutaties |
 | `statistics.html` | statistics | ingredients, ingredient_documenten |
 | `settings.html` | settings | reference tables, water_instellingen |
-| `gebruikers.html` | admin only (hardcoded check on `gebruikers.rol`) | gebruikers, roles |
+| `gebruikers.html` | admin only | users, roles |
 | `rollen.html` | admin only | roles, role_permissions, permission_modules |
-| `status.html` | admin only (hardcoded check on `gebruikers.rol`) | counts |
+| `status.html` | admin only | counts |
 
 ---
 
@@ -214,14 +226,15 @@ Agreed table and column names per table: `supabase/rename-map.json`.
 6. Add the page to the table in §4.
 
 ### 5.2 New table or column
-1. Right schema (§3.1), names per §3.2 and the glossary.
+1. Brewery app: `public`; separate app: its own schema (§3.1). Names per §3.2 and the glossary.
 2. Migration file in `supabase/migrations/` (§5.4), idempotent where possible.
 3. RLS on, policies via the permission helpers, DELETE consistent with EDIT.
 4. Check it does not duplicate an existing field.
 
 ### 5.3 New app on the same database
 1. New schema (§3.1), exposed in the Data API and granted.
-2. Users and roles come from `core`; add permission modules for the new app.
+2. Users and roles come from `public`; add permission modules for the new app.
+   Read views on shared data live in the app's own schema (§3.1).
 3. Shared master data (ingredients, …) by foreign key — never copied.
 4. Own HTML pages (or repo) but the same `config.js` pattern and helpers.
 5. Add a section to this file.

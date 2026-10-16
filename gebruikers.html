@@ -81,16 +81,21 @@
   <script>
     let huidigeGebruikerId = null;
     let huidigeGebruikerNaam = null;
-    let rollenLijst = []; // {id, naam} uit de roles-tabel, geladen bij init
+    let rollenLijst = []; // [{ id, name }] from the roles table, loaded at init
 
     async function laadRollenLijst() {
-      const { data } = await supabaseClient.from('roles').select('id, naam').order('id');
+      const { data } = await supabaseClient.from('roles').select('id, name').order('id');
       rollenLijst = data || [];
     }
 
-    function rolOptiesHtml(geselecteerdeRol) {
+    function roleName(roleId) {
+      const r = rollenLijst.find(x => x.id === roleId);
+      return r ? r.name : '';
+    }
+
+    function rolOptiesHtml(selectedRoleId) {
       return rollenLijst.map(r =>
-        `<option value="${r.naam}" ${r.naam === geselecteerdeRol ? 'selected' : ''}>${rolLabel(r.naam)}</option>`
+        `<option value="${r.id}" ${r.id === selectedRoleId ? 'selected' : ''}>${escapeHtml(rolLabel(r.name))}</option>`
       ).join('');
     }
 
@@ -151,7 +156,7 @@
     document.getElementById('genereer-link-btn').addEventListener('click', async () => {
       const email = document.getElementById('invite-email').value.trim();
       const naam = document.getElementById('invite-naam').value.trim();
-      const rol = document.getElementById('invite-rol').value;
+      const roleId = Number(document.getElementById('invite-rol').value);
       const melding = document.getElementById('invite-melding');
       const resultaatDiv = document.getElementById('link-resultaat');
 
@@ -166,7 +171,7 @@
       resultaatDiv.style.display = 'none';
 
       const { data, error } = await supabaseClient.functions.invoke('generate-invite-link', {
-        body: { email, naam, rol },
+        body: { email, name: naam, role_id: roleId },
       });
 
       if (error || data?.error) {
@@ -219,13 +224,12 @@
     async function laadGebruikersLijst() {      const container = document.getElementById('gebruikers-lijst');
       const [{ data, error }, loginsResult] = await Promise.all([
         supabaseClient
-          .from('gebruikers')
-          .select('id, naam, rol, actief, aangemaakt_op')
-          .order('naam'),
-        // auth.users.last_sign_in_at is Supabase's eigen, altijd-actuele bron
-        // (zie migratie admin_haal_laatste_logins voor waarom niet meer op
-        // gebruikers.laatst_ingelogd wordt vertrouwd).
-        supabaseClient.rpc('admin_haal_laatste_logins'),
+          .from('users')
+          .select('id, name, role_id, is_active, created_at')
+          .order('name'),
+        // auth.users.last_sign_in_at is Supabase's own, always current source
+        // (users.last_login_at is not maintained by the app).
+        supabaseClient.rpc('admin_get_last_logins'),
       ]);
 
       if (error) {
@@ -235,7 +239,7 @@
 
       const laatsteLoginPerGebruiker = {};
       if (!loginsResult.error) {
-        (loginsResult.data || []).forEach(r => { laatsteLoginPerGebruiker[r.id] = r.laatst_ingelogd; });
+        (loginsResult.data || []).forEach(r => { laatsteLoginPerGebruiker[r.id] = r.last_login_at; });
       } else {
         console.error('Could not load last-login timestamps:', loginsResult.error);
       }
@@ -249,13 +253,13 @@
         const isZelf = g.id === huidigeGebruikerId;
         return `
         <tr data-id="${g.id}">
-          <td>${g.naam}</td>
+          <td>${escapeHtml(g.name)}</td>
           <td>
             ${isZelf
-              ? `<span class="rol-badge ${g.rol}">${rolLabel(g.rol)}</span>`
-              : `<select class="gebr-rol-select">${rolOptiesHtml(g.rol)}</select>`}
+              ? `<span class="rol-badge ${roleName(g.role_id) === 'admin' ? 'admin' : ''}">${escapeHtml(rolLabel(roleName(g.role_id)))}</span>`
+              : `<select class="gebr-rol-select">${rolOptiesHtml(g.role_id)}</select>`}
           </td>
-          <td>${g.actief ? 'Yes' : '<span class="actief-nee">No</span>'}</td>
+          <td>${g.is_active ? 'Yes' : '<span class="actief-nee">No</span>'}</td>
           <td>${formatLaatstIngelogd(laatsteLoginPerGebruiker[g.id])}</td>
           <td>
             ${isZelf
@@ -283,14 +287,14 @@
     async function slaRolOp(tr) {
       const melding = document.getElementById('lijst-melding');
       const id = tr.dataset.id;
-      const nieuweRol = tr.querySelector('.gebr-rol-select').value;
+      const newRoleId = Number(tr.querySelector('.gebr-rol-select').value);
 
       melding.textContent = 'Saving role…';
       melding.className = 'jopen-form-melding';
 
       const { error } = await supabaseClient
-        .from('gebruikers')
-        .update({ rol: nieuweRol })
+        .from('users')
+        .update({ role_id: newRoleId })
         .eq('id', id);
 
       if (error) {
@@ -344,18 +348,19 @@
     }
 
     async function initGebruikersPagina() {
-      const gebruiker = await getHuidigeGebruiker();
+      const gebruiker = await getCurrentUser();
 
-      if (!gebruiker || gebruiker.rol !== 'admin') {
+      if (!gebruiker || !gebruiker.isAdmin) {
         document.getElementById('geen-toegang').style.display = 'block';
         return;
       }
 
       huidigeGebruikerId = gebruiker.id;
-      huidigeGebruikerNaam = gebruiker.naam;
+      huidigeGebruikerNaam = gebruiker.name;
       document.getElementById('admin-inhoud').style.display = 'block';
       await laadRollenLijst();
-      document.getElementById('invite-rol').innerHTML = rolOptiesHtml('viewer');
+      const viewer = rollenLijst.find(r => r.name.toLowerCase() === 'viewer');
+      document.getElementById('invite-rol').innerHTML = rolOptiesHtml(viewer ? viewer.id : null);
       laadGebruikersLijst();
     }
 

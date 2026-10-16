@@ -764,9 +764,9 @@ let geselecteerdeIngCategorieen = new Set();
 let geselecteerdeIngProductSheetStatussen = new Set();
 
 async function initIngredientenPagina() {
-  const gebruiker = await getHuidigeGebruiker();
+  const gebruiker = await getCurrentUser();
   huidigeGebruiker = gebruiker;
-  huidigeGebruikerRol = gebruiker ? gebruiker.rol : null;
+  huidigeGebruikerRol = gebruiker ? gebruiker.roleName : null;
   magIngBewerken = !!gebruiker && await magBewerkenModule('ingredients');
   magIngVerwijderen = !!gebruiker && await magVerwijderenModule('ingredients');
 
@@ -785,7 +785,7 @@ async function initIngredientenPagina() {
   // i.p.v. vrije tekst, zodat nieuwe ingrediënten meteen een consistente
   // code krijgen.
   const { data: eenhedenData, error: eenhedenError } = await supabaseClient
-    .from('eenheden')
+    .from('units')
     .select('id, code, label, sort_order')
     .order('sort_order');
   if (!eenhedenError) alleEenheden = eenhedenData || [];
@@ -802,7 +802,7 @@ async function initIngredientenPagina() {
 
   // Beheerbare documenttypenlijst uit Settings -> Document types.
   const { data: documenttypeData, error: documenttypeError } = await supabaseClient
-    .from('document_typen')
+    .from('document_types')
     .select('id, code, label, sort_order')
     .order('sort_order');
   if (!documenttypeError) alleDocumenttypen = documenttypeData || [];
@@ -2117,7 +2117,7 @@ async function slaIngredientOp(i, soort, wijziging) {
       versie_major: i.versie_major ?? 1,
       versie_minor: nieuweMinor,
       datum: vandaag,
-      door: huidigeGebruiker?.naam,
+      door: huidigeGebruiker?.name,
       wijziging,
       gebruiker_id: gebruikerId,
     });
@@ -2171,7 +2171,7 @@ async function slaIngredientOp(i, soort, wijziging) {
     versie_major: nieuweMajor,
     versie_minor: 0,
     datum: vandaag,
-    door: huidigeGebruiker?.naam,
+    door: huidigeGebruiker?.name,
     wijziging: `Major revision from v${i.versie_major ?? 1}.${i.versie_minor ?? 0}: ${wijziging}`,
     gebruiker_id: gebruikerId,
   });
@@ -2440,7 +2440,7 @@ async function slaNieuwIngredientOp() {
     versie_major: 1,
     versie_minor: 0,
     datum: new Date().toISOString().slice(0, 10),
-    door: huidigeGebruiker?.naam,
+    door: huidigeGebruiker?.name,
     wijziging: 'Initial version',
     gebruiker_id: gebruikerId,
   });

@@ -688,12 +688,12 @@
     }
 
     async function laadHistGebruikers() {
-      const { data, error } = await supabaseClient.from('gebruikers').select('id, naam').order('naam');
+      const { data, error } = await supabaseClient.from('users').select('id, name').order('name');
       if (error) { console.error('Kon gebruikers voor history-filter niet laden:', error); return; }
       histGebruikers = data || [];
       const select = document.getElementById('bp-hist-gebruiker-filter');
       select.innerHTML = '<option value="">all</option>' +
-        histGebruikers.map(g => `<option value="${g.id}">${escapeHtml(g.naam)}</option>`).join('');
+        histGebruikers.map(g => `<option value="${g.id}">${escapeHtml(g.name)}</option>`).join('');
     }
 
     function vulHistJaarFilter() {
@@ -1942,7 +1942,7 @@
     (async function init() {
       const ok = await vereisIngelogd();
       if (!ok) return;
-      const gebruiker = await getHuidigeGebruiker();
+      const gebruiker = await getCurrentUser();
       huidigeGebruikerId = gebruiker ? gebruiker.id : null;
       magBpBewerken = !!gebruiker && await magBewerkenModule('brewing_planning');
       magBpVerwijderen = !!gebruiker && await magVerwijderenModule('brewing_planning');

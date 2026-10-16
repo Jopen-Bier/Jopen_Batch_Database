@@ -2225,7 +2225,7 @@ function vulExtraVeldenUit(fermData, procData) {
 }
 
 async function initReceptInvoer() {
-  huidigeGebruiker = await getHuidigeGebruiker();
+  huidigeGebruiker = await getCurrentUser();
   const magReceptenBewerken = !!huidigeGebruiker && await magBewerkenModule('recipes');
 
   if (!magReceptenBewerken) {
@@ -2248,7 +2248,7 @@ async function initReceptInvoer() {
   // afwijkende schrijfwijzen). Nu een vaste keuzelijst, net als bij de
   // ingrediëntkaart.
   const { data: eenhedenData, error: eenhedenError } = await supabaseClient
-    .from('eenheden')
+    .from('units')
     .select('id, code, label, sort_order')
     .order('sort_order');
   if (!eenhedenError) alleEenhedenLijst = eenhedenData || [];
@@ -2656,7 +2656,7 @@ async function maakNieuwRecept() {
     versie_major: 1,
     versie_minor: 0,
     datum: new Date().toISOString().slice(0, 10),
-    door: huidigeGebruiker.naam,
+    door: huidigeGebruiker.name,
     wijziging: 'Initial version',
     gebruiker_id: gebruikerId,
   });
@@ -2839,7 +2839,7 @@ async function slaBestaandReceptOp(soort) {
       versie_major: bestaandRecept.versie_major,
       versie_minor: nieuweMinor,
       datum: vandaag,
-      door: huidigeGebruiker.naam,
+      door: huidigeGebruiker.name,
       wijziging,
       gebruiker_id: gebruikerId,
     });
@@ -2895,7 +2895,7 @@ async function slaBestaandReceptOp(soort) {
     versie_major: nieuweMajor,
     versie_minor: 0,
     datum: vandaag,
-    door: huidigeGebruiker.naam,
+    door: huidigeGebruiker.name,
     wijziging: `Major revision from v${bestaandRecept.versie_major}.${bestaandRecept.versie_minor}: ${wijziging}`,
     gebruiker_id: gebruikerId,
   });

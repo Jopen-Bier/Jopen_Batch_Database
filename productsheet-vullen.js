@@ -217,7 +217,7 @@ async function psUpdate(recipeGroupId, gebruiker) {
     versie: nieuweVersie,
     recipe_versie_major: live.recipe.versie_major,
     recipe_versie_minor: live.recipe.versie_minor,
-    door: gebruiker?.naam || '',
+    door: gebruiker?.name || '',
     wijzigingen: changelog,
   });
   if (revErr) throw revErr;
@@ -241,7 +241,7 @@ async function psDownload(recipeGroupId, gebruiker) {
     .eq('product_sheet_id', productSheetRow.id)
     .order('versie', { ascending: false }).limit(1).maybeSingle();
 
-  productSheetRow._writtenByNaam = laatsteRevisie ? laatsteRevisie.door : (gebruiker?.naam || '');
+  productSheetRow._writtenByNaam = laatsteRevisie ? laatsteRevisie.door : (gebruiker?.name || '');
   productSheetRow._datum = laatsteRevisie ? laatsteRevisie.datum : ((productSheetRow.bijgewerkt_op || '').slice(0, 10) || new Date().toISOString().slice(0, 10));
   productSheetRow._changelog = laatsteRevisie ? laatsteRevisie.wijzigingen : '';
 

@@ -370,7 +370,7 @@
       for (let van = 0; ; van += PAGINA) {
         const { data, error } = await supabaseClient
           .from('batches')
-          .select('id, batchnummer, naam, aantal_brouwsels, aangemaakt_op, gebruikers(naam), recipes(locatie, bierstijl)')
+          .select('id, batchnummer, naam, aantal_brouwsels, aangemaakt_op, users(name), recipes(locatie, bierstijl)')
           // aangemaakt_op alone isn't a reliable sort key: rows inserted in the same
           // statement (e.g. a bulk historical import) all share one timestamp, so ties
           // need a tiebreaker. id (insertion order) does that cheaply.
@@ -401,7 +401,7 @@
       };
       const uniek = (f) => [...new Set(alleBatches.map(f).filter(Boolean))].sort((a, b) => a.localeCompare(b));
       vul('bc-f-locatie', uniek(b => b.recipes?.locatie));
-      vul('bc-f-door', uniek(b => b.gebruikers?.naam));
+      vul('bc-f-door', uniek(b => b.users?.name));
     }
 
     // Lokale datum (yyyy-mm-dd) van een tijdstempel, voor vergelijking met <input type="date">.
@@ -422,7 +422,7 @@
           if (!hooiberg.some(v => v.includes(term))) return false;
         }
         if (locatie && b.recipes?.locatie !== locatie) return false;
-        if (door && b.gebruikers?.naam !== door) return false;
+        if (door && b.users?.name !== door) return false;
         if (van || tot) {
           if (!b.aangemaakt_op) return false;
           const dag = lokaleDatum(b.aangemaakt_op);
@@ -455,7 +455,7 @@
           <td>${escapeHtml(b.naam)}</td>
           <td>${b.aantal_brouwsels ?? '—'}</td>
           <td>${b.aangemaakt_op ? new Date(b.aangemaakt_op).toLocaleString() : '—'}</td>
-          <td>${escapeHtml(b.gebruikers?.naam || '—')}</td>
+          <td>${escapeHtml(b.users?.name || '—')}</td>
           <td style="white-space:nowrap;"><button type="button" class="bc-download-btn" data-batchnummer="${escapeHtml(String(b.batchnummer))}" style="background:none;border:1px solid var(--jopen-red);color:var(--jopen-red);border-radius:4px;padding:3px 10px;cursor:pointer;font-size:0.85em;">Download</button>${magVerwijderen ? `<button type="button" class="bc-verwijder-btn" data-batchnummer="${escapeHtml(String(b.batchnummer))}" style="background:none;border:1px solid #a33f2c;color:#a33f2c;border-radius:4px;padding:3px 10px;cursor:pointer;font-size:0.85em;margin-left:6px;">Delete</button>` : ''}</td>
         </tr>`).join('');
     }
@@ -504,7 +504,7 @@
     });
 
     window.addEventListener('DOMContentLoaded', async () => {
-      const gebruiker = await getHuidigeGebruiker();
+      const gebruiker = await getCurrentUser();
       magAanmaken = await magBewerken(gebruiker);
       magVerwijderen = !!gebruiker && await magVerwijderenModule('batches');
       document.getElementById('bc-geen-rechten').style.display = magAanmaken ? 'none' : 'block';

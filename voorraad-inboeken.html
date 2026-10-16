@@ -157,7 +157,7 @@
 
     function vandaag() { return new Date().toISOString().slice(0, 10); }
 
-    const VR_FYSIEKE_EENHEDEN = ['g', 'kg', 'ml', 'l', 'stuks'];
+    const VR_FYSIEKE_EENHEDEN = ['g', 'kg', 'ml', 'l', 'pcs'];
     function vrVulEenhedenSelect(select, eenheden, geselecteerd) {
       select.innerHTML = ['<option value="">—</option>']
         .concat(eenheden.map(e => `<option value="${e}" ${e === geselecteerd ? 'selected' : ''}>${e}</option>`)).join('');
@@ -183,12 +183,12 @@
     async function laadOntvangenDoorOpties() {
       const select = document.getElementById('vr-ontv-ontvangen-door');
       const { data, error } = await supabaseClient
-        .from('gebruikers')
-        .select('id, naam')
-        .order('naam');
+        .from('users')
+        .select('id, name')
+        .order('name');
       if (error) { console.error('Kon gebruikerslijst niet laden:', error); select.innerHTML = '<option value="">—</option>'; return; }
       select.innerHTML = ['<option value="">—</option>']
-        .concat((data || []).map(g => `<option value="${g.id}">${escapeHtml(g.naam)}</option>`)).join('');
+        .concat((data || []).map(g => `<option value="${g.id}">${escapeHtml(g.name)}</option>`)).join('');
     }
 
     // ---------------------------------------------------------------------
@@ -293,7 +293,7 @@
     // Init
     // ---------------------------------------------------------------------
     window.addEventListener('DOMContentLoaded', async () => {
-      const gebruiker = await getHuidigeGebruiker();
+      const gebruiker = await getCurrentUser();
       magBewerken = !!gebruiker && await magBewerkenModule('inventory');
 
       document.getElementById('vr-ontv-geen-rechten').style.display = magBewerken ? 'none' : 'block';

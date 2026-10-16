@@ -1,7 +1,7 @@
 // supabase/functions/generate-invite-link/index.ts
 //
 // Doel: dezelfde uitnodiging aanmaken als invite-user (nieuwe auth-user +
-// rij in `gebruikers`), maar zonder dat Supabase zelf een e-mail verstuurt.
+// rij in `users`), maar zonder dat Supabase zelf een e-mail verstuurt.
 // In plaats daarvan krijg je de kale uitnodigingslink terug, die je zelf
 // via je eigen mailprogramma (Outlook e.d.) naar de collega kunt sturen --
 // handig zolang er nog geen custom SMTP is en de gratis Supabase-mail-
@@ -28,9 +28,11 @@ serve(async (req) => {
   }
 
   try {
-    const { email, naam, rol } = await req.json();
-    if (!email || !naam || !rol) {
-      return json({ error: "email, naam and rol are all required" }, 400);
+    const body = await req.json();
+    const email: string | undefined = body.email;
+    const name: string | undefined = body.name ?? body.naam; // `naam`: pre-2026-10-16 page
+    if (!email || !name) {
+      return json({ error: "email and name are required" }, 400);
     }
 
     // 1. Wie roept dit aan?
@@ -47,15 +49,19 @@ serve(async (req) => {
 
     // 2. Is de aanroeper admin?
     const adminClient = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
-    const { data: callerRow, error: roleErr } = await adminClient
-      .from("gebruikers")
-      .select("rol")
-      .eq("id", callerData.user.id)
-      .single();
-
-    if (roleErr || callerRow?.rol !== "admin") {
+    if (!(await isAdmin(adminClient, callerData.user.id))) {
       return json({ error: "Only admins can invite new colleagues" }, 403);
     }
+
+    // Role: role_id (current page) or a role name (pre-2026-10-16 page).
+    let roleId: number | null = body.role_id ? Number(body.role_id) : null;
+    if (!roleId && body.rol) {
+      const { data: r } = await adminClient.from("roles").select("id").eq("name", body.rol).maybeSingle();
+      roleId = r?.id ?? null;
+    }
+    if (!roleId) return json({ error: "A valid role is required" }, 400);
+    const { data: roleRow } = await adminClient.from("roles").select("id, name").eq("id", roleId).maybeSingle();
+    if (!roleRow) return json({ error: `Unknown role id ${roleId}` }, 400);
 
     // 3. Uitnodigingslink genereren -- dit maakt de auth-user AL aan, maar
     // stuurt zelf GEEN e-mail (in tegenstelling tot inviteUserByEmail).
@@ -64,7 +70,7 @@ serve(async (req) => {
       type: "invite",
       email,
       options: {
-        data: { naam, rol },
+        data: { name, role: roleRow.name },
         redirectTo: REDIRECT_TO,
       },
     });
@@ -73,13 +79,13 @@ serve(async (req) => {
       return json({ error: `Could not generate invite link: ${linkErr?.message ?? "unknown error"}` }, 500);
     }
 
-    // 4. Rij in `gebruikers` aanmaken, zelfde als invite-user zou doen.
+    // 4. Rij in `users` aanmaken, zelfde als invite-user zou doen.
     const { error: insertErr } = await adminClient
-      .from("gebruikers")
-      .insert({ id: linkData.user.id, naam, rol, actief: true });
+      .from("users")
+      .insert({ id: linkData.user.id, name, role_id: roleRow.id, is_active: true });
 
     if (insertErr) {
-      return json({ error: `Link generated, but could not create gebruikers row: ${insertErr.message}` }, 500);
+      return json({ error: `Link generated, but could not create users row: ${insertErr.message}` }, 500);
     }
 
     // BELANGRIJK: we sturen bewust NIET linkData.properties.action_link mee.
@@ -105,6 +111,17 @@ serve(async (req) => {
     return json({ error: String(e) }, 500);
   }
 });
+
+// True when the given auth user is an active user with the role 'admin'.
+// deno-lint-ignore no-explicit-any
+async function isAdmin(client: any, userId: string): Promise<boolean> {
+  const { data, error } = await client
+    .from("users")
+    .select("is_active, roles(name)")
+    .eq("id", userId)
+    .single();
+  return !error && data?.is_active === true && data?.roles?.name === "admin";
+}
 
 function json(body: unknown, status: number) {
   return new Response(JSON.stringify(body), {

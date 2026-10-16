@@ -432,8 +432,8 @@ let magReceptBewerken = false;   // rechten voor module 'recipes', geladen bij p
 let magReceptVerwijderen = false;
 
 window.addEventListener('DOMContentLoaded', async () => {
-  const gebruiker = await getHuidigeGebruiker();
-  huidigeGebruikerRol = gebruiker ? gebruiker.rol : null;
+  const gebruiker = await getCurrentUser();
+  huidigeGebruikerRol = gebruiker ? gebruiker.roleName : null;
   magReceptBewerken = !!gebruiker && await magBewerkenModule('recipes');
   magReceptVerwijderen = !!gebruiker && await magVerwijderenModule('recipes');
   if (magReceptBewerken) {

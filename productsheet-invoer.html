@@ -47,7 +47,7 @@ let recipeGroupId = null;
 let productSheetId = null;
 
 window.addEventListener('DOMContentLoaded', async () => {
-  const gebruiker = await getHuidigeGebruiker();
+  const gebruiker = await getCurrentUser();
   const magBewerken = !!gebruiker && await magBewerkenModule('product_sheets');
   if (!magBewerken) {
     document.getElementById('container').innerHTML = '<div class="error">You do not have permission to edit product sheets.</div>';

@@ -11,8 +11,9 @@ rules that must not be skipped.
   that changes production behaviour.
 
 ## Database
-- English names, `snake_case`, US spelling, in the right domain schema
-  (`core`, `inventory`, `recipe`, `production`, or a new app schema).
+- English names, `snake_case`, US spelling. The brewery app lives in
+  `public`; a separate app gets its own schema and reads shared data through
+  explicit views in that schema (PostgREST only embeds within one schema).
   Use the glossary in `ARCHITECTURE.md` §3.3 and `supabase/rename-map.json`.
 - No duplicate fields: one fact, one column, one table.
 - RLS on every table, via the permission helpers; DELETE consistent with EDIT

@@ -1,8 +1,7 @@
 {
- "_uitleg": "Vastgestelde NL->EN mapping (Jaap, 16-10-2026). Bron voor de migraties van stap 6-9 en het omzetten van de code. \"drop\" = kolom vervalt.",
+ "_uitleg": "Vastgestelde NL->EN mapping (Jaap, 16-10-2026). Alle tabellen blijven in schema public (besluit 16-10: PostgREST embedt alleen binnen één schema); \"domain\" geeft de groep/volgorde van hernoemen aan. \"drop\" = kolom vervalt.",
  "tables": {
   "gebruikers": {
-   "schema": "core",
    "name": "users",
    "kind": "tabel",
    "columns": {
@@ -16,10 +15,10 @@
    },
    "notes": {
     "rol": "Dubbel met role_id (2 sync-triggers houden ze gelijk). Voorstel: kolom + triggers weg, alles via role_id."
-   }
+   },
+   "domain": "core"
   },
   "roles": {
-   "schema": "core",
    "name": "roles",
    "kind": "tabel",
    "columns": {
@@ -27,10 +26,10 @@
     "naam": "name",
     "is_systeemrol": "is_system_role",
     "aangemaakt_op": "created_at"
-   }
+   },
+   "domain": "core"
   },
   "role_permissions": {
-   "schema": "core",
    "name": "role_permissions",
    "kind": "tabel",
    "columns": {
@@ -39,20 +38,20 @@
     "can_view": "can_view",
     "can_edit": "can_edit",
     "can_delete": "can_delete"
-   }
+   },
+   "domain": "core"
   },
   "permission_modules": {
-   "schema": "core",
    "name": "permission_modules",
    "kind": "tabel",
    "columns": {
     "module_key": "module_key",
     "naam": "name",
     "volgorde": "sort_order"
-   }
+   },
+   "domain": "core"
   },
   "eenheden": {
-   "schema": "core",
    "name": "units",
    "kind": "tabel",
    "columns": {
@@ -61,10 +60,10 @@
     "label": "label",
     "sort_order": "sort_order",
     "aangemaakt_op": "created_at"
-   }
+   },
+   "domain": "core"
   },
   "document_typen": {
-   "schema": "core",
    "name": "document_types",
    "kind": "tabel",
    "columns": {
@@ -73,10 +72,10 @@
     "label": "label",
     "sort_order": "sort_order",
     "aangemaakt_op": "created_at"
-   }
+   },
+   "domain": "core"
   },
   "ingredients": {
-   "schema": "inventory",
    "name": "ingredients",
    "kind": "tabel",
    "columns": {
@@ -127,10 +126,10 @@
     "created_at": "Er zijn twee aanmaakdatums: created_at én aangemaakt_op, en die verschillen bij 589 van de 615 rijen. Welke is de echte? Voorstel: aangemaakt_op wordt created_at, de andere vervalt (of wordt imported_at als hij de importdatum is).",
     "versie_status": "Waarden: huidig→current, gearchiveerd→archived",
     "allergenen": "Inhoud is al Engels (gluten, milk)."
-   }
+   },
+   "domain": "inventory"
   },
   "ingredient_categories": {
-   "schema": "inventory",
    "name": "ingredient_categories",
    "kind": "tabel",
    "columns": {
@@ -141,10 +140,10 @@
     "uses_gistfactor": "uses_yeast_factor",
     "sort_order": "sort_order",
     "created_at": "created_at"
-   }
+   },
+   "domain": "inventory"
   },
   "ingredient_revisies": {
-   "schema": "inventory",
    "name": "ingredient_revisions",
    "kind": "tabel",
    "columns": {
@@ -157,10 +156,10 @@
     "wijziging": "change_description",
     "gebruiker_id": "user_id",
     "aangemaakt_op": "created_at"
-   }
+   },
+   "domain": "inventory"
   },
   "ingredient_documenten": {
-   "schema": "inventory",
    "name": "ingredient_documents",
    "kind": "tabel",
    "columns": {
@@ -174,10 +173,10 @@
     "geupload_op": "uploaded_at",
     "document_type_id": "document_type_id",
     "status": "status"
-   }
+   },
+   "domain": "inventory"
   },
   "ingredient_declaraties": {
-   "schema": "inventory",
    "name": "ingredient_declarations",
    "kind": "tabel",
    "columns": {
@@ -189,10 +188,10 @@
    },
    "notes": {
     "is_geen_declaratie": "Besluit Jaap 16-10"
-   }
+   },
+   "domain": "inventory"
   },
   "grondstof_lots": {
-   "schema": "inventory",
    "name": "lots",
    "kind": "tabel",
    "columns": {
@@ -220,10 +219,10 @@
     "aantal_colli": "Is tekst; bewust zo laten?",
     "ontvangstcontrole": "Besluit Jaap 16-10; UI: Receiving check done",
     "ingangscontrole": "Besluit Jaap 16-10; UI: Incoming check done"
-   }
+   },
+   "domain": "inventory"
   },
   "voorraad_mutaties": {
-   "schema": "inventory",
    "name": "stock_movements",
    "kind": "tabel",
    "columns": {
@@ -247,19 +246,19 @@
    },
    "notes": {
     "type": "Waarden: ontvangst→receipt, reservering→reservation, uitboeking→issue, correctie→correction"
-   }
+   },
+   "domain": "inventory"
   },
   "ingredient_gebruik_counts": {
-   "schema": "inventory",
    "name": "ingredient_usage_counts",
    "kind": "view",
    "columns": {
     "ingredient_id": "ingredient_id",
     "aantal_recepten": "recipe_count"
-   }
+   },
+   "domain": "inventory"
   },
   "recipes": {
-   "schema": "recipe",
    "name": "recipes",
    "kind": "tabel",
    "columns": {
@@ -287,10 +286,10 @@
    "notes": {
     "huidige_versie": "Besluit Jaap 16-10: vervalt; code omzetten naar version_major/minor",
     "kleur": "Besluit Jaap 16-10: weergavekleur van het recept in de planning, niet de bierkleur"
-   }
+   },
+   "domain": "recipe"
   },
   "recipe_brouwspecificaties": {
-   "schema": "recipe",
    "name": "recipe_brewing_specs",
    "kind": "tabel",
    "columns": {
@@ -358,19 +357,19 @@
     "ph_eind_koken": "Leidend",
     "beluchting": "Leidend",
     "stamwort_correctie_brouwhuis": "Besluit Jaap 16-10"
-   }
+   },
+   "domain": "recipe"
   },
   "recipe_comments": {
-   "schema": "recipe",
    "name": "recipe_comments",
    "kind": "tabel",
    "columns": {
     "recipe_id": "recipe_id",
     "comments": "comments"
-   }
+   },
+   "domain": "recipe"
   },
   "recipe_fermentatie": {
-   "schema": "recipe",
    "name": "recipe_fermentation",
    "kind": "tabel",
    "columns": {
@@ -409,10 +408,10 @@
     "troebeling_na_sep": "UI: Turbidity after separation",
     "bier_risico": "Waarden: zie tabblad Statuswaarden",
     "bier_status": "Waarden: zie tabblad Statuswaarden"
-   }
+   },
+   "domain": "recipe"
   },
   "recipe_ingredients": {
-   "schema": "recipe",
    "name": "recipe_ingredients",
    "kind": "tabel",
    "columns": {
@@ -433,10 +432,10 @@
    "notes": {
     "rol": "Besluit Jaap 16-10",
     "hdt": "Besluit Jaap 16-10: HDT = hop dosing tank"
-   }
+   },
+   "domain": "recipe"
   },
   "recipe_kosten": {
-   "schema": "recipe",
    "name": "recipe_costs",
    "kind": "tabel",
    "columns": {
@@ -449,10 +448,10 @@
    "notes": {
     "cost_clr_per_kge": "Besluit Jaap 16-10",
     "cost_bh_per_kge": "Besluit Jaap 16-10"
-   }
+   },
+   "domain": "recipe"
   },
   "recipe_processtappen": {
-   "schema": "recipe",
    "name": "recipe_process_steps",
    "kind": "tabel",
    "columns": {
@@ -484,10 +483,10 @@
     "comment_verwerken": "processing_comment",
     "total_wp_hop": "total_wp_hop",
     "total_dry_hop": "total_dry_hop"
-   }
+   },
+   "domain": "recipe"
   },
   "recipe_revisies": {
-   "schema": "recipe",
    "name": "recipe_revisions",
    "kind": "tabel",
    "columns": {
@@ -503,10 +502,10 @@
    },
    "notes": {
     "versienummer": "Besluit Jaap 16-10: vervalt"
-   }
+   },
+   "domain": "recipe"
   },
   "recipe_specificaties": {
-   "schema": "recipe",
    "name": "recipe_specs",
    "kind": "tabel",
    "columns": {
@@ -541,10 +540,10 @@
    "notes": {
     "origineel_extract": "UI: Original extract",
     "rest_extract": "UI: Final extract"
-   }
+   },
+   "domain": "recipe"
   },
   "recipe_verpakking": {
-   "schema": "recipe",
    "name": "recipe_packaging",
    "kind": "tabel",
    "columns": {
@@ -567,10 +566,10 @@
    "notes": {
     "alc_pct": "Voorlopig; tabel wordt later herzien (Jaap 16-10)",
     "formaten": "Inhoud (20L keykeg e.d.) blijft; is al Engels."
-   }
+   },
+   "domain": "recipe"
   },
   "recipe_water": {
-   "schema": "recipe",
    "name": "recipe_water",
    "kind": "tabel",
    "columns": {
@@ -594,10 +593,10 @@
     "ph_start_koken": "Lege kopie (0 gevuld)",
     "ph_eind_koken": "Lege kopie (0 gevuld)",
     "beluchting": "Lege kopie (0 gevuld)"
-   }
+   },
+   "domain": "recipe"
   },
   "product_sheets": {
-   "schema": "recipe",
    "name": "product_sheets",
    "kind": "tabel",
    "columns": {
@@ -626,10 +625,10 @@
    },
    "notes": {
     "vat_gerijpt_hl": "vat = houten vat, niet btw"
-   }
+   },
+   "domain": "recipe"
   },
   "product_sheet_revisies": {
-   "schema": "recipe",
    "name": "product_sheet_revisions",
    "kind": "tabel",
    "columns": {
@@ -642,10 +641,10 @@
     "door": "changed_by_name",
     "wijzigingen": "change_description",
     "created_at": "created_at"
-   }
+   },
+   "domain": "recipe"
   },
   "product_sheet_status": {
-   "schema": "recipe",
    "name": "product_sheet_status",
    "kind": "view",
    "columns": {
@@ -659,19 +658,19 @@
     "opgeslagen_hash": "stored_hash",
     "huidige_hash": "current_hash",
     "in_sync": "in_sync"
-   }
+   },
+   "domain": "recipe"
   },
   "hop_utilisatie_curve": {
-   "schema": "recipe",
    "name": "hop_utilization_curve",
    "kind": "tabel",
    "columns": {
     "kooktijd_min": "boil_time_min",
     "rendement_pct": "utilization_pct"
-   }
+   },
+   "domain": "recipe"
   },
   "water_instellingen": {
-   "schema": "recipe",
    "name": "water_settings",
    "kind": "tabel",
    "columns": {
@@ -690,10 +689,10 @@
     "max_so4": "max_so4",
     "gewijzigd_op": "updated_at",
     "gewijzigd_door": "updated_by"
-   }
+   },
+   "domain": "recipe"
   },
   "water_instellingen_historie": {
-   "schema": "recipe",
    "name": "water_settings_history",
    "kind": "tabel",
    "columns": {
@@ -704,10 +703,10 @@
    },
    "notes": {
     "gegevens": "JSON-sleutels in bestaande rijen worden mee vertaald."
-   }
+   },
+   "domain": "recipe"
   },
   "batches": {
-   "schema": "production",
    "name": "batches",
    "kind": "tabel",
    "columns": {
@@ -745,10 +744,10 @@
     "datum_orderpicken": "Behouden (Jaap 16-10)",
     "glt_leeg": "Behouden (Jaap 16-10)",
     "created_at": "Exact gelijk aan aangemaakt_op bij alle 349 batches. aangemaakt_op wordt created_at, deze vervalt."
-   }
+   },
+   "domain": "production"
   },
   "brew_capacity": {
-   "schema": "production",
    "name": "brew_capacity",
    "kind": "tabel",
    "columns": {
@@ -759,10 +758,10 @@
     "max_brouwsels": "max_brews",
     "updated_by": "updated_by",
     "updated_at": "updated_at"
-   }
+   },
+   "domain": "production"
   },
   "brew_planning": {
-   "schema": "production",
    "name": "brew_planning",
    "kind": "tabel",
    "columns": {
@@ -780,10 +779,10 @@
     "aangemaakt_op": "created_at",
     "bijgewerkt_op": "updated_at",
     "recipe_group_id": "recipe_group_id"
-   }
+   },
+   "domain": "production"
   },
   "brew_planning_geschiedenis": {
-   "schema": "production",
    "name": "brew_planning_history",
    "kind": "tabel",
    "columns": {
@@ -798,10 +797,10 @@
    "notes": {
     "voor": "JSON-sleutels in bestaande rijen worden mee vertaald.",
     "na": "JSON-sleutels in bestaande rijen worden mee vertaald."
-   }
+   },
+   "domain": "production"
   },
   "brew_planning_splits": {
-   "schema": "production",
    "name": "brew_planning_splits",
    "kind": "tabel",
    "columns": {
@@ -812,10 +811,10 @@
     "hl": "hl",
     "sort_order": "sort_order",
     "aangemaakt_op": "created_at"
-   }
+   },
+   "domain": "production"
   },
   "brew_planning_geschiedenis_verrijkt": {
-   "schema": "production",
    "name": "brew_planning_history_detailed",
    "kind": "view",
    "columns": {
@@ -827,10 +826,10 @@
     "gewijzigd_door": "updated_by",
     "gewijzigd_door_naam": "updated_by_name",
     "gewijzigd_op": "updated_at"
-   }
+   },
+   "domain": "production"
   },
   "brew_planning_wijzigingen": {
-   "schema": "production",
    "name": "brew_planning_changes",
    "kind": "view",
    "columns": {
@@ -847,7 +846,8 @@
     "gewijzigd_door": "updated_by",
     "gewijzigd_door_naam": "updated_by_name",
     "gewijzigd_op": "updated_at"
-   }
+   },
+   "domain": "production"
   }
  },
  "status_values": [

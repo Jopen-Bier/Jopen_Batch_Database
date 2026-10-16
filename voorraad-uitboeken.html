@@ -267,7 +267,7 @@
       if (!eenheid) return null;
       if (VR_MASSA_NAAR_G[eenheid] !== undefined) return 'massa';
       if (VR_VOLUME_NAAR_ML[eenheid] !== undefined) return 'volume';
-      if (eenheid === 'stuks') return 'stuks';
+      if (eenheid === 'pcs') return 'pcs';
       return 'overig';
     }
     // Geeft de lijst eenheden terug waarin de operator een uitboeking voor dit lot
@@ -421,7 +421,7 @@
       const dichtheid = geselecteerdIngredientManu ? geselecteerdIngredientManu.dichtheid : null;
       const opties = vrToegestaneEenheden(lot.eenheid, dichtheid);
       vrVulEenhedenSelect(eenheidSelect, opties, lot.eenheid);
-      if (dichtheid == null && vrEenheidType(lot.eenheid) !== 'stuks' && vrEenheidType(lot.eenheid) !== 'overig') {
+      if (dichtheid == null && vrEenheidType(lot.eenheid) !== 'pcs' && vrEenheidType(lot.eenheid) !== 'overig') {
         document.getElementById('vr-manu-conversie-info').textContent =
           `Only ${vrEenheidType(lot.eenheid) === 'massa' ? 'mass' : 'volume'} units offered — fill in the ingredient's density to also allow ${vrEenheidType(lot.eenheid) === 'massa' ? 'volume' : 'mass'} units.`;
       } else {
@@ -561,8 +561,8 @@
         .select(`id, aangemaakt_op, notitie, hoeveelheid, off_recipe, is_spoilage, is_correction,
           ingevoerde_hoeveelheid, ingevoerde_eenheid, geboekt_in_boekhouding, geboekt_op,
           batches(batchnummer, naam), grondstof_lots(lotcode, eenheid, ingredients(id, naam)),
-          gebruikers!voorraad_mutaties_aangemaakt_door_fkey(naam),
-          geboekt_door_gebruiker:gebruikers!voorraad_mutaties_geboekt_door_fkey(naam)`)
+          users!voorraad_mutaties_aangemaakt_door_fkey(name),
+          geboekt_door_gebruiker:users!voorraad_mutaties_geboekt_door_fkey(name)`)
         .eq('type', 'uitboeking')
         .order('aangemaakt_op', { ascending: false });
 
@@ -695,7 +695,7 @@
                       <td>${escapeHtml(m.grondstof_lots?.lotcode || '—')}</td>
                       <td>${m.batches ? escapeHtml(String(m.batches.batchnummer)) : '—'}</td>
                       <td>${m.hoeveelheid ?? '—'} ${escapeHtml(g.eenheid)}</td>
-                      <td>${escapeHtml(m.gebruikers?.naam || '—')}</td>
+                      <td>${escapeHtml(m.users?.name || '—')}</td>
                       <td>${vrBoekVlagBadges(m)}</td>
                       <td><span class="status-pill ${m.geboekt_in_boekhouding ? 'status-ok' : 'status-pending'}">${m.geboekt_in_boekhouding ? 'Signed off' : 'Pending'}</span></td>
                       <td>${magVerwijderen ? `<button type="button" class="vr-btn-secundair vr-verwijder-boeking-btn" data-id="${m.id}" style="color:#a33f2c;border-color:#a33f2c;">Delete</button>` : ''}</td>
@@ -760,14 +760,14 @@
         ['Batch', m.batches ? `${m.batches.batchnummer} — ${m.batches.naam}` : '—'],
         ['Quantity', `${m.hoeveelheid ?? '—'} ${m.grondstof_lots?.eenheid || ''}`],
         ...(m.ingevoerde_hoeveelheid != null ? [['Entered as', `${m.ingevoerde_hoeveelheid} ${m.ingevoerde_eenheid || ''}`]] : []),
-        ['Requested by', m.gebruikers?.naam || '—'],
+        ['Requested by', m.users?.name || '—'],
         ['Off-recipe', m.off_recipe ? 'Yes' : 'No'],
         ['Spoilage', m.is_spoilage ? 'Yes' : 'No'],
         ['Correction', m.is_correction ? 'Yes' : 'No'],
         ['Notes', m.notitie || '—'],
         ['Status', m.geboekt_in_boekhouding ? 'Signed off' : 'Pending'],
         ...(m.geboekt_in_boekhouding ? [
-          ['Signed off by', m.geboekt_door_gebruiker?.naam || '—'],
+          ['Signed off by', m.geboekt_door_gebruiker?.name || '—'],
           ['Signed off on', m.geboekt_op ? new Date(m.geboekt_op).toLocaleString() : '—'],
         ] : []),
       ]);
@@ -777,7 +777,7 @@
     // Init
     // ---------------------------------------------------------------------
     window.addEventListener('DOMContentLoaded', async () => {
-      const gebruiker = await getHuidigeGebruiker();
+      const gebruiker = await getCurrentUser();
       magBewerken = !!gebruiker && await magBewerkenModule('inventory');
       magVerwijderen = !!gebruiker && await magVerwijderenModule('inventory');
 

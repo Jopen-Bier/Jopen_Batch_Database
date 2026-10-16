@@ -253,16 +253,16 @@
       );
 
       const { count: userTotal, error: e7 } = await supabaseClient
-        .from('gebruikers').select('*', { count: 'exact', head: true });
+        .from('users').select('*', { count: 'exact', head: true });
       if (e7) throw e7;
 
       const { data: userRoles, error: e8 } = await supabaseClient
-        .from('gebruikers').select('rol');
+        .from('users').select('roles(name)');
       if (e8) throw e8;
 
       const roleCounts = {};
       for (const g of userRoles) {
-        const key = g.rol || '(empty)';
+        const key = (g.roles && g.roles.name) || '(empty)';
         roleCounts[key] = (roleCounts[key] || 0) + 1;
       }
       setCard('card-users', userTotal ?? '—', 'total accounts');
@@ -290,12 +290,12 @@
   window.addEventListener('DOMContentLoaded', async () => {
     let user = null;
     try {
-      user = await getHuidigeGebruiker();
+      user = await getCurrentUser();
     } catch (e) {
       user = null;
     }
 
-    if (!user || user.rol !== 'admin') {
+    if (!user || !user.isAdmin) {
       accessCheck.textContent = 'Access denied — this page is for admins only. Redirecting...';
       setTimeout(() => { window.location.href = 'index.html'; }, 1500);
       return;

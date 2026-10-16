@@ -20,26 +20,34 @@ const SUPABASE_ANON_KEY = 'sb_publishable_ftz3c-3AVlRiYve4Y1V6fQ_hg_BdAm-';
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 /**
- * Haalt de huidige ingelogde gebruiker op, inclusief rol uit de
- * `gebruikers`-tabel. Geeft `null` terug als niemand is ingelogd.
+ * The logged-in user with role information, or `null` when nobody is logged
+ * in. Shape: { id, name, roleId, roleName, isActive, isAdmin }.
  */
-async function getHuidigeGebruiker() {
+async function getCurrentUser() {
   const { data: { session } } = await supabaseClient.auth.getSession();
   if (!session) return null;
 
-  const { data: gebruiker, error } = await supabaseClient
-    .from('gebruikers')
-    .select('id, naam, rol, actief')
+  const { data, error } = await supabaseClient
+    .from('users')
+    .select('id, name, is_active, role_id, roles(name)')
     .eq('id', session.user.id)
     .single();
 
   if (error) {
-    console.error('Kon gebruikersgegevens niet ophalen uit gebruikers-tabel:', error);
-    // Val terug op sessie-data zodat de app niet vastloopt als de tabel-rij
-    // (nog) ontbreekt — bijvoorbeeld direct na een nieuwe invite.
-    return { id: session.user.id, naam: session.user.email, rol: 'viewer', actief: true };
+    console.error('Could not load the current user from the users table:', error);
+    // Fall back on session data so the app does not get stuck when the row
+    // is missing (e.g. right after an invite). No rights in that case.
+    return { id: session.user.id, name: session.user.email, roleId: null, roleName: null, isActive: true, isAdmin: false };
   }
-  return gebruiker;
+  const roleName = data.roles ? data.roles.name : null;
+  return {
+    id: data.id,
+    name: data.name,
+    roleId: data.role_id,
+    roleName,
+    isActive: data.is_active,
+    isAdmin: roleName === 'admin' && data.is_active === true,
+  };
 }
 
 /** Roept `callback(session)` aan bij inloggen/uitloggen/token-refresh. */

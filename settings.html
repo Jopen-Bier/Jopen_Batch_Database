@@ -208,7 +208,7 @@
     }
 
     async function initSettingsPagina() {
-      const gebruiker = await getHuidigeGebruiker();
+      const gebruiker = await getCurrentUser();
       const magKijken = gebruiker && await magBekijkenModule('settings');
       if (!magKijken) {
         document.getElementById('geen-toegang').style.display = 'block';
@@ -308,7 +308,7 @@
     async function laadEenhedenSectie() {
       const container = document.getElementById('eenheden-lijst');
       const { data, error } = await supabaseClient
-        .from('eenheden').select('id, code, label, sort_order').order('sort_order');
+        .from('units').select('id, code, label, sort_order').order('sort_order');
 
       if (error) {
         container.innerHTML = `<p class="jopen-form-melding fout">Could not load units: ${error.message}</p>`;
@@ -405,7 +405,7 @@
 
       melding.textContent = 'Saving order…'; melding.className = 'jopen-form-melding';
       const resultaten = await Promise.all(nieuweVolgorde.map(({ id, sort_order }) =>
-        supabaseClient.from('eenheden').update({ sort_order }).eq('id', id)
+        supabaseClient.from('units').update({ sort_order }).eq('id', id)
       ));
       const fout = resultaten.find(r => r.error);
       if (fout) {
@@ -425,7 +425,7 @@
       const label = tr.querySelector('.eenheid-label-veld').value.trim() || null;
       if (!code) { melding.textContent = 'Code cannot be empty.'; melding.className = 'jopen-form-melding fout'; return; }
 
-      const { error } = await supabaseClient.from('eenheden').update({ code, label }).eq('id', id);
+      const { error } = await supabaseClient.from('units').update({ code, label }).eq('id', id);
       if (error) { melding.textContent = 'Save failed: ' + error.message; melding.className = 'jopen-form-melding fout'; return; }
       melding.textContent = 'Saved.'; melding.className = 'jopen-form-melding ok';
       laadEenhedenSectie();
@@ -435,7 +435,7 @@
       const id = tr.dataset.id;
       const melding = document.getElementById('eenheid-melding');
       if (!confirm('Delete this unit? This does not affect recipe lines already using this text.')) return;
-      const { error } = await supabaseClient.from('eenheden').delete().eq('id', id);
+      const { error } = await supabaseClient.from('units').delete().eq('id', id);
       if (error) { melding.textContent = 'Delete failed: ' + error.message; melding.className = 'jopen-form-melding fout'; return; }
       melding.textContent = 'Deleted.'; melding.className = 'jopen-form-melding ok';
       laadEenhedenSectie();
@@ -447,7 +447,7 @@
       const label = document.getElementById('eenheid-nieuw-label').value.trim() || null;
       if (!code) { melding.textContent = 'Enter a code for the new unit.'; melding.className = 'jopen-form-melding fout'; return; }
 
-      const { error } = await supabaseClient.from('eenheden').insert({
+      const { error } = await supabaseClient.from('units').insert({
         code, label, sort_order: alleEenheden.length + 1,
       });
       if (error) {
@@ -469,7 +469,7 @@
     async function laadDocumenttypenSectie() {
       const container = document.getElementById('documenttypen-lijst');
       const { data, error } = await supabaseClient
-        .from('document_typen').select('id, code, label, sort_order').order('sort_order');
+        .from('document_types').select('id, code, label, sort_order').order('sort_order');
 
       if (error) {
         container.innerHTML = `<p class="jopen-form-melding fout">Could not load document types: ${error.message}</p>`;
@@ -558,7 +558,7 @@
 
       melding.textContent = 'Saving order…'; melding.className = 'jopen-form-melding';
       const resultaten = await Promise.all(nieuweVolgorde.map(({ id, sort_order }) =>
-        supabaseClient.from('document_typen').update({ sort_order }).eq('id', id)
+        supabaseClient.from('document_types').update({ sort_order }).eq('id', id)
       ));
       const fout = resultaten.find(r => r.error);
       if (fout) {
@@ -578,7 +578,7 @@
       const label = tr.querySelector('.documenttype-label-veld').value.trim() || null;
       if (!code) { melding.textContent = 'Code cannot be empty.'; melding.className = 'jopen-form-melding fout'; return; }
 
-      const { error } = await supabaseClient.from('document_typen').update({ code, label }).eq('id', id);
+      const { error } = await supabaseClient.from('document_types').update({ code, label }).eq('id', id);
       if (error) { melding.textContent = 'Save failed: ' + error.message; melding.className = 'jopen-form-melding fout'; return; }
       melding.textContent = 'Saved.'; melding.className = 'jopen-form-melding ok';
       laadDocumenttypenSectie();
@@ -588,7 +588,7 @@
       const id = tr.dataset.id;
       const melding = document.getElementById('documenttype-melding');
       if (!confirm('Delete this document type?')) return;
-      const { error } = await supabaseClient.from('document_typen').delete().eq('id', id);
+      const { error } = await supabaseClient.from('document_types').delete().eq('id', id);
       if (error) {
         melding.textContent = error.code === '23503'
           ? 'Could not delete: this type is still used on one or more uploaded documents.'
@@ -606,7 +606,7 @@
       const label = document.getElementById('documenttype-nieuw-label').value.trim() || null;
       if (!code) { melding.textContent = 'Enter a code for the new document type.'; melding.className = 'jopen-form-melding fout'; return; }
 
-      const { error } = await supabaseClient.from('document_typen').insert({
+      const { error } = await supabaseClient.from('document_types').insert({
         code, label, sort_order: alleDocumenttypen.length + 1,
       });
       if (error) {

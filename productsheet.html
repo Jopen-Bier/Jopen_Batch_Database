@@ -76,7 +76,7 @@ let magBewerken = false;
 let recipeGroupId = null;
 
 window.addEventListener('DOMContentLoaded', async () => {
-  huidigeGebruiker = await getHuidigeGebruiker();
+  huidigeGebruiker = await getCurrentUser();
   magBewerken = !!huidigeGebruiker && await magBewerkenModule('product_sheets');
 
   const params = new URLSearchParams(window.location.search);

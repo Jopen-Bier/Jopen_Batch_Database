@@ -649,7 +649,7 @@
 
   window.addEventListener('DOMContentLoaded', async () => {
     toonHuidigeWeek();
-    const gebruiker = await getHuidigeGebruiker();
+    const gebruiker = await getCurrentUser();
     magBewerken = !!gebruiker && await magBewerkenModule('inventory');
     await laadStockOverview();
   });

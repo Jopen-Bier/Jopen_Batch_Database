@@ -82,7 +82,7 @@
 
     // Al ingelogd en toch op login.html beland? Meteen doorsturen.
     (async () => {
-      const gebruiker = await getHuidigeGebruiker();
+      const gebruiker = await getCurrentUser();
       if (gebruiker) window.location.replace(nieuweRedirectDoel());
     })();
 

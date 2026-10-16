@@ -1,7 +1,7 @@
 // supabase/functions/delete-user/index.ts
 //
 // Doel: een ADMIN kan een collega volledig verwijderen — zowel uit de eigen
-// `gebruikers`-tabel als uit Supabase Auth zelf (anders kan iemand nog
+// `users`-tabel als uit Supabase Auth zelf (anders kan iemand nog
 // inloggen ook al staat hij niet meer in de rechten-tabel).
 //
 // Zelfde beveiligingspatroon als invite-user: het JWT van de aanroeper wordt
@@ -44,13 +44,7 @@ serve(async (req) => {
 
     // 2. Is de aanroeper admin?
     const adminClient = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
-    const { data: callerRow, error: roleErr } = await adminClient
-      .from("gebruikers")
-      .select("rol")
-      .eq("id", callerData.user.id)
-      .single();
-
-    if (roleErr || callerRow?.rol !== "admin") {
+    if (!(await isAdmin(adminClient, callerData.user.id))) {
       return json({ error: "Only admins can delete users" }, 403);
     }
 
@@ -59,14 +53,14 @@ serve(async (req) => {
       return json({ error: "You cannot delete your own account" }, 400);
     }
 
-    // 4. Verwijder eerst de rij in gebruikers, dan de auth-user zelf.
+    // 4. Verwijder eerst de rij in users, dan de auth-user zelf.
     const { error: deleteRowErr } = await adminClient
-      .from("gebruikers")
+      .from("users")
       .delete()
       .eq("id", user_id);
 
     if (deleteRowErr) {
-      return json({ error: `Failed to remove from gebruikers table: ${deleteRowErr.message}` }, 500);
+      return json({ error: `Failed to remove from users table: ${deleteRowErr.message}` }, 500);
     }
 
     const { error: deleteAuthErr } = await adminClient.auth.admin.deleteUser(user_id);
@@ -79,6 +73,17 @@ serve(async (req) => {
     return json({ error: String(e) }, 500);
   }
 });
+
+// True when the given auth user is an active user with the role 'admin'.
+// deno-lint-ignore no-explicit-any
+async function isAdmin(client: any, userId: string): Promise<boolean> {
+  const { data, error } = await client
+    .from("users")
+    .select("is_active, roles(name)")
+    .eq("id", userId)
+    .single();
+  return !error && data?.is_active === true && data?.roles?.name === "admin";
+}
 
 function json(body: unknown, status: number) {
   return new Response(JSON.stringify(body), {

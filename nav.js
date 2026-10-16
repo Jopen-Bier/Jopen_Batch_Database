@@ -79,10 +79,10 @@ function rolLabel(rol) { return JOPEN_ROL_LABELS[rol] || rol; }
 let _jopenRechtenCache = null;
 async function jopenHaalRechten() {
   if (_jopenRechtenCache) return _jopenRechtenCache;
-  const gebruiker = await getHuidigeGebruiker();
+  const gebruiker = await getCurrentUser();
   if (!gebruiker) { _jopenRechtenCache = {}; return _jopenRechtenCache; }
 
-  if (gebruiker.rol === 'admin') {
+  if (gebruiker.isAdmin) {
     const { data: modules } = await supabaseClient.from('permission_modules').select('module_key');
     const alles = {};
     (modules || []).forEach(m => { alles[m.module_key] = { view: true, edit: true, delete: true }; });
@@ -90,13 +90,12 @@ async function jopenHaalRechten() {
     return _jopenRechtenCache;
   }
 
-  const { data: rolRij } = await supabaseClient.from('roles').select('id').eq('naam', gebruiker.rol).maybeSingle();
-  if (!rolRij) { _jopenRechtenCache = {}; return _jopenRechtenCache; }
+  if (!gebruiker.roleId) { _jopenRechtenCache = {}; return _jopenRechtenCache; }
 
   const { data } = await supabaseClient
     .from('role_permissions')
     .select('module_key, can_view, can_edit, can_delete')
-    .eq('role_id', rolRij.id);
+    .eq('role_id', gebruiker.roleId);
 
   const rechten = {};
   (data || []).forEach(r => { rechten[r.module_key] = { view: r.can_view, edit: r.can_edit, delete: r.can_delete }; });
@@ -126,7 +125,7 @@ async function vereisIngelogd() {
   const huidigePagina = window.location.pathname.split('/').pop();
   if (JOPEN_PUBLIEKE_PAGINAS.includes(huidigePagina)) return true;
 
-  const gebruiker = await getHuidigeGebruiker();
+  const gebruiker = await getCurrentUser();
   if (!gebruiker) {
     const terugNaar = encodeURIComponent(huidigePagina + window.location.search);
     window.location.replace(`login.html?redirect=${terugNaar}`);
@@ -142,7 +141,7 @@ async function renderNav(huidigeGebruiker) {
   if (!container) return;
 
   const huidigePagina = window.location.pathname.split('/').pop();
-  const isAdmin = huidigeGebruiker?.rol === 'admin';
+  const isAdmin = !!huidigeGebruiker?.isAdmin;
   const rechten = huidigeGebruiker ? await jopenHaalRechten() : {};
 
   // Groepen filteren op zichtbare items (can_view voor de moduleKey, of geen
@@ -178,7 +177,7 @@ async function renderNav(huidigeGebruiker) {
   const rechterkant = huidigeGebruiker
     ? `<div class="jopen-nav-gebruiker-wrap">
          <button id="jopen-gebruiker-btn" class="jopen-nav-gebruiker-btn">
-           ${escapeHtml(huidigeGebruiker.naam)} <span class="jopen-nav-rol">(${escapeHtml(rolLabel(huidigeGebruiker.rol))})</span>
+           ${escapeHtml(huidigeGebruiker.name)} <span class="jopen-nav-rol">(${escapeHtml(rolLabel(huidigeGebruiker.roleName || '—'))})</span>
            <span class="jopen-nav-caret">&#9662;</span>
          </button>
          <div id="jopen-gebruiker-menu" class="jopen-nav-dropdown" style="display:none;">
@@ -245,12 +244,12 @@ async function initJopenNav() {
   const magDoorgaan = await vereisIngelogd();
   if (!magDoorgaan) return; // pagina stuurt door naar login.html, verder niets doen
 
-  const gebruiker = await getHuidigeGebruiker();
+  const gebruiker = await getCurrentUser();
   await renderNav(gebruiker);
 
   onAuthChange(async () => {
     jopenWisRechtenCache();
-    const opnieuw = await getHuidigeGebruiker();
+    const opnieuw = await getCurrentUser();
     await renderNav(opnieuw);
   });
 }

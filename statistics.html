@@ -254,7 +254,7 @@ function statusLabel(status) {
 // Data laden
 // ---------------------------------------------------------------------------
 async function laadData() {
-  const { data: typen, error: typeFout } = await supabaseClient.from('document_typen').select('id, code');
+  const { data: typen, error: typeFout } = await supabaseClient.from('document_types').select('id, code');
   if (typeFout) throw typeFout;
   const psTypeId = (typen || []).find(t => t.code === 'product_sheet')?.id;
 
@@ -545,7 +545,7 @@ function renderTabs() {
 }
 
 async function initStatistics() {
-  const gebruiker = await getHuidigeGebruiker();
+  const gebruiker = await getCurrentUser();
   if (!gebruiker) return; // nav.js stuurt door naar login
   const magZien = await magBekijkenModule('statistics');
   const toegang = document.getElementById('st-toegang');
