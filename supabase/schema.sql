@@ -36,15 +36,15 @@ CREATE TYPE public.brew_plan_group AS ENUM (
 
 
 --
--- Name: admin_haal_laatste_logins(); Type: FUNCTION; Schema: public; Owner: -
+-- Name: admin_get_last_logins(); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.admin_haal_laatste_logins() RETURNS TABLE(id uuid, laatst_ingelogd timestamp with time zone)
+CREATE FUNCTION public.admin_get_last_logins() RETURNS TABLE(id uuid, last_login_at timestamp with time zone)
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
 begin
-  if not public.is_admin() then
+  if not is_admin() then
     raise exception 'Not authorized';
   end if;
   return query select au.id, au.last_sign_in_at from auth.users au;
@@ -53,46 +53,59 @@ $$;
 
 
 --
--- Name: gebruikers_sync_rol_role_id(); Type: FUNCTION; Schema: public; Owner: -
+-- Name: can_delete(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.gebruikers_sync_rol_role_id() RETURNS trigger
-    LANGUAGE plpgsql
+CREATE FUNCTION public.can_delete(p_module_key text) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
     AS $$
-declare
-  v_naam text;
-  v_role_id integer;
-begin
-  -- Als role_id expliciet is meegegeven/gewijzigd, is dat leidend: rol volgt eruit.
-  if new.role_id is not null and (tg_op = 'INSERT' or new.role_id is distinct from old.role_id) then
-    select naam into v_naam from roles where id = new.role_id;
-    if v_naam is null then
-      raise exception 'Onbekend role_id: %', new.role_id;
-    end if;
-    new.rol := v_naam;
-  -- Anders, als er een rol-tekst is (insert met alleen rol gezet, of latere update van rol),
-  -- wordt role_id daaruit afgeleid.
-  elsif new.rol is not null then
-    select id into v_role_id from roles where naam = new.rol;
-    if v_role_id is null then
-      raise exception 'Onbekende rol: % (bestaat niet in de roles-tabel)', new.rol;
-    end if;
-    new.role_id := v_role_id;
-  end if;
-  return new;
-end;
+  select is_admin() or exists (
+    select 1 from role_permissions rp
+    where rp.role_id = current_role_id() and rp.module_key = p_module_key and rp.can_delete
+  );
 $$;
 
 
 --
--- Name: huidige_role_id(); Type: FUNCTION; Schema: public; Owner: -
+-- Name: can_edit(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.huidige_role_id() RETURNS integer
+CREATE FUNCTION public.can_edit(p_module_key text) RETURNS boolean
     LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
     AS $$
-  select role_id from public.gebruikers
-  where id = auth.uid() and actief = true;
+  select is_admin() or exists (
+    select 1 from role_permissions rp
+    where rp.role_id = current_role_id() and rp.module_key = p_module_key and rp.can_edit
+  );
+$$;
+
+
+--
+-- Name: can_view(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.can_view(p_module_key text) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select is_admin() or exists (
+    select 1 from role_permissions rp
+    where rp.role_id = current_role_id() and rp.module_key = p_module_key and rp.can_view
+  );
+$$;
+
+
+--
+-- Name: current_role_id(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.current_role_id() RETURNS integer
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select role_id from users where id = auth.uid() and is_active;
 $$;
 
 
@@ -105,26 +118,8 @@ CREATE FUNCTION public.is_admin() RETURNS boolean
     SET search_path TO 'public'
     AS $$
   select exists (
-    select 1 from public.gebruikers
-    where id = auth.uid()
-      and rol = 'admin'
-      and actief = true
-  );
-$$;
-
-
---
--- Name: is_editor_of_hoger(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.is_editor_of_hoger() RETURNS boolean
-    LANGUAGE sql SECURITY DEFINER
-    AS $$
-  select exists (
-    select 1 from public.gebruikers
-    where id = auth.uid()
-      and rol in ('admin', 'head_brewer')
-      and actief = true
+    select 1 from users u join roles r on r.id = u.role_id
+    where u.id = auth.uid() and u.is_active and r.name = 'admin'
   );
 $$;
 
@@ -152,65 +147,6 @@ begin
   end if;
   return null;
 end;
-$$;
-
-
---
--- Name: mag_bekijken(text); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.mag_bekijken(p_module_key text) RETURNS boolean
-    LANGUAGE sql STABLE SECURITY DEFINER
-    AS $$
-  select is_admin() or exists (
-    select 1 from public.role_permissions rp
-    where rp.role_id = huidige_role_id()
-      and rp.module_key = p_module_key
-      and rp.can_view = true
-  );
-$$;
-
-
---
--- Name: mag_bekijken_vergrendeld(text); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.mag_bekijken_vergrendeld(p_module_key text) RETURNS boolean
-    LANGUAGE sql STABLE SECURITY DEFINER
-    AS $$
-  select is_admin();
-$$;
-
-
---
--- Name: mag_bewerken(text); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.mag_bewerken(p_module_key text) RETURNS boolean
-    LANGUAGE sql STABLE SECURITY DEFINER
-    AS $$
-  select is_admin() or exists (
-    select 1 from public.role_permissions rp
-    where rp.role_id = huidige_role_id()
-      and rp.module_key = p_module_key
-      and rp.can_edit = true
-  );
-$$;
-
-
---
--- Name: mag_verwijderen(text); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.mag_verwijderen(p_module_key text) RETURNS boolean
-    LANGUAGE sql STABLE SECURITY DEFINER
-    AS $$
-  select is_admin() or exists (
-    select 1 from public.role_permissions rp
-    where rp.role_id = huidige_role_id()
-      and rp.module_key = p_module_key
-      and rp.can_delete = true
-  );
 $$;
 
 
@@ -286,22 +222,6 @@ $$;
 
 
 --
--- Name: roles_sync_naam_naar_gebruikers(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.roles_sync_naam_naar_gebruikers() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-begin
-  if new.naam is distinct from old.naam then
-    update gebruikers set rol = new.naam where role_id = new.id;
-  end if;
-  return new;
-end;
-$$;
-
-
---
 -- Name: set_gewijzigd_op(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -325,6 +245,20 @@ CREATE FUNCTION public.set_ingredients_gewijzigd_op() RETURNS trigger
 begin
   new.gewijzigd_op = now();
   return new;
+end;
+$$;
+
+
+--
+-- Name: set_last_login(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.set_last_login() RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  update users set last_login_at = now() where id = auth.uid();
 end;
 $$;
 
@@ -356,19 +290,6 @@ begin
   new.gewijzigd_op := now();
   new.gewijzigd_door := auth.uid();
   return new;
-end;
-$$;
-
-
---
--- Name: zet_laatst_ingelogd(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.zet_laatst_ingelogd() RETURNS void
-    LANGUAGE plpgsql SECURITY DEFINER
-    AS $$
-begin
-  update gebruikers set laatst_ingelogd = now() where id = auth.uid();
 end;
 $$;
 
@@ -485,16 +406,15 @@ CREATE TABLE public.brew_planning_geschiedenis (
 
 
 --
--- Name: gebruikers; Type: TABLE; Schema: public; Owner: -
+-- Name: users; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.gebruikers (
+CREATE TABLE public.users (
     id uuid NOT NULL,
-    naam text NOT NULL,
-    rol text DEFAULT 'viewer'::text NOT NULL,
-    actief boolean DEFAULT true NOT NULL,
-    aangemaakt_op timestamp with time zone DEFAULT now(),
-    laatst_ingelogd timestamp with time zone,
+    name text NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    created_at timestamp with time zone DEFAULT now(),
+    last_login_at timestamp with time zone,
     role_id integer
 );
 
@@ -510,10 +430,10 @@ CREATE VIEW public.brew_planning_geschiedenis_verrijkt WITH (security_invoker='t
     g.voor,
     g.na,
     g.gewijzigd_door,
-    u.naam AS gewijzigd_door_naam,
+    u.name AS gewijzigd_door_naam,
     g.gewijzigd_op
    FROM (public.brew_planning_geschiedenis g
-     LEFT JOIN public.gebruikers u ON ((u.id = g.gewijzigd_door)))
+     LEFT JOIN public.users u ON ((u.id = g.gewijzigd_door)))
   ORDER BY g.gewijzigd_op DESC;
 
 
@@ -548,35 +468,22 @@ CREATE VIEW public.brew_planning_wijzigingen AS
     ((h.na ->> 'prio'::text))::boolean AS prio_na,
     (h.na ->> 'plan_group'::text) AS plan_group_na,
     h.gewijzigd_door,
-    g.naam AS gewijzigd_door_naam,
+    g.name AS gewijzigd_door_naam,
     h.gewijzigd_op
    FROM (public.brew_planning_geschiedenis h
-     LEFT JOIN public.gebruikers g ON ((g.id = h.gewijzigd_door)));
+     LEFT JOIN public.users g ON ((g.id = h.gewijzigd_door)));
 
 
 --
--- Name: document_typen; Type: TABLE; Schema: public; Owner: -
+-- Name: document_types; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.document_typen (
+CREATE TABLE public.document_types (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     code text NOT NULL,
     label text,
     sort_order integer DEFAULT 0 NOT NULL,
-    aangemaakt_op timestamp with time zone DEFAULT now() NOT NULL
-);
-
-
---
--- Name: eenheden; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.eenheden (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    code text NOT NULL,
-    label text,
-    sort_order integer DEFAULT 0 NOT NULL,
-    aangemaakt_op timestamp with time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 
@@ -874,8 +781,8 @@ ALTER TABLE public.ingredients ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY 
 
 CREATE TABLE public.permission_modules (
     module_key text NOT NULL,
-    naam text NOT NULL,
-    volgorde integer DEFAULT 0 NOT NULL
+    name text NOT NULL,
+    sort_order integer DEFAULT 0 NOT NULL
 );
 
 
@@ -1320,9 +1227,9 @@ CREATE TABLE public.role_permissions (
 
 CREATE TABLE public.roles (
     id bigint NOT NULL,
-    naam text NOT NULL,
-    is_systeemrol boolean DEFAULT false NOT NULL,
-    aangemaakt_op timestamp with time zone DEFAULT now() NOT NULL
+    name text NOT NULL,
+    is_system_role boolean DEFAULT false NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 
@@ -1337,6 +1244,19 @@ ALTER TABLE public.roles ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
     NO MINVALUE
     NO MAXVALUE
     CACHE 1
+);
+
+
+--
+-- Name: units; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.units (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    code text NOT NULL,
+    label text,
+    sort_order integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 
@@ -1487,43 +1407,19 @@ ALTER TABLE ONLY public.brew_planning_splits
 
 
 --
--- Name: document_typen document_typen_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: document_types document_types_code_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.document_typen
-    ADD CONSTRAINT document_typen_code_key UNIQUE (code);
-
-
---
--- Name: document_typen document_typen_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.document_typen
-    ADD CONSTRAINT document_typen_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.document_types
+    ADD CONSTRAINT document_types_code_key UNIQUE (code);
 
 
 --
--- Name: eenheden eenheden_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: document_types document_types_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.eenheden
-    ADD CONSTRAINT eenheden_code_key UNIQUE (code);
-
-
---
--- Name: eenheden eenheden_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.eenheden
-    ADD CONSTRAINT eenheden_pkey PRIMARY KEY (id);
-
-
---
--- Name: gebruikers gebruikers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.gebruikers
-    ADD CONSTRAINT gebruikers_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.document_types
+    ADD CONSTRAINT document_types_pkey PRIMARY KEY (id);
 
 
 --
@@ -1727,11 +1623,11 @@ ALTER TABLE ONLY public.role_permissions
 
 
 --
--- Name: roles roles_naam_key; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: roles roles_name_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.roles
-    ADD CONSTRAINT roles_naam_key UNIQUE (naam);
+    ADD CONSTRAINT roles_name_key UNIQUE (name);
 
 
 --
@@ -1740,6 +1636,30 @@ ALTER TABLE ONLY public.roles
 
 ALTER TABLE ONLY public.roles
     ADD CONSTRAINT roles_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: units units_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.units
+    ADD CONSTRAINT units_code_key UNIQUE (code);
+
+
+--
+-- Name: units units_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.units
+    ADD CONSTRAINT units_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: users users_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.users
+    ADD CONSTRAINT users_pkey PRIMARY KEY (id);
 
 
 --
@@ -1921,13 +1841,6 @@ CREATE TRIGGER trg_brew_planning_geschiedenis AFTER INSERT OR DELETE OR UPDATE O
 
 
 --
--- Name: gebruikers trg_gebruikers_sync_rol_role_id; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER trg_gebruikers_sync_rol_role_id BEFORE INSERT OR UPDATE ON public.gebruikers FOR EACH ROW EXECUTE FUNCTION public.gebruikers_sync_rol_role_id();
-
-
---
 -- Name: ingredients trg_ingredients_gewijzigd_op; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -1939,13 +1852,6 @@ CREATE TRIGGER trg_ingredients_gewijzigd_op BEFORE UPDATE ON public.ingredients 
 --
 
 CREATE TRIGGER trg_recipes_gewijzigd_op BEFORE UPDATE ON public.recipes FOR EACH ROW EXECUTE FUNCTION public.set_gewijzigd_op();
-
-
---
--- Name: roles trg_roles_sync_naam_naar_gebruikers; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER trg_roles_sync_naam_naar_gebruikers AFTER UPDATE ON public.roles FOR EACH ROW EXECUTE FUNCTION public.roles_sync_naam_naar_gebruikers();
 
 
 --
@@ -1967,7 +1873,7 @@ CREATE TRIGGER trg_water_instellingen_stempel BEFORE UPDATE ON public.water_inst
 --
 
 ALTER TABLE ONLY public.batches
-    ADD CONSTRAINT batches_aangemaakt_door_fkey FOREIGN KEY (aangemaakt_door) REFERENCES public.gebruikers(id);
+    ADD CONSTRAINT batches_aangemaakt_door_fkey FOREIGN KEY (aangemaakt_door) REFERENCES public.users(id);
 
 
 --
@@ -1983,7 +1889,7 @@ ALTER TABLE ONLY public.batches
 --
 
 ALTER TABLE ONLY public.brew_capacity
-    ADD CONSTRAINT brew_capacity_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.gebruikers(id);
+    ADD CONSTRAINT brew_capacity_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id);
 
 
 --
@@ -1991,7 +1897,7 @@ ALTER TABLE ONLY public.brew_capacity
 --
 
 ALTER TABLE ONLY public.brew_planning
-    ADD CONSTRAINT brew_planning_aangemaakt_door_fkey FOREIGN KEY (aangemaakt_door) REFERENCES public.gebruikers(id);
+    ADD CONSTRAINT brew_planning_aangemaakt_door_fkey FOREIGN KEY (aangemaakt_door) REFERENCES public.users(id);
 
 
 --
@@ -1999,7 +1905,7 @@ ALTER TABLE ONLY public.brew_planning
 --
 
 ALTER TABLE ONLY public.brew_planning_geschiedenis
-    ADD CONSTRAINT brew_planning_geschiedenis_gewijzigd_door_fkey FOREIGN KEY (gewijzigd_door) REFERENCES public.gebruikers(id);
+    ADD CONSTRAINT brew_planning_geschiedenis_gewijzigd_door_fkey FOREIGN KEY (gewijzigd_door) REFERENCES public.users(id);
 
 
 --
@@ -2027,27 +1933,11 @@ ALTER TABLE ONLY public.brew_planning_splits
 
 
 --
--- Name: gebruikers gebruikers_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.gebruikers
-    ADD CONSTRAINT gebruikers_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE;
-
-
---
--- Name: gebruikers gebruikers_role_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.gebruikers
-    ADD CONSTRAINT gebruikers_role_id_fkey FOREIGN KEY (role_id) REFERENCES public.roles(id);
-
-
---
 -- Name: grondstof_lots grondstof_lots_aangemaakt_door_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.grondstof_lots
-    ADD CONSTRAINT grondstof_lots_aangemaakt_door_fkey FOREIGN KEY (aangemaakt_door) REFERENCES public.gebruikers(id);
+    ADD CONSTRAINT grondstof_lots_aangemaakt_door_fkey FOREIGN KEY (aangemaakt_door) REFERENCES public.users(id);
 
 
 --
@@ -2063,7 +1953,7 @@ ALTER TABLE ONLY public.grondstof_lots
 --
 
 ALTER TABLE ONLY public.grondstof_lots
-    ADD CONSTRAINT grondstof_lots_ontvangen_door_fkey FOREIGN KEY (ontvangen_door) REFERENCES public.gebruikers(id);
+    ADD CONSTRAINT grondstof_lots_ontvangen_door_fkey FOREIGN KEY (ontvangen_door) REFERENCES public.users(id);
 
 
 --
@@ -2071,7 +1961,7 @@ ALTER TABLE ONLY public.grondstof_lots
 --
 
 ALTER TABLE ONLY public.ingredient_documenten
-    ADD CONSTRAINT ingredient_documenten_document_type_id_fkey FOREIGN KEY (document_type_id) REFERENCES public.document_typen(id);
+    ADD CONSTRAINT ingredient_documenten_document_type_id_fkey FOREIGN KEY (document_type_id) REFERENCES public.document_types(id);
 
 
 --
@@ -2095,7 +1985,7 @@ ALTER TABLE ONLY public.ingredient_documenten
 --
 
 ALTER TABLE ONLY public.ingredient_revisies
-    ADD CONSTRAINT ingredient_revisies_gebruiker_id_fkey FOREIGN KEY (gebruiker_id) REFERENCES public.gebruikers(id);
+    ADD CONSTRAINT ingredient_revisies_gebruiker_id_fkey FOREIGN KEY (gebruiker_id) REFERENCES public.users(id);
 
 
 --
@@ -2283,11 +2173,27 @@ ALTER TABLE ONLY public.role_permissions
 
 
 --
+-- Name: users users_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.users
+    ADD CONSTRAINT users_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: users users_role_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.users
+    ADD CONSTRAINT users_role_id_fkey FOREIGN KEY (role_id) REFERENCES public.roles(id);
+
+
+--
 -- Name: voorraad_mutaties voorraad_mutaties_aangemaakt_door_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.voorraad_mutaties
-    ADD CONSTRAINT voorraad_mutaties_aangemaakt_door_fkey FOREIGN KEY (aangemaakt_door) REFERENCES public.gebruikers(id);
+    ADD CONSTRAINT voorraad_mutaties_aangemaakt_door_fkey FOREIGN KEY (aangemaakt_door) REFERENCES public.users(id);
 
 
 --
@@ -2303,7 +2209,7 @@ ALTER TABLE ONLY public.voorraad_mutaties
 --
 
 ALTER TABLE ONLY public.voorraad_mutaties
-    ADD CONSTRAINT voorraad_mutaties_geboekt_door_fkey FOREIGN KEY (geboekt_door) REFERENCES public.gebruikers(id);
+    ADD CONSTRAINT voorraad_mutaties_geboekt_door_fkey FOREIGN KEY (geboekt_door) REFERENCES public.users(id);
 
 
 --
@@ -2327,7 +2233,7 @@ ALTER TABLE ONLY public.voorraad_mutaties
 --
 
 ALTER TABLE ONLY public.water_instellingen
-    ADD CONSTRAINT water_instellingen_gewijzigd_door_fkey FOREIGN KEY (gewijzigd_door) REFERENCES public.gebruikers(id);
+    ADD CONSTRAINT water_instellingen_gewijzigd_door_fkey FOREIGN KEY (gewijzigd_door) REFERENCES public.users(id);
 
 
 --
@@ -2335,23 +2241,7 @@ ALTER TABLE ONLY public.water_instellingen
 --
 
 ALTER TABLE ONLY public.water_instellingen_historie
-    ADD CONSTRAINT water_instellingen_historie_gewijzigd_door_fkey FOREIGN KEY (gewijzigd_door) REFERENCES public.gebruikers(id);
-
-
---
--- Name: gebruikers admin_schrijft; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY admin_schrijft ON public.gebruikers USING (public.is_admin()) WITH CHECK (public.is_admin());
-
-
---
--- Name: gebruikers alleen admins mogen gebruikers bewerken; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "alleen admins mogen gebruikers bewerken" ON public.gebruikers FOR UPDATE USING ((EXISTS ( SELECT 1
-   FROM public.gebruikers g
-  WHERE ((g.id = auth.uid()) AND (g.rol = 'admin'::text)))));
+    ADD CONSTRAINT water_instellingen_historie_gewijzigd_door_fkey FOREIGN KEY (gewijzigd_door) REFERENCES public.users(id);
 
 
 --
@@ -2364,28 +2254,28 @@ ALTER TABLE public.batches ENABLE ROW LEVEL SECURITY;
 -- Name: batches batches_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY batches_delete ON public.batches FOR DELETE USING (public.mag_verwijderen('batches'::text));
+CREATE POLICY batches_delete ON public.batches FOR DELETE USING (public.can_delete('batches'::text));
 
 
 --
 -- Name: batches batches_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY batches_insert ON public.batches FOR INSERT WITH CHECK (public.mag_bewerken('batches'::text));
+CREATE POLICY batches_insert ON public.batches FOR INSERT WITH CHECK (public.can_edit('batches'::text));
 
 
 --
 -- Name: batches batches_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY batches_select ON public.batches FOR SELECT USING (public.mag_bekijken('batches'::text));
+CREATE POLICY batches_select ON public.batches FOR SELECT USING (public.can_view('batches'::text));
 
 
 --
 -- Name: batches batches_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY batches_update ON public.batches FOR UPDATE USING (public.mag_bewerken('batches'::text)) WITH CHECK (public.mag_bewerken('batches'::text));
+CREATE POLICY batches_update ON public.batches FOR UPDATE USING (public.can_edit('batches'::text)) WITH CHECK (public.can_edit('batches'::text));
 
 
 --
@@ -2398,28 +2288,28 @@ ALTER TABLE public.brew_capacity ENABLE ROW LEVEL SECURITY;
 -- Name: brew_capacity brew_capacity_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY brew_capacity_delete ON public.brew_capacity FOR DELETE USING (public.mag_verwijderen('brewing_planning'::text));
+CREATE POLICY brew_capacity_delete ON public.brew_capacity FOR DELETE USING (public.can_delete('brewing_planning'::text));
 
 
 --
 -- Name: brew_capacity brew_capacity_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY brew_capacity_insert ON public.brew_capacity FOR INSERT WITH CHECK (public.mag_bewerken('brewing_planning'::text));
+CREATE POLICY brew_capacity_insert ON public.brew_capacity FOR INSERT WITH CHECK (public.can_edit('brewing_planning'::text));
 
 
 --
 -- Name: brew_capacity brew_capacity_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY brew_capacity_select ON public.brew_capacity FOR SELECT USING (public.mag_bekijken('brewing_planning'::text));
+CREATE POLICY brew_capacity_select ON public.brew_capacity FOR SELECT USING (public.can_view('brewing_planning'::text));
 
 
 --
 -- Name: brew_capacity brew_capacity_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY brew_capacity_update ON public.brew_capacity FOR UPDATE USING (public.mag_bewerken('brewing_planning'::text)) WITH CHECK (public.mag_bewerken('brewing_planning'::text));
+CREATE POLICY brew_capacity_update ON public.brew_capacity FOR UPDATE USING (public.can_edit('brewing_planning'::text)) WITH CHECK (public.can_edit('brewing_planning'::text));
 
 
 --
@@ -2432,7 +2322,7 @@ ALTER TABLE public.brew_planning ENABLE ROW LEVEL SECURITY;
 -- Name: brew_planning brew_planning_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY brew_planning_delete ON public.brew_planning FOR DELETE USING (public.mag_verwijderen('brewing_planning'::text));
+CREATE POLICY brew_planning_delete ON public.brew_planning FOR DELETE USING (public.can_delete('brewing_planning'::text));
 
 
 --
@@ -2445,21 +2335,21 @@ ALTER TABLE public.brew_planning_geschiedenis ENABLE ROW LEVEL SECURITY;
 -- Name: brew_planning_geschiedenis brew_planning_geschiedenis_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY brew_planning_geschiedenis_select ON public.brew_planning_geschiedenis FOR SELECT USING (public.mag_bekijken('brewing_planning'::text));
+CREATE POLICY brew_planning_geschiedenis_select ON public.brew_planning_geschiedenis FOR SELECT USING (public.can_view('brewing_planning'::text));
 
 
 --
 -- Name: brew_planning brew_planning_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY brew_planning_insert ON public.brew_planning FOR INSERT WITH CHECK (public.mag_bewerken('brewing_planning'::text));
+CREATE POLICY brew_planning_insert ON public.brew_planning FOR INSERT WITH CHECK (public.can_edit('brewing_planning'::text));
 
 
 --
 -- Name: brew_planning brew_planning_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY brew_planning_select ON public.brew_planning FOR SELECT USING (public.mag_bekijken('brewing_planning'::text));
+CREATE POLICY brew_planning_select ON public.brew_planning FOR SELECT USING (public.can_view('brewing_planning'::text));
 
 
 --
@@ -2472,110 +2362,70 @@ ALTER TABLE public.brew_planning_splits ENABLE ROW LEVEL SECURITY;
 -- Name: brew_planning_splits brew_planning_splits_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY brew_planning_splits_delete ON public.brew_planning_splits FOR DELETE USING (public.mag_bewerken('brewing_planning'::text));
+CREATE POLICY brew_planning_splits_delete ON public.brew_planning_splits FOR DELETE USING (public.can_edit('brewing_planning'::text));
 
 
 --
 -- Name: brew_planning_splits brew_planning_splits_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY brew_planning_splits_insert ON public.brew_planning_splits FOR INSERT WITH CHECK (public.mag_bewerken('brewing_planning'::text));
+CREATE POLICY brew_planning_splits_insert ON public.brew_planning_splits FOR INSERT WITH CHECK (public.can_edit('brewing_planning'::text));
 
 
 --
 -- Name: brew_planning_splits brew_planning_splits_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY brew_planning_splits_select ON public.brew_planning_splits FOR SELECT USING (public.mag_bekijken('brewing_planning'::text));
+CREATE POLICY brew_planning_splits_select ON public.brew_planning_splits FOR SELECT USING (public.can_view('brewing_planning'::text));
 
 
 --
 -- Name: brew_planning_splits brew_planning_splits_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY brew_planning_splits_update ON public.brew_planning_splits FOR UPDATE USING (public.mag_bewerken('brewing_planning'::text)) WITH CHECK (public.mag_bewerken('brewing_planning'::text));
+CREATE POLICY brew_planning_splits_update ON public.brew_planning_splits FOR UPDATE USING (public.can_edit('brewing_planning'::text)) WITH CHECK (public.can_edit('brewing_planning'::text));
 
 
 --
 -- Name: brew_planning brew_planning_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY brew_planning_update ON public.brew_planning FOR UPDATE USING (public.mag_bewerken('brewing_planning'::text)) WITH CHECK (public.mag_bewerken('brewing_planning'::text));
+CREATE POLICY brew_planning_update ON public.brew_planning FOR UPDATE USING (public.can_edit('brewing_planning'::text)) WITH CHECK (public.can_edit('brewing_planning'::text));
 
 
 --
--- Name: document_typen; Type: ROW SECURITY; Schema: public; Owner: -
+-- Name: document_types; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
-ALTER TABLE public.document_typen ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.document_types ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: document_typen document_typen_delete; Type: POLICY; Schema: public; Owner: -
+-- Name: document_types document_types_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY document_typen_delete ON public.document_typen FOR DELETE USING (public.mag_verwijderen('settings'::text));
-
-
---
--- Name: document_typen document_typen_insert; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY document_typen_insert ON public.document_typen FOR INSERT WITH CHECK (public.mag_bewerken('settings'::text));
+CREATE POLICY document_types_delete ON public.document_types FOR DELETE USING (public.can_delete('settings'::text));
 
 
 --
--- Name: document_typen document_typen_select; Type: POLICY; Schema: public; Owner: -
+-- Name: document_types document_types_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY document_typen_select ON public.document_typen FOR SELECT USING (true);
-
-
---
--- Name: document_typen document_typen_update; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY document_typen_update ON public.document_typen FOR UPDATE USING (public.mag_bewerken('settings'::text)) WITH CHECK (public.mag_bewerken('settings'::text));
+CREATE POLICY document_types_insert ON public.document_types FOR INSERT WITH CHECK (public.can_edit('settings'::text));
 
 
 --
--- Name: eenheden; Type: ROW SECURITY; Schema: public; Owner: -
+-- Name: document_types document_types_select; Type: POLICY; Schema: public; Owner: -
 --
 
-ALTER TABLE public.eenheden ENABLE ROW LEVEL SECURITY;
-
---
--- Name: eenheden eenheden_delete; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY eenheden_delete ON public.eenheden FOR DELETE USING (public.mag_verwijderen('settings'::text));
+CREATE POLICY document_types_select ON public.document_types FOR SELECT USING (true);
 
 
 --
--- Name: eenheden eenheden_insert; Type: POLICY; Schema: public; Owner: -
+-- Name: document_types document_types_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY eenheden_insert ON public.eenheden FOR INSERT WITH CHECK (public.mag_bewerken('settings'::text));
+CREATE POLICY document_types_update ON public.document_types FOR UPDATE USING (public.can_edit('settings'::text)) WITH CHECK (public.can_edit('settings'::text));
 
-
---
--- Name: eenheden eenheden_select; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY eenheden_select ON public.eenheden FOR SELECT USING (true);
-
-
---
--- Name: eenheden eenheden_update; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY eenheden_update ON public.eenheden FOR UPDATE USING (public.mag_bewerken('settings'::text)) WITH CHECK (public.mag_bewerken('settings'::text));
-
-
---
--- Name: gebruikers; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.gebruikers ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: grondstof_lots; Type: ROW SECURITY; Schema: public; Owner: -
@@ -2587,28 +2437,28 @@ ALTER TABLE public.grondstof_lots ENABLE ROW LEVEL SECURITY;
 -- Name: grondstof_lots grondstof_lots_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY grondstof_lots_delete ON public.grondstof_lots FOR DELETE USING (public.mag_verwijderen('inventory'::text));
+CREATE POLICY grondstof_lots_delete ON public.grondstof_lots FOR DELETE USING (public.can_delete('inventory'::text));
 
 
 --
 -- Name: grondstof_lots grondstof_lots_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY grondstof_lots_insert ON public.grondstof_lots FOR INSERT WITH CHECK (public.mag_bewerken('inventory'::text));
+CREATE POLICY grondstof_lots_insert ON public.grondstof_lots FOR INSERT WITH CHECK (public.can_edit('inventory'::text));
 
 
 --
 -- Name: grondstof_lots grondstof_lots_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY grondstof_lots_select ON public.grondstof_lots FOR SELECT USING (public.mag_bekijken('inventory'::text));
+CREATE POLICY grondstof_lots_select ON public.grondstof_lots FOR SELECT USING (public.can_view('inventory'::text));
 
 
 --
 -- Name: grondstof_lots grondstof_lots_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY grondstof_lots_update ON public.grondstof_lots FOR UPDATE USING (public.mag_bewerken('inventory'::text)) WITH CHECK (public.mag_bewerken('inventory'::text));
+CREATE POLICY grondstof_lots_update ON public.grondstof_lots FOR UPDATE USING (public.can_edit('inventory'::text)) WITH CHECK (public.can_edit('inventory'::text));
 
 
 --
@@ -2621,14 +2471,14 @@ ALTER TABLE public.hop_utilisatie_curve ENABLE ROW LEVEL SECURITY;
 -- Name: hop_utilisatie_curve hop_utilisatie_curve_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY hop_utilisatie_curve_delete ON public.hop_utilisatie_curve FOR DELETE USING (public.mag_verwijderen('settings'::text));
+CREATE POLICY hop_utilisatie_curve_delete ON public.hop_utilisatie_curve FOR DELETE USING (public.can_delete('settings'::text));
 
 
 --
 -- Name: hop_utilisatie_curve hop_utilisatie_curve_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY hop_utilisatie_curve_insert ON public.hop_utilisatie_curve FOR INSERT WITH CHECK (public.mag_bewerken('settings'::text));
+CREATE POLICY hop_utilisatie_curve_insert ON public.hop_utilisatie_curve FOR INSERT WITH CHECK (public.can_edit('settings'::text));
 
 
 --
@@ -2642,14 +2492,7 @@ CREATE POLICY hop_utilisatie_curve_select ON public.hop_utilisatie_curve FOR SEL
 -- Name: hop_utilisatie_curve hop_utilisatie_curve_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY hop_utilisatie_curve_update ON public.hop_utilisatie_curve FOR UPDATE USING (public.mag_bewerken('settings'::text)) WITH CHECK (public.mag_bewerken('settings'::text));
-
-
---
--- Name: gebruikers ingelogde gebruikers mogen gebruikers lezen; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "ingelogde gebruikers mogen gebruikers lezen" ON public.gebruikers FOR SELECT USING ((auth.role() = 'authenticated'::text));
+CREATE POLICY hop_utilisatie_curve_update ON public.hop_utilisatie_curve FOR UPDATE USING (public.can_edit('settings'::text)) WITH CHECK (public.can_edit('settings'::text));
 
 
 --
@@ -2662,14 +2505,14 @@ ALTER TABLE public.ingredient_categories ENABLE ROW LEVEL SECURITY;
 -- Name: ingredient_categories ingredient_categories_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY ingredient_categories_delete ON public.ingredient_categories FOR DELETE USING (public.mag_verwijderen('settings'::text));
+CREATE POLICY ingredient_categories_delete ON public.ingredient_categories FOR DELETE USING (public.can_delete('settings'::text));
 
 
 --
 -- Name: ingredient_categories ingredient_categories_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY ingredient_categories_insert ON public.ingredient_categories FOR INSERT WITH CHECK (public.mag_bewerken('settings'::text));
+CREATE POLICY ingredient_categories_insert ON public.ingredient_categories FOR INSERT WITH CHECK (public.can_edit('settings'::text));
 
 
 --
@@ -2683,7 +2526,7 @@ CREATE POLICY ingredient_categories_select ON public.ingredient_categories FOR S
 -- Name: ingredient_categories ingredient_categories_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY ingredient_categories_update ON public.ingredient_categories FOR UPDATE USING (public.mag_bewerken('settings'::text)) WITH CHECK (public.mag_bewerken('settings'::text));
+CREATE POLICY ingredient_categories_update ON public.ingredient_categories FOR UPDATE USING (public.can_edit('settings'::text)) WITH CHECK (public.can_edit('settings'::text));
 
 
 --
@@ -2696,14 +2539,14 @@ ALTER TABLE public.ingredient_declaraties ENABLE ROW LEVEL SECURITY;
 -- Name: ingredient_declaraties ingredient_declaraties_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY ingredient_declaraties_delete ON public.ingredient_declaraties FOR DELETE USING (public.mag_verwijderen('settings'::text));
+CREATE POLICY ingredient_declaraties_delete ON public.ingredient_declaraties FOR DELETE USING (public.can_delete('settings'::text));
 
 
 --
 -- Name: ingredient_declaraties ingredient_declaraties_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY ingredient_declaraties_insert ON public.ingredient_declaraties FOR INSERT WITH CHECK (public.mag_bewerken('settings'::text));
+CREATE POLICY ingredient_declaraties_insert ON public.ingredient_declaraties FOR INSERT WITH CHECK (public.can_edit('settings'::text));
 
 
 --
@@ -2717,7 +2560,7 @@ CREATE POLICY ingredient_declaraties_select ON public.ingredient_declaraties FOR
 -- Name: ingredient_declaraties ingredient_declaraties_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY ingredient_declaraties_update ON public.ingredient_declaraties FOR UPDATE USING (public.mag_bewerken('settings'::text)) WITH CHECK (public.mag_bewerken('settings'::text));
+CREATE POLICY ingredient_declaraties_update ON public.ingredient_declaraties FOR UPDATE USING (public.can_edit('settings'::text)) WITH CHECK (public.can_edit('settings'::text));
 
 
 --
@@ -2730,28 +2573,28 @@ ALTER TABLE public.ingredient_documenten ENABLE ROW LEVEL SECURITY;
 -- Name: ingredient_documenten ingredient_documenten_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY ingredient_documenten_delete ON public.ingredient_documenten FOR DELETE USING (public.mag_verwijderen('ingredients'::text));
+CREATE POLICY ingredient_documenten_delete ON public.ingredient_documenten FOR DELETE USING (public.can_delete('ingredients'::text));
 
 
 --
 -- Name: ingredient_documenten ingredient_documenten_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY ingredient_documenten_insert ON public.ingredient_documenten FOR INSERT WITH CHECK (public.mag_bewerken('ingredients'::text));
+CREATE POLICY ingredient_documenten_insert ON public.ingredient_documenten FOR INSERT WITH CHECK (public.can_edit('ingredients'::text));
 
 
 --
 -- Name: ingredient_documenten ingredient_documenten_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY ingredient_documenten_select ON public.ingredient_documenten FOR SELECT USING (public.mag_bekijken('ingredients'::text));
+CREATE POLICY ingredient_documenten_select ON public.ingredient_documenten FOR SELECT USING (public.can_view('ingredients'::text));
 
 
 --
 -- Name: ingredient_documenten ingredient_documenten_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY ingredient_documenten_update ON public.ingredient_documenten FOR UPDATE USING (public.mag_bewerken('ingredients'::text)) WITH CHECK (public.mag_bewerken('ingredients'::text));
+CREATE POLICY ingredient_documenten_update ON public.ingredient_documenten FOR UPDATE USING (public.can_edit('ingredients'::text)) WITH CHECK (public.can_edit('ingredients'::text));
 
 
 --
@@ -2764,14 +2607,14 @@ ALTER TABLE public.ingredient_revisies ENABLE ROW LEVEL SECURITY;
 -- Name: ingredient_revisies ingredient_revisies_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY ingredient_revisies_insert ON public.ingredient_revisies FOR INSERT WITH CHECK (public.mag_bewerken('ingredients'::text));
+CREATE POLICY ingredient_revisies_insert ON public.ingredient_revisies FOR INSERT WITH CHECK (public.can_edit('ingredients'::text));
 
 
 --
 -- Name: ingredient_revisies ingredient_revisies_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY ingredient_revisies_select ON public.ingredient_revisies FOR SELECT USING (public.mag_bekijken('ingredients'::text));
+CREATE POLICY ingredient_revisies_select ON public.ingredient_revisies FOR SELECT USING (public.can_view('ingredients'::text));
 
 
 --
@@ -2784,28 +2627,28 @@ ALTER TABLE public.ingredients ENABLE ROW LEVEL SECURITY;
 -- Name: ingredients ingredients_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY ingredients_delete ON public.ingredients FOR DELETE USING (public.mag_verwijderen('ingredients'::text));
+CREATE POLICY ingredients_delete ON public.ingredients FOR DELETE USING (public.can_delete('ingredients'::text));
 
 
 --
 -- Name: ingredients ingredients_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY ingredients_insert ON public.ingredients FOR INSERT WITH CHECK (public.mag_bewerken('ingredients'::text));
+CREATE POLICY ingredients_insert ON public.ingredients FOR INSERT WITH CHECK (public.can_edit('ingredients'::text));
 
 
 --
 -- Name: ingredients ingredients_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY ingredients_select ON public.ingredients FOR SELECT USING (public.mag_bekijken('ingredients'::text));
+CREATE POLICY ingredients_select ON public.ingredients FOR SELECT USING (public.can_view('ingredients'::text));
 
 
 --
 -- Name: ingredients ingredients_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY ingredients_update ON public.ingredients FOR UPDATE USING (public.mag_bewerken('ingredients'::text)) WITH CHECK (public.mag_bewerken('ingredients'::text));
+CREATE POLICY ingredients_update ON public.ingredients FOR UPDATE USING (public.can_edit('ingredients'::text)) WITH CHECK (public.can_edit('ingredients'::text));
 
 
 --
@@ -2815,10 +2658,10 @@ CREATE POLICY ingredients_update ON public.ingredients FOR UPDATE USING (public.
 ALTER TABLE public.permission_modules ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: permission_modules permission_modules_select_authenticated; Type: POLICY; Schema: public; Owner: -
+-- Name: permission_modules permission_modules_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY permission_modules_select_authenticated ON public.permission_modules FOR SELECT USING (true);
+CREATE POLICY permission_modules_select ON public.permission_modules FOR SELECT USING (true);
 
 
 --
@@ -2831,14 +2674,14 @@ ALTER TABLE public.product_sheet_revisies ENABLE ROW LEVEL SECURITY;
 -- Name: product_sheet_revisies product_sheet_revisies_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY product_sheet_revisies_insert ON public.product_sheet_revisies FOR INSERT WITH CHECK (public.mag_bewerken('product_sheets'::text));
+CREATE POLICY product_sheet_revisies_insert ON public.product_sheet_revisies FOR INSERT WITH CHECK (public.can_edit('product_sheets'::text));
 
 
 --
 -- Name: product_sheet_revisies product_sheet_revisies_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY product_sheet_revisies_select ON public.product_sheet_revisies FOR SELECT USING (public.mag_bekijken('product_sheets'::text));
+CREATE POLICY product_sheet_revisies_select ON public.product_sheet_revisies FOR SELECT USING (public.can_view('product_sheets'::text));
 
 
 --
@@ -2851,28 +2694,28 @@ ALTER TABLE public.product_sheets ENABLE ROW LEVEL SECURITY;
 -- Name: product_sheets product_sheets_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY product_sheets_delete ON public.product_sheets FOR DELETE USING (public.mag_verwijderen('product_sheets'::text));
+CREATE POLICY product_sheets_delete ON public.product_sheets FOR DELETE USING (public.can_delete('product_sheets'::text));
 
 
 --
 -- Name: product_sheets product_sheets_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY product_sheets_insert ON public.product_sheets FOR INSERT WITH CHECK (public.mag_bewerken('product_sheets'::text));
+CREATE POLICY product_sheets_insert ON public.product_sheets FOR INSERT WITH CHECK (public.can_edit('product_sheets'::text));
 
 
 --
 -- Name: product_sheets product_sheets_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY product_sheets_select ON public.product_sheets FOR SELECT USING (public.mag_bekijken('product_sheets'::text));
+CREATE POLICY product_sheets_select ON public.product_sheets FOR SELECT USING (public.can_view('product_sheets'::text));
 
 
 --
 -- Name: product_sheets product_sheets_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY product_sheets_update ON public.product_sheets FOR UPDATE USING (public.mag_bewerken('product_sheets'::text));
+CREATE POLICY product_sheets_update ON public.product_sheets FOR UPDATE USING (public.can_edit('product_sheets'::text));
 
 
 --
@@ -2885,28 +2728,28 @@ ALTER TABLE public.recipe_brouwspecificaties ENABLE ROW LEVEL SECURITY;
 -- Name: recipe_brouwspecificaties recipe_brouwspecificaties_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_brouwspecificaties_delete ON public.recipe_brouwspecificaties FOR DELETE USING (public.mag_verwijderen('recipes'::text));
+CREATE POLICY recipe_brouwspecificaties_delete ON public.recipe_brouwspecificaties FOR DELETE USING (public.can_delete('recipes'::text));
 
 
 --
 -- Name: recipe_brouwspecificaties recipe_brouwspecificaties_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_brouwspecificaties_insert ON public.recipe_brouwspecificaties FOR INSERT WITH CHECK (public.mag_bewerken('recipes'::text));
+CREATE POLICY recipe_brouwspecificaties_insert ON public.recipe_brouwspecificaties FOR INSERT WITH CHECK (public.can_edit('recipes'::text));
 
 
 --
 -- Name: recipe_brouwspecificaties recipe_brouwspecificaties_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_brouwspecificaties_select ON public.recipe_brouwspecificaties FOR SELECT USING (public.mag_bekijken('recipes'::text));
+CREATE POLICY recipe_brouwspecificaties_select ON public.recipe_brouwspecificaties FOR SELECT USING (public.can_view('recipes'::text));
 
 
 --
 -- Name: recipe_brouwspecificaties recipe_brouwspecificaties_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_brouwspecificaties_update ON public.recipe_brouwspecificaties FOR UPDATE USING (public.mag_bewerken('recipes'::text)) WITH CHECK (public.mag_bewerken('recipes'::text));
+CREATE POLICY recipe_brouwspecificaties_update ON public.recipe_brouwspecificaties FOR UPDATE USING (public.can_edit('recipes'::text)) WITH CHECK (public.can_edit('recipes'::text));
 
 
 --
@@ -2919,28 +2762,28 @@ ALTER TABLE public.recipe_comments ENABLE ROW LEVEL SECURITY;
 -- Name: recipe_comments recipe_comments_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_comments_delete ON public.recipe_comments FOR DELETE USING (public.mag_verwijderen('recipes'::text));
+CREATE POLICY recipe_comments_delete ON public.recipe_comments FOR DELETE USING (public.can_delete('recipes'::text));
 
 
 --
 -- Name: recipe_comments recipe_comments_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_comments_insert ON public.recipe_comments FOR INSERT WITH CHECK (public.mag_bewerken('recipes'::text));
+CREATE POLICY recipe_comments_insert ON public.recipe_comments FOR INSERT WITH CHECK (public.can_edit('recipes'::text));
 
 
 --
 -- Name: recipe_comments recipe_comments_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_comments_select ON public.recipe_comments FOR SELECT USING (public.mag_bekijken('recipes'::text));
+CREATE POLICY recipe_comments_select ON public.recipe_comments FOR SELECT USING (public.can_view('recipes'::text));
 
 
 --
 -- Name: recipe_comments recipe_comments_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_comments_update ON public.recipe_comments FOR UPDATE USING (public.mag_bewerken('recipes'::text)) WITH CHECK (public.mag_bewerken('recipes'::text));
+CREATE POLICY recipe_comments_update ON public.recipe_comments FOR UPDATE USING (public.can_edit('recipes'::text)) WITH CHECK (public.can_edit('recipes'::text));
 
 
 --
@@ -2953,28 +2796,28 @@ ALTER TABLE public.recipe_fermentatie ENABLE ROW LEVEL SECURITY;
 -- Name: recipe_fermentatie recipe_fermentatie_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_fermentatie_delete ON public.recipe_fermentatie FOR DELETE USING (public.mag_verwijderen('recipes'::text));
+CREATE POLICY recipe_fermentatie_delete ON public.recipe_fermentatie FOR DELETE USING (public.can_delete('recipes'::text));
 
 
 --
 -- Name: recipe_fermentatie recipe_fermentatie_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_fermentatie_insert ON public.recipe_fermentatie FOR INSERT WITH CHECK (public.mag_bewerken('recipes'::text));
+CREATE POLICY recipe_fermentatie_insert ON public.recipe_fermentatie FOR INSERT WITH CHECK (public.can_edit('recipes'::text));
 
 
 --
 -- Name: recipe_fermentatie recipe_fermentatie_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_fermentatie_select ON public.recipe_fermentatie FOR SELECT USING (public.mag_bekijken('recipes'::text));
+CREATE POLICY recipe_fermentatie_select ON public.recipe_fermentatie FOR SELECT USING (public.can_view('recipes'::text));
 
 
 --
 -- Name: recipe_fermentatie recipe_fermentatie_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_fermentatie_update ON public.recipe_fermentatie FOR UPDATE USING (public.mag_bewerken('recipes'::text)) WITH CHECK (public.mag_bewerken('recipes'::text));
+CREATE POLICY recipe_fermentatie_update ON public.recipe_fermentatie FOR UPDATE USING (public.can_edit('recipes'::text)) WITH CHECK (public.can_edit('recipes'::text));
 
 
 --
@@ -2987,28 +2830,28 @@ ALTER TABLE public.recipe_ingredients ENABLE ROW LEVEL SECURITY;
 -- Name: recipe_ingredients recipe_ingredients_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_ingredients_delete ON public.recipe_ingredients FOR DELETE USING (public.mag_bewerken('recipes'::text));
+CREATE POLICY recipe_ingredients_delete ON public.recipe_ingredients FOR DELETE USING (public.can_edit('recipes'::text));
 
 
 --
 -- Name: recipe_ingredients recipe_ingredients_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_ingredients_insert ON public.recipe_ingredients FOR INSERT WITH CHECK (public.mag_bewerken('recipes'::text));
+CREATE POLICY recipe_ingredients_insert ON public.recipe_ingredients FOR INSERT WITH CHECK (public.can_edit('recipes'::text));
 
 
 --
 -- Name: recipe_ingredients recipe_ingredients_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_ingredients_select ON public.recipe_ingredients FOR SELECT USING (public.mag_bekijken('recipes'::text));
+CREATE POLICY recipe_ingredients_select ON public.recipe_ingredients FOR SELECT USING (public.can_view('recipes'::text));
 
 
 --
 -- Name: recipe_ingredients recipe_ingredients_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_ingredients_update ON public.recipe_ingredients FOR UPDATE USING (public.mag_bewerken('recipes'::text)) WITH CHECK (public.mag_bewerken('recipes'::text));
+CREATE POLICY recipe_ingredients_update ON public.recipe_ingredients FOR UPDATE USING (public.can_edit('recipes'::text)) WITH CHECK (public.can_edit('recipes'::text));
 
 
 --
@@ -3021,28 +2864,28 @@ ALTER TABLE public.recipe_kosten ENABLE ROW LEVEL SECURITY;
 -- Name: recipe_kosten recipe_kosten_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_kosten_delete ON public.recipe_kosten FOR DELETE USING (public.mag_verwijderen('recipes'::text));
+CREATE POLICY recipe_kosten_delete ON public.recipe_kosten FOR DELETE USING (public.can_delete('recipes'::text));
 
 
 --
 -- Name: recipe_kosten recipe_kosten_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_kosten_insert ON public.recipe_kosten FOR INSERT WITH CHECK (public.mag_bewerken('recipes'::text));
+CREATE POLICY recipe_kosten_insert ON public.recipe_kosten FOR INSERT WITH CHECK (public.can_edit('recipes'::text));
 
 
 --
 -- Name: recipe_kosten recipe_kosten_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_kosten_select ON public.recipe_kosten FOR SELECT USING (public.mag_bekijken('recipes'::text));
+CREATE POLICY recipe_kosten_select ON public.recipe_kosten FOR SELECT USING (public.can_view('recipes'::text));
 
 
 --
 -- Name: recipe_kosten recipe_kosten_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_kosten_update ON public.recipe_kosten FOR UPDATE USING (public.mag_bewerken('recipes'::text)) WITH CHECK (public.mag_bewerken('recipes'::text));
+CREATE POLICY recipe_kosten_update ON public.recipe_kosten FOR UPDATE USING (public.can_edit('recipes'::text)) WITH CHECK (public.can_edit('recipes'::text));
 
 
 --
@@ -3055,28 +2898,28 @@ ALTER TABLE public.recipe_processtappen ENABLE ROW LEVEL SECURITY;
 -- Name: recipe_processtappen recipe_processtappen_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_processtappen_delete ON public.recipe_processtappen FOR DELETE USING (public.mag_verwijderen('recipes'::text));
+CREATE POLICY recipe_processtappen_delete ON public.recipe_processtappen FOR DELETE USING (public.can_delete('recipes'::text));
 
 
 --
 -- Name: recipe_processtappen recipe_processtappen_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_processtappen_insert ON public.recipe_processtappen FOR INSERT WITH CHECK (public.mag_bewerken('recipes'::text));
+CREATE POLICY recipe_processtappen_insert ON public.recipe_processtappen FOR INSERT WITH CHECK (public.can_edit('recipes'::text));
 
 
 --
 -- Name: recipe_processtappen recipe_processtappen_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_processtappen_select ON public.recipe_processtappen FOR SELECT USING (public.mag_bekijken('recipes'::text));
+CREATE POLICY recipe_processtappen_select ON public.recipe_processtappen FOR SELECT USING (public.can_view('recipes'::text));
 
 
 --
 -- Name: recipe_processtappen recipe_processtappen_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_processtappen_update ON public.recipe_processtappen FOR UPDATE USING (public.mag_bewerken('recipes'::text)) WITH CHECK (public.mag_bewerken('recipes'::text));
+CREATE POLICY recipe_processtappen_update ON public.recipe_processtappen FOR UPDATE USING (public.can_edit('recipes'::text)) WITH CHECK (public.can_edit('recipes'::text));
 
 
 --
@@ -3089,28 +2932,28 @@ ALTER TABLE public.recipe_revisies ENABLE ROW LEVEL SECURITY;
 -- Name: recipe_revisies recipe_revisies_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_revisies_delete ON public.recipe_revisies FOR DELETE USING (public.mag_verwijderen('recipes'::text));
+CREATE POLICY recipe_revisies_delete ON public.recipe_revisies FOR DELETE USING (public.can_delete('recipes'::text));
 
 
 --
 -- Name: recipe_revisies recipe_revisies_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_revisies_insert ON public.recipe_revisies FOR INSERT WITH CHECK (public.mag_bewerken('recipes'::text));
+CREATE POLICY recipe_revisies_insert ON public.recipe_revisies FOR INSERT WITH CHECK (public.can_edit('recipes'::text));
 
 
 --
 -- Name: recipe_revisies recipe_revisies_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_revisies_select ON public.recipe_revisies FOR SELECT USING (public.mag_bekijken('recipes'::text));
+CREATE POLICY recipe_revisies_select ON public.recipe_revisies FOR SELECT USING (public.can_view('recipes'::text));
 
 
 --
 -- Name: recipe_revisies recipe_revisies_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_revisies_update ON public.recipe_revisies FOR UPDATE USING (public.mag_bewerken('recipes'::text)) WITH CHECK (public.mag_bewerken('recipes'::text));
+CREATE POLICY recipe_revisies_update ON public.recipe_revisies FOR UPDATE USING (public.can_edit('recipes'::text)) WITH CHECK (public.can_edit('recipes'::text));
 
 
 --
@@ -3123,28 +2966,28 @@ ALTER TABLE public.recipe_specificaties ENABLE ROW LEVEL SECURITY;
 -- Name: recipe_specificaties recipe_specificaties_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_specificaties_delete ON public.recipe_specificaties FOR DELETE USING (public.mag_verwijderen('recipes'::text));
+CREATE POLICY recipe_specificaties_delete ON public.recipe_specificaties FOR DELETE USING (public.can_delete('recipes'::text));
 
 
 --
 -- Name: recipe_specificaties recipe_specificaties_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_specificaties_insert ON public.recipe_specificaties FOR INSERT WITH CHECK (public.mag_bewerken('recipes'::text));
+CREATE POLICY recipe_specificaties_insert ON public.recipe_specificaties FOR INSERT WITH CHECK (public.can_edit('recipes'::text));
 
 
 --
 -- Name: recipe_specificaties recipe_specificaties_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_specificaties_select ON public.recipe_specificaties FOR SELECT USING (public.mag_bekijken('recipes'::text));
+CREATE POLICY recipe_specificaties_select ON public.recipe_specificaties FOR SELECT USING (public.can_view('recipes'::text));
 
 
 --
 -- Name: recipe_specificaties recipe_specificaties_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_specificaties_update ON public.recipe_specificaties FOR UPDATE USING (public.mag_bewerken('recipes'::text)) WITH CHECK (public.mag_bewerken('recipes'::text));
+CREATE POLICY recipe_specificaties_update ON public.recipe_specificaties FOR UPDATE USING (public.can_edit('recipes'::text)) WITH CHECK (public.can_edit('recipes'::text));
 
 
 --
@@ -3157,28 +3000,28 @@ ALTER TABLE public.recipe_verpakking ENABLE ROW LEVEL SECURITY;
 -- Name: recipe_verpakking recipe_verpakking_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_verpakking_delete ON public.recipe_verpakking FOR DELETE USING (public.mag_verwijderen('recipes'::text));
+CREATE POLICY recipe_verpakking_delete ON public.recipe_verpakking FOR DELETE USING (public.can_delete('recipes'::text));
 
 
 --
 -- Name: recipe_verpakking recipe_verpakking_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_verpakking_insert ON public.recipe_verpakking FOR INSERT WITH CHECK (public.mag_bewerken('recipes'::text));
+CREATE POLICY recipe_verpakking_insert ON public.recipe_verpakking FOR INSERT WITH CHECK (public.can_edit('recipes'::text));
 
 
 --
 -- Name: recipe_verpakking recipe_verpakking_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_verpakking_select ON public.recipe_verpakking FOR SELECT USING (public.mag_bekijken('recipes'::text));
+CREATE POLICY recipe_verpakking_select ON public.recipe_verpakking FOR SELECT USING (public.can_view('recipes'::text));
 
 
 --
 -- Name: recipe_verpakking recipe_verpakking_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_verpakking_update ON public.recipe_verpakking FOR UPDATE USING (public.mag_bewerken('recipes'::text)) WITH CHECK (public.mag_bewerken('recipes'::text));
+CREATE POLICY recipe_verpakking_update ON public.recipe_verpakking FOR UPDATE USING (public.can_edit('recipes'::text)) WITH CHECK (public.can_edit('recipes'::text));
 
 
 --
@@ -3191,28 +3034,28 @@ ALTER TABLE public.recipe_water ENABLE ROW LEVEL SECURITY;
 -- Name: recipe_water recipe_water_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_water_delete ON public.recipe_water FOR DELETE USING (public.mag_verwijderen('recipes'::text));
+CREATE POLICY recipe_water_delete ON public.recipe_water FOR DELETE USING (public.can_delete('recipes'::text));
 
 
 --
 -- Name: recipe_water recipe_water_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_water_insert ON public.recipe_water FOR INSERT WITH CHECK (public.mag_bewerken('recipes'::text));
+CREATE POLICY recipe_water_insert ON public.recipe_water FOR INSERT WITH CHECK (public.can_edit('recipes'::text));
 
 
 --
 -- Name: recipe_water recipe_water_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_water_select ON public.recipe_water FOR SELECT USING (public.mag_bekijken('recipes'::text));
+CREATE POLICY recipe_water_select ON public.recipe_water FOR SELECT USING (public.can_view('recipes'::text));
 
 
 --
 -- Name: recipe_water recipe_water_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_water_update ON public.recipe_water FOR UPDATE USING (public.mag_bewerken('recipes'::text)) WITH CHECK (public.mag_bewerken('recipes'::text));
+CREATE POLICY recipe_water_update ON public.recipe_water FOR UPDATE USING (public.can_edit('recipes'::text)) WITH CHECK (public.can_edit('recipes'::text));
 
 
 --
@@ -3225,28 +3068,28 @@ ALTER TABLE public.recipes ENABLE ROW LEVEL SECURITY;
 -- Name: recipes recipes_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipes_delete ON public.recipes FOR DELETE USING (public.mag_verwijderen('recipes'::text));
+CREATE POLICY recipes_delete ON public.recipes FOR DELETE USING (public.can_delete('recipes'::text));
 
 
 --
 -- Name: recipes recipes_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipes_insert ON public.recipes FOR INSERT WITH CHECK (public.mag_bewerken('recipes'::text));
+CREATE POLICY recipes_insert ON public.recipes FOR INSERT WITH CHECK (public.can_edit('recipes'::text));
 
 
 --
 -- Name: recipes recipes_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipes_select ON public.recipes FOR SELECT USING (public.mag_bekijken('recipes'::text));
+CREATE POLICY recipes_select ON public.recipes FOR SELECT USING (public.can_view('recipes'::text));
 
 
 --
 -- Name: recipes recipes_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipes_update ON public.recipes FOR UPDATE USING (public.mag_bewerken('recipes'::text)) WITH CHECK (public.mag_bewerken('recipes'::text));
+CREATE POLICY recipes_update ON public.recipes FOR UPDATE USING (public.can_edit('recipes'::text)) WITH CHECK (public.can_edit('recipes'::text));
 
 
 --
@@ -3256,10 +3099,10 @@ CREATE POLICY recipes_update ON public.recipes FOR UPDATE USING (public.mag_bewe
 ALTER TABLE public.role_permissions ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: role_permissions role_permissions_select_authenticated; Type: POLICY; Schema: public; Owner: -
+-- Name: role_permissions role_permissions_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY role_permissions_select_authenticated ON public.role_permissions FOR SELECT USING (true);
+CREATE POLICY role_permissions_select ON public.role_permissions FOR SELECT USING (true);
 
 
 --
@@ -3276,10 +3119,10 @@ CREATE POLICY role_permissions_write_admin ON public.role_permissions USING (pub
 ALTER TABLE public.roles ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: roles roles_select_authenticated; Type: POLICY; Schema: public; Owner: -
+-- Name: roles roles_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY roles_select_authenticated ON public.roles FOR SELECT USING (true);
+CREATE POLICY roles_select ON public.roles FOR SELECT USING (true);
 
 
 --
@@ -3290,10 +3133,57 @@ CREATE POLICY roles_write_admin ON public.roles USING (public.is_admin()) WITH C
 
 
 --
--- Name: gebruikers select_authenticated; Type: POLICY; Schema: public; Owner: -
+-- Name: units; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
-CREATE POLICY select_authenticated ON public.gebruikers FOR SELECT USING ((auth.role() = 'authenticated'::text));
+ALTER TABLE public.units ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: units units_delete; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY units_delete ON public.units FOR DELETE USING (public.can_delete('settings'::text));
+
+
+--
+-- Name: units units_insert; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY units_insert ON public.units FOR INSERT WITH CHECK (public.can_edit('settings'::text));
+
+
+--
+-- Name: units units_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY units_select ON public.units FOR SELECT USING (true);
+
+
+--
+-- Name: units units_update; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY units_update ON public.units FOR UPDATE USING (public.can_edit('settings'::text)) WITH CHECK (public.can_edit('settings'::text));
+
+
+--
+-- Name: users; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: users users_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY users_select ON public.users FOR SELECT TO authenticated USING (true);
+
+
+--
+-- Name: users users_write_admin; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY users_write_admin ON public.users TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin());
 
 
 --
@@ -3306,28 +3196,28 @@ ALTER TABLE public.voorraad_mutaties ENABLE ROW LEVEL SECURITY;
 -- Name: voorraad_mutaties voorraad_mutaties_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY voorraad_mutaties_delete ON public.voorraad_mutaties FOR DELETE USING (public.mag_verwijderen('inventory'::text));
+CREATE POLICY voorraad_mutaties_delete ON public.voorraad_mutaties FOR DELETE USING (public.can_delete('inventory'::text));
 
 
 --
 -- Name: voorraad_mutaties voorraad_mutaties_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY voorraad_mutaties_insert ON public.voorraad_mutaties FOR INSERT WITH CHECK (public.mag_bewerken('inventory'::text));
+CREATE POLICY voorraad_mutaties_insert ON public.voorraad_mutaties FOR INSERT WITH CHECK (public.can_edit('inventory'::text));
 
 
 --
 -- Name: voorraad_mutaties voorraad_mutaties_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY voorraad_mutaties_select ON public.voorraad_mutaties FOR SELECT USING (public.mag_bekijken('inventory'::text));
+CREATE POLICY voorraad_mutaties_select ON public.voorraad_mutaties FOR SELECT USING (public.can_view('inventory'::text));
 
 
 --
 -- Name: voorraad_mutaties voorraad_mutaties_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY voorraad_mutaties_update ON public.voorraad_mutaties FOR UPDATE USING (public.mag_bewerken('inventory'::text)) WITH CHECK (public.mag_bewerken('inventory'::text));
+CREATE POLICY voorraad_mutaties_update ON public.voorraad_mutaties FOR UPDATE USING (public.can_edit('inventory'::text)) WITH CHECK (public.can_edit('inventory'::text));
 
 
 --
@@ -3360,7 +3250,7 @@ CREATE POLICY water_instellingen_select ON public.water_instellingen FOR SELECT 
 -- Name: water_instellingen water_instellingen_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY water_instellingen_update ON public.water_instellingen FOR UPDATE USING (public.mag_bewerken('settings'::text)) WITH CHECK (public.mag_bewerken('settings'::text));
+CREATE POLICY water_instellingen_update ON public.water_instellingen FOR UPDATE USING (public.can_edit('settings'::text)) WITH CHECK (public.can_edit('settings'::text));
 
 
 --
@@ -3374,25 +3264,40 @@ GRANT USAGE ON SCHEMA public TO service_role;
 
 
 --
--- Name: FUNCTION admin_haal_laatste_logins(); Type: ACL; Schema: public; Owner: -
+-- Name: FUNCTION admin_get_last_logins(); Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON FUNCTION public.admin_haal_laatste_logins() TO service_role;
-GRANT ALL ON FUNCTION public.admin_haal_laatste_logins() TO authenticated;
-
-
---
--- Name: FUNCTION gebruikers_sync_rol_role_id(); Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON FUNCTION public.gebruikers_sync_rol_role_id() TO service_role;
+REVOKE ALL ON FUNCTION public.admin_get_last_logins() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.admin_get_last_logins() TO service_role;
+GRANT ALL ON FUNCTION public.admin_get_last_logins() TO authenticated;
 
 
 --
--- Name: FUNCTION huidige_role_id(); Type: ACL; Schema: public; Owner: -
+-- Name: FUNCTION can_delete(p_module_key text); Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON FUNCTION public.huidige_role_id() TO service_role;
+GRANT ALL ON FUNCTION public.can_delete(p_module_key text) TO service_role;
+
+
+--
+-- Name: FUNCTION can_edit(p_module_key text); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION public.can_edit(p_module_key text) TO service_role;
+
+
+--
+-- Name: FUNCTION can_view(p_module_key text); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION public.can_view(p_module_key text) TO service_role;
+
+
+--
+-- Name: FUNCTION current_role_id(); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION public.current_role_id() TO service_role;
 
 
 --
@@ -3403,45 +3308,10 @@ GRANT ALL ON FUNCTION public.is_admin() TO service_role;
 
 
 --
--- Name: FUNCTION is_editor_of_hoger(); Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON FUNCTION public.is_editor_of_hoger() TO service_role;
-
-
---
 -- Name: FUNCTION log_brew_planning_wijziging(); Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON FUNCTION public.log_brew_planning_wijziging() TO service_role;
-
-
---
--- Name: FUNCTION mag_bekijken(p_module_key text); Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON FUNCTION public.mag_bekijken(p_module_key text) TO service_role;
-
-
---
--- Name: FUNCTION mag_bekijken_vergrendeld(p_module_key text); Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON FUNCTION public.mag_bekijken_vergrendeld(p_module_key text) TO service_role;
-
-
---
--- Name: FUNCTION mag_bewerken(p_module_key text); Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON FUNCTION public.mag_bewerken(p_module_key text) TO service_role;
-
-
---
--- Name: FUNCTION mag_verwijderen(p_module_key text); Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON FUNCTION public.mag_verwijderen(p_module_key text) TO service_role;
 
 
 --
@@ -3466,13 +3336,6 @@ GRANT ALL ON FUNCTION public.product_sheet_relevant_recipe_id(p_recipe_group_id 
 
 
 --
--- Name: FUNCTION roles_sync_naam_naar_gebruikers(); Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON FUNCTION public.roles_sync_naam_naar_gebruikers() TO service_role;
-
-
---
 -- Name: FUNCTION set_gewijzigd_op(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -3487,6 +3350,14 @@ GRANT ALL ON FUNCTION public.set_ingredients_gewijzigd_op() TO service_role;
 
 
 --
+-- Name: FUNCTION set_last_login(); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION public.set_last_login() TO service_role;
+GRANT ALL ON FUNCTION public.set_last_login() TO authenticated;
+
+
+--
 -- Name: FUNCTION water_instellingen_log(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -3498,14 +3369,6 @@ GRANT ALL ON FUNCTION public.water_instellingen_log() TO service_role;
 --
 
 GRANT ALL ON FUNCTION public.water_instellingen_stempel() TO service_role;
-
-
---
--- Name: FUNCTION zet_laatst_ingelogd(); Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON FUNCTION public.zet_laatst_ingelogd() TO service_role;
-GRANT ALL ON FUNCTION public.zet_laatst_ingelogd() TO authenticated;
 
 
 --
@@ -3554,12 +3417,12 @@ GRANT ALL ON TABLE public.brew_planning_geschiedenis TO service_role;
 
 
 --
--- Name: TABLE gebruikers; Type: ACL; Schema: public; Owner: -
+-- Name: TABLE users; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.gebruikers TO anon;
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.gebruikers TO authenticated;
-GRANT ALL ON TABLE public.gebruikers TO service_role;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.users TO anon;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.users TO authenticated;
+GRANT ALL ON TABLE public.users TO service_role;
 
 
 --
@@ -3590,21 +3453,12 @@ GRANT ALL ON TABLE public.brew_planning_wijzigingen TO service_role;
 
 
 --
--- Name: TABLE document_typen; Type: ACL; Schema: public; Owner: -
+-- Name: TABLE document_types; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.document_typen TO anon;
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.document_typen TO authenticated;
-GRANT ALL ON TABLE public.document_typen TO service_role;
-
-
---
--- Name: TABLE eenheden; Type: ACL; Schema: public; Owner: -
---
-
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.eenheden TO anon;
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.eenheden TO authenticated;
-GRANT ALL ON TABLE public.eenheden TO service_role;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.document_types TO anon;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.document_types TO authenticated;
+GRANT ALL ON TABLE public.document_types TO service_role;
 
 
 --
@@ -3929,6 +3783,15 @@ GRANT ALL ON TABLE public.roles TO service_role;
 GRANT SELECT,USAGE ON SEQUENCE public.roles_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.roles_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.roles_id_seq TO service_role;
+
+
+--
+-- Name: TABLE units; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.units TO anon;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.units TO authenticated;
+GRANT ALL ON TABLE public.units TO service_role;
 
 
 --
