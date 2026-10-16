@@ -47,15 +47,19 @@ jobs:
           rm -rf /tmp/d
       - name: Before
         run: |
-          "$PG_BIN/psql" "$TEST_DB" -v ON_ERROR_STOP=1 -f .github/dryrun/before.sql
+          "$PG_BIN/psql" "$TEST_DB" -v ON_ERROR_STOP=1 -f .github/dryrun/before.sql | tee out.txt
+          bash .github/dryrun/notice.sh Before out.txt
       - name: Apply step 8 (one transaction)
         run: |
           "$PG_BIN/psql" "$TEST_DB" -v ON_ERROR_STOP=1 -1 -q -f supabase/migrations/20261016190000_recipe_english_names.sql
       - name: After
         run: |
-          "$PG_BIN/psql" "$TEST_DB" -v ON_ERROR_STOP=1 -f .github/dryrun/checks.sql
+          "$PG_BIN/psql" "$TEST_DB" -v ON_ERROR_STOP=1 -f .github/dryrun/checks.sql | tee out.txt
+          bash .github/dryrun/notice.sh After out.txt
       - name: Column list (for the static query check)
         run: |
           "$PG_BIN/psql" "$TEST_DB" -tA -c "select table_name||'.'||column_name from information_schema.columns where table_schema='public' order by 1" > columns.txt
-          wc -l columns.txt
-          python3 tools/check_query_columns.py columns.txt recipes,recipe_brewing_specs,recipe_comments,recipe_fermentation,recipe_ingredients,recipe_costs,recipe_process_steps,recipe_revisions,recipe_specs,recipe_packaging,recipe_water,product_sheets,product_sheet_revisions,product_sheet_status,hop_utilization_curve,water_settings,water_settings_history,ingredients,users *.html *.js batchrapport-generator/*.js || true
+          python3 -c "import json;d={};[d.setdefault(t,[]).append(c) for t,c in (l.strip().split('.',1) for l in open('columns.txt') if l.strip())];print(json.dumps(d,separators=(',',':')))" > columns.json
+          bash .github/dryrun/notice.sh Columns columns.json
+          python3 tools/check_query_columns.py columns.txt recipes,recipe_brewing_specs,recipe_comments,recipe_fermentation,recipe_ingredients,recipe_costs,recipe_process_steps,recipe_revisions,recipe_specs,recipe_packaging,recipe_water,product_sheets,product_sheet_revisions,product_sheet_status,hop_utilization_curve,water_settings,water_settings_history,ingredients,users *.html *.js batchrapport-generator/*.js > check.txt 2>&1 || true
+          bash .github/dryrun/notice.sh ColumnCheck check.txt
