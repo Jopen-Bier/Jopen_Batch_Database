@@ -1,0 +1,75 @@
+name: Schema snapshot
+
+# Zet de actuele STRUCTUUR van de database (geen data) in deze repo, in
+# supabase/schema.sql: tabellen, kolommen, constraints, indexen, functies,
+# triggers, views, RLS-policies en grants van al onze eigen schema's
+# (zie .github/backup/eigen_schemas.sql).
+#
+# Waarom:
+#   - De database is zo altijd terug te lezen en te herbouwen vanuit de repo,
+#     ook de delen die ooit buiten een migratie om zijn aangemaakt.
+#   - Verandert de structuur, dan verschijnt er een commit "Schema gewijzigd".
+#     Hoort daar geen migratie in supabase/migrations/ bij, dan is er iets
+#     buiten de migraties om aangepast (drift) en moet dat worden rechtgezet.
+#
+# Draait elke nacht na de backup, en handmatig via de Actions-tab.
+# Gebruikt het secret SUPABASE_DB_URL (hetzelfde als de backup).
+
+on:
+  schedule:
+    - cron: '30 3 * * *'   # na de backup van 03:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write          # om supabase/schema.sql te kunnen committen
+
+env:
+  PG_BIN: /usr/lib/postgresql/17/bin
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install postgresql-client 17
+        run: |
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
+
+      - name: Dump structuur
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          EIGEN=$("$PG_BIN/psql" "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -tA -f .github/backup/eigen_schemas.sql)
+          [ -n "$EIGEN" ] || { echo "::error::Kon de eigen schema's niet bepalen."; exit 1; }
+          echo "Eigen schema's: ${EIGEN}"
+          SCHEMA_ARGS=()
+          IFS=',' read -ra SCHEMAS <<< "$EIGEN"
+          for s in "${SCHEMAS[@]}"; do SCHEMA_ARGS+=(--schema="$s"); done
+          # --no-owner: eigenaar verschilt per omgeving. Grants blijven er WEL
+          # in, want die zijn nodig om de app te laten werken.
+          "$PG_BIN/pg_dump" "$SUPABASE_DB_URL" "${SCHEMA_ARGS[@]}" \
+            --schema-only --no-owner -f ruw.sql
+          # Regels die per run veranderen zonder dat het schema verandert
+          # (versie-commentaar en de willekeurige \restrict-sleutel van
+          # nieuwere pg_dump-versies) eruit, zodat er alleen een commit komt
+          # bij een echte wijziging.
+          mkdir -p supabase
+          grep -vE '^\\(un)?restrict |^-- Dumped (from|by) ' ruw.sql > supabase/schema.sql
+          wc -l supabase/schema.sql
+
+      - name: Commit bij wijziging
+        run: |
+          git add supabase/schema.sql
+          if git diff --cached --quiet; then
+            echo "Schema ongewijzigd."
+            exit 0
+          fi
+          git config user.name "jopen-schema-bot"
+          git config user.email "schema-bot@users.noreply.github.com"
+          git commit -q -m "Schema gewijzigd ($(date -u +%Y-%m-%d))"
+          git push -q
+          echo "::notice::Het databaseschema is gewijzigd en vastgelegd in supabase/schema.sql. Controleer of er een migratie bij hoort."
