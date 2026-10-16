@@ -59,6 +59,7 @@
 <body>
 <div id="jopen-nav"></div>
 <script src="config.js"></script>
+<script src="jopen-utils.js"></script>
 <script src="nav.js"></script>
 <script src="productsheet-xlsx-writer.js"></script>
 <script src="productsheet-shared.js"></script>
@@ -295,11 +296,6 @@ function renderSheet(live, status, p, revisies) {
   });
 }
 
-function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str ?? '';
-  return div.innerHTML;
-}
 </script>
 </body>
 </html>

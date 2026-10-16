@@ -220,14 +220,10 @@
 </div>
 
 <script src="config.js"></script>
+<script src="jopen-utils.js"></script>
 <script src="nav.js"></script>
 <script src="voorraad-forecast.js"></script>
 <script>
-  function escapeHtml(str) {
-    const div = document.createElement('div');
-    div.textContent = str ?? '';
-    return div.innerHTML;
-  }
   function vfmt(n) {
     if (n === null || n === undefined || Number.isNaN(n)) return '—';
     return Number(n).toFixed(3).replace(/\.?0+$/, '');
@@ -360,16 +356,6 @@
       optionsContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
       werkMarkBij(); pasFiltersToe();
     };
-  }
-  function toggleDropdownPanel(prefix) {
-    const panel = document.getElementById(`dd-${prefix}-panel`);
-    const wasOpen = panel.style.display !== 'none';
-    document.querySelectorAll('.dd-filter-panel').forEach(p => p.style.display = 'none');
-    document.querySelectorAll('.dd-filter-btn').forEach(b => b.classList.remove('actief-menu'));
-    if (!wasOpen) {
-      panel.style.display = 'block';
-      document.getElementById(`dd-${prefix}-btn`).classList.add('actief-menu');
-    }
   }
   document.getElementById('dd-vo-categorie-btn').addEventListener('click', (e) => { e.stopPropagation(); toggleDropdownPanel('vo-categorie'); });
   document.querySelectorAll('.dd-filter-panel').forEach(p => p.addEventListener('click', e => e.stopPropagation()));

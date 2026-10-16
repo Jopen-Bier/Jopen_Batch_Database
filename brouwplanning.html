@@ -474,6 +474,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <script src="config.js"></script>
+  <script src="jopen-utils.js"></script>
   <script src="nav.js"></script>
   <script>
     // ------------------------------------------------------------------
@@ -493,12 +494,6 @@
     // Modal-context
     let modalContext = { mode: 'add', item: null, group: 'jk' };
     let gekozenWeken = new Set();
-
-    function escapeHtml(str) {
-      const div = document.createElement('div');
-      div.textContent = str ?? '';
-      return div.innerHTML;
-    }
 
     // ------------------------------------------------------------------
     // ISO-weekhulpfuncties
@@ -1119,7 +1114,7 @@
       if (resultaatRegel) {
         const rij = resultaatRegel.closest('.bp-bier-rij');
         rij.dataset.recipeId = resultaatRegel.dataset.id;
-        rij.querySelector('.bp-bier-zoek').value = escapeHtml(receptNaam(resultaatRegel.dataset.id));
+        rij.querySelector('.bp-bier-zoek').value = receptNaam(resultaatRegel.dataset.id);
         rij.querySelector('.bp-bier-resultaten').style.display = 'none';
         werkBierRijHlBij(rij);
         return;
@@ -1204,7 +1199,7 @@
       if (resultaatRegel) {
         const rij = resultaatRegel.closest('.bp-split-rij');
         rij.dataset.recipeId = resultaatRegel.dataset.id;
-        rij.querySelector('.bp-split-zoek').value = escapeHtml(receptNaam(resultaatRegel.dataset.id));
+        rij.querySelector('.bp-split-zoek').value = receptNaam(resultaatRegel.dataset.id);
         rij.querySelector('.bp-bier-resultaten').style.display = 'none';
         // Automatisch een nieuwe lege rij toevoegen als dit de laatste rij was.
         if (rij === splitContainer.lastElementChild) {
@@ -1342,7 +1337,7 @@
         // recipe_id + recipe_group_id terug.
         const receptNu = receptVoorItem(item);
         rij.dataset.recipeId = receptNu ? receptNu.id : (item.recipe_id ?? '');
-        rij.querySelector('.bp-bier-zoek').value = escapeHtml(receptNu ? receptNu.naam : '(unknown recipe)');
+        rij.querySelector('.bp-bier-zoek').value = receptNu ? receptNu.naam : '(unknown recipe)';
         rij.querySelector('.bp-bier-brouwsels').value = item.aantal_brouwsels;
         werkBierRijHlBij(rij);
         rij.querySelector('.bp-bier-hl-vrij').value = item.hl ?? '';
@@ -1523,30 +1518,12 @@
     let totaalGrafiekModus = 'week';
     let totaalHuidigJaar = null;
 
-    // Zelfde paginerings-patroon als ingredienten.html/receptoverzicht.html/
-    // verbruiksprognose.html -- brew_planning blijft voor nu ruim onder de
-    // 1000-rijen-standaardlimiet per jaar, maar dit voorkomt dat dezelfde
-    // stille-afkap-bug hier ooit terugkeert naarmate er meer jaren bijkomen.
-    async function haalAlleRijenOp(query) {
-      const PAGINA = 1000;
-      let vanaf = 0;
-      let alles = [];
-      while (true) {
-        const { data, error } = await query.range(vanaf, vanaf + PAGINA - 1);
-        if (error) return { data: null, error };
-        alles = alles.concat(data || []);
-        if (!data || data.length < PAGINA) break;
-        vanaf += PAGINA;
-      }
-      return { data: alles, error: null };
-    }
-
     async function laadTotaalPlanning(jaar) {
       const weken = isoWeeksInYear(jaar);
       const maandVanWeek = [];
       for (let w = 1; w <= weken; w++) maandVanWeek[w] = mondayOfIsoWeek(jaar, w).getUTCMonth();
 
-      const { data, error } = await haalAlleRijenOp(
+      const { data, error } = await fetchAllRows(
         supabaseClient.from('brew_planning').select('id, recipe_id, recipe_group_id, week_number, aantal_brouwsels, hl').eq('iso_year', jaar)
       );
       if (error) { console.error('Kon planning voor Total planned niet laden:', error); return {}; }

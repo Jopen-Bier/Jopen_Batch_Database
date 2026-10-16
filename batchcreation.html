@@ -195,18 +195,13 @@
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script src="config.js"></script>
   <script>document.write('<script src="batchrapport-vullen.js?t=' + Date.now() + '"><\/script>');</script>
+  <script src="jopen-utils.js"></script>
   <script src="nav.js"></script>
   <script>
     let alleRecepten = [];
     let geselecteerdRecipeId = null;
     let magAanmaken = false;
     let magVerwijderen = false;
-
-    function escapeHtml(str) {
-      const div = document.createElement('div');
-      div.textContent = str ?? '';
-      return div.innerHTML;
-    }
 
     async function magBewerken(gebruiker) {
       return !!gebruiker && await magBewerkenModule('batches');

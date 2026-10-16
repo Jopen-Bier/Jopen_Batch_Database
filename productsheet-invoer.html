@@ -36,6 +36,7 @@
 <body>
 <div id="jopen-nav"></div>
 <script src="config.js"></script>
+<script src="jopen-utils.js"></script>
 <script src="nav.js"></script>
 <main>
   <a class="back-link" id="terug-link" href="receptoverzicht.html">&larr; Back</a>
@@ -164,11 +165,6 @@ async function opslaan() {
   window.location.href = `productsheet.html?recipe_group_id=${recipeGroupId}`;
 }
 
-function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str ?? '';
-  return div.innerHTML;
-}
 </script>
 </body>
 </html>

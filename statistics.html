@@ -166,6 +166,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script src="config.js"></script>
+<script src="jopen-utils.js"></script>
 <script src="nav.js"></script>
 <script>
 // ============================================================================
@@ -245,31 +246,8 @@ function allergenenTekst(allergenen) {
   return allergenen.map(k => EU_ALLERGENEN[k] || k).join(', ');
 }
 
-function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str ?? '';
-  return div.innerHTML;
-}
-function formatDatum(d) {
-  if (!d) return '—';
-  return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-}
 function statusLabel(status) {
   return (ST_ING_STATUSSEN.find(s => s.key === status) || {}).label || status || '—';
-}
-
-async function haalAlleRijenOp(query) {
-  const PAGINA = 1000;
-  let vanaf = 0;
-  let alles = [];
-  while (true) {
-    const { data, error } = await query.range(vanaf, vanaf + PAGINA - 1);
-    if (error) return { data: null, error };
-    alles = alles.concat(data || []);
-    if (!data || data.length < PAGINA) break;
-    vanaf += PAGINA;
-  }
-  return { data: alles, error: null };
 }
 
 // ---------------------------------------------------------------------------
@@ -281,13 +259,13 @@ async function laadData() {
   const psTypeId = (typen || []).find(t => t.code === 'product_sheet')?.id;
 
   const [ingRes, docRes] = await Promise.all([
-    haalAlleRijenOp(supabaseClient
+    fetchAllRows(supabaseClient
       .from('ingredients')
       .select('id, naam, categorie, leverancier, status, allergenen, ingredient_categories(name)')
       .eq('versie_status', 'huidig')
       .order('naam')),
     psTypeId
-      ? haalAlleRijenOp(supabaseClient
+      ? fetchAllRows(supabaseClient
           .from('ingredient_documenten')
           .select('ingredient_id, revisiedatum')
           .eq('document_type_id', psTypeId)
@@ -371,8 +349,8 @@ const ST_CONFIG = {
       `<a href="ingredienten.html?id=${i.id}" target="_blank" rel="noopener">${escapeHtml(i.naam)}</a>`,
       escapeHtml(i.categorieNaam || '—'),
       escapeHtml(i.leverancier || '—'),
-      formatDatum(i.psRevisiedatum),
-      formatDatum(i.psVervaldatum),
+      formatDate(i.psRevisiedatum),
+      formatDate(i.psVervaldatum),
       segmentPil('productsheets', i.psStatus),
     ],
     lijstTitel: 'product sheet',
@@ -491,7 +469,7 @@ async function exporteer(grafiek) {
 
   ws.getCell('A1').value = `QA overview — ${titel}`;
   ws.getCell('A1').font = { bold: true, size: 14 };
-  ws.getCell('A2').value = `Exported ${formatDatum(vandaag)} · Ingredient status: ${statusScope || '—'}`;
+  ws.getCell('A2').value = `Exported ${formatDate(vandaag)} · Ingredient status: ${statusScope || '—'}`;
   ws.getCell('A2').font = { italic: true, color: { argb: 'FF6B6355' } };
 
   // Samenvatting

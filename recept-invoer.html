@@ -731,6 +731,7 @@
 </div>
 
 <script src="config.js"></script>
+<script src="jopen-utils.js"></script>
 <script src="nav.js"></script>
 <script src="waterzouten.js"></script>
 <script>
@@ -2992,12 +2993,6 @@ async function schrijfGerelateerdeData(recipeId) {
   }
 
   return null;
-}
-
-function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
 }
 
 // ============================================================================

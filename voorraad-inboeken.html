@@ -148,17 +148,13 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
+  <script src="jopen-utils.js"></script>
   <script src="nav.js"></script>
   <script>
     let alleIngredienten = [];       // {id, naam, eenheid, leveranciers, usesAlphaPct}
     let magBewerken = false;
     let geselecteerdIngredientOntv = null;
 
-    function escapeHtml(str) {
-      const div = document.createElement('div');
-      div.textContent = str ?? '';
-      return div.innerHTML;
-    }
     function vandaag() { return new Date().toISOString().slice(0, 10); }
 
     const VR_FYSIEKE_EENHEDEN = ['g', 'kg', 'ml', 'l', 'stuks'];

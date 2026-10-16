@@ -63,6 +63,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
+  <script src="jopen-utils.js"></script>
   <script src="nav.js"></script>
   <script>
     // module_keys die nooit instelbaar zijn -- altijd hardcoded admin-only,
@@ -89,7 +90,7 @@
       const rechtenMap = {}; // `${role_id}|${module_key}` -> rij
       (rechten || []).forEach(r => { rechtenMap[`${r.role_id}|${r.module_key}`] = r; });
 
-      const headerHtml = modules.map(m => `<th>${escapeHtmlNav(m.naam)}</th>`).join('');
+      const headerHtml = modules.map(m => `<th>${escapeHtml(m.naam)}</th>`).join('');
 
       const rijenHtml = roles.map(rol => {
         const isAdminRol = rol.naam === 'admin';
@@ -110,9 +111,9 @@
         }).join('');
 
         const rolNaamCel = isAdminRol
-          ? `<td class="rl-rolnaam">${escapeHtmlNav(rolLabel(rol.naam))} <span class="rl-slot">(locked)</span></td>`
+          ? `<td class="rl-rolnaam">${escapeHtml(rolLabel(rol.naam))} <span class="rl-slot">(locked)</span></td>`
           : `<td class="rl-rolnaam">
-               <input type="text" class="rl-rolnaam-input" data-role-id="${rol.id}" value="${escapeHtmlNav(rol.naam)}" />
+               <input type="text" class="rl-rolnaam-input" data-role-id="${rol.id}" value="${escapeHtml(rol.naam)}" />
                <span class="rl-melding-inline"></span>
              </td>`;
         return `<tr class="${isAdminRol ? 'rl-admin-rij' : ''}">${rolNaamCel}${cellenHtml}</tr>`;

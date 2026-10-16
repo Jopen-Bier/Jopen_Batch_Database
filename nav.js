@@ -178,7 +178,7 @@ async function renderNav(huidigeGebruiker) {
   const rechterkant = huidigeGebruiker
     ? `<div class="jopen-nav-gebruiker-wrap">
          <button id="jopen-gebruiker-btn" class="jopen-nav-gebruiker-btn">
-           ${escapeHtmlNav(huidigeGebruiker.naam)} <span class="jopen-nav-rol">(${escapeHtmlNav(rolLabel(huidigeGebruiker.rol))})</span>
+           ${escapeHtml(huidigeGebruiker.naam)} <span class="jopen-nav-rol">(${escapeHtml(rolLabel(huidigeGebruiker.rol))})</span>
            <span class="jopen-nav-caret">&#9662;</span>
          </button>
          <div id="jopen-gebruiker-menu" class="jopen-nav-dropdown" style="display:none;">
@@ -239,12 +239,6 @@ async function renderNav(huidigeGebruiker) {
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') sluitAlleMenus();
   });
-}
-
-function escapeHtmlNav(str) {
-  const div = document.createElement('div');
-  div.textContent = str ?? '';
-  return div.innerHTML;
 }
 
 async function initJopenNav() {

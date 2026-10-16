@@ -506,6 +506,7 @@
 
 
 <script src="config.js"></script>
+<script src="jopen-utils.js"></script>
 <script src="nav.js"></script>
 <script>
 let alleIngredienten = [];
@@ -686,11 +687,6 @@ function statusLabel(status) {
   return labels[status] || status || 'Unknown';
 }
 
-function formatDatum(iso) {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-}
-
 // -- Product sheet-stoplicht: geldig tot revisiedatum + 3 jaar. --
 function productSheetTypeId() {
   return alleDocumenttypen.find(t => t.code === 'product_sheet')?.id;
@@ -821,20 +817,6 @@ async function initIngredientenPagina() {
 
 document.getElementById('ing-nieuw-btn').addEventListener('click', toonNieuwFormulier);
 
-async function haalAlleRijenOp(query) {
-  const PAGINA = 1000;
-  let vanaf = 0;
-  let alles = [];
-  while (true) {
-    const { data, error } = await query.range(vanaf, vanaf + PAGINA - 1);
-    if (error) return { data: null, error };
-    alles = alles.concat(data || []);
-    if (!data || data.length < PAGINA) break;
-    vanaf += PAGINA;
-  }
-  return { data: alles, error: null };
-}
-
 async function laadIngredienten() {
   const container = document.getElementById('ing-list-container');
   const psTypeId = productSheetTypeId();
@@ -849,7 +831,7 @@ async function laadIngredienten() {
     // dat laatste kostte alleen al een stuk of 9 gepagineerde requests en was
     // de belangrijkste reden dat deze pagina bijna 10s duurde om te laden.
     supabaseClient.from('ingredient_gebruik_counts').select('ingredient_id, aantal_recepten'),
-    haalAlleRijenOp(supabaseClient.from('ingredient_revisies').select('ingredient_id, datum')),
+    fetchAllRows(supabaseClient.from('ingredient_revisies').select('ingredient_id, datum')),
     // Alleen actieve product sheets nodig voor het stoplicht -- lichte
     // aparte query i.p.v. alle documenten van alle ingrediënten op te halen.
     psTypeId
@@ -982,16 +964,6 @@ function renderFilterToggles() {
 }
 
 // -- Dropdown open/dicht, buiten-klik sluit alles, één tegelijk open --
-function toggleDropdownPanel(prefix) {
-  const panel = document.getElementById(`dd-${prefix}-panel`);
-  const wasOpen = panel.style.display !== 'none';
-  document.querySelectorAll('.dd-filter-panel').forEach(p => p.style.display = 'none');
-  document.querySelectorAll('.dd-filter-btn').forEach(b => b.classList.remove('actief-menu'));
-  if (!wasOpen) {
-    panel.style.display = 'block';
-    document.getElementById(`dd-${prefix}-btn`).classList.add('actief-menu');
-  }
-}
 document.getElementById('dd-ing-status-btn').addEventListener('click', (e) => { e.stopPropagation(); toggleDropdownPanel('ing-status'); });
 document.getElementById('dd-ing-categorie-btn').addEventListener('click', (e) => { e.stopPropagation(); toggleDropdownPanel('ing-categorie'); });
 document.getElementById('dd-ing-productsheet-btn').addEventListener('click', (e) => { e.stopPropagation(); toggleDropdownPanel('ing-productsheet'); });
@@ -1085,7 +1057,7 @@ function renderIngLijst(ingredienten) {
       <td>${escapeHtml(i.eenheid || '—')}</td>
       <td>v${i.versie_major ?? 1}.${i.versie_minor ?? 0}</td>
       <td><span class="status-pill status-${i.status || 'onbekend'}">${escapeHtml(statusLabel(i.status))}</span></td>
-      <td>${formatDatum(laatsteWijzigingPerIngredient[i.id] || i.gewijzigd_op || i.aangemaakt_op)}</td>
+      <td>${formatDate(laatsteWijzigingPerIngredient[i.id] || i.gewijzigd_op || i.aangemaakt_op)}</td>
       <td class="ing-tabel-getal">${i.gebruikt_in_aantal}</td>
       <td>${i.product_sheet_status ? `<span class="ps-dot ${i.product_sheet_status}" title="${productSheetDotTitel(i.product_sheet_status)}"></span>` : ''}</td>
       ${toonActiesKolom ? `<td>${ingRijActiesHtml(i)}</td>` : ''}
@@ -1250,7 +1222,7 @@ function renderDocumentStatusSamenvatting() {
     houder.innerHTML = `<span>No active product sheet uploaded.</span>`;
     return;
   }
-  const vervaldatum = formatDatum(productSheetVervaldatum(revisiedatum));
+  const vervaldatum = formatDate(productSheetVervaldatum(revisiedatum));
   const tekst = status === 'rood'
     ? `Product sheet expired on ${vervaldatum}`
     : status === 'oranje'
@@ -1297,7 +1269,7 @@ function renderDocumentenLijst() {
         <div class="ing-doc-meta">
           <span class="ing-doc-type-pill">${escapeHtml(documentTypeLabel(doc.document_type_id))}</span>
           <span class="ing-doc-status-pill status-${doc.status}">${doc.status === 'actief' ? 'Active' : 'Archived'}</span>
-          <div style="margin-top:4px;">Revision date: ${formatDatum(doc.revisiedatum)} &middot; uploaded ${formatDatum(doc.geupload_op)}</div>
+          <div style="margin-top:4px;">Revision date: ${formatDate(doc.revisiedatum)} &middot; uploaded ${formatDate(doc.geupload_op)}</div>
         </div>
       </div>
       <div class="ing-doc-acties">
@@ -1560,7 +1532,7 @@ async function laadIngredientRevisies(ingredientId) {
           ${revisiesVoorHuidigIngredient.map(rv => `
             <tr>
               <td>v${rv.versie_major}.${rv.versie_minor}</td>
-              <td>${formatDatum(rv.datum)}</td>
+              <td>${formatDate(rv.datum)}</td>
               <td>${escapeHtml(rv.door || '—')}</td>
               <td>${escapeHtml(rv.wijziging || '—')}</td>
             </tr>`).join('')}
@@ -1578,7 +1550,7 @@ async function laadIngredientRevisies(ingredientId) {
     <div class="ing-latest-revisie-titel">Latest revision</div>
     <div class="ing-latest-revisie-grid">
       <div><span class="label">Version</span>v${laatste.versie_major}.${laatste.versie_minor}</div>
-      <div><span class="label">Date</span>${formatDatum(laatste.datum)}</div>
+      <div><span class="label">Date</span>${formatDate(laatste.datum)}</div>
       <div><span class="label">By</span>${escapeHtml(laatste.door || '—')}</div>
       <div><span class="label">Comment</span>${escapeHtml(laatste.wijziging || '—')}</div>
     </div>`;
@@ -2495,12 +2467,6 @@ document.getElementById('ing-back-btn').addEventListener('click', () => {
   document.getElementById('ing-detail').classList.remove('actief');
   document.getElementById('ing-list-view').style.display = 'block';
 });
-
-function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
-}
 
 document.addEventListener('DOMContentLoaded', initIngredientenPagina);
 </script>
