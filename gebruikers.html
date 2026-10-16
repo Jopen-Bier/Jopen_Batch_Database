@@ -13,18 +13,18 @@
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="stylesheet" href="jopen-shared.css" />
   <style>
-    table.gebruikers-tabel { width: 100%; border-collapse: collapse; background: #fff; margin-bottom: 12px; }
-    table.gebruikers-tabel th, table.gebruikers-tabel td { text-align: left; padding: 10px 14px; border-bottom: 1px solid #ddd; }
-    table.gebruikers-tabel th { font-size: 0.85em; color: #555; }
-    .rol-badge { font-size: 0.8em; padding: 2px 8px; border-radius: 10px; background: #eee; }
-    .rol-badge.admin { background: #fbe4e6; color: #A80016; }
-    .actief-nee { color: #999; font-style: italic; }
-    .geen-toegang { padding: 40px 0; color: #555; }
-    .gebr-rol-select { padding: 4px 6px; border: 1px solid #ccc; border-radius: 4px; }
-    .gebr-opslaan-btn { padding: 4px 10px; border: 1px solid #ccc; border-radius: 4px; background: #fff; cursor: pointer; }
-    .gebr-verwijder-btn { padding: 4px 10px; border: 1px solid #A80016; color: #A80016; border-radius: 4px; background: #fff; cursor: pointer; }
-    .gebr-verwijder-btn:hover { background: #fbe4e6; }
-    .gebr-zelf { color: #999; font-size: 0.85em; font-style: italic; }
+    table.users-table { width: 100%; border-collapse: collapse; background: #fff; margin-bottom: 12px; }
+    table.users-table th, table.users-table td { text-align: left; padding: 10px 14px; border-bottom: 1px solid #ddd; }
+    table.users-table th { font-size: 0.85em; color: #555; }
+    .role-badge { font-size: 0.8em; padding: 2px 8px; border-radius: 10px; background: #eee; }
+    .role-badge.admin { background: #fbe4e6; color: #A80016; }
+    .inactive { color: #999; font-style: italic; }
+    .no-access { padding: 40px 0; color: #555; }
+    .user-role-select { padding: 4px 6px; border: 1px solid #ccc; border-radius: 4px; }
+    .user-save-btn { padding: 4px 10px; border: 1px solid #ccc; border-radius: 4px; background: #fff; cursor: pointer; }
+    .user-delete-btn { padding: 4px 10px; border: 1px solid #A80016; color: #A80016; border-radius: 4px; background: #fff; cursor: pointer; }
+    .user-delete-btn:hover { background: #fbe4e6; }
+    .user-self { color: #999; font-size: 0.85em; font-style: italic; }
   </style>
 </head>
 <body>
@@ -35,32 +35,32 @@
     <h1>Users</h1>
     <p class="jopen-subtitel">Overview of colleagues and their role, and inviting new colleagues.</p>
 
-    <div id="geen-toegang" class="geen-toegang" style="display:none;">
+    <div id="no-access" class="no-access" style="display:none;">
       This screen is only visible to admins. Log in with an admin account to manage users.
     </div>
 
-    <div id="admin-inhoud" style="display:none;">
-      <div id="gebruikers-lijst"><div class="jopen-subtitel">Loading users…</div></div>
-      <p id="lijst-melding" class="jopen-form-melding"></p>
+    <div id="admin-content" style="display:none;">
+      <div id="users-list"><div class="jopen-subtitel">Loading users…</div></div>
+      <p id="list-message" class="jopen-form-melding"></p>
 
       <h2 style="font-size:1.2em;">Invite a new colleague</h2>
       <form class="jopen-form" id="invite-form" style="margin: 0 0 40px;">
         <label for="invite-email">Email address</label>
         <input type="email" id="invite-email" required />
 
-        <label for="invite-naam">Name</label>
-        <input type="text" id="invite-naam" required />
+        <label for="invite-name">Name</label>
+        <input type="text" id="invite-name" required />
 
-        <label for="invite-rol">Role</label>
-        <select id="invite-rol" required style="width:100%; padding:8px; border:1px solid #ccc; border-radius:4px;"></select>
+        <label for="invite-role">Role</label>
+        <select id="invite-role" required style="width:100%; padding:8px; border:1px solid #ccc; border-radius:4px;"></select>
 
-        <button type="button" id="genereer-link-btn">Create account</button>
-        <p id="invite-melding" class="jopen-form-melding"></p>
+        <button type="button" id="create-link-btn">Create account</button>
+        <p id="invite-message" class="jopen-form-melding"></p>
 
-        <div id="link-resultaat" style="display:none; margin-top:12px; padding:12px; background:#f7f7f5; border-radius:6px;">
+        <div id="link-result" style="display:none; margin-top:12px; padding:12px; background:#f7f7f5; border-radius:6px;">
           <div>
             <a id="mailto-link" href="#" style="display:inline-block; padding:8px 16px; border:1px solid var(--jopen-red); color:var(--jopen-red); border-radius:4px; text-decoration:none;">Open Email</a>
-            <button type="button" id="kopieer-html-btn" style="background:var(--jopen-red); color:#fff; border:none; padding:8px 16px; border-radius:4px; cursor:pointer; margin-left:8px;">Copy Email content</button>
+            <button type="button" id="copy-html-btn" style="background:var(--jopen-red); color:#fff; border:none; padding:8px 16px; border-radius:4px; cursor:pointer; margin-left:8px;">Copy Email content</button>
           </div>
           <p style="font-size:0.8em; color:#6b6b6b; margin:8px 0 0 0;">
             "Open Email" opens a new message in your computer's default email program (e.g. Outlook) with the recipient, subject and text already filled in.
@@ -68,7 +68,7 @@
           <p style="font-size:0.8em; color:#6b6b6b; margin:4px 0 0 0;">
             "Copy Email content" copies the formatted email — open a new message yourself and paste (Ctrl+V) into the body.
           </p>
-          <span id="kopieer-html-melding" style="display:block; font-size:0.85em; margin-top:6px; color:#2f7d3c;"></span>
+          <span id="copy-html-message" style="display:block; font-size:0.85em; margin-top:6px; color:#2f7d3c;"></span>
         </div>
       </form>
     </div>
@@ -79,73 +79,73 @@
   <script src="jopen-utils.js"></script>
   <script src="nav.js"></script>
   <script>
-    let huidigeGebruikerId = null;
-    let huidigeGebruikerNaam = null;
-    let rollenLijst = []; // [{ id, name }] from the roles table, loaded at init
+    let currentUserId = null;
+    let currentUserName = null;
+    let roleList = []; // [{ id, name }] from the roles table, loaded at init
 
-    async function laadRollenLijst() {
+    async function loadRoleList() {
       const { data } = await supabaseClient.from('roles').select('id, name').order('id');
-      rollenLijst = data || [];
+      roleList = data || [];
     }
 
     function roleName(roleId) {
-      const r = rollenLijst.find(x => x.id === roleId);
+      const r = roleList.find(x => x.id === roleId);
       return r ? r.name : '';
     }
 
-    function rolOptiesHtml(selectedRoleId) {
-      return rollenLijst.map(r =>
+    function roleOptionsHtml(selectedRoleId) {
+      return roleList.map(r =>
         `<option value="${r.id}" ${r.id === selectedRoleId ? 'selected' : ''}>${escapeHtml(rolLabel(r.name))}</option>`
       ).join('');
     }
 
-    // Zelfde HTML als supabase-invite-email-template.html (repo-root) --
-    // hier gedupliceerd zodat de pagina 'm direct kan invullen met de echte
-    // link, zonder een los bestand te moeten fetchen. Pas je de e-mailtekst
-    // aan in dat bestand, kopieer de wijziging dan ook hierheen.
-    // Zelfde tekst als supabase-invite-email-template.html (repo-root), maar
-    // hier bewust EENVOUDIGER opgezet: geen geneste paginabrede tabel, geen
-    // afgeronde hoeken -- dit stuk wordt niet als echte e-mail verstuurd,
-    // maar in het klembord gezet om in een nieuw Outlook-bericht te PLAKKEN,
-    // en dat plakken gaat via een heel andere (veel beperktere) weg dan een
-    // daadwerkelijk ontvangen HTML-mail. Alleen de knop staat wel in 1 kleine
-    // tabelcel: achtergrondkleur op een <a> zelf overleefde het plakken niet
-    // (kwam er als kale onderstreepte link uit), op een tabelcel wel.
-    // __NAAM__/__LINK__/__UITNODIGER__ worden hieronder ingevuld.
-    const UITNODIGING_MAIL_HTML = `<div style="font-family:Arial, Helvetica, sans-serif; max-width:480px;">
+    function setMessage(el, text, kind) {
+      el.textContent = text;
+      el.className = 'jopen-form-melding' + (kind === 'error' ? ' fout' : kind === 'ok' ? ' ok' : '');
+    }
+
+    // Same text as supabase-invite-email-template.html (repo root), but built
+    // SIMPLER on purpose: no nested full-width table and no rounded corners.
+    // This HTML is not sent as a real email; it is copied to the clipboard to
+    // PASTE into a new Outlook message, and pasting goes through a much more
+    // limited path than a received HTML email. Only the button sits in one
+    // small table cell: a background colour on an <a> did not survive pasting,
+    // on a table cell it does. If you change the email text in that file,
+    // copy the change here too. __NAME__/__LINK__/__INVITER__ are filled below.
+    const INVITE_EMAIL_HTML = `<div style="font-family:Arial, Helvetica, sans-serif; max-width:480px;">
 <img src="https://nrouqtxkeeoayqudkiud.supabase.co/storage/v1/object/public/Jopen%20art/Jopen%20logo.png" alt="Jopen" width="56" style="display:block; margin-bottom:10px;">
 <div style="background-color:#E0001D; height:4px; width:64px; margin-bottom:18px; font-size:0; line-height:0;">&nbsp;</div>
 <h2 style="color:#222222; margin:0 0 16px 0;">You've been invited to the Jopen Batch Database</h2>
-<p style="font-size:15px; line-height:1.5; color:#444444;">Hi __NAAM__,</p>
-<p style="font-size:15px; line-height:1.5; color:#444444;">__UITNODIGER__ has invited you to an account on the <b>Jopen Batch Database</b> &mdash; the internal system we use within the brewery for recipe management and batch reports.</p>
+<p style="font-size:15px; line-height:1.5; color:#444444;">Hi __NAME__,</p>
+<p style="font-size:15px; line-height:1.5; color:#444444;">__INVITER__ has invited you to an account on the <b>Jopen Batch Database</b> &mdash; the internal system we use within the brewery for recipe management and batch reports.</p>
 <table cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 16px 0;"><tr><td style="background-color:#E0001D; text-align:center; padding:12px 28px;"><a href="__LINK__" style="text-decoration:none;"><span style="color:#ffffff; font-weight:bold; font-size:15px; text-decoration:none;">Create your account</span></a></td></tr></table>
 <p style="font-size:13px; line-height:1.5; color:#777777;">Button not working? Copy this link into your browser instead:<br><a href="__LINK__" style="color:#E0001D;">__LINK__</a></p>
 <hr style="border:none; border-top:1px solid #eeeeee; margin:20px 0;">
-<p style="font-size:13px; line-height:1.5; color:#777777;"><b>Not phishing:</b> this email was sent because __UITNODIGER__ (an administrator at Jopen Brouwerij) added your email address to the Batch Database. If you weren't expecting this invitation, or you're unsure about the sender, please contact __UITNODIGER__ before clicking the button.</p>
+<p style="font-size:13px; line-height:1.5; color:#777777;"><b>Not phishing:</b> this email was sent because __INVITER__ (an administrator at Jopen Brouwerij) added your email address to the Batch Database. If you weren't expecting this invitation, or you're unsure about the sender, please contact __INVITER__ before clicking the button.</p>
 <p style="font-size:13px; line-height:1.5; color:#777777;">We will never ask you to share your password by email.</p>
 <p style="font-size:13px; line-height:1.5; color:#777777;">One more heads-up: if you ever use "Forgot password" to reset your password, that email will look much plainer than this one (sent from noreply@mail.app.supabase.io, no logo). That's expected &mdash; it's the underlying system sending it directly, not us.</p>
 <p style="font-size:11px; color:#999999; border-top:1px solid #eeeeee; padding-top:10px;">Jopen Batch Database &middot; internal system of Jopen Brouwerij (Haarlem)</p>
 </div>`;
 
-    function bouwUitnodigingMail(link, naam, uitnodiger) {
-      return UITNODIGING_MAIL_HTML
+    function buildInviteEmail(link, name, inviter) {
+      return INVITE_EMAIL_HTML
         .replaceAll('__LINK__', link)
-        .replaceAll('__NAAM__', naam)
-        .replaceAll('__UITNODIGER__', uitnodiger);
+        .replaceAll('__NAME__', name)
+        .replaceAll('__INVITER__', inviter);
     }
 
-    function bouwPlatteTekstVersie(link, naam, uitnodiger) {
+    function buildPlainTextVersion(link, name, inviter) {
       return [
-        `Hi ${naam},`,
+        `Hi ${name},`,
         '',
-        `${uitnodiger} has invited you to an account on the Jopen Batch Database`,
+        `${inviter} has invited you to an account on the Jopen Batch Database`,
         '— the internal system we use within the brewery for recipe management and batch reports.',
         '',
         'Create your account: ' + link,
         '',
-        `Not phishing: this email was sent because ${uitnodiger} (an administrator at Jopen Brouwerij)`,
+        `Not phishing: this email was sent because ${inviter} (an administrator at Jopen Brouwerij)`,
         'added your email address to the Batch Database. If you were not expecting this, contact',
-        `${uitnodiger} before clicking the link. We will never ask you to share your password by email.`,
+        `${inviter} before clicking the link. We will never ask you to share your password by email.`,
         '',
         'One more heads-up: if you ever use "Forgot password" to reset your password, that email',
         'will look much plainer than this one (sent from noreply@mail.app.supabase.io, no logo).',
@@ -153,25 +153,23 @@
       ].join('\n');
     }
 
-    document.getElementById('genereer-link-btn').addEventListener('click', async () => {
+    document.getElementById('create-link-btn').addEventListener('click', async () => {
       const email = document.getElementById('invite-email').value.trim();
-      const naam = document.getElementById('invite-naam').value.trim();
-      const roleId = Number(document.getElementById('invite-rol').value);
-      const melding = document.getElementById('invite-melding');
-      const resultaatDiv = document.getElementById('link-resultaat');
+      const name = document.getElementById('invite-name').value.trim();
+      const roleId = Number(document.getElementById('invite-role').value);
+      const msg = document.getElementById('invite-message');
+      const resultDiv = document.getElementById('link-result');
 
-      if (!email || !naam) {
-        melding.textContent = 'Fill in email address and name first.';
-        melding.className = 'jopen-form-melding fout';
+      if (!email || !name) {
+        setMessage(msg, 'Fill in email address and name first.', 'error');
         return;
       }
 
-      melding.textContent = 'Generating link…';
-      melding.className = 'jopen-form-melding';
-      resultaatDiv.style.display = 'none';
+      setMessage(msg, 'Generating link…');
+      resultDiv.style.display = 'none';
 
       const { data, error } = await supabaseClient.functions.invoke('generate-invite-link', {
-        body: { email, name: naam, role_id: roleId },
+        body: { email, name, role_id: roleId },
       });
 
       if (error || data?.error) {
@@ -179,49 +177,48 @@
         try {
           const body = await error.context.json();
           if (body?.error) detail = body.error;
-        } catch (_) { /* geen JSON-body of geen error.context -- val terug op wat we al hadden */ }
-        melding.textContent = 'Could not generate link: ' + detail;
-        melding.className = 'jopen-form-melding fout';
+        } catch (_) { /* no JSON body or no error.context: keep what we have */ }
+        setMessage(msg, 'Could not generate link: ' + detail, 'error');
         return;
       }
 
       const link = data.action_link;
-      const onderwerp = "You've been invited to the Jopen Batch Database";
-      const uitnodiger = huidigeGebruikerNaam || 'An administrator at Jopen Brouwerij';
-      const platteTekst = bouwPlatteTekstVersie(link, naam, uitnodiger);
-      const emailHtml = bouwUitnodigingMail(link, naam, uitnodiger);
+      const subject = "You've been invited to the Jopen Batch Database";
+      const inviter = currentUserName || 'An administrator at Jopen Brouwerij';
+      const plainText = buildPlainTextVersion(link, name, inviter);
+      const emailHtml = buildInviteEmail(link, name, inviter);
 
-      melding.textContent = `Account created for ${email} — use the buttons below to send the invite yourself.`;
-      melding.className = 'jopen-form-melding ok';
+      setMessage(msg, `Account created for ${email} — use the buttons below to send the invite yourself.`, 'ok');
       document.getElementById('mailto-link').href =
-        `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(onderwerp)}&body=${encodeURIComponent(platteTekst)}`;
-      resultaatDiv.style.display = 'block';
-      laadGebruikersLijst();
+        `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(plainText)}`;
+      resultDiv.style.display = 'block';
+      loadUserList();
 
-      document.getElementById('kopieer-html-btn').onclick = async () => {
-        const kopieerMelding = document.getElementById('kopieer-html-melding');
+      document.getElementById('copy-html-btn').onclick = async () => {
+        const copyMsg = document.getElementById('copy-html-message');
         try {
           await navigator.clipboard.write([
             new ClipboardItem({
               'text/html': new Blob([emailHtml], { type: 'text/html' }),
-              'text/plain': new Blob([platteTekst], { type: 'text/plain' }),
+              'text/plain': new Blob([plainText], { type: 'text/plain' }),
             }),
           ]);
-          kopieerMelding.textContent = 'Copied — now paste (Ctrl+V) into a new email message.';
+          copyMsg.textContent = 'Copied — now paste (Ctrl+V) into a new email message.';
         } catch (e) {
-          kopieerMelding.textContent = 'Could not copy in this browser — try "Open Email" instead.';
+          copyMsg.textContent = 'Could not copy in this browser — try "Open Email" instead.';
         }
       };
     });
 
-    function formatLaatstIngelogd(iso) {
+    function formatLastLogin(iso) {
       if (!iso) return '<span class="jopen-subtitel" style="margin:0;">Never</span>';
       const d = new Date(iso);
       return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) +
         ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
     }
 
-    async function laadGebruikersLijst() {      const container = document.getElementById('gebruikers-lijst');
+    async function loadUserList() {
+      const container = document.getElementById('users-list');
       const [{ data, error }, loginsResult] = await Promise.all([
         supabaseClient
           .from('users')
@@ -233,13 +230,13 @@
       ]);
 
       if (error) {
-        container.innerHTML = `<p class="jopen-form-melding fout">Could not load users: ${error.message}</p>`;
+        container.innerHTML = `<p class="jopen-form-melding fout">Could not load users: ${escapeHtml(error.message)}</p>`;
         return;
       }
 
-      const laatsteLoginPerGebruiker = {};
+      const lastLoginByUser = {};
       if (!loginsResult.error) {
-        (loginsResult.data || []).forEach(r => { laatsteLoginPerGebruiker[r.id] = r.last_login_at; });
+        (loginsResult.data || []).forEach(r => { lastLoginByUser[r.id] = r.last_login_at; });
       } else {
         console.error('Could not load last-login timestamps:', loginsResult.error);
       }
@@ -249,77 +246,71 @@
         return;
       }
 
-      const rijen = data.map(g => {
-        const isZelf = g.id === huidigeGebruikerId;
+      const rows = data.map(u => {
+        const isSelf = u.id === currentUserId;
+        const uRole = roleName(u.role_id);
         return `
-        <tr data-id="${g.id}">
-          <td>${escapeHtml(g.name)}</td>
+        <tr data-id="${u.id}">
+          <td>${escapeHtml(u.name)}</td>
           <td>
-            ${isZelf
-              ? `<span class="rol-badge ${roleName(g.role_id) === 'admin' ? 'admin' : ''}">${escapeHtml(rolLabel(roleName(g.role_id)))}</span>`
-              : `<select class="gebr-rol-select">${rolOptiesHtml(g.role_id)}</select>`}
+            ${isSelf
+              ? `<span class="role-badge ${uRole === 'admin' ? 'admin' : ''}">${escapeHtml(rolLabel(uRole))}</span>`
+              : `<select class="user-role-select">${roleOptionsHtml(u.role_id)}</select>`}
           </td>
-          <td>${g.is_active ? 'Yes' : '<span class="actief-nee">No</span>'}</td>
-          <td>${formatLaatstIngelogd(laatsteLoginPerGebruiker[g.id])}</td>
+          <td>${u.is_active ? 'Yes' : '<span class="inactive">No</span>'}</td>
+          <td>${formatLastLogin(lastLoginByUser[u.id])}</td>
           <td>
-            ${isZelf
-              ? `<span class="gebr-zelf">(you)</span>`
-              : `<button class="gebr-opslaan-btn">Save</button>
-                 <button class="gebr-verwijder-btn">Delete</button>`}
+            ${isSelf
+              ? `<span class="user-self">(you)</span>`
+              : `<button class="user-save-btn">Save</button>
+                 <button class="user-delete-btn">Delete</button>`}
           </td>
         </tr>`;
       }).join('');
 
       container.innerHTML = `
-        <table class="gebruikers-tabel">
+        <table class="users-table">
           <thead><tr><th>Name</th><th>Role</th><th>Active</th><th>Last login</th><th></th></tr></thead>
-          <tbody>${rijen}</tbody>
+          <tbody>${rows}</tbody>
         </table>`;
 
       container.querySelectorAll('tr[data-id]').forEach(tr => {
-        const opslaanBtn = tr.querySelector('.gebr-opslaan-btn');
-        const verwijderBtn = tr.querySelector('.gebr-verwijder-btn');
-        if (opslaanBtn) opslaanBtn.addEventListener('click', () => slaRolOp(tr));
-        if (verwijderBtn) verwijderBtn.addEventListener('click', () => verwijderGebruiker(tr));
+        const saveBtn = tr.querySelector('.user-save-btn');
+        const deleteBtn = tr.querySelector('.user-delete-btn');
+        if (saveBtn) saveBtn.addEventListener('click', () => saveRole(tr));
+        if (deleteBtn) deleteBtn.addEventListener('click', () => deleteUser(tr));
       });
     }
 
-    async function slaRolOp(tr) {
-      const melding = document.getElementById('lijst-melding');
+    async function saveRole(tr) {
+      const msg = document.getElementById('list-message');
       const id = tr.dataset.id;
-      const newRoleId = Number(tr.querySelector('.gebr-rol-select').value);
+      const newRoleId = Number(tr.querySelector('.user-role-select').value);
 
-      melding.textContent = 'Saving role…';
-      melding.className = 'jopen-form-melding';
-
+      setMessage(msg, 'Saving role…');
       const { error } = await supabaseClient
         .from('users')
         .update({ role_id: newRoleId })
         .eq('id', id);
 
       if (error) {
-        melding.textContent = 'Save failed: ' + error.message;
-        melding.className = 'jopen-form-melding fout';
+        setMessage(msg, 'Save failed: ' + error.message, 'error');
         return;
       }
-
-      melding.textContent = 'Role updated.';
-      melding.className = 'jopen-form-melding ok';
-      laadGebruikersLijst();
+      setMessage(msg, 'Role updated.', 'ok');
+      loadUserList();
     }
 
-    async function verwijderGebruiker(tr) {
+    async function deleteUser(tr) {
       const id = tr.dataset.id;
-      const naam = tr.children[0].textContent;
-      const melding = document.getElementById('lijst-melding');
+      const name = tr.children[0].textContent;
+      const msg = document.getElementById('list-message');
 
-      if (!confirm(`Delete ${naam}? This permanently removes their account and login access. This cannot be undone.`)) {
+      if (!confirm(`Delete ${name}? This permanently removes their account and login access. This cannot be undone.`)) {
         return;
       }
 
-      melding.textContent = 'Deleting…';
-      melding.className = 'jopen-form-melding';
-
+      setMessage(msg, 'Deleting…');
       const { data, error } = await supabaseClient.functions.invoke('delete-user', {
         body: { user_id: id },
       });
@@ -332,39 +323,36 @@
         } catch (_) {
           // response wasn't JSON, or context was missing — fall back to error.message
         }
-        melding.textContent = 'Delete failed: ' + detail;
-        melding.className = 'jopen-form-melding fout';
+        setMessage(msg, 'Delete failed: ' + detail, 'error');
         return;
       }
       if (data?.error) {
-        melding.textContent = 'Delete failed: ' + data.error;
-        melding.className = 'jopen-form-melding fout';
+        setMessage(msg, 'Delete failed: ' + data.error, 'error');
         return;
       }
 
-      melding.textContent = `${naam} deleted.`;
-      melding.className = 'jopen-form-melding ok';
-      laadGebruikersLijst();
+      setMessage(msg, `${name} deleted.`, 'ok');
+      loadUserList();
     }
 
-    async function initGebruikersPagina() {
-      const gebruiker = await getCurrentUser();
+    async function initUsersPage() {
+      const user = await getCurrentUser();
 
-      if (!gebruiker || !gebruiker.isAdmin) {
-        document.getElementById('geen-toegang').style.display = 'block';
+      if (!user || !user.isAdmin) {
+        document.getElementById('no-access').style.display = 'block';
         return;
       }
 
-      huidigeGebruikerId = gebruiker.id;
-      huidigeGebruikerNaam = gebruiker.name;
-      document.getElementById('admin-inhoud').style.display = 'block';
-      await laadRollenLijst();
-      const viewer = rollenLijst.find(r => r.name.toLowerCase() === 'viewer');
-      document.getElementById('invite-rol').innerHTML = rolOptiesHtml(viewer ? viewer.id : null);
-      laadGebruikersLijst();
+      currentUserId = user.id;
+      currentUserName = user.name;
+      document.getElementById('admin-content').style.display = 'block';
+      await loadRoleList();
+      const viewer = roleList.find(r => r.name.toLowerCase() === 'viewer');
+      document.getElementById('invite-role').innerHTML = roleOptionsHtml(viewer ? viewer.id : null);
+      loadUserList();
     }
 
-    document.addEventListener('DOMContentLoaded', initGebruikersPagina);
+    document.addEventListener('DOMContentLoaded', initUsersPage);
   </script>
 </body>
 </html>

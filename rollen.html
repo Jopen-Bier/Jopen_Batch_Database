@@ -13,26 +13,25 @@
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="stylesheet" href="jopen-shared.css" />
   <style>
-    .geen-toegang { padding: 40px 0; color: #555; }
-    .rl-uitleg { max-width: 720px; }
+    .no-access { padding: 40px 0; color: #555; }
+    .rl-intro { max-width: 720px; }
     table.rl-matrix { width: 100%; border-collapse: collapse; background: #fff; margin: 20px 0 32px; }
     table.rl-matrix th, table.rl-matrix td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #eee; vertical-align: middle; }
     table.rl-matrix th { font-size: 0.85em; color: #555; border-bottom: 2px solid #ddd; white-space: nowrap; }
-    table.rl-matrix td.rl-rolnaam { font-weight: 600; white-space: nowrap; }
-    table.rl-matrix tr.rl-admin-rij { background: #fbe4e6; }
-    table.rl-matrix tr.rl-admin-rij td.rl-rolnaam { color: #A80016; }
-    .rl-cel { display: flex; gap: 10px; align-items: center; }
-    .rl-cel label { display: flex; align-items: center; gap: 3px; font-size: 0.8em; color: #555; cursor: pointer; }
-    .rl-cel input[type="checkbox"] { cursor: pointer; }
-    .rl-cel input[type="checkbox"]:disabled { cursor: not-allowed; opacity: 0.4; }
-    .rl-slot { font-size: 0.8em; color: #999; font-style: italic; }
-    .rl-rolnaam-input { font-weight: 600; font-size: 1em; padding: 4px 6px; border: 1px solid transparent; border-radius: 4px; width: 140px; }
-    .rl-rolnaam-input:hover { border-color: var(--line); }
-    .rl-rolnaam-input:focus { border-color: var(--line); outline: none; background: #fafafa; }
-    .rl-vergrendeld-kolom { color: #999; font-style: italic; font-size: 0.85em; }
-    .rl-melding-inline { font-size: 0.8em; margin-left: 4px; }
-    .rl-melding-inline.ok { color: #2a7a3b; }
-    .rl-melding-inline.fout { color: #A80016; }
+    table.rl-matrix td.rl-role-name { font-weight: 600; white-space: nowrap; }
+    table.rl-matrix tr.rl-admin-row { background: #fbe4e6; }
+    table.rl-matrix tr.rl-admin-row td.rl-role-name { color: #A80016; }
+    .rl-cell { display: flex; gap: 10px; align-items: center; }
+    .rl-cell label { display: flex; align-items: center; gap: 3px; font-size: 0.8em; color: #555; cursor: pointer; }
+    .rl-cell input[type="checkbox"] { cursor: pointer; }
+    .rl-cell input[type="checkbox"]:disabled { cursor: not-allowed; opacity: 0.4; }
+    .rl-locked { font-size: 0.8em; color: #999; font-style: italic; }
+    .rl-role-name-input { font-weight: 600; font-size: 1em; padding: 4px 6px; border: 1px solid transparent; border-radius: 4px; width: 140px; }
+    .rl-role-name-input:hover { border-color: var(--line); }
+    .rl-role-name-input:focus { border-color: var(--line); outline: none; background: #fafafa; }
+    .rl-inline-msg { font-size: 0.8em; margin-left: 4px; }
+    .rl-inline-msg.ok { color: #2a7a3b; }
+    .rl-inline-msg.error { color: #A80016; }
   </style>
 </head>
 <body>
@@ -41,18 +40,18 @@
 
   <main class="jopen-pagina">
     <h1>User Roles</h1>
-    <p class="jopen-subtitel rl-uitleg">
+    <p class="jopen-subtitel rl-intro">
       What each role can see, edit, and delete per part of the app. Changes save immediately per checkbox.
       <strong>Admin</strong> always has full access everywhere (locked, to prevent accidentally locking yourself out).
       <strong>User Management</strong> and <strong>Role Management</strong> are always admin-only for the same reason —
       those columns are locked for every other role.
     </p>
 
-    <div id="geen-toegang" class="geen-toegang" style="display:none;">
+    <div id="no-access" class="no-access" style="display:none;">
       This screen is only visible to admins. Log in with an admin account to manage roles.
     </div>
 
-    <div id="admin-inhoud" style="display:none;">
+    <div id="admin-content" style="display:none;">
       <div id="rl-matrix-container"><div class="jopen-subtitel">Loading roles…</div></div>
       <p class="jopen-subtitel" style="margin-top:24px;">
         Roles themselves (adding a new role, e.g. for a different job function) aren't self-service on purpose —
@@ -66,151 +65,142 @@
   <script src="jopen-utils.js"></script>
   <script src="nav.js"></script>
   <script>
-    // module_keys die nooit instelbaar zijn -- altijd hardcoded admin-only,
-    // ongeacht wat er in role_permissions staat (zie ook rechten-check in
-    // magBewerkenModule/magVerwijderenModule elders, die dit zelf ook nooit
-    // aan een niet-admin rol toekent omdat we deze cellen hier nooit
-    // aanpasbaar maken).
-    const RL_VERGRENDELDE_MODULES = ['user_management', 'role_management'];
+    // Modules that are never configurable: always admin-only, whatever
+    // role_permissions says. Their cells are shown locked for every role.
+    const RL_LOCKED_MODULES = ['user_management', 'role_management'];
 
-    async function laadRollenMatrix() {
+    async function loadRoleMatrix() {
       const container = document.getElementById('rl-matrix-container');
 
-      const [{ data: roles, error: rolesErr }, { data: modules, error: modErr }, { data: rechten, error: rechtenErr }] = await Promise.all([
+      const [{ data: roles, error: rolesErr }, { data: modules, error: modErr }, { data: permissions, error: permErr }] = await Promise.all([
         supabaseClient.from('roles').select('id, name').order('id'),
         supabaseClient.from('permission_modules').select('module_key, name, sort_order').order('sort_order'),
         supabaseClient.from('role_permissions').select('role_id, module_key, can_view, can_edit, can_delete'),
       ]);
 
-      if (rolesErr || modErr || rechtenErr) {
-        container.innerHTML = `<p class="jopen-form-melding fout">Could not load roles: ${(rolesErr || modErr || rechtenErr).message}</p>`;
+      if (rolesErr || modErr || permErr) {
+        container.innerHTML = `<p class="jopen-form-melding fout">Could not load roles: ${escapeHtml((rolesErr || modErr || permErr).message)}</p>`;
         return;
       }
 
-      const rechtenMap = {}; // `${role_id}|${module_key}` -> rij
-      (rechten || []).forEach(r => { rechtenMap[`${r.role_id}|${r.module_key}`] = r; });
+      const permissionMap = {}; // `${role_id}|${module_key}` -> row
+      (permissions || []).forEach(p => { permissionMap[`${p.role_id}|${p.module_key}`] = p; });
 
       const headerHtml = modules.map(m => `<th>${escapeHtml(m.name)}</th>`).join('');
 
-      const rijenHtml = roles.map(rol => {
-        const isAdminRol = rol.name === 'admin';
-        const cellenHtml = modules.map(m => {
-          const vergrendeld = isAdminRol || RL_VERGRENDELDE_MODULES.includes(m.module_key);
-          const rij = rechtenMap[`${rol.id}|${m.module_key}`] || { can_view: isAdminRol, can_edit: isAdminRol, can_delete: isAdminRol };
-          const checked = { view: isAdminRol || rij.can_view, edit: isAdminRol || rij.can_edit, delete: isAdminRol || rij.can_delete };
-          const disabledAttr = vergrendeld ? 'disabled' : '';
+      const rowsHtml = roles.map(role => {
+        const isAdminRole = role.name === 'admin';
+        const cellsHtml = modules.map(m => {
+          const locked = isAdminRole || RL_LOCKED_MODULES.includes(m.module_key);
+          const row = permissionMap[`${role.id}|${m.module_key}`] || { can_view: isAdminRole, can_edit: isAdminRole, can_delete: isAdminRole };
+          const checked = { view: isAdminRole || row.can_view, edit: isAdminRole || row.can_edit, delete: isAdminRole || row.can_delete };
+          const disabledAttr = locked ? 'disabled' : '';
           return `
             <td>
-              <div class="rl-cel" data-role-id="${rol.id}" data-module-key="${m.module_key}">
-                <label><input type="checkbox" class="rl-check" data-veld="can_view" ${checked.view ? 'checked' : ''} ${disabledAttr} /> View</label>
-                <label><input type="checkbox" class="rl-check" data-veld="can_edit" ${checked.edit ? 'checked' : ''} ${disabledAttr} /> Edit</label>
-                <label><input type="checkbox" class="rl-check" data-veld="can_delete" ${checked.delete ? 'checked' : ''} ${disabledAttr} /> Delete</label>
-                <span class="rl-melding-inline"></span>
+              <div class="rl-cell" data-role-id="${role.id}" data-module-key="${escapeHtml(m.module_key)}">
+                <label><input type="checkbox" class="rl-check" data-field="can_view" ${checked.view ? 'checked' : ''} ${disabledAttr} /> View</label>
+                <label><input type="checkbox" class="rl-check" data-field="can_edit" ${checked.edit ? 'checked' : ''} ${disabledAttr} /> Edit</label>
+                <label><input type="checkbox" class="rl-check" data-field="can_delete" ${checked.delete ? 'checked' : ''} ${disabledAttr} /> Delete</label>
+                <span class="rl-inline-msg"></span>
               </div>
             </td>`;
         }).join('');
 
-        const rolNaamCel = isAdminRol
-          ? `<td class="rl-rolnaam">${escapeHtml(rolLabel(rol.name))} <span class="rl-slot">(locked)</span></td>`
-          : `<td class="rl-rolnaam">
-               <input type="text" class="rl-rolnaam-input" data-role-id="${rol.id}" value="${escapeHtml(rol.name)}" />
-               <span class="rl-melding-inline"></span>
+        const nameCell = isAdminRole
+          ? `<td class="rl-role-name">${escapeHtml(rolLabel(role.name))} <span class="rl-locked">(locked)</span></td>`
+          : `<td class="rl-role-name">
+               <input type="text" class="rl-role-name-input" data-role-id="${role.id}" value="${escapeHtml(role.name)}" />
+               <span class="rl-inline-msg"></span>
              </td>`;
-        return `<tr class="${isAdminRol ? 'rl-admin-rij' : ''}">${rolNaamCel}${cellenHtml}</tr>`;
+        return `<tr class="${isAdminRole ? 'rl-admin-row' : ''}">${nameCell}${cellsHtml}</tr>`;
       }).join('');
 
       container.innerHTML = `
         <table class="rl-matrix">
           <thead><tr><th>Role</th>${headerHtml}</tr></thead>
-          <tbody>${rijenHtml}</tbody>
+          <tbody>${rowsHtml}</tbody>
         </table>`;
 
-      container.querySelectorAll('.rl-cel:not(:has(input:disabled))').forEach(cel => {
-        cel.querySelectorAll('.rl-check').forEach(cb => {
-          cb.addEventListener('change', () => slaRechtOp(cel));
+      container.querySelectorAll('.rl-cell:not(:has(input:disabled))').forEach(cell => {
+        cell.querySelectorAll('.rl-check').forEach(cb => {
+          cb.addEventListener('change', () => savePermission(cell));
         });
       });
 
-      container.querySelectorAll('.rl-rolnaam-input').forEach(input => {
-        input.addEventListener('change', () => slaRolNaamOp(input));
+      container.querySelectorAll('.rl-role-name-input').forEach(input => {
+        input.addEventListener('change', () => saveRoleName(input));
       });
     }
 
-    async function slaRolNaamOp(input) {
-      const roleId = Number(input.dataset.roleId);
-      const nieuweNaam = input.value.trim();
-      const melding = input.nextElementSibling;
+    function showInlineMessage(el, text, kind) {
+      el.textContent = text;
+      el.className = 'rl-inline-msg' + (kind ? ' ' + kind : '');
+      if (kind === 'ok') setTimeout(() => { el.textContent = ''; }, 1500);
+    }
 
-      if (!nieuweNaam) {
-        melding.textContent = 'Failed: name cannot be empty';
-        melding.className = 'rl-melding-inline fout';
+    async function saveRoleName(input) {
+      const roleId = Number(input.dataset.roleId);
+      const newName = input.value.trim();
+      const msg = input.nextElementSibling;
+
+      if (!newName) {
+        showInlineMessage(msg, 'Failed: name cannot be empty', 'error');
         return;
       }
 
-      melding.textContent = 'Saving…';
-      melding.className = 'rl-melding-inline';
-
+      showInlineMessage(msg, 'Saving…');
       const { error } = await supabaseClient
         .from('roles')
-        .update({ name: nieuweNaam })
+        .update({ name: newName })
         .eq('id', roleId);
 
       if (error) {
-        melding.textContent = 'Failed: ' + error.message;
-        melding.className = 'rl-melding-inline fout';
+        showInlineMessage(msg, 'Failed: ' + error.message, 'error');
         return;
       }
-      melding.textContent = 'Saved';
-      melding.className = 'rl-melding-inline ok';
-      setTimeout(() => { melding.textContent = ''; }, 1500);
+      showInlineMessage(msg, 'Saved', 'ok');
     }
 
-    async function slaRechtOp(cel) {
-      const roleId = Number(cel.dataset.roleId);
-      const moduleKey = cel.dataset.moduleKey;
-      const melding = cel.querySelector('.rl-melding-inline');
+    async function savePermission(cell) {
+      const roleId = Number(cell.dataset.roleId);
+      const moduleKey = cell.dataset.moduleKey;
+      const msg = cell.querySelector('.rl-inline-msg');
 
-      const waarden = {
-        can_view: cel.querySelector('[data-veld="can_view"]').checked,
-        can_edit: cel.querySelector('[data-veld="can_edit"]').checked,
-        can_delete: cel.querySelector('[data-veld="can_delete"]').checked,
+      const values = {
+        can_view: cell.querySelector('[data-field="can_view"]').checked,
+        can_edit: cell.querySelector('[data-field="can_edit"]').checked,
+        can_delete: cell.querySelector('[data-field="can_delete"]').checked,
       };
-      // Edit/Delete zonder View is verwarrend in de UI (je zou iets kunnen
-      // bewerken dat je zelf niet kunt zien) -- Edit/Delete aanvinken zet
-      // dus automatisch ook View aan.
-      if ((waarden.can_edit || waarden.can_delete) && !waarden.can_view) {
-        waarden.can_view = true;
-        cel.querySelector('[data-veld="can_view"]').checked = true;
+      // Edit/Delete without View is confusing (editing something you cannot
+      // see), so ticking Edit or Delete also ticks View.
+      if ((values.can_edit || values.can_delete) && !values.can_view) {
+        values.can_view = true;
+        cell.querySelector('[data-field="can_view"]').checked = true;
       }
 
-      melding.textContent = 'Saving…';
-      melding.className = 'rl-melding-inline';
-
+      showInlineMessage(msg, 'Saving…');
       const { error } = await supabaseClient
         .from('role_permissions')
-        .upsert({ role_id: roleId, module_key: moduleKey, ...waarden }, { onConflict: 'role_id,module_key' });
+        .upsert({ role_id: roleId, module_key: moduleKey, ...values }, { onConflict: 'role_id,module_key' });
 
       if (error) {
-        melding.textContent = 'Failed: ' + error.message;
-        melding.className = 'rl-melding-inline fout';
+        showInlineMessage(msg, 'Failed: ' + error.message, 'error');
         return;
       }
-      melding.textContent = 'Saved';
-      melding.className = 'rl-melding-inline ok';
-      setTimeout(() => { melding.textContent = ''; }, 1500);
+      showInlineMessage(msg, 'Saved', 'ok');
     }
 
-    async function initRollenPagina() {
-      const gebruiker = await getCurrentUser();
-      if (!gebruiker || !gebruiker.isAdmin) {
-        document.getElementById('geen-toegang').style.display = 'block';
+    async function initRolesPage() {
+      const user = await getCurrentUser();
+      if (!user || !user.isAdmin) {
+        document.getElementById('no-access').style.display = 'block';
         return;
       }
-      document.getElementById('admin-inhoud').style.display = 'block';
-      laadRollenMatrix();
+      document.getElementById('admin-content').style.display = 'block';
+      loadRoleMatrix();
     }
 
-    document.addEventListener('DOMContentLoaded', initRollenPagina);
+    document.addEventListener('DOMContentLoaded', initRolesPage);
   </script>
 </body>
 </html>
