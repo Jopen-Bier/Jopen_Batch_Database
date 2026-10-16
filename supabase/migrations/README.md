@@ -24,6 +24,34 @@ SQL Editor), zet dan direct een bestand met **exact dezelfde versie en naam**
 zijn de 50 ontbrekende migraties zo uit de database overgenomen, en is
 `20260918072509_…` hernoemd naar de geregistreerde versie `20260918072457_…`.
 
+## De volledige structuur: `supabase/schema.sql`
+De migraties in deze map beginnen pas op 29 juli 2026; de kerntabellen
+(recepten, ingrediënten, gebruikers, …) zijn van daarvoor en staan hier niet
+in. De migratieketen is dus **niet** genoeg om de database vanaf nul op te
+bouwen.
+
+Daarvoor is er `supabase/schema.sql`: een volledige `pg_dump --schema-only`
+van al onze eigen schema's (tabellen, functies, triggers, views,
+RLS-policies, grants). De workflow *Schema snapshot* ververst hem elke nacht
+en bij handmatig starten. Dat is de baseline: opnieuw opbouwen = `schema.sql`
+draaien, daarna de data uit de backup.
+
+Verschijnt er een commit "Schema gewijzigd" zonder bijbehorende migratie,
+dan is er iets buiten de migraties om veranderd (drift). Leg dat dan alsnog
+vast met een migratiebestand.
+
+**Geen baseline-bestand in deze map zetten**: de GitHub-integratie zou het
+als nieuwe migratie op productie proberen uit te voeren.
+
+## Migratie zelf uitgevoerd (SQL Editor)? Eerst registreren, dan pushen
+Lukt een migratie niet via de connector (bv. destructieve DDL) en draait
+Jaap hem in de SQL Editor, dan:
+1. bestand in deze map met versie `YYYYMMDDHHMMSS_naam.sql`;
+2. **vóór de push** die versie registreren:
+   `insert into supabase_migrations.schema_migrations (version, name, statements) values ('<versie>', '<naam>', array['-- uitgevoerd via SQL Editor'])`;
+3. pas daarna pushen. De integratie ziet de versie dan als al uitgevoerd en
+   slaat hem over, in plaats van hem nog eens te draaien.
+
 ## Conventie
 - Bestandsnaam: `YYYYMMDDHHMMSS_korte_beschrijving.sql` (UTC-timestamp,
   oplopend/chronologisch — dat bepaalt de uitvoervolgorde).
@@ -86,3 +114,9 @@ zijn de 50 ontbrekende migraties zo uit de database overgenomen, en is
   op `batches`. De generatiescripts schreven dit veld al naar
   Recept-voorblad!G7, maar de kolom en het invoerveld op Batch Creation
   ontbraken nog.
+- `20261016085000_drop_ongebruikte_faseoranje_tabellen.sql` — architectuur-
+  opschoning stap 1: de 13 lege `batch_*`-tabellen (eerste Fase
+  Oranje-concept), `verpakkingsartikelen`, `verpakkingsmaterialen`,
+  `recipe_maisch_stappen` en `genereer_batchnummer()` (plus de ongebruikte
+  standaardwaarde op `batches.batchnummer`) verwijderd. Uitgevoerd via de SQL
+  Editor en vooraf geregistreerd.
