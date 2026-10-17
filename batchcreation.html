@@ -376,7 +376,7 @@
           // aangemaakt_op alone isn't a reliable sort key: rows inserted in the same
           // statement (e.g. a bulk historical import) all share one timestamp, so ties
           // need a tiebreaker. id (insertion order) does that cheaply.
-          .order('aangemaakt_op', { ascending: false })
+          .order('created_at', { ascending: false })
           .order('id', { ascending: false })
           .range(van, van + PAGINA - 1);
         if (error) {
