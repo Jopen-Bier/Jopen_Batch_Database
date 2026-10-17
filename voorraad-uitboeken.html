@@ -345,9 +345,9 @@
     async function laadOpenBatches() {
       const { data, error } = await supabaseClient
         .from('batches')
-        .select('id, batchnummer, naam, status')
-        .neq('status', 'afgerond')
-        .order('batchnummer', { ascending: false });
+        .select('id, batchnummer:batch_number, naam:name, status')
+        .neq('status', 'completed')
+        .order('batch_number', { ascending: false });
       if (error) { console.error('Kon batches niet laden:', error); return; }
       alleOpenBatches = data || [];
       const opties = ['<option value="">Select batch…</option>']
@@ -561,7 +561,7 @@
         .from('stock_movements')
         .select(`id, aangemaakt_op:created_at, notitie:note, hoeveelheid:quantity, off_recipe, is_spoilage, is_correction,
           ingevoerde_hoeveelheid:entered_quantity, ingevoerde_eenheid:entered_unit, geboekt_in_boekhouding:booked_in_accounting, geboekt_op:booked_at,
-          batches(batchnummer, naam), grondstof_lots:lots(lotcode:lot_code, eenheid:unit, ingredients(id, naam:name)),
+          batches(batchnummer:batch_number, naam:name), grondstof_lots:lots(lotcode:lot_code, eenheid:unit, ingredients(id, naam:name)),
           users!stock_movements_created_by_fkey(name),
           geboekt_door_gebruiker:users!stock_movements_booked_by_fkey(name)`)
         .eq('movement_type', 'consumption')

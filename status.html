@@ -242,7 +242,7 @@
       if (e5) throw e5;
 
       const { data: latestBatches, error: e6 } = await supabaseClient
-        .from('batches').select('batchnummer').order('batchnummer', { ascending: false }).limit(5);
+        .from('batches').select('batchnummer:batch_number').order('batch_number', { ascending: false }).limit(5);
       if (e6) throw e6;
 
       setCard('card-batches', batchTotal ?? '—', latestBatches?.[0] ? `latest: ${latestBatches[0].batchnummer}` : '');

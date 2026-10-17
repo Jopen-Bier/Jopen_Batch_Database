@@ -820,7 +820,8 @@ function reportFermentationText(row) {
 
 async function haalBatchDataOpBrowser(supabase, batchnummer) {
   const { data: batch, error: batchErr } = await supabase
-    .from('batches').select('*').eq('batchnummer', batchnummer).single();
+    .from('batches').select('*').eq('batch_number', batchnummer).single()
+    .then(r => fromDbResult('batches', r));
   if (batchErr || !batch) throw new Error(`Batch ${batchnummer} niet gevonden: ${batchErr?.message || ''}`);
 
   const recipeId = batch.recipe_id;

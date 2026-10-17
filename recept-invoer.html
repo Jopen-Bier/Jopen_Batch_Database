@@ -2541,7 +2541,7 @@ async function laadBestaandRecept(id) {
 
   document.getElementById('re-titel').textContent = 'Edit: ' + bestaandRecept.naam;
   document.getElementById('re-subtitel').textContent =
-    `Current version v${bestaandRecept.versie_major}.${bestaandRecept.versie_minor} · ${bestaandRecept.status}`;
+    `Current version v${bestaandRecept.versie_major}.${bestaandRecept.versie_minor} · ${valueLabel(RECIPE_STATUS_LABELS, bestaandRecept.status)}`;
 
   document.getElementById('veld-naam').value = bestaandRecept.naam || '';
   document.getElementById('veld-bierstijl').value = bestaandRecept.bierstijl || '';

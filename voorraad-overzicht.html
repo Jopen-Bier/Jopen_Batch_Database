@@ -593,7 +593,7 @@
     container.innerHTML = '<span class="vo-loading" style="padding:10px 0;">Loading…</span>';
     const { data, error } = await supabaseClient
       .from('stock_movements')
-      .select('hoeveelheid:quantity, aangemaakt_op:created_at, batches(batchnummer, naam)')
+      .select('hoeveelheid:quantity, aangemaakt_op:created_at, batches(batchnummer:batch_number, naam:name)')
       .eq('lot_id', lotId).eq('movement_type', 'consumption').not('batch_id', 'is', null)
       .order('created_at', { ascending: true });
     if (error) { container.innerHTML = `<span style="color:#a3492f;">Could not load: ${escapeHtml(error.message)}</span>`; return; }
