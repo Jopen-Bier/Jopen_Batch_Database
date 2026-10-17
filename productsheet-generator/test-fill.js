@@ -50,7 +50,7 @@ async function main() {
 
   // -- Stap 1: recept ophalen (Mooie Nel) --
   const { data: recipe, error: recErr } = await supabaseClient
-    .from('recipes').select('id, naam, recipe_group_id').eq('id', 361).single();
+    .from('recipes').select('id, naam:name, recipe_group_id').eq('id', 361).single();
   if (recErr) throw recErr;
   console.log(`Test tegen: ${recipe.naam} (recipe_group_id ${recipe.recipe_group_id})`);
 

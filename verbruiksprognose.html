@@ -114,11 +114,11 @@
 
     <div class="vp-filter-tabs" id="vp-filter-tabs">
       <button type="button" class="actief" data-rol="alle">All</button>
-      <button type="button" data-rol="hoofdmout">Malt &amp; grains</button>
+      <button type="button" data-rol="malt">Malt &amp; grains</button>
       <button type="button" data-rol="hops">Hops</button>
-      <button type="button" data-rol="toegift_brouwerij">Brewing additions</button>
-      <button type="button" data-rol="gist">Yeast</button>
-      <button type="button" data-rol="toegift_kelder">Cellar additions</button>
+      <button type="button" data-rol="brewhouse_addition">Brewing additions</button>
+      <button type="button" data-rol="yeast">Yeast</button>
+      <button type="button" data-rol="cellar_addition">Cellar additions</button>
     </div>
 
     <div id="vp-resultaat">
@@ -147,13 +147,13 @@
   <script src="voorraad-forecast.js"></script>
   <script>
     const ROL_LABEL = {
-      hoofdmout: 'Malt & grains',
+      malt: 'Malt & grains',
       hops: 'Hops',
-      toegift_brouwerij: 'Brewing additions',
-      gist: 'Yeast',
-      toegift_kelder: 'Cellar additions',
+      brewhouse_addition: 'Brewing additions',
+      yeast: 'Yeast',
+      cellar_addition: 'Cellar additions',
     };
-    const ROL_VOLGORDE = ['hoofdmout', 'hops', 'toegift_brouwerij', 'gist', 'toegift_kelder'];
+    const ROL_VOLGORDE = ['malt', 'hops', 'brewhouse_addition', 'yeast', 'cellar_addition'];
 
     // Eenheid -> kg of L, voor de "Total (kg/L)"-kolom bij Hops, Brewing
     // additions, Cellar additions en Yeast (allemaal ná de rate-naar-
@@ -187,7 +187,7 @@
     // input ongewijzigd terug (met weergaveTotaal = r.totaal) voor elke
     // andere rol dan Yeast.
     function berekenGistWeergave(r, rol) {
-      if (rol !== 'gist') return { ...r, weergaveTotaal: r.totaal };
+      if (rol !== 'yeast') return { ...r, weergaveTotaal: r.totaal };
       const perRecipeAfgerond = {};
       let totaalAfgerond = 0;
       Object.entries(r.perRecept).forEach(([naam, hoev]) => {
@@ -294,7 +294,7 @@
         if (ingredientZoekterm) rijen = rijen.filter(r => r.naam.toLowerCase().includes(ingredientZoekterm));
         if (rijen.length === 0) return;
         ietsGetoond = true;
-        const toonTotaalKolom = ['hops', 'toegift_brouwerij', 'toegift_kelder', 'gist'].includes(rol);
+        const toonTotaalKolom = ['hops', 'brewhouse_addition', 'cellar_addition', 'yeast'].includes(rol);
 
         html += `
           <div class="vp-groep">
@@ -313,7 +313,7 @@
                   return `
                   <tr class="vp-rij-ingredient" data-detail="detail-${rol}-${i}">
                     <td>${escapeHtml(r.naam)}${mixedBadge}${missingHlBadge}</td>
-                    <td>${formatGetal(r.weergaveTotaal)}${r.eenheid ? ' ' + escapeHtml(r.eenheid) : ''}${rol === 'gist' ? ' <span title="Sum of the per-recipe amounts, each rounded up to the nearest 500 g">(rounded)</span>' : ''}</td>
+                    <td>${formatGetal(r.weergaveTotaal)}${r.eenheid ? ' ' + escapeHtml(r.eenheid) : ''}${rol === 'yeast' ? ' <span title="Sum of the per-recipe amounts, each rounded up to the nearest 500 g">(rounded)</span>' : ''}</td>
                     ${toonTotaalKolom ? `<td>${kgOfL !== null ? formatGetal(kgOfL.waarde) + ' ' + kgOfL.label : `<span title="Unit '${escapeHtml(r.eenheid || '')}' not recognized — check manually">—</span>`}</td>` : ''}
                   </tr>
                   <tr class="vp-detail-rij" id="detail-${rol}-${i}">
@@ -321,7 +321,7 @@
                       Per recipe:
                       <ul>
                         ${Object.entries(r.perRecept).map(([naam, hoev]) =>
-                          rol === 'gist'
+                          rol === 'yeast'
                             ? `<li>${escapeHtml(naam)}: ${formatGetal(hoev)} ${escapeHtml(r.eenheid || '')} - Rounded: ${formatGetal(r.perRecipeAfgerond[naam])} ${escapeHtml(r.eenheid || '')}</li>`
                             : `<li>${escapeHtml(naam)}: ${formatGetal(hoev)}${r.eenheid ? ' ' + escapeHtml(r.eenheid) : ''}</li>`
                         ).join('')}
@@ -408,7 +408,7 @@
         titelCel.font = { bold: true, size: 12 };
         rijIndex += 1;
 
-        const isGist = rol === 'gist';
+        const isGist = rol === 'yeast';
         const tabelStartRij = rijIndex;
         sheet.addTable({
           name: `Tabel_${rol}`,

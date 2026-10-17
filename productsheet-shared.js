@@ -21,7 +21,7 @@ function psTurbidityLabel(troebelingLab) {
 }
 
 // -- Calculated color: zelfde formule als Recipe-invoer/batchrapport --
-// (kg × EBC × 0.08) per hoofdmout-regel, opgeteld, gedeeld door brouwsel_hl, +1.75
+// (kg × EBC × 0.08) per malt-regel, opgeteld, gedeeld door brouwsel_hl, +1.75
 function psCalculatedColor(hoofdmoutRegels, brouwselHl) {
   if (!brouwselHl) return null;
   const som = (hoofdmoutRegels || []).reduce((acc, r) => {
@@ -34,12 +34,12 @@ function psCalculatedColor(hoofdmoutRegels, brouwselHl) {
 
 // Rol -> label-categorie. Malt + Unmalted grains staan bewust samen onder 'malt'.
 const PS_ROL_NAAR_CATEGORIE = {
-  hoofdmout: 'malt',
-  hopgift_kook: 'hop',
+  malt: 'malt',
+  boil_hop: 'hop',
   dry_hop: 'hop',
-  gist: 'gist',
-  toegift_brouwerij: 'additief',
-  toegift_kelder: 'additief',
+  yeast: 'gist',
+  brewhouse_addition: 'additief',
+  cellar_addition: 'additief',
 };
 
 // Eenheid -> gram, voor Order by size. Rate-eenheden (g/hl, ml/hl) worden
@@ -178,19 +178,19 @@ function psBerekenAllergenen(regels) {
 async function psLaadReceptData(recipeGroupId) {
   const { data: recepten, error: recErr } = await supabaseClient
     .from('recipes')
-    .select('id, naam, bierstijl, versie_major, versie_minor, brouwsel_hl, smaakomschrijving, smaak_keywords, kleur_vrije_tekst, aanbevolen_schenktemperatuur')
+    .select('id, naam:name, bierstijl:beer_style, versie_major:version_major, versie_minor:version_minor, brouwsel_hl:brew_volume_hl, smaakomschrijving:flavor_description, smaak_keywords:flavor_keywords, kleur_vrije_tekst:color_free_text, aanbevolen_schenktemperatuur:serving_temperature')
     .eq('recipe_group_id', recipeGroupId)
-    .order('versie_major', { ascending: false })
-    .order('versie_minor', { ascending: false })
+    .order('version_major', { ascending: false })
+    .order('version_minor', { ascending: false })
     .limit(1);
   if (recErr) throw recErr;
   if (!recepten || recepten.length === 0) throw new Error('Geen recept gevonden voor deze receptgroep.');
   const recipe = recepten[0];
 
   const [{ data: specs, error: specsErr }, { data: ingredientRegels, error: ingErr }] = await Promise.all([
-    supabaseClient.from('recipe_specificaties').select('*').eq('recipe_id', recipe.id).maybeSingle(),
+    supabaseClient.from('recipe_specs').select('*').eq('recipe_id', recipe.id).maybeSingle(),
     supabaseClient.from('recipe_ingredients')
-      .select('rol, hoeveelheid, eenheid, ingredients(naam:name, ingredient_declaratie:ingredient_declaration, allergenen:allergens, dichtheid:density)')
+      .select('rol:addition_type, hoeveelheid:quantity, eenheid:unit, ingredients(naam:name, ingredient_declaratie:ingredient_declaration, allergenen:allergens, dichtheid:density)')
       .eq('recipe_id', recipe.id),
   ]);
   if (specsErr) throw specsErr;
@@ -206,15 +206,15 @@ async function psLaadReceptData(recipeGroupId) {
     dichtheid: r.ingredients ? r.ingredients.dichtheid : null,
   }));
 
-  // Ook hoofdmout-regels apart voor de Calculated color-berekening.
+  // Ook malt-regels apart voor de Calculated color-berekening.
   const { data: moutRegels, error: moutErr } = await supabaseClient
     .from('recipe_ingredients')
-    .select('hoeveelheid, kleur_ebc')
+    .select('hoeveelheid:quantity, kleur_ebc:color_ebc')
     .eq('recipe_id', recipe.id)
-    .eq('rol', 'hoofdmout');
+    .eq('addition_type', 'malt');
   if (moutErr) throw moutErr;
 
-  const s = specs || {};
+  const s = fromDb('recipe_specs', specs) || {};
   const calcColor = psCalculatedColor(moutRegels || [], recipe.brouwsel_hl);
   const ingredientenBlok = psBerekenIngredientenBlok(regels, recipe.brouwsel_hl);
   const allergenenTekst = psBerekenAllergenen(regels);
@@ -238,7 +238,7 @@ async function psHuidigeHash(recipeGroupId) {
 async function psLaadSyncStatus(recipeGroupId) {
   const { data, error } = await supabaseClient
     .from('product_sheet_status')
-    .select('*')
+    .select('product_sheet_id, recipe_group_id, status, in_sync')
     .eq('recipe_group_id', recipeGroupId)
     .maybeSingle();
   if (error) throw error;

@@ -30,7 +30,7 @@ function escapeHtml(value) {
  * Pass the query WITHOUT .range(); returns { data, error } like Supabase.
  *
  *   const { data, error } = await fetchAllRows(
- *     supabaseClient.from('recipes').select('id, naam').order('id'));
+ *     supabaseClient.from('recipes').select('id, naam:name').order('id'));
  *
  * Give the query a stable .order(), otherwise pages can overlap or skip rows.
  */

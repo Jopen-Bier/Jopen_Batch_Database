@@ -31,7 +31,7 @@
    "tijdstip": "Recipe Sheet!G63"
   }
  },
- "gist": {
+ "yeast": {
   "1": {
    "hoeveelheid": "Recipe Sheet!G87",
    "naam": "Recipe Sheet!A87"
@@ -41,7 +41,7 @@
    "naam": "Recipe Sheet!A88"
   }
  },
- "hopgift_kook": {
+ "boil_hop": {
   "1": {
    "naam": "Recipe Sheet!A43",
    "hdt": "Recipe Sheet!Q43",
@@ -148,7 +148,7 @@
    "tijdstip": "Recipe Sheet!G51"
   }
  },
- "hoofdmout": {
+ "malt": {
   "1": {
    "naam": "Recipe Sheet!A30",
    "hoeveelheid": "Recipe Sheet!D30",
@@ -200,7 +200,7 @@
    "kleur_ebc": "Recipe Sheet!E38"
   }
  },
- "toegift_brouwerij": {
+ "brewhouse_addition": {
   "1": {
    "tijdstip": "Recipe Sheet!I73",
    "hoeveelheid": "Recipe Sheet!E73",
@@ -252,7 +252,7 @@
    "naam": "Recipe Sheet!A81"
   }
  },
- "toegift_kelder": {
+ "cellar_addition": {
   "1": {
    "tijdstip": "Recipe Sheet!I89",
    "hoeveelheid": "Recipe Sheet!E89",

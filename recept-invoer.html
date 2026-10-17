@@ -389,8 +389,8 @@
             <label for="veld-locatie">Location</label>
             <select id="veld-locatie">
               <option value="">—</option>
-              <option value="Waarderpolder">WP</option>
-              <option value="Jopen Kerk">JK</option>
+              <option value="wp">WP</option>
+              <option value="jk">JK</option>
             </select>
           </div>
           <div class="re-field">
@@ -400,28 +400,28 @@
           <div class="re-field">
             <label for="veld-status">Status</label>
             <select id="veld-status">
-              <option value="concept">Draft</option>
-              <option value="actief">Active</option>
-              <option value="gearchiveerd">Archived</option>
+              <option value="draft">Draft</option>
+              <option value="active">Active</option>
+              <option value="archived">Archived</option>
             </select>
           </div>
           <div class="re-field re-badge-field">
             <label for="veld-bier_risico">Beer risk</label>
             <select id="veld-bier_risico">
               <option value="">—</option>
-              <option value="Standaard">Standaard</option>
-              <option value="Gevaarlijk">Gevaarlijk</option>
-              <option value="Suikerhoudend">Suikerhoudend</option>
-              <option value="Gevoelig">Gevoelig</option>
+              <option value="standard">Standard</option>
+              <option value="dangerous">Dangerous</option>
+              <option value="contains_sugar">Contains sugar</option>
+              <option value="sensitive">Sensitive</option>
             </select>
           </div>
           <div class="re-field re-badge-field">
             <label for="veld-bier_status">Beer status</label>
             <select id="veld-bier_status">
               <option value="">—</option>
-              <option value="Standaard">Standaard</option>
-              <option value="NPI">NPI</option>
-              <option value="Te verbeteren">Te verbeteren</option>
+              <option value="standard">Standard</option>
+              <option value="npi">NPI</option>
+              <option value="to_improve">To improve</option>
             </select>
           </div>
           <div class="re-field wide">
@@ -500,7 +500,7 @@
           </tfoot>
         </table>
         <p class="re-versie-uitleg" style="margin-top:-4px;">Calculated color: <strong id="re-mout-kleur-waarde">—</strong> EBC (weighted by weight/color per malt, ÷ Brouwsel (hl), + 1.75)</p>
-        <button type="button" class="re-btn secundair" data-tbody="re-ing-mout-tbody" data-roles="hoofdmout" data-add-btn>+ Add malt/grain</button>
+        <button type="button" class="re-btn secundair" data-tbody="re-ing-mout-tbody" data-roles="malt" data-add-btn>+ Add malt/grain</button>
       </div>
 
       <div class="re-section">
@@ -515,7 +515,7 @@
           <tbody id="re-ing-hop-tbody"></tbody>
         </table>
         <p class="re-versie-uitleg" style="margin-top:-4px;">Rendement/EBU calculated from Original extract + Boil volume (General/Boiling). Calculated total EBU: <strong id="re-ebu-totaal-waarde">—</strong></p>
-        <button type="button" class="re-btn secundair" data-tbody="re-ing-hop-tbody" data-roles="hopgift_kook,dry_hop" data-add-btn>+ Add hop/herb</button>
+        <button type="button" class="re-btn secundair" data-tbody="re-ing-hop-tbody" data-roles="boil_hop,dry_hop" data-add-btn>+ Add hop/herb</button>
 
         <div class="re-subkop" style="margin-top:16px;">Dry hop notes</div>
         <div class="re-grid">
@@ -562,7 +562,7 @@
           <thead><tr><th></th><th>Ingredient</th><th>Amount</th><th>Unit</th><th>Weigh for this brew</th><th>All in brew 1?</th><th>Timing</th><th>Note</th><th></th></tr></thead>
           <tbody id="re-ing-brouwtoegift-tbody"></tbody>
         </table>
-        <button type="button" class="re-btn secundair" data-tbody="re-ing-brouwtoegift-tbody" data-roles="toegift_brouwerij" data-add-btn>+ Add brewing addition</button>
+        <button type="button" class="re-btn secundair" data-tbody="re-ing-brouwtoegift-tbody" data-roles="brewhouse_addition" data-add-btn>+ Add brewing addition</button>
       </div>
 
       <div class="re-section">
@@ -575,7 +575,7 @@
           <thead><tr><th></th><th>Ingredient</th><th>Amount</th><th>Unit</th><th>Timing</th><th>Note</th><th></th></tr></thead>
           <tbody id="re-ing-gist-tbody"></tbody>
         </table>
-        <button type="button" class="re-btn secundair" data-tbody="re-ing-gist-tbody" data-roles="gist" data-add-btn>+ Add yeast</button>
+        <button type="button" class="re-btn secundair" data-tbody="re-ing-gist-tbody" data-roles="yeast" data-add-btn>+ Add yeast</button>
       </div>
 
       <div class="re-section">
@@ -588,7 +588,7 @@
           <thead><tr><th></th><th>Ingredient</th><th>Amount</th><th>Unit</th><th>Weigh for this brew</th><th>Timing</th><th>Note</th><th></th></tr></thead>
           <tbody id="re-ing-keldertoegift-tbody"></tbody>
         </table>
-        <button type="button" class="re-btn secundair" data-tbody="re-ing-keldertoegift-tbody" data-roles="toegift_kelder" data-add-btn>+ Add cellar addition</button>
+        <button type="button" class="re-btn secundair" data-tbody="re-ing-keldertoegift-tbody" data-roles="cellar_addition" data-add-btn>+ Add cellar addition</button>
         <div class="re-grid" style="margin-top:16px;">
           <div class="re-field wide" style="display:none;">
             <!-- Verborgen op verzoek van de gebruiker (leek niet nodig) -- kolom
@@ -732,6 +732,8 @@
 
 <script src="config.js"></script>
 <script src="jopen-utils.js"></script>
+<script src="db-legacy-names.js"></script>
+<script src="recipe-values.js"></script>
 <script src="nav.js"></script>
 <script src="waterzouten.js"></script>
 <script>
@@ -772,7 +774,8 @@ const BROUW_ALGEMEEN_SECTIES = [
   {
     titel: 'General',
     velden: [
-      ['recept_naam_software', 'Recipe name (Software / Braukon no.)', '', 'text'],
+      ['brewhouse_recipe_name_wp', 'Recipe name WP (Software / Braukon no.)', '', 'text'],
+      ['brewhouse_recipe_name_jk', 'Recipe name JK (Software / Braukon no.)', '', 'text'],
     ],
   },
   {
@@ -868,14 +871,14 @@ const WATER_FIELDS = [
   ['alkalinity', 'Alkalinity', '', 'number'],
 ];
 const ROL_LABELS = {
-  hoofdmout: 'Malt', hopgift_kook: 'Hop (boil)', dry_hop: 'Dry hop',
-  toegift_brouwerij: 'Brewhouse addition', toegift_kelder: 'Cellar addition', gist: 'Yeast',
+  malt: 'Malt', boil_hop: 'Hop (boil)', dry_hop: 'Dry hop',
+  brewhouse_addition: 'Brewhouse addition', cellar_addition: 'Cellar addition', yeast: 'Yeast',
 };
 
 // ---------------------------------------------------------------------------
 // Hop rendement (utilization) & EBU — 1-op-1 overgenomen uit Moederdata.xlsm,
 // tabblad "EBU Berekening" (T2:AF27) en de formule in Recipe Sheet!K43/K64.
-// Alleen van toepassing op rijen met rol "hopgift_kook" (Hop (boil)); dry hop
+// Alleen van toepassing op rijen met rol "boil_hop" (Hop (boil)); dry hop
 // heeft geen kooktijd-in-minuten en krijgt dus geen rendement/EBU.
 // Bevestigd gedrag (bewust, geen bug): kooktijd 0 min krijgt ook al een
 // rendement mee, want de brontabel heeft voor die rij al waardes (whirlpool-
@@ -1232,8 +1235,8 @@ function voegIngredientRegelToe(tbodyId, rollenLijst, regel = {}) {
     : '';
   // HDT hoort alleen bij Hop (boil), niet bij Dry hop -- de select staat er
   // altijd (voor een consistente tabelbreedte), maar wordt uitgeschakeld
-  // zodra de rol niet hopgift_kook is (zie ook de change-listener verderop).
-  const isBoilRij = (regel.rol || rollenLijst[0]) === 'hopgift_kook';
+  // zodra de rol niet boil_hop is (zie ook de change-listener verderop).
+  const isBoilRij = (regel.rol || rollenLijst[0]) === 'boil_hop';
   const hdtKolomHtml = isHopSectie ? `
     <td>
       <select class="re-ing-hdt" ${isBoilRij ? '' : 'disabled'}>
@@ -1393,7 +1396,7 @@ function voegIngredientRegelToe(tbodyId, rollenLijst, regel = {}) {
     const tijdstipDryhopWrap = tr.querySelector('.re-ing-tijdstip-dryhop-wrap');
     if (rolSelect) {
       rolSelect.addEventListener('change', () => {
-        const isBoil = rolSelect.value === 'hopgift_kook';
+        const isBoil = rolSelect.value === 'boil_hop';
         if (hdtSelect) {
           hdtSelect.disabled = !isBoil;
           if (!isBoil) hdtSelect.value = '';
@@ -1482,7 +1485,7 @@ function leesIngredientRegelsUit(tbodyId) {
 
     let tijdstip;
     if (isHopSectie) {
-      const isBoil = rol === 'hopgift_kook';
+      const isBoil = rol === 'boil_hop';
       tijdstip = isBoil
         ? (tr.querySelector('.re-ing-tijdstip-boil').value.trim() || null)
         : (() => {
@@ -1630,7 +1633,7 @@ function herberekenHopgewichten() {
     </table>`;
 }
 
-// Rendement% en EBU per hopgift (rol "hopgift_kook"), plus de "Calculated
+// Rendement% en EBU per hopgift (rol "boil_hop"), plus de "Calculated
 // total EBU" onderaan. Leest Original extract (General/Specificaties) en
 // Boil volume (Boiling) rechtstreeks van het formulier, dus werkt live
 // terwijl je typt, ook los van opslaan.
@@ -1650,7 +1653,7 @@ function herberekenHopRendementEnEbu() {
     if (!rendementCel || !ebuCel) return;
 
     const rol = tr.querySelector('.re-ing-rol').value;
-    if (rol !== 'hopgift_kook') {
+    if (rol !== 'boil_hop') {
       rendementCel.textContent = '—';
       ebuCel.textContent = '—';
       return;
@@ -2086,27 +2089,16 @@ function leesBasisgegevens() {
   };
 }
 
-// Kleurenschema's exact zoals de voorwaardelijke opmaak in Moederdata.
-const BIER_RISICO_KLEUREN = [
-  [/suiker.*gevaarlijk/i, '#7030A0', '#ffffff'],
-  [/suikerhoudend/i, '#FF66FF', '#ffffff'],
-  [/gevaarlijk/i, '#548235', '#ffffff'],
-  [/standaard/i, '#00B0F0', '#ffffff'],
-  [/gevoelig/i, '#A9D18E', '#1f1f1f'],
-];
-const BIER_STATUS_KLEUREN = [
-  [/te verbeteren/i, '#FFC000', '#1f1f1f'],
-  [/standaard/i, '#92D050', '#1f1f1f'],
-  [/npi/i, '#FF0000', '#ffffff'],
-];
+// Colour schemes (code -> [background, text]) come from recipe-values.js.
+const BIER_RISICO_KLEUREN = BEER_RISK_COLORS;
+const BIER_STATUS_KLEUREN = BEER_STATUS_COLORS;
 
 function pasBadgeKleurToe(inputEl, kleurenSchema) {
-  const waarde = (inputEl.value || '').trim();
-  const match = kleurenSchema.find(([regex]) => regex.test(waarde));
+  const match = kleurenSchema[(inputEl.value || '').trim()];
   if (match) {
-    inputEl.style.background = match[1];
-    inputEl.style.color = match[2];
-    inputEl.style.borderColor = match[1];
+    inputEl.style.background = match[0];
+    inputEl.style.color = match[1];
+    inputEl.style.borderColor = match[0];
   } else {
     inputEl.style.background = '';
     inputEl.style.color = '';
@@ -2296,11 +2288,11 @@ const KOPIEER_BLOKKEN = [
   { id: 'specs', label: 'End product specifications' },
   { id: 'proces', label: 'Process parameters' },
   { id: 'brouw', label: 'Brewing parameters' },
-  { id: 'mout', label: 'Malt & Grains', rollen: ['hoofdmout'] },
-  { id: 'hop', label: 'Hops and Herbs', rollen: ['hopgift_kook', 'dry_hop'] },
-  { id: 'brouwtoegift', label: 'Additions Brewing', rollen: ['toegift_brouwerij'] },
-  { id: 'gist', label: 'Yeasts', rollen: ['gist'] },
-  { id: 'keldertoegift', label: 'Additions Cellar', rollen: ['toegift_kelder'] },
+  { id: 'mout', label: 'Malt & Grains', rollen: ['malt'] },
+  { id: 'hop', label: 'Hops and Herbs', rollen: ['boil_hop', 'dry_hop'] },
+  { id: 'brouwtoegift', label: 'Additions Brewing', rollen: ['brewhouse_addition'] },
+  { id: 'gist', label: 'Yeasts', rollen: ['yeast'] },
+  { id: 'keldertoegift', label: 'Additions Cellar', rollen: ['cellar_addition'] },
   { id: 'water', label: 'Target water profile' },
   { id: 'verpakking', label: 'Packaging' },
   { id: 'processtappen', label: 'Process steps' },
@@ -2353,9 +2345,9 @@ async function vulKopieerSelect() {
   const select = document.getElementById('re-kopieer-select');
   const { data, error } = await supabaseClient
     .from('recipes')
-    .select('id, naam, bierstijl, status')
-    .neq('status', 'gearchiveerd')
-    .order('naam');
+    .select('id, naam:name, bierstijl:beer_style, status')
+    .neq('status', 'archived')
+    .order('name');
 
   if (error || !data) return;
 
@@ -2397,7 +2389,7 @@ function dryHopSorteerWaarde(tijdstip) {
 }
 
 function sorteerHopHerbsRegels(rijen) {
-  const boil = rijen.filter(r => r.rol === 'hopgift_kook')
+  const boil = rijen.filter(r => r.rol === 'boil_hop')
     .sort((a, b) => (parseFloat(b.tijdstip) || -Infinity) - (parseFloat(a.tijdstip) || -Infinity));
   const dryHop = rijen.filter(r => r.rol === 'dry_hop')
     .sort((a, b) => dryHopSorteerWaarde(a.tijdstip) - dryHopSorteerWaarde(b.tijdstip));
@@ -2406,14 +2398,14 @@ function sorteerHopHerbsRegels(rijen) {
 
 function vulIngredientSectiesUit(ingredients) {
   ALLE_ING_TBODY_IDS.forEach(tbodyId => { document.getElementById(tbodyId).innerHTML = ''; });
-  const hopRegels = sorteerHopHerbsRegels((ingredients || []).filter(r => r.rol === 'hopgift_kook' || r.rol === 'dry_hop'));
-  hopRegels.forEach(regel => voegIngredientRegelToe('re-ing-hop-tbody', ['hopgift_kook', 'dry_hop'], regel));
+  const hopRegels = sorteerHopHerbsRegels((ingredients || []).filter(r => r.rol === 'boil_hop' || r.rol === 'dry_hop'));
+  hopRegels.forEach(regel => voegIngredientRegelToe('re-ing-hop-tbody', ['boil_hop', 'dry_hop'], regel));
 
   (ingredients || []).forEach(regel => {
-    if (regel.rol === 'hoofdmout') voegIngredientRegelToe('re-ing-mout-tbody', ['hoofdmout'], regel);
-    else if (regel.rol === 'toegift_brouwerij') voegIngredientRegelToe('re-ing-brouwtoegift-tbody', ['toegift_brouwerij'], regel);
-    else if (regel.rol === 'gist') voegIngredientRegelToe('re-ing-gist-tbody', ['gist'], regel);
-    else if (regel.rol === 'toegift_kelder') voegIngredientRegelToe('re-ing-keldertoegift-tbody', ['toegift_kelder'], regel);
+    if (regel.rol === 'malt') voegIngredientRegelToe('re-ing-mout-tbody', ['malt'], regel);
+    else if (regel.rol === 'brewhouse_addition') voegIngredientRegelToe('re-ing-brouwtoegift-tbody', ['brewhouse_addition'], regel);
+    else if (regel.rol === 'yeast') voegIngredientRegelToe('re-ing-gist-tbody', ['yeast'], regel);
+    else if (regel.rol === 'cellar_addition') voegIngredientRegelToe('re-ing-keldertoegift-tbody', ['cellar_addition'], regel);
   });
   herberekenHopgewichten();
   herberekenHopRendementEnEbu();
@@ -2435,16 +2427,16 @@ document.getElementById('re-kopieer-btn').addEventListener('click', async () => 
   melding.className = 're-melding';
 
   const [recipe, specs, ferm, brouw, water, verpakking, processtappen, comments, kosten, ingredients] = await Promise.all([
-    supabaseClient.from('recipes').select('*').eq('id', bronId).single(),
-    supabaseClient.from('recipe_specificaties').select('*').eq('recipe_id', bronId).maybeSingle(),
-    supabaseClient.from('recipe_fermentatie').select('*').eq('recipe_id', bronId).maybeSingle(),
-    supabaseClient.from('recipe_brouwspecificaties').select('*').eq('recipe_id', bronId).maybeSingle(),
-    supabaseClient.from('recipe_water').select('*').eq('recipe_id', bronId).maybeSingle(),
-    supabaseClient.from('recipe_verpakking').select('*').eq('recipe_id', bronId).maybeSingle(),
-    supabaseClient.from('recipe_processtappen').select('*').eq('recipe_id', bronId).maybeSingle(),
-    supabaseClient.from('recipe_comments').select('*').eq('recipe_id', bronId).maybeSingle(),
-    supabaseClient.from('recipe_kosten').select('*').eq('recipe_id', bronId).maybeSingle(),
-    supabaseClient.from('recipe_ingredients').select('*').eq('recipe_id', bronId).order('rol').order('volgorde'),
+    supabaseClient.from('recipes').select('*').eq('id', bronId).single().then(r => fromDbResult('recipes', r)),
+    supabaseClient.from('recipe_specs').select('*').eq('recipe_id', bronId).maybeSingle().then(r => fromDbResult('recipe_specs', r)),
+    supabaseClient.from('recipe_fermentation').select('*').eq('recipe_id', bronId).maybeSingle().then(r => fromDbResult('recipe_fermentation', r)),
+    supabaseClient.from('recipe_brewing_specs').select('*').eq('recipe_id', bronId).maybeSingle().then(r => fromDbResult('recipe_brewing_specs', r)),
+    supabaseClient.from('recipe_water').select('*').eq('recipe_id', bronId).maybeSingle().then(r => fromDbResult('recipe_water', r)),
+    supabaseClient.from('recipe_packaging').select('*').eq('recipe_id', bronId).maybeSingle().then(r => fromDbResult('recipe_packaging', r)),
+    supabaseClient.from('recipe_process_steps').select('*').eq('recipe_id', bronId).maybeSingle().then(r => fromDbResult('recipe_process_steps', r)),
+    supabaseClient.from('recipe_comments').select('*').eq('recipe_id', bronId).maybeSingle().then(r => fromDbResult('recipe_comments', r)),
+    supabaseClient.from('recipe_costs').select('*').eq('recipe_id', bronId).maybeSingle().then(r => fromDbResult('recipe_costs', r)),
+    supabaseClient.from('recipe_ingredients').select('*').eq('recipe_id', bronId).order('addition_type').order('sort_order').then(r => fromDbResult('recipe_ingredients', r)),
   ]);
 
   if (recipe.error || !recipe.data) {
@@ -2461,7 +2453,7 @@ document.getElementById('re-kopieer-btn').addEventListener('click', async () => 
     document.getElementById('veld-bierstijl').value = bron.bierstijl || '';
     document.getElementById('veld-locatie').value = bron.locatie || '';
     document.getElementById('veld-brouwsel_hl').value = bron.brouwsel_hl ?? '';
-    document.getElementById('veld-status').value = 'concept';
+    document.getElementById('veld-status').value = 'draft';
     window.zetKleurPicker(bron.kleur || '');
     document.getElementById('veld-smaakomschrijving').value = bron.smaakomschrijving || '';
     smaakKeywords = (bron.smaak_keywords || []).slice();
@@ -2526,17 +2518,17 @@ document.getElementById('re-kopieer-btn').addEventListener('click', async () => 
 
 async function laadBestaandRecept(id) {
   const [recipe, specs, ferm, brouw, water, verpakking, processtappen, comments, kosten, ingredients, revisies] = await Promise.all([
-    supabaseClient.from('recipes').select('*').eq('id', id).single(),
-    supabaseClient.from('recipe_specificaties').select('*').eq('recipe_id', id).maybeSingle(),
-    supabaseClient.from('recipe_fermentatie').select('*').eq('recipe_id', id).maybeSingle(),
-    supabaseClient.from('recipe_brouwspecificaties').select('*').eq('recipe_id', id).maybeSingle(),
-    supabaseClient.from('recipe_water').select('*').eq('recipe_id', id).maybeSingle(),
-    supabaseClient.from('recipe_verpakking').select('*').eq('recipe_id', id).maybeSingle(),
-    supabaseClient.from('recipe_processtappen').select('*').eq('recipe_id', id).maybeSingle(),
-    supabaseClient.from('recipe_comments').select('*').eq('recipe_id', id).maybeSingle(),
-    supabaseClient.from('recipe_kosten').select('*').eq('recipe_id', id).maybeSingle(),
-    supabaseClient.from('recipe_ingredients').select('*').eq('recipe_id', id).order('rol').order('volgorde'),
-    supabaseClient.from('recipe_revisies').select('*').eq('recipe_id', id).order('versie_major', { ascending: false }).order('versie_minor', { ascending: false }).order('id', { ascending: false }),
+    supabaseClient.from('recipes').select('*').eq('id', id).single().then(r => fromDbResult('recipes', r)),
+    supabaseClient.from('recipe_specs').select('*').eq('recipe_id', id).maybeSingle().then(r => fromDbResult('recipe_specs', r)),
+    supabaseClient.from('recipe_fermentation').select('*').eq('recipe_id', id).maybeSingle().then(r => fromDbResult('recipe_fermentation', r)),
+    supabaseClient.from('recipe_brewing_specs').select('*').eq('recipe_id', id).maybeSingle().then(r => fromDbResult('recipe_brewing_specs', r)),
+    supabaseClient.from('recipe_water').select('*').eq('recipe_id', id).maybeSingle().then(r => fromDbResult('recipe_water', r)),
+    supabaseClient.from('recipe_packaging').select('*').eq('recipe_id', id).maybeSingle().then(r => fromDbResult('recipe_packaging', r)),
+    supabaseClient.from('recipe_process_steps').select('*').eq('recipe_id', id).maybeSingle().then(r => fromDbResult('recipe_process_steps', r)),
+    supabaseClient.from('recipe_comments').select('*').eq('recipe_id', id).maybeSingle().then(r => fromDbResult('recipe_comments', r)),
+    supabaseClient.from('recipe_costs').select('*').eq('recipe_id', id).maybeSingle().then(r => fromDbResult('recipe_costs', r)),
+    supabaseClient.from('recipe_ingredients').select('*').eq('recipe_id', id).order('addition_type').order('sort_order').then(r => fromDbResult('recipe_ingredients', r)),
+    supabaseClient.from('recipe_revisions').select('*').eq('recipe_id', id).order('version_major', { ascending: false }).order('version_minor', { ascending: false }).order('id', { ascending: false }).then(r => fromDbResult('recipe_revisions', r)),
   ]);
 
   if (recipe.error || !recipe.data) {
@@ -2555,7 +2547,7 @@ async function laadBestaandRecept(id) {
   document.getElementById('veld-bierstijl').value = bestaandRecept.bierstijl || '';
   document.getElementById('veld-locatie').value = bestaandRecept.locatie || '';
   document.getElementById('veld-brouwsel_hl').value = bestaandRecept.brouwsel_hl ?? '';
-  document.getElementById('veld-status').value = bestaandRecept.status || 'concept';
+  document.getElementById('veld-status').value = bestaandRecept.status || 'draft';
   window.zetKleurPicker(bestaandRecept.kleur || '');
   document.getElementById('veld-smaakomschrijving').value = bestaandRecept.smaakomschrijving || '';
   smaakKeywords = (bestaandRecept.smaak_keywords || []).slice();
@@ -2627,13 +2619,13 @@ async function maakNieuwRecept() {
 
   const { data: nieuwRecept, error: receptErr } = await supabaseClient
     .from('recipes')
-    .insert({
+    .insert(toDb('recipes', {
       ...basis,
       versie_major: 1,
       versie_minor: 0,
       aangemaakt_door: gebruikerId,
       gewijzigd_door: gebruikerId,
-    })
+    }))
     .select()
     .single();
 
@@ -2651,7 +2643,7 @@ async function maakNieuwRecept() {
     return;
   }
 
-  await supabaseClient.from('recipe_revisies').insert({
+  await supabaseClient.from('recipe_revisions').insert(toDb('recipe_revisions', {
     recipe_id: nieuwId,
     versie_major: 1,
     versie_minor: 0,
@@ -2659,7 +2651,7 @@ async function maakNieuwRecept() {
     door: huidigeGebruiker.name,
     wijziging: 'Initial version',
     gebruiker_id: gebruikerId,
-  });
+  }));
 
   melding.textContent = 'Recipe created! Redirecting…';
   melding.className = 're-melding ok';
@@ -2791,7 +2783,7 @@ async function slaBestaandReceptOp(soort) {
     // van kleine foutjes, niet voor iets dat in de historie moet komen.
     const { error: updateErr } = await supabaseClient
       .from('recipes')
-      .update({ ...basis })
+      .update(toDb('recipes', { ...basis }))
       .eq('id', bestaandRecept.id);
 
     if (updateErr) {
@@ -2818,7 +2810,7 @@ async function slaBestaandReceptOp(soort) {
 
     const { error: updateErr } = await supabaseClient
       .from('recipes')
-      .update({ ...basis, versie_minor: nieuweMinor, gewijzigd_door: gebruikerId })
+      .update(toDb('recipes', { ...basis, versie_minor: nieuweMinor, gewijzigd_door: gebruikerId }))
       .eq('id', bestaandRecept.id);
 
     if (updateErr) {
@@ -2834,7 +2826,7 @@ async function slaBestaandReceptOp(soort) {
       return;
     }
 
-    await supabaseClient.from('recipe_revisies').insert({
+    await supabaseClient.from('recipe_revisions').insert(toDb('recipe_revisions', {
       recipe_id: bestaandRecept.id,
       versie_major: bestaandRecept.versie_major,
       versie_minor: nieuweMinor,
@@ -2842,7 +2834,7 @@ async function slaBestaandReceptOp(soort) {
       door: huidigeGebruiker.name,
       wijziging,
       gebruiker_id: gebruikerId,
-    });
+    }));
 
     melding.textContent = `Saved as v${bestaandRecept.versie_major}.${nieuweMinor}. Redirecting…`;
     melding.className = 're-melding ok';
@@ -2852,7 +2844,7 @@ async function slaBestaandReceptOp(soort) {
 
   const { error: archiveerErr } = await supabaseClient
     .from('recipes')
-    .update({ status: 'gearchiveerd', gewijzigd_door: gebruikerId })
+    .update(toDb('recipes', { status: 'archived', gewijzigd_door: gebruikerId }))
     .eq('id', bestaandRecept.id);
 
   if (archiveerErr) {
@@ -2865,14 +2857,14 @@ async function slaBestaandReceptOp(soort) {
 
   const { data: nieuwRecept, error: receptErr } = await supabaseClient
     .from('recipes')
-    .insert({
+    .insert(toDb('recipes', {
       ...basis,
       versie_major: nieuweMajor,
       versie_minor: 0,
       recipe_group_id: bestaandRecept.recipe_group_id,
       aangemaakt_door: gebruikerId,
       gewijzigd_door: gebruikerId,
-    })
+    }))
     .select()
     .single();
 
@@ -2890,7 +2882,7 @@ async function slaBestaandReceptOp(soort) {
     return;
   }
 
-  await supabaseClient.from('recipe_revisies').insert({
+  await supabaseClient.from('recipe_revisions').insert(toDb('recipe_revisions', {
     recipe_id: nieuwId,
     versie_major: nieuweMajor,
     versie_minor: 0,
@@ -2898,7 +2890,7 @@ async function slaBestaandReceptOp(soort) {
     door: huidigeGebruiker.name,
     wijziging: `Major revision from v${bestaandRecept.versie_major}.${bestaandRecept.versie_minor}: ${wijziging}`,
     gebruiker_id: gebruikerId,
-  });
+  }));
 
   melding.textContent = `Saved as new version v${nieuweMajor}.0. Redirecting…`;
   melding.className = 're-melding ok';
@@ -2916,7 +2908,7 @@ function berekenHopTotalen() {
   let totalDryHop = 0;
   rijen.forEach(r => {
     const hoeveelheid = r.hoeveelheid || 0;
-    if (r.rol === 'hopgift_kook') totalWpHop += hoeveelheid;
+    if (r.rol === 'boil_hop') totalWpHop += hoeveelheid;
     else if (r.rol === 'dry_hop') totalDryHop += hoeveelheid;
   });
   return { totalWpHop, totalDryHop };
@@ -2958,28 +2950,28 @@ async function schrijfGerelateerdeData(recipeId) {
   const comments = commentsTekst ? [commentsTekst] : [];
   const ingredientRegels = leesAlleIngredientRegels();
 
-  const { error: specsErr } = await supabaseClient.from('recipe_specificaties').upsert({ recipe_id: recipeId, ...specs });
+  const { error: specsErr } = await supabaseClient.from('recipe_specs').upsert(toDb('recipe_specs', { recipe_id: recipeId, ...specs }));
   if (specsErr) return 'end product specifications: ' + specsErr.message;
 
-  const { error: fermErr } = await supabaseClient.from('recipe_fermentatie').upsert({ recipe_id: recipeId, ...ferm });
+  const { error: fermErr } = await supabaseClient.from('recipe_fermentation').upsert(toDb('recipe_fermentation', { recipe_id: recipeId, ...ferm }));
   if (fermErr) return 'process parameters: ' + fermErr.message;
 
-  const { error: brouwErr } = await supabaseClient.from('recipe_brouwspecificaties').upsert({ recipe_id: recipeId, ...brouw });
+  const { error: brouwErr } = await supabaseClient.from('recipe_brewing_specs').upsert(toDb('recipe_brewing_specs', { recipe_id: recipeId, ...brouw }));
   if (brouwErr) return 'brewing parameters: ' + brouwErr.message;
 
-  const { error: waterErr } = await supabaseClient.from('recipe_water').upsert({ recipe_id: recipeId, ...water });
+  const { error: waterErr } = await supabaseClient.from('recipe_water').upsert(toDb('recipe_water', { recipe_id: recipeId, ...water }));
   if (waterErr) return 'target water profile: ' + waterErr.message;
 
-  const { error: verpakkingErr } = await supabaseClient.from('recipe_verpakking').upsert({ recipe_id: recipeId, ...verpakking, formaten });
+  const { error: verpakkingErr } = await supabaseClient.from('recipe_packaging').upsert(toDb('recipe_packaging', { recipe_id: recipeId, ...verpakking, formaten }));
   if (verpakkingErr) return 'packaging: ' + verpakkingErr.message;
 
-  const { error: processtappenErr } = await supabaseClient.from('recipe_processtappen').upsert({ recipe_id: recipeId, ...processtappen });
+  const { error: processtappenErr } = await supabaseClient.from('recipe_process_steps').upsert(toDb('recipe_process_steps', { recipe_id: recipeId, ...processtappen }));
   if (processtappenErr) return 'process steps: ' + processtappenErr.message;
 
-  const { error: kostenErr } = await supabaseClient.from('recipe_kosten').upsert({ recipe_id: recipeId, ...kosten });
+  const { error: kostenErr } = await supabaseClient.from('recipe_costs').upsert(toDb('recipe_costs', { recipe_id: recipeId, ...kosten }));
   if (kostenErr) return 'costs: ' + kostenErr.message;
 
-  const { error: commentsErr } = await supabaseClient.from('recipe_comments').upsert({ recipe_id: recipeId, comments });
+  const { error: commentsErr } = await supabaseClient.from('recipe_comments').upsert(toDb('recipe_comments', { recipe_id: recipeId, comments }));
   if (commentsErr) return 'comments: ' + commentsErr.message;
 
   const { error: verwijderErr } = await supabaseClient.from('recipe_ingredients').delete().eq('recipe_id', recipeId);
@@ -2988,7 +2980,7 @@ async function schrijfGerelateerdeData(recipeId) {
   if (ingredientRegels.length > 0) {
     const { error: insertErr } = await supabaseClient
       .from('recipe_ingredients')
-      .insert(ingredientRegels.map(r => ({ ...r, recipe_id: recipeId })));
+      .insert(toDb('recipe_ingredients', ingredientRegels.map(r => ({ ...r, recipe_id: recipeId }))));
     if (insertErr) return 'ingredients: ' + insertErr.message;
   }
 
@@ -2997,7 +2989,7 @@ async function schrijfGerelateerdeData(recipeId) {
 
 // ============================================================================
 // Water salts calculator (popup). Rekenkern: waterzouten.js. Bronwater en caps:
-// tabel water_instellingen (Settings › Water). "Copy to Additions Brewing"
+// table water_settings (Settings › Water). "Copy to Additions Brewing"
 // vult alleen het formulier; opslaan gaat via de normale receptflow.
 // ============================================================================
 const WZ_INVOER = [['ca', 'Ca – Calcium'], ['mg', 'Mg – Magnesium'], ['na', 'Na – Sodium'], ['cl', 'Cl – Chloride'], ['so4', 'SO₄ – Sulfate']];
@@ -3011,7 +3003,7 @@ function wzFmt(x, dec = 0) {
 async function openWaterZoutenModal() {
   const melding = document.getElementById('re-wz-melding');
   melding.textContent = ''; melding.className = 'melding';
-  const { data, error } = await supabaseClient.from('water_instellingen').select('*').eq('id', 1).maybeSingle();
+  const { data, error } = await supabaseClient.from('water_settings').select('*').eq('id', 1).maybeSingle();
   if (error || !data) {
     alert('Could not load the source water profile (Settings › Water)' + (error ? ': ' + error.message : '.'));
     return;
@@ -3065,11 +3057,11 @@ function renderWaterZouten(volledig) {
   wzStaat.laatste = r;
   const body = document.getElementById('re-wz-body');
   if (volledig) {
-    const gemeten = w.gemeten_op ? ' · measured ' + new Date(w.gemeten_op).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+    const gemeten = w.measured_on ? ' · measured ' + new Date(w.measured_on).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
     body.innerHTML = `
       <div class="re-wz-rij">
         <div class="re-wz-bron">
-          <div class="re-wz-lbl">Source water · ${escapeHtml(w.omschrijving || '')}</div>
+          <div class="re-wz-lbl">Source water · ${escapeHtml(w.description || '')}</div>
           <div class="waarden">
             <span><b>Ca</b> ${wzFmt(w.ca, 1)}</span><span><b>Mg</b> ${wzFmt(w.mg, 1)}</span><span><b>Na</b> ${wzFmt(w.na, 1)}</span>
             <span><b>Cl</b> ${wzFmt(w.cl, 1)}</span><span><b>SO₄</b> ${wzFmt(w.so4, 1)}</span><span><b>Alk</b> ${wzFmt(w.alkalinity, 1)}</span>
@@ -3179,7 +3171,7 @@ function wzNaarAdditions() {
     const delen = r.split ? [['Mash', z.gphlMash], ['Boil', z.gphlBoil]] : [['', z.gphl]];
     delen.forEach(([moment, gphl]) => {
       if (!(gphl > 0)) return;
-      voegIngredientRegelToe(tbodyId, ['toegift_brouwerij'], { rol: 'toegift_brouwerij', ingredient_id: ids[z.key], hoeveelheid: rond6(gphl), eenheid: 'g/hl', tijdstip: moment });
+      voegIngredientRegelToe(tbodyId, ['brewhouse_addition'], { rol: 'brewhouse_addition', ingredient_id: ids[z.key], hoeveelheid: rond6(gphl), eenheid: 'g/hl', tijdstip: moment });
       n++;
     });
   });

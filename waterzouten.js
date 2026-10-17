@@ -3,7 +3,7 @@
 //
 // Pure functies, geen DOM en geen Supabase: ook in Node te testen
 // (zie tests/waterzouten.test.js). Bronwater en caps komen uit de tabel
-// water_instellingen (Settings › Water); de zoutfactoren staan hieronder vast.
+// water_settings (Settings › Water); de zoutfactoren staan hieronder vast.
 //
 // Volgorde (afgesproken met Jaap):
 //   0. Natrium  -> Natrium Chloride (enige natriumbron), maar nooit zoveel dat

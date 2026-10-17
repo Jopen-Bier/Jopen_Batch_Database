@@ -180,9 +180,9 @@
     border-radius: 20px;
     display: inline-block;
   }
-  .status-actief { background: #e1ead9; color: var(--hop-dark); }
-  .status-concept { background: #f3e3c9; color: #8a5a1e; }
-  .status-gearchiveerd { background: #e6e2d8; color: #7a7266; }
+  .status-active { background: #e1ead9; color: var(--hop-dark); }
+  .status-draft { background: #f3e3c9; color: #8a5a1e; }
+  .status-archived { background: #e6e2d8; color: #7a7266; }
 
   #detail-view { display: none; }
   #detail-view.active { display: block; }
@@ -363,6 +363,8 @@
 
 <script src="config.js"></script>
 <script src="jopen-utils.js"></script>
+<script src="db-legacy-names.js"></script>
+<script src="recipe-values.js"></script>
 <script src="nav.js"></script>
 <script>
 // Supabase-client (supabaseClient) en auth komen nu uit config.js, gedeeld
@@ -378,7 +380,9 @@ let huidigeGebruikerRol = null;
 // eerste bezoek (niets opgeslagen) staat alles aan, wat gelijk is aan "geen
 // filter". `null` in de opgeslagen set betekent hier altijd "alle waarden
 // geselecteerd" totdat de gebruiker er zelf één uitklikt.
-const FILTER_OPSLAG_KEY = 'jopen_receptoverzicht_filters_v1';
+// v2: status/location values became English codes (16-10-2026); old saved
+// filters would match nothing, so they are ignored.
+const FILTER_OPSLAG_KEY = 'jopen_receptoverzicht_filters_v2';
 
 function laadOpgeslagenFilters() {
   try {
@@ -412,20 +416,15 @@ let geselecteerdeProductSheetStatussen = new Set();
 const mainEl = document.getElementById('main');
 const connStatus = document.getElementById('conn-status');
 
-// Display-only translation of the status values as stored in the database
-// (Dutch: actief/concept/gearchiveerd) — the stored value itself is left
-// unchanged, only what's shown to the user is translated.
+// Display labels for the stored status values (draft/active/archived).
 function statusLabel(status) {
-  const labels = { actief: 'Active', concept: 'Draft', gearchiveerd: 'Archived' };
+  const labels = { active: 'Active', draft: 'Draft', archived: 'Archived' };
   return labels[status] || status || 'Unknown';
 }
 
-// Zelfde principe als statusLabel(): in de database staat de volledige naam
-// (verplicht door de check-constraint op recipes.locatie), in de app tonen
-// we de korte WP/JK-afkorting.
+// Location code (wp/jk) -> WP/JK, see recipe-values.js.
 function locatieLabel(locatie) {
-  const labels = { 'Waarderpolder': 'WP', 'Jopen Kerk': 'JK' };
-  return labels[locatie] || locatie || '—';
+  return locationLabel(locatie);
 }
 
 let magReceptBewerken = false;   // rechten voor module 'recipes', geladen bij page load
@@ -466,10 +465,10 @@ async function loadRecipes() {
   const [{ data, error }, { data: batchData, error: batchErr }, { data: revisieData, error: revisieErr }, { data: psData, error: psErr }] = await Promise.all([
     supabaseClient
       .from('recipes')
-      .select('id, naam, bierstijl, locatie, status, versie_major, versie_minor, recipe_group_id')
-      .order('naam'),
+      .select('id, naam:name, bierstijl:beer_style, locatie:location, status, versie_major:version_major, versie_minor:version_minor, recipe_group_id')
+      .order('name'),
     supabaseClient.from('batches').select('recipe_id, aangemaakt_op'),
-    fetchAllRows(supabaseClient.from('recipe_revisies').select('recipe_id, datum, door')),
+    fetchAllRows(supabaseClient.from('recipe_revisions').select('recipe_id, datum:date, door:changed_by_name')),
     supabaseClient.from('product_sheet_status').select('recipe_group_id, in_sync'),
   ]);
   if (error) {
@@ -511,7 +510,7 @@ async function loadRecipes() {
   // Filters initialiseren: opgeslagen selectie toepassen indien aanwezig,
   // anders alles aan (= geen filter) als startpunt.
   const opgeslagen = laadOpgeslagenFilters();
-  const alleStatussen = ['actief', 'concept', 'gearchiveerd'];
+  const alleStatussen = ['active', 'draft', 'archived'];
   geselecteerdeStatussen = new Set(opgeslagen.status ? opgeslagen.status.filter(s => alleStatussen.includes(s)) : alleStatussen);
   const alleLocaties = [...new Set(allRecipes.map(r => r.locatie).filter(Boolean))].sort();
   geselecteerdeLocaties = new Set(opgeslagen.locatie ? opgeslagen.locatie.filter(l => alleLocaties.includes(l)) : alleLocaties);
@@ -562,7 +561,7 @@ function setupDropdownFilter(prefix, opties, geselecteerdSet, onChange) {
 
 function renderFilterToggles() {
   const statusOpties = [
-    ['actief', 'Active'], ['concept', 'Draft'], ['gearchiveerd', 'Archived'],
+    ['active', 'Active'], ['draft', 'Draft'], ['archived', 'Archived'],
   ];
   setupDropdownFilter('status', statusOpties, geselecteerdeStatussen, () => {
     bewaarFilters();
@@ -685,7 +684,7 @@ function productSheetDotHtml(recipeGroupId) {
 // flow stays exactly as it was; these are a faster alternative for going
 // through many recipes during a cleanup pass.
 function rijActiesHtml(r) {
-  const alGearchiveerd = r.status === 'gearchiveerd';
+  const alGearchiveerd = r.status === 'archived';
   const editIcon = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M13.5 3.5l3 3L6 17H3v-3L13.5 3.5z"/></svg>`;
   const archiveIcon = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="14" height="3.2" rx="0.8"/><path d="M4.5 7.2V16a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1V7.2"/><path d="M8.2 10.8h3.6"/></svg>`;
   const deleteIcon = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 5.5h12"/><path d="M8 5.5V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5"/><path d="M5.5 5.5 6.2 16a1 1 0 0 0 1 1h5.6a1 1 0 0 0 1-1l0.7-10.5"/></svg>`;
@@ -702,7 +701,7 @@ function rijActiesHtml(r) {
   return `<span class="row-actions">${editBtn}${archiveBtn}${deleteBtn}</span>`;
 }
 
-// Quick archive: a direct status flip to 'gearchiveerd', deliberately NOT the
+// Quick archive: a direct status flip to 'archived', deliberately NOT the
 // same as the major-version-save archive flow in recept-invoer.html (which
 // archives the old row and creates a new active version). Meant for fast
 // bulk cleanup; a versioned archive is still available via "Save as new
@@ -710,7 +709,7 @@ function rijActiesHtml(r) {
 async function rijArchiveerRecept(id, naam, btn) {
   if (!confirm(`Archive "${naam}"?\n\nThis directly sets status to Archived. It does NOT create a new version -- use "Save as new version" in the recipe editor instead if you need a versioned archive.`)) return;
   btn.disabled = true;
-  const { error } = await supabaseClient.from('recipes').update({ status: 'gearchiveerd' }).eq('id', id);
+  const { error } = await supabaseClient.from('recipes').update(toDb('recipes', { status: 'archived' })).eq('id', id);
   if (error) {
     alert('Could not archive: ' + error.message);
     btn.disabled = false;
@@ -850,17 +849,17 @@ async function openDetail(id) {
   container.innerHTML = `<div class="loading">Loading recipe…</div>`;
 
   const [recipe, specs, ferm, brouw, water, verpakking, processtappen, comments, kosten, ingredients, revisies] = await Promise.all([
-    supabaseClient.from('recipes').select('*').eq('id', id).single(),
-    supabaseClient.from('recipe_specificaties').select('*').eq('recipe_id', id).maybeSingle(),
-    supabaseClient.from('recipe_fermentatie').select('*').eq('recipe_id', id).maybeSingle(),
-    supabaseClient.from('recipe_brouwspecificaties').select('*').eq('recipe_id', id).maybeSingle(),
-    supabaseClient.from('recipe_water').select('*').eq('recipe_id', id).maybeSingle(),
-    supabaseClient.from('recipe_verpakking').select('*').eq('recipe_id', id).maybeSingle(),
-    supabaseClient.from('recipe_processtappen').select('*').eq('recipe_id', id).maybeSingle(),
-    supabaseClient.from('recipe_comments').select('*').eq('recipe_id', id).maybeSingle(),
-    supabaseClient.from('recipe_kosten').select('*').eq('recipe_id', id).maybeSingle(),
-    supabaseClient.from('recipe_ingredients').select('rol, hoeveelheid, eenheid, tijdstip, volgorde, hdt, alpha_pct, kleur_ebc, notitie, ingredients(naam:name)').eq('recipe_id', id).order('rol').order('volgorde'),
-    supabaseClient.from('recipe_revisies').select('*').eq('recipe_id', id).order('versie_major', { ascending: false }).order('versie_minor', { ascending: false }).order('id', { ascending: false }),
+    supabaseClient.from('recipes').select('*').eq('id', id).single().then(r => fromDbResult('recipes', r)),
+    supabaseClient.from('recipe_specs').select('*').eq('recipe_id', id).maybeSingle().then(r => fromDbResult('recipe_specs', r)),
+    supabaseClient.from('recipe_fermentation').select('*').eq('recipe_id', id).maybeSingle().then(r => fromDbResult('recipe_fermentation', r)),
+    supabaseClient.from('recipe_brewing_specs').select('*').eq('recipe_id', id).maybeSingle().then(r => fromDbResult('recipe_brewing_specs', r)),
+    supabaseClient.from('recipe_water').select('*').eq('recipe_id', id).maybeSingle().then(r => fromDbResult('recipe_water', r)),
+    supabaseClient.from('recipe_packaging').select('*').eq('recipe_id', id).maybeSingle().then(r => fromDbResult('recipe_packaging', r)),
+    supabaseClient.from('recipe_process_steps').select('*').eq('recipe_id', id).maybeSingle().then(r => fromDbResult('recipe_process_steps', r)),
+    supabaseClient.from('recipe_comments').select('*').eq('recipe_id', id).maybeSingle().then(r => fromDbResult('recipe_comments', r)),
+    supabaseClient.from('recipe_costs').select('*').eq('recipe_id', id).maybeSingle().then(r => fromDbResult('recipe_costs', r)),
+    supabaseClient.from('recipe_ingredients').select('rol:addition_type, hoeveelheid:quantity, eenheid:unit, tijdstip:timing, volgorde:sort_order, hdt:hop_dosing_tank, alpha_pct, kleur_ebc:color_ebc, notitie:note, ingredients(naam:name)').eq('recipe_id', id).order('addition_type').order('sort_order'),
+    supabaseClient.from('recipe_revisions').select('*').eq('recipe_id', id).order('version_major', { ascending: false }).order('version_minor', { ascending: false }).order('id', { ascending: false }).then(r => fromDbResult('recipe_revisions', r)),
   ]);
 
   if (recipe.error) {
@@ -883,11 +882,11 @@ async function openDetail(id) {
   // "Previous versions"-lijstje onderaan de kaart.
   const { data: overigeVersies } = await supabaseClient
     .from('recipes')
-    .select('id, versie_major, versie_minor, status')
+    .select('id, versie_major:version_major, versie_minor:version_minor, status')
     .eq('recipe_group_id', r.recipe_group_id)
     .neq('id', id)
-    .order('versie_major', { ascending: false })
-    .order('versie_minor', { ascending: false });
+    .order('version_major', { ascending: false })
+    .order('version_minor', { ascending: false });
 
   const { data: productSheetStatus } = await supabaseClient
     .from('product_sheet_status')
@@ -934,7 +933,8 @@ async function openDetail(id) {
 
   const brouwSecties = [
     { titel: 'General', rows: [
-      ['Recipe name (Software / Braukon no.)', b.recept_naam_software, ''],
+      ['Recipe name WP (Software / Braukon no.)', b.brewhouse_recipe_name_wp, ''],
+      ['Recipe name JK (Software / Braukon no.)', b.brewhouse_recipe_name_jk, ''],
     ]},
     { titel: 'Milling', rows: [
       ['Roller mill', b.walsenmolen, ''],
@@ -1048,25 +1048,12 @@ async function openDetail(id) {
       </div>`).join('')}</div>`;
   }
 
-  // Kleurenschema's exact zoals de voorwaardelijke opmaak in Moederdata.
-  const BIER_RISICO_KLEUREN = [
-    [/suiker.*gevaarlijk/i, '#7030A0', '#ffffff'],
-    [/suikerhoudend/i, '#FF66FF', '#ffffff'],
-    [/gevaarlijk/i, '#548235', '#ffffff'],
-    [/standaard/i, '#00B0F0', '#ffffff'],
-    [/gevoelig/i, '#A9D18E', '#1f1f1f'],
-  ];
-  const BIER_STATUS_KLEUREN = [
-    [/te verbeteren/i, '#FFC000', '#1f1f1f'],
-    [/standaard/i, '#92D050', '#1f1f1f'],
-    [/npi/i, '#FF0000', '#ffffff'],
-  ];
-
+  // Colours and labels come from recipe-values.js.
   function badgeKleurStijl(type, waarde) {
-    const schema = type === 'status' ? BIER_STATUS_KLEUREN : BIER_RISICO_KLEUREN;
-    const match = schema.find(([regex]) => regex.test(String(waarde || '')));
+    const schema = type === 'status' ? BEER_STATUS_COLORS : BEER_RISK_COLORS;
+    const match = schema[waarde];
     if (!match) return '';
-    return ` style="background:${match[1]}; border-color:${match[1]}; color:${match[2]};"`;
+    return ` style="background:${match[0]}; border-color:${match[0]}; color:${match[1]};"`;
   }
 
   // Knop naar de Product Sheet-pagina, met rood/groen-stip als er al een
@@ -1083,7 +1070,7 @@ async function openDetail(id) {
   function badgeRowsHtml(rows) {
     if (rows.length === 0) return '';
     return rows.map(([label, val, type]) => `
-      <div class="badge-row"${badgeKleurStijl(type, val)}><span>${escapeHtml(label)}</span><span>${escapeHtml(String(val))}</span></div>`).join('');
+      <div class="badge-row"${badgeKleurStijl(type, val)}><span>${escapeHtml(label)}</span><span>${escapeHtml(valueLabel(type === 'status' ? BEER_STATUS_LABELS : BEER_RISK_LABELS, val))}</span></div>`).join('');
   }
 
   // Voor brouwparameters: zelfde compacte tabel, maar met subsectie-koppen
@@ -1104,14 +1091,14 @@ async function openDetail(id) {
   }
 
   const rolLabels = {
-    hoofdmout: 'Malt', hopgift_kook: 'Hop (boil)', dry_hop: 'Dry hop',
-    toegift_brouwerij: 'Brewhouse addition', toegift_kelder: 'Cellar addition', gist: 'Yeast'
+    malt: 'Malt', boil_hop: 'Hop (boil)', dry_hop: 'Dry hop',
+    brewhouse_addition: 'Brewhouse addition', cellar_addition: 'Cellar addition', yeast: 'Yeast'
   };
 
   // ---------------------------------------------------------------------
   // Hop rendement (utilization) & EBU — zelfde logica als recept-invoer.html,
   // 1-op-1 overgenomen uit Moederdata.xlsm (EBU Berekening T2:AF27 +
-  // Recipe Sheet!K43/K64). Alleen voor rol "hopgift_kook" (Hop (boil)).
+  // Recipe Sheet!K43/K64). Alleen voor rol "boil_hop" (Hop (boil)).
   // ---------------------------------------------------------------------
   const HOP_SG_BUCKETS = [1.02, 1.03, 1.04, 1.05, 1.06, 1.07, 1.08, 1.09, 1.10, 1.11, 1.12, 1.13];
   const HOP_RENDEMENT_TABEL = [
@@ -1196,7 +1183,7 @@ async function openDetail(id) {
     return 1000;
   }
   function sorteerHopHerbsRegels(rijen) {
-    const boil = rijen.filter(r => r.rol === 'hopgift_kook')
+    const boil = rijen.filter(r => r.rol === 'boil_hop')
       .sort((a, b) => (parseFloat(b.tijdstip) || -Infinity) - (parseFloat(a.tijdstip) || -Infinity));
     const dryHop = rijen.filter(r => r.rol === 'dry_hop')
       .sort((a, b) => dryHopSorteerWaarde(a.tijdstip) - dryHopSorteerWaarde(b.tijdstip));
@@ -1246,7 +1233,7 @@ async function openDetail(id) {
       let rendementCel = '';
       let ebuCel = '';
       if (toonHopEbu) {
-        if (i.rol === 'hopgift_kook') {
+        if (i.rol === 'boil_hop') {
           const kooktijd = i.tijdstip !== null && i.tijdstip !== undefined && i.tijdstip !== '' ? Number(i.tijdstip) : null;
           const rendement = (kooktijd !== null && s.origineel_extract) ? bepaalHopRendement(kooktijd, s.origineel_extract) : null;
           const ebu = (kooktijd !== null && s.origineel_extract) ? bepaalHopEbu(i.hoeveelheid, i.alpha_pct, kooktijd, s.origineel_extract, b.volume_kook) : null;
@@ -1269,7 +1256,7 @@ async function openDetail(id) {
         ${toonMout ? `<td>${i.kleur_ebc ?? '—'}</td><td>${totaalKg > 0 ? ((i.hoeveelheid || 0) / totaalKg * 100).toFixed(1) + '%' : '—'}</td>` : ''}
         <td>${escapeHtml(timingWeergave(i))}</td>
         ${toonHopEbu ? rendementCel + ebuCel : ''}
-        ${toonHdt ? `<td>${(i.rol === 'hopgift_kook' && i.hdt) ? 'HDT ' + i.hdt : '—'}</td>` : ''}
+        ${toonHdt ? `<td>${(i.rol === 'boil_hop' && i.hdt) ? 'HDT ' + i.hdt : '—'}</td>` : ''}
         <td>${escapeHtml(i.notitie || '—')}</td>
       </tr>`;
     }).join('');
@@ -1301,7 +1288,7 @@ async function openDetail(id) {
   // Calculated color: som van (kg * EBC * 0.08) / Brouwsel (hl) per moutregel,
   // + 1.75. Excel: Recipe Sheet!F30:F40.
   function berekenMoutKleur() {
-    const moutRijen = ings.filter(i => i.rol === 'hoofdmout');
+    const moutRijen = ings.filter(i => i.rol === 'malt');
     if (moutRijen.length === 0 || !r.brouwsel_hl) return null;
     const totaalBijdrage = moutRijen.reduce((som, i) => {
       const kg = i.hoeveelheid || 0;
@@ -1312,7 +1299,7 @@ async function openDetail(id) {
   }
 
   function hopSomHtml() {
-    const hopRijen = ings.filter(i => i.rol === 'hopgift_kook' || i.rol === 'dry_hop');
+    const hopRijen = ings.filter(i => i.rol === 'boil_hop' || i.rol === 'dry_hop');
     if (hopRijen.length === 0) return '<div class="empty">None added.</div>';
     const totalen = {};
     hopRijen.forEach(i => {
@@ -1458,24 +1445,24 @@ async function openDetail(id) {
     ${paramSectiesHtml(brouwSecties) || '<div class="empty">None entered.</div>'}
 
     <div class="section-title">Malt &amp; Grains</div>
-    ${ingTabelHtml(['hoofdmout'], false, false, false, true)}
+    ${ingTabelHtml(['malt'], false, false, false, true)}
     <p style="margin-top:-4px; color: var(--tekst-grijs, #555);">Calculated color: <strong>${moutKleur !== null ? moutKleur.toFixed(2) + ' EBC' : '—'}</strong></p>
 
     <div class="section-title">Hops and Herbs</div>
-    ${ingTabelHtml(['hopgift_kook', 'dry_hop'], true, true, true, false, true)}
+    ${ingTabelHtml(['boil_hop', 'dry_hop'], true, true, true, false, true)}
     ${paramColumnsHtml(dryHopNotesRows)}
 
     <div class="section-title">Hops total weights</div>
     ${hopSomHtml()}
 
     <div class="section-title">Additions Brewing</div>
-    ${ingTabelHtml(['toegift_brouwerij'], false, false, false, false, false, true, true)}
+    ${ingTabelHtml(['brewhouse_addition'], false, false, false, false, false, true, true)}
 
     <div class="section-title">Yeasts</div>
-    ${ingTabelHtml(['gist'], false)}
+    ${ingTabelHtml(['yeast'], false)}
 
     <div class="section-title">Additions Cellar</div>
-    ${ingTabelHtml(['toegift_kelder'], false, false, false, false, false, true)}
+    ${ingTabelHtml(['cellar_addition'], false, false, false, false, false, true)}
     ${paramColumnsHtml(cellarNotesRows)}
 
     <div class="section-title">Target water profile</div>

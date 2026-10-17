@@ -1565,7 +1565,7 @@ async function laadGebruiktInRecepten(ingredientId) {
 
   const { data, error } = await supabaseClient
     .from('recipe_ingredients')
-    .select('recipes(id, naam, bierstijl, status)')
+    .select('recipes(id, naam:name, bierstijl:beer_style, status)')
     .eq('ingredient_id', ingredientId);
 
   if (error) {
@@ -1584,7 +1584,7 @@ async function laadGebruiktInRecepten(ingredientId) {
 }
 
 function receptStatusLabel(status) {
-  const labels = { actief: 'Active', concept: 'Draft', gearchiveerd: 'Archived' };
+  const labels = { active: 'Active', draft: 'Draft', archived: 'Archived' };
   return labels[status] || status || 'Unknown';
 }
 
