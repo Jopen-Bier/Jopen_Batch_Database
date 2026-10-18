@@ -11,8 +11,8 @@ select 'history_before' as k, count(*)::text as v from public.brew_planning_hist
 select 'wsh_before' as k, count(*)::text as v from public.water_settings_history;
 set role t_noexec;
 select 'noexec_has_exec' as k, has_function_privilege('public.log_brew_planning_change()','execute')::text as v;
-update public.brew_planning set notes = coalesce(notes,'') || ' ' where id = (select min(id) from public.brew_planning);
-update public.water_settings set id = id where id = (select min(id) from public.water_settings);
+update public.brew_planning set notes = coalesce(notes,'') || ' ' where id = (select id from public.brew_planning limit 1);
+update public.water_settings set id = id where id = (select id from public.water_settings limit 1);
 reset role;
 select 'history_after' as k, count(*)::text as v from public.brew_planning_history;
 select 'wsh_after' as k, count(*)::text as v from public.water_settings_history;
