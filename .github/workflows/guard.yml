@@ -1,0 +1,42 @@
+name: Guard
+
+# Runs on every push and pull request. Fails when:
+#   - a page or script has its own copy of a helper from jopen-utils.js;
+#   - a new migration (after step 9 of the architecture cleanup) creates or
+#     renames something with a Dutch or non-snake_case name;
+#   - a root .js file has a syntax error;
+#   - one of the Node tests in tests/ fails.
+# Findings show up as annotations on the commit. Details: tools/ci_guard.py.
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+
+      - name: Helper copies and migration naming
+        run: python3 tools/ci_guard.py
+
+      - name: Syntax check (.js)
+        run: |
+          set -e
+          for f in *.js; do node --check "$f"; done
+
+      - name: Node tests
+        run: |
+          set -e
+          for t in tests/*.test.js; do
+            echo "== $t"
+            node "$t"
+          done

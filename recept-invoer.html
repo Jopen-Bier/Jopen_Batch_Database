@@ -1793,7 +1793,7 @@ function renderSmaakChipsSamenvatting() {
   smaakKeywords.forEach(naam => {
     const chip = document.createElement('span');
     chip.className = 'chip';
-    chip.innerHTML = `<span>${escapeHtmlLokaal(naam)}</span>`;
+    chip.innerHTML = `<span>${escapeHtml(naam)}</span>`;
     const removeBtn = document.createElement('button');
     removeBtn.type = 'button';
     removeBtn.textContent = '\u00D7';
@@ -1804,15 +1804,6 @@ function renderSmaakChipsSamenvatting() {
     chip.appendChild(removeBtn);
     el.appendChild(chip);
   });
-}
-
-// recept-invoer.html doesn't have its own escapeHtml elsewhere yet at the
-// point this section loads on the page, so a tiny local one avoids a
-// load-order dependency.
-function escapeHtmlLokaal(str) {
-  const div = document.createElement('div');
-  div.textContent = str ?? '';
-  return div.innerHTML;
 }
 
 function smaakToggleSelect(naam) {
@@ -1907,7 +1898,7 @@ function renderSmaakwielModal() {
     smaakKeywordsWerk.forEach(naam => {
       const chip = document.createElement('span');
       chip.className = 'chip';
-      chip.innerHTML = `<span>${escapeHtmlLokaal(naam)}</span>`;
+      chip.innerHTML = `<span>${escapeHtml(naam)}</span>`;
       const removeBtn = document.createElement('button');
       removeBtn.type = 'button';
       removeBtn.textContent = '\u00D7';
