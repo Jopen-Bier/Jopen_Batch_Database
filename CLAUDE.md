@@ -43,7 +43,7 @@ rules that must not be skipped.
 - Generic helpers come from `jopen-utils.js` — never copy them into a page.
   A helper needed on a second page moves to `jopen-utils.js`.
 - A calculation needed in more than one place becomes its own module with a
-  Node test in `tests/` (pattern: `waterzouten.js`). Browser + Node export:
+  Node test in `tests/` (pattern: `waterzouten.js`, `brew-calculations.js`). Browser + Node export:
   `if (typeof module !== 'undefined' && module.exports) module.exports = {…}`.
 - Excel batch report: patch XML via `xlsx-direct.js`; never load/save the
   template with ExcelJS. `batchrapport-vullen.js` has its own browser copy of
