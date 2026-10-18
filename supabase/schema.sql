@@ -157,14 +157,14 @@ $$;
 CREATE FUNCTION public.product_sheet_calculated_color(p_recipe_id bigint) RETURNS numeric
     LANGUAGE sql STABLE
     AS $$
-  select round(
-    coalesce(sum(ri.hoeveelheid * ri.kleur_ebc * 0.08), 0) / nullif(r.brouwsel_hl, 0) + 1.75
-  , 2)
-  from recipes r
-  left join recipe_ingredients ri on ri.recipe_id = r.id and ri.rol = 'hoofdmout'
-  where r.id = p_recipe_id
-  group by r.brouwsel_hl
-$$;
+                                                                                                                                                                                             select round(
+                                                                                                                                                                                                 coalesce(sum(ri.quantity * ri.color_ebc * 0.08), 0) / nullif(r.brew_volume_hl, 0) + 1.75
+                                                                                                                                                                                                   , 2)
+                                                                                                                                                                                                     from recipes r
+                                                                                                                                                                                                       left join recipe_ingredients ri on ri.recipe_id = r.id and ri.addition_type = 'malt'
+                                                                                                                                                                                                         where r.id = p_recipe_id
+                                                                                                                                                                                                           group by r.brew_volume_hl
+                                                                                                                                                                                                           $$;
 
 
 --
@@ -174,37 +174,37 @@ $$;
 CREATE FUNCTION public.product_sheet_relevant_hash(p_recipe_group_id uuid) RETURNS text
     LANGUAGE sql STABLE
     AS $$
-  select md5(
-    coalesce(s.origineel_extract::text,'') || '|' || coalesce(s.origineel_extract_tol,'') || '|' ||
-    coalesce(s.rest_extract::text,'') || '|' || coalesce(s.rest_extract_tol,'') || '|' ||
-    coalesce(s.alcohol::text,'') || '|' || coalesce(s.alcohol_tol,'') || '|' ||
-    coalesce(s.bitterheid::text,'') || '|' || coalesce(s.bitterheid_tol,'') || '|' ||
-    coalesce(product_sheet_calculated_color(r.id)::text,'') || '|' || coalesce(s.kleur_tol,'') || '|' ||
-    coalesce(s.ph::text,'') || '|' || coalesce(s.ph_tol,'') || '|' ||
-    coalesce(s.troebeling_lab::text,'') || '|' || coalesce(s.troebeling_lab_tol,'') || '|' ||
-    coalesce(s.co2_fles::text,'') || '|' || coalesce(s.co2_fles_tol,'') || '|' ||
-    coalesce(s.co2_can::text,'') || '|' || coalesce(s.co2_can_tol,'') || '|' ||
-    coalesce(s.co2_fust::text,'') || '|' || coalesce(s.co2_fust_tol,'') || '|' ||
-    coalesce(s.headspace_o2::text,'') || '|' || coalesce(s.headspace_o2_tol,'') || '|' ||
-    coalesce(s.dissolved_o2::text,'') || '|' || coalesce(s.dissolved_o2_tol,'') || '|' ||
-    coalesce(r.smaakomschrijving,'') || '|' ||
-    coalesce(array_to_string(r.smaak_keywords, ','),'') || '|' ||
-    coalesce(r.kleur_vrije_tekst,'') || '|' ||
-    coalesce(r.aanbevolen_schenktemperatuur::text,'') || '|' ||
-    coalesce((
-      select string_agg(ri.ingredient_id::text || ':' || coalesce(ri.hoeveelheid::text,'') || ':' || coalesce(ri.eenheid,'') || ':' || ri.rol, ',' order by ri.ingredient_id, ri.rol)
-      from recipe_ingredients ri where ri.recipe_id = r.id
-    ), '') || '|' ||
-    coalesce((
-      select string_agg(coalesce(i.ingredient_declaration,'') || ':' || coalesce(i.allergens, '[]'::jsonb)::text, ',' order by i.id)
-      from recipe_ingredients ri2 join ingredients i on i.id = ri2.ingredient_id
-      where ri2.recipe_id = r.id
-    ), '')
-  )
-  from recipes r
-  left join recipe_specificaties s on s.recipe_id = r.id
-  where r.id = product_sheet_relevant_recipe_id(p_recipe_group_id)
-$$;
+                                                                                                                                                                                                             select md5(
+                                                                                                                                                                                                                 coalesce(s.original_extract::text,'') || '|' || coalesce(s.original_extract_tol,'') || '|' ||
+                                                                                                                                                                                                                     coalesce(s.final_extract::text,'') || '|' || coalesce(s.final_extract_tol,'') || '|' ||
+                                                                                                                                                                                                                         coalesce(s.alcohol::text,'') || '|' || coalesce(s.alcohol_tol,'') || '|' ||
+                                                                                                                                                                                                                             coalesce(s.bitterness::text,'') || '|' || coalesce(s.bitterness_tol,'') || '|' ||
+                                                                                                                                                                                                                                 coalesce(product_sheet_calculated_color(r.id)::text,'') || '|' || coalesce(s.color_tol,'') || '|' ||
+                                                                                                                                                                                                                                     coalesce(s.ph::text,'') || '|' || coalesce(s.ph_tol,'') || '|' ||
+                                                                                                                                                                                                                                         coalesce(s.turbidity_lab::text,'') || '|' || coalesce(s.turbidity_lab_tol,'') || '|' ||
+                                                                                                                                                                                                                                             coalesce(s.co2_bottle::text,'') || '|' || coalesce(s.co2_bottle_tol,'') || '|' ||
+                                                                                                                                                                                                                                                 coalesce(s.co2_can::text,'') || '|' || coalesce(s.co2_can_tol,'') || '|' ||
+                                                                                                                                                                                                                                                     coalesce(s.co2_keg::text,'') || '|' || coalesce(s.co2_keg_tol,'') || '|' ||
+                                                                                                                                                                                                                                                         coalesce(s.headspace_o2::text,'') || '|' || coalesce(s.headspace_o2_tol,'') || '|' ||
+                                                                                                                                                                                                                                                             coalesce(s.dissolved_o2::text,'') || '|' || coalesce(s.dissolved_o2_tol,'') || '|' ||
+                                                                                                                                                                                                                                                                 coalesce(r.flavor_description,'') || '|' ||
+                                                                                                                                                                                                                                                                     coalesce(array_to_string(r.flavor_keywords, ','),'') || '|' ||
+                                                                                                                                                                                                                                                                         coalesce(r.color_free_text,'') || '|' ||
+                                                                                                                                                                                                                                                                             coalesce(r.serving_temperature::text,'') || '|' ||
+                                                                                                                                                                                                                                                                                 coalesce((
+                                                                                                                                                                                                                                                                                       select string_agg(ri.ingredient_id::text || ':' || coalesce(ri.quantity::text,'') || ':' || coalesce(ri.unit,'') || ':' || ri.addition_type, ',' order by ri.ingredient_id, ri.addition_type)
+                                                                                                                                                                                                                                                                                             from recipe_ingredients ri where ri.recipe_id = r.id
+                                                                                                                                                                                                                                                                                                 ), '') || '|' ||
+                                                                                                                                                                                                                                                                                                     coalesce((
+                                                                                                                                                                                                                                                                                                           select string_agg(coalesce(i.ingredient_declaration,'') || ':' || coalesce(i.allergens, '[]'::jsonb)::text, ',' order by i.id)
+                                                                                                                                                                                                                                                                                                                 from recipe_ingredients ri2 join ingredients i on i.id = ri2.ingredient_id
+                                                                                                                                                                                                                                                                                                                       where ri2.recipe_id = r.id
+                                                                                                                                                                                                                                                                                                                           ), '')
+                                                                                                                                                                                                                                                                                                                             )
+                                                                                                                                                                                                                                                                                                                               from recipes r
+                                                                                                                                                                                                                                                                                                                                 left join recipe_specs s on s.recipe_id = r.id
+                                                                                                                                                                                                                                                                                                                                   where r.id = product_sheet_relevant_recipe_id(p_recipe_group_id)
+                                                                                                                                                                                                                                                                                                                                   $$;
 
 
 --
@@ -214,25 +214,11 @@ $$;
 CREATE FUNCTION public.product_sheet_relevant_recipe_id(p_recipe_group_id uuid) RETURNS bigint
     LANGUAGE sql STABLE
     AS $$
-  select id from recipes
-  where recipe_group_id = p_recipe_group_id
-  order by versie_major desc, versie_minor desc
-  limit 1
-$$;
-
-
---
--- Name: set_gewijzigd_op(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.set_gewijzigd_op() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-begin
-  new.gewijzigd_op = now();
-  return new;
-end;
-$$;
+                                                                                                                                                                                     select id from recipes
+                                                                                                                                                                                       where recipe_group_id = p_recipe_group_id
+                                                                                                                                                                                         order by version_major desc, version_minor desc
+                                                                                                                                                                                           limit 1
+                                                                                                                                                                                           $$;
 
 
 --
@@ -264,34 +250,34 @@ $$;
 
 
 --
--- Name: water_instellingen_log(); Type: FUNCTION; Schema: public; Owner: -
+-- Name: water_settings_log(); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.water_instellingen_log() RETURNS trigger
+CREATE FUNCTION public.water_settings_log() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
-begin
-  insert into water_instellingen_historie (geldig_vanaf, gewijzigd_door, gegevens)
-    values (new.gewijzigd_op, new.gewijzigd_door, to_jsonb(new));
-  return new;
-end;
-$$;
+                                                                           begin
+                                                                             insert into water_settings_history (valid_from, updated_by, data)
+                                                                                 values (new.updated_at, new.updated_by, to_jsonb(new));
+                                                                                   return new;
+                                                                                   end;
+                                                                                   $$;
 
 
 --
--- Name: water_instellingen_stempel(); Type: FUNCTION; Schema: public; Owner: -
+-- Name: water_settings_stamp(); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.water_instellingen_stempel() RETURNS trigger
+CREATE FUNCTION public.water_settings_stamp() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
-begin
-  new.gewijzigd_op := now();
-  new.gewijzigd_door := auth.uid();
-  return new;
-end;
-$$;
+                                                                     begin
+                                                                       new.updated_at := now();
+                                                                         new.updated_by := auth.uid();
+                                                                           return new;
+                                                                           end;
+                                                                           $$;
 
 
 SET default_tablespace = '';
@@ -488,12 +474,12 @@ CREATE TABLE public.document_types (
 
 
 --
--- Name: hop_utilisatie_curve; Type: TABLE; Schema: public; Owner: -
+-- Name: hop_utilization_curve; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.hop_utilisatie_curve (
-    kooktijd_min integer NOT NULL,
-    rendement_pct numeric NOT NULL
+CREATE TABLE public.hop_utilization_curve (
+    boil_time_min integer NOT NULL,
+    utilization_pct numeric NOT NULL
 );
 
 
@@ -611,17 +597,17 @@ CREATE TABLE public.recipe_ingredients (
     id bigint NOT NULL,
     recipe_id bigint NOT NULL,
     ingredient_id bigint,
-    rol text NOT NULL,
-    hoeveelheid numeric,
-    eenheid text,
-    tijdstip text,
-    volgorde integer,
-    notitie text,
-    hdt integer,
+    addition_type text NOT NULL,
+    quantity numeric,
+    unit text,
+    timing text,
+    sort_order integer,
+    note text,
+    hop_dosing_tank integer,
     alpha_pct numeric,
-    kleur_ebc numeric,
-    alles_in_brouwsel_1 boolean DEFAULT false NOT NULL,
-    CONSTRAINT recipe_ingredients_rol_check CHECK ((rol = ANY (ARRAY['hoofdmout'::text, 'hopgift_kook'::text, 'dry_hop'::text, 'toegift_brouwerij'::text, 'toegift_kelder'::text, 'gist'::text])))
+    color_ebc numeric,
+    all_in_first_brew boolean DEFAULT false NOT NULL,
+    CONSTRAINT recipe_ingredients_addition_type_check CHECK ((addition_type = ANY (ARRAY['malt'::text, 'boil_hop'::text, 'dry_hop'::text, 'brewhouse_addition'::text, 'cellar_addition'::text, 'yeast'::text])))
 );
 
 
@@ -784,28 +770,28 @@ CREATE TABLE public.permission_modules (
 
 
 --
--- Name: product_sheet_revisies; Type: TABLE; Schema: public; Owner: -
+-- Name: product_sheet_revisions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.product_sheet_revisies (
+CREATE TABLE public.product_sheet_revisions (
     id bigint NOT NULL,
     product_sheet_id bigint NOT NULL,
-    versie integer NOT NULL,
-    recipe_versie_major integer,
-    recipe_versie_minor integer,
-    datum date DEFAULT CURRENT_DATE NOT NULL,
-    door text,
-    wijzigingen text,
+    version integer NOT NULL,
+    recipe_version_major integer,
+    recipe_version_minor integer,
+    date date DEFAULT CURRENT_DATE NOT NULL,
+    changed_by_name text,
+    change_description text,
     created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 
 --
--- Name: product_sheet_revisies_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+-- Name: product_sheet_revisions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-ALTER TABLE public.product_sheet_revisies ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
-    SEQUENCE NAME public.product_sheet_revisies_id_seq
+ALTER TABLE public.product_sheet_revisions ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.product_sheet_revisions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -821,26 +807,27 @@ ALTER TABLE public.product_sheet_revisies ALTER COLUMN id ADD GENERATED ALWAYS A
 CREATE TABLE public.product_sheets (
     id bigint NOT NULL,
     recipe_group_id uuid NOT NULL,
-    status text DEFAULT 'actief'::text NOT NULL,
-    huidige_versie integer DEFAULT 1 NOT NULL,
+    status text DEFAULT 'active'::text NOT NULL,
+    current_version integer DEFAULT 1 NOT NULL,
     excise_tax_category text,
-    vat_gerijpt_hl numeric,
-    vat_type text,
-    vat_dagen numeric,
-    energie_kj numeric,
-    energie_kcal numeric,
-    vet_g numeric,
-    koolhydraten_g numeric,
-    eiwit_g numeric,
-    zout_g numeric,
-    opmerkingen text,
+    barrel_aged_hl numeric,
+    barrel_type text,
+    barrel_days numeric,
+    energy_kj numeric,
+    energy_kcal numeric,
+    fat_g numeric,
+    carbohydrates_g numeric,
+    protein_g numeric,
+    salt_g numeric,
+    remarks text,
     sync_snapshot jsonb,
-    bijgewerkt_obv_versie_major integer,
-    bijgewerkt_obv_versie_minor integer,
-    bijgewerkt_op timestamp with time zone,
-    bijgewerkt_door uuid,
-    aangemaakt_op timestamp with time zone DEFAULT now() NOT NULL,
-    aangemaakt_door uuid
+    based_on_version_major integer,
+    based_on_version_minor integer,
+    updated_at timestamp with time zone,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    CONSTRAINT product_sheets_status_check CHECK ((status = ANY (ARRAY['active'::text, 'archived'::text])))
 );
 
 
@@ -859,15 +846,15 @@ CREATE VIEW public.product_sheet_status WITH (security_invoker='true') AS
  SELECT id AS product_sheet_id,
     recipe_group_id,
     status,
-    huidige_versie,
-    bijgewerkt_op,
-    bijgewerkt_obv_versie_major,
-    bijgewerkt_obv_versie_minor,
-    (sync_snapshot ->> 'hash'::text) AS opgeslagen_hash,
-    public.product_sheet_relevant_hash(recipe_group_id) AS huidige_hash,
+    current_version,
+    updated_at,
+    based_on_version_major,
+    based_on_version_minor,
+    (sync_snapshot ->> 'hash'::text) AS stored_hash,
+    public.product_sheet_relevant_hash(recipe_group_id) AS current_hash,
     COALESCE(((sync_snapshot ->> 'hash'::text) = public.product_sheet_relevant_hash(recipe_group_id)), false) AS in_sync
    FROM public.product_sheets ps
-  WHERE (status <> 'gearchiveerd'::text);
+  WHERE (status <> 'archived'::text);
 
 
 --
@@ -885,57 +872,58 @@ ALTER TABLE public.product_sheets ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTI
 
 
 --
--- Name: recipe_brouwspecificaties; Type: TABLE; Schema: public; Owner: -
+-- Name: recipe_brewing_specs; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.recipe_brouwspecificaties (
+CREATE TABLE public.recipe_brewing_specs (
     recipe_id bigint NOT NULL,
-    kamers_mashfilter numeric,
-    walsenmolen text,
-    beslag_dikte numeric,
-    volume_kook numeric,
-    wortvoorkoeler_temp numeric,
-    eindvolume_brouwsel numeric,
-    gewenste_verdamping numeric,
-    intensiteit_koken numeric,
-    whirlpool_rust numeric,
-    lauterfactor numeric,
-    recept_naam_software text,
-    stort_special_bin_kg numeric,
-    naam_special_bin text,
-    mash_inmaischen_temp numeric,
-    mash_inmaischen_tijd numeric,
-    mash_verhogen1_temp numeric,
-    mash_verhogen1_tijd numeric,
-    mash_verhogen2_temp numeric,
-    mash_verhogen2_tijd numeric,
-    mash_verhogen3_temp numeric,
-    mash_verhogen3_tijd numeric,
-    mash_verhogen4_temp numeric,
-    mash_verhogen4_tijd numeric,
-    mash_uitmaischen_temp numeric,
-    mash_uitmaischen_tijd numeric,
-    cumm_sparging_vol numeric,
-    verwacht_extract_begin_kook numeric,
-    volume_water_additie_terugkoeling numeric,
-    sparging_1e numeric,
-    sparging_2e numeric,
-    sparging_3e numeric,
-    sparging_4e numeric,
-    eerste_afloop numeric,
-    spoelwater numeric,
-    spoel_afloop numeric,
-    totaal_gefiltreerd_volume numeric,
-    inmaischen_zuur_l numeric,
-    inmaischen_tannines_l numeric,
-    koken_zuur_l numeric,
-    inline_sparge_zuur_l numeric,
-    maischwater numeric,
-    ph_maische text,
-    ph_start_koken text,
-    ph_eind_koken text,
-    beluchting numeric,
-    stamwort_correctie_brouwhuis numeric
+    mash_filter_chambers numeric,
+    roller_mill text,
+    mash_thickness numeric,
+    boil_volume numeric,
+    wort_precooler_temp numeric,
+    brew_final_volume numeric,
+    target_evaporation numeric,
+    boil_intensity numeric,
+    whirlpool_rest numeric,
+    lauter_factor numeric,
+    special_bin_load_kg numeric,
+    special_bin_name text,
+    mash_in_temp numeric,
+    mash_in_time numeric,
+    mash_step1_temp numeric,
+    mash_step1_time numeric,
+    mash_step2_temp numeric,
+    mash_step2_time numeric,
+    mash_step3_temp numeric,
+    mash_step3_time numeric,
+    mash_step4_temp numeric,
+    mash_step4_time numeric,
+    mash_out_temp numeric,
+    mash_out_time numeric,
+    cumulative_sparge_volume numeric,
+    expected_extract_boil_start numeric,
+    water_addition_volume_cooling numeric,
+    sparge_1 numeric,
+    sparge_2 numeric,
+    sparge_3 numeric,
+    sparge_4 numeric,
+    first_wort numeric,
+    sparge_water numeric,
+    sparge_runoff numeric,
+    total_lautered_volume numeric,
+    mash_in_acid_l numeric,
+    mash_in_tannins_l numeric,
+    boil_acid_l numeric,
+    inline_sparge_acid_l numeric,
+    mash_water numeric,
+    ph_mash text,
+    ph_boil_start text,
+    ph_boil_end text,
+    aeration numeric,
+    original_gravity_correction_brewhouse numeric,
+    brewhouse_recipe_name_wp text,
+    brewhouse_recipe_name_jk text
 );
 
 
@@ -950,41 +938,54 @@ CREATE TABLE public.recipe_comments (
 
 
 --
--- Name: recipe_fermentatie; Type: TABLE; Schema: public; Owner: -
+-- Name: recipe_costs; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.recipe_fermentatie (
+CREATE TABLE public.recipe_costs (
+    recipe_id bigint NOT NULL,
+    cost_cellar_per_kge numeric,
+    cost_brewhouse_per_kge numeric,
+    cost_ingredients_per_hl numeric,
+    beer_loss_pct numeric
+);
+
+
+--
+-- Name: recipe_fermentation; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.recipe_fermentation (
     recipe_id bigint NOT NULL,
     pitching_temp numeric,
     main_ferm_temp numeric,
-    t_release numeric,
-    temp_dry_warm numeric,
-    extract_dry_warm_1 numeric,
-    extract_dry_warm_2 numeric,
-    extract_dry_warm_3 numeric,
-    vergistingstijd numeric,
-    lagertijd numeric,
-    lager_temp numeric,
-    pasteurisatie numeric,
-    troebeling_na_sep numeric,
-    bier_risico text,
-    bier_status text,
+    release_temp numeric,
+    dry_hop_warm_temp numeric,
+    dry_hop_warm_extract_1 numeric,
+    dry_hop_warm_extract_2 numeric,
+    dry_hop_warm_extract_3 numeric,
+    fermentation_time numeric,
+    lagering_time numeric,
+    lagering_temp numeric,
+    pasteurization numeric,
+    turbidity_after_separation numeric,
+    beer_risk text,
+    beer_status text,
     pitching_temp_tol text,
     main_ferm_temp_tol text,
-    t_release_tol text,
-    temp_dry_warm_tol text,
-    extract_dry_warm_1_tol text,
-    extract_dry_warm_2_tol text,
-    extract_dry_warm_3_tol text,
-    vergistingstijd_tol text,
-    lagertijd_tol text,
-    lager_temp_tol text,
-    pasteurisatie_tol text,
-    troebeling_na_sep_tol text,
-    bitterheid_bh numeric,
-    bitterheid_bh_tol text,
-    CONSTRAINT recipe_fermentatie_bier_risico_check CHECK (((bier_risico IS NULL) OR (bier_risico = ANY (ARRAY['Standaard'::text, 'Gevaarlijk'::text, 'Suikerhoudend'::text, 'Gevoelig'::text])))),
-    CONSTRAINT recipe_fermentatie_bier_status_check CHECK (((bier_status IS NULL) OR (bier_status = ANY (ARRAY['Standaard'::text, 'NPI'::text, 'Te verbeteren'::text]))))
+    release_temp_tol text,
+    dry_hop_warm_temp_tol text,
+    dry_hop_warm_extract_1_tol text,
+    dry_hop_warm_extract_2_tol text,
+    dry_hop_warm_extract_3_tol text,
+    fermentation_time_tol text,
+    lagering_time_tol text,
+    lagering_temp_tol text,
+    pasteurization_tol text,
+    turbidity_after_separation_tol text,
+    bitterness_brewhouse numeric,
+    bitterness_brewhouse_tol text,
+    CONSTRAINT recipe_fermentation_beer_risk_check CHECK (((beer_risk IS NULL) OR (beer_risk = ANY (ARRAY['standard'::text, 'dangerous'::text, 'contains_sugar'::text, 'sensitive'::text])))),
+    CONSTRAINT recipe_fermentation_beer_status_check CHECK (((beer_status IS NULL) OR (beer_status = ANY (ARRAY['standard'::text, 'npi'::text, 'to_improve'::text]))))
 );
 
 
@@ -1003,23 +1004,33 @@ ALTER TABLE public.recipe_ingredients ALTER COLUMN id ADD GENERATED ALWAYS AS ID
 
 
 --
--- Name: recipe_kosten; Type: TABLE; Schema: public; Owner: -
+-- Name: recipe_packaging; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.recipe_kosten (
+CREATE TABLE public.recipe_packaging (
     recipe_id bigint NOT NULL,
-    cost_clr_per_kge numeric,
-    cost_bh_per_kge numeric,
-    cost_grondstoffen_hl numeric,
-    bierverlies_pct numeric
+    ean_bottle text,
+    best_before_bottle_months numeric,
+    best_before_keg_months numeric,
+    best_before_can_months numeric,
+    abv_pct numeric,
+    formats jsonb,
+    tpo_spec numeric,
+    hso_spec numeric,
+    do_spec numeric,
+    co2_bottle_can_spec numeric,
+    co2_bottle_can_tolerance numeric,
+    co2_keg_spec numeric,
+    co2_keg_tolerance numeric,
+    o2_keg_spec numeric
 );
 
 
 --
--- Name: recipe_processtappen; Type: TABLE; Schema: public; Owner: -
+-- Name: recipe_process_steps; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.recipe_processtappen (
+CREATE TABLE public.recipe_process_steps (
     recipe_id bigint NOT NULL,
     dry_hop_warm boolean DEFAULT false,
     dry_hop_cold boolean DEFAULT false,
@@ -1032,48 +1043,47 @@ CREATE TABLE public.recipe_processtappen (
     cool_to_7c boolean DEFAULT false,
     cool_to_0c boolean DEFAULT false,
     check_hbt_addition boolean DEFAULT false,
-    keldersplitsing boolean DEFAULT false,
+    cellar_split boolean DEFAULT false,
     cellar_add_1 boolean DEFAULT false,
     cellar_add_2 boolean DEFAULT false,
     cellar_add_3 boolean DEFAULT false,
     cellar_add_4 boolean DEFAULT false,
     dry_hop_0c boolean,
     dry_hop_comment_warm text,
-    dry_hop_methode_warm text,
+    dry_hop_method_warm text,
     dry_hop_comment_16c text,
-    dry_hop_methode_16c text,
-    dry_hop_1_dag integer,
-    dry_hop_2_dag integer,
-    kelder_toevoeging_dag integer,
-    comment_verwerken text,
+    dry_hop_method_16c text,
+    dry_hop_1_day integer,
+    dry_hop_2_day integer,
+    cellar_addition_day integer,
+    processing_comment text,
     total_wp_hop numeric,
     total_dry_hop numeric
 );
 
 
 --
--- Name: recipe_revisies; Type: TABLE; Schema: public; Owner: -
+-- Name: recipe_revisions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.recipe_revisies (
+CREATE TABLE public.recipe_revisions (
     id bigint NOT NULL,
     recipe_id bigint NOT NULL,
-    versienummer integer,
-    datum date,
-    door text,
-    wijziging text,
-    versie_major integer,
-    versie_minor integer,
-    gebruiker_id uuid
+    date date,
+    changed_by_name text,
+    change_description text,
+    version_major integer,
+    version_minor integer,
+    user_id uuid
 );
 
 
 --
--- Name: recipe_revisies_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+-- Name: recipe_revisions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-ALTER TABLE public.recipe_revisies ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
-    SEQUENCE NAME public.recipe_revisies_id_seq
+ALTER TABLE public.recipe_revisions ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.recipe_revisions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1083,60 +1093,37 @@ ALTER TABLE public.recipe_revisies ALTER COLUMN id ADD GENERATED ALWAYS AS IDENT
 
 
 --
--- Name: recipe_specificaties; Type: TABLE; Schema: public; Owner: -
+-- Name: recipe_specs; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.recipe_specificaties (
+CREATE TABLE public.recipe_specs (
     recipe_id bigint NOT NULL,
-    origineel_extract numeric,
-    rest_extract numeric,
+    original_extract numeric,
+    final_extract numeric,
     alcohol numeric,
-    bitterheid numeric,
-    kleur numeric,
+    bitterness numeric,
+    color numeric,
     ph numeric,
     adf_pct numeric,
-    troebeling_lab numeric,
-    co2_fles numeric,
+    turbidity_lab numeric,
+    co2_bottle numeric,
     co2_can numeric,
-    co2_fust numeric,
+    co2_keg numeric,
     headspace_o2 numeric,
     dissolved_o2 numeric,
-    origineel_extract_tol text,
-    rest_extract_tol text,
+    original_extract_tol text,
+    final_extract_tol text,
     alcohol_tol text,
-    bitterheid_tol text,
-    kleur_tol text,
+    bitterness_tol text,
+    color_tol text,
     ph_tol text,
     adf_pct_tol text,
-    troebeling_lab_tol text,
-    co2_fles_tol text,
+    turbidity_lab_tol text,
+    co2_bottle_tol text,
     co2_can_tol text,
-    co2_fust_tol text,
+    co2_keg_tol text,
     headspace_o2_tol text,
     dissolved_o2_tol text
-);
-
-
---
--- Name: recipe_verpakking; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.recipe_verpakking (
-    recipe_id bigint NOT NULL,
-    ean_fles text,
-    tht_fles_maanden numeric,
-    tht_vat_maanden numeric,
-    tht_blik_maanden numeric,
-    alc_pct numeric,
-    formaten jsonb,
-    tpo_spec numeric,
-    hso_spec numeric,
-    do_spec numeric,
-    co2_fles_can_spec numeric,
-    co2_fles_can_tolerantie numeric,
-    co2_fust_spec numeric,
-    co2_fust_tolerantie numeric,
-    zuurstof_fust_spec numeric
 );
 
 
@@ -1152,12 +1139,7 @@ CREATE TABLE public.recipe_water (
     cl numeric,
     so4 numeric,
     ratio_cl_so4 numeric,
-    alkalinity numeric,
-    maischwater numeric,
-    ph_maische numeric,
-    ph_start_koken numeric,
-    ph_eind_koken numeric,
-    beluchting numeric
+    alkalinity numeric
 );
 
 
@@ -1167,27 +1149,26 @@ CREATE TABLE public.recipe_water (
 
 CREATE TABLE public.recipes (
     id bigint NOT NULL,
-    naam text NOT NULL,
-    bierstijl text,
-    locatie text,
-    huidige_versie integer DEFAULT 1 NOT NULL,
-    status text DEFAULT 'actief'::text NOT NULL,
+    name text NOT NULL,
+    beer_style text,
+    location text,
+    status text DEFAULT 'active'::text NOT NULL,
     created_at timestamp with time zone DEFAULT now(),
-    versie_major integer DEFAULT 1 NOT NULL,
-    versie_minor integer DEFAULT 0 NOT NULL,
-    aangemaakt_door uuid,
-    gewijzigd_door uuid,
-    gewijzigd_op timestamp with time zone DEFAULT now() NOT NULL,
+    version_major integer DEFAULT 1 NOT NULL,
+    version_minor integer DEFAULT 0 NOT NULL,
+    created_by uuid,
+    updated_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
     recipe_group_id uuid DEFAULT gen_random_uuid() NOT NULL,
-    brouwsel_hl numeric,
-    kleur text,
-    smaakomschrijving text,
-    smaak_keywords text[],
-    aanbevolen_schenktemperatuur numeric,
-    kleur_srm numeric,
-    kleur_vrije_tekst text,
-    CONSTRAINT recipes_locatie_check CHECK ((locatie = ANY (ARRAY['Waarderpolder'::text, 'Jopen Kerk'::text]))),
-    CONSTRAINT recipes_status_check CHECK ((status = ANY (ARRAY['concept'::text, 'actief'::text, 'gearchiveerd'::text])))
+    brew_volume_hl numeric,
+    recipe_color text,
+    flavor_description text,
+    flavor_keywords text[],
+    serving_temperature numeric,
+    color_srm numeric,
+    color_free_text text,
+    CONSTRAINT recipes_location_check CHECK ((location = ANY (ARRAY['wp'::text, 'jk'::text]))),
+    CONSTRAINT recipes_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'active'::text, 'archived'::text])))
 );
 
 
@@ -1298,13 +1279,13 @@ CREATE TABLE public.units (
 
 
 --
--- Name: water_instellingen; Type: TABLE; Schema: public; Owner: -
+-- Name: water_settings; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.water_instellingen (
+CREATE TABLE public.water_settings (
     id smallint DEFAULT 1 NOT NULL,
-    omschrijving text DEFAULT 'Jopen ambient water'::text NOT NULL,
-    gemeten_op date,
+    description text DEFAULT 'Jopen ambient water'::text NOT NULL,
+    measured_on date,
     ca numeric NOT NULL,
     mg numeric NOT NULL,
     na numeric NOT NULL,
@@ -1315,30 +1296,30 @@ CREATE TABLE public.water_instellingen (
     max_mg numeric DEFAULT 30 NOT NULL,
     max_cl numeric DEFAULT 400 NOT NULL,
     max_so4 numeric DEFAULT 600 NOT NULL,
-    gewijzigd_op timestamp with time zone DEFAULT now() NOT NULL,
-    gewijzigd_door uuid,
-    CONSTRAINT water_instellingen_id_check CHECK ((id = 1))
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT water_settings_id_check CHECK ((id = 1))
 );
 
 
 --
--- Name: water_instellingen_historie; Type: TABLE; Schema: public; Owner: -
+-- Name: water_settings_history; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.water_instellingen_historie (
+CREATE TABLE public.water_settings_history (
     id bigint NOT NULL,
-    geldig_vanaf timestamp with time zone NOT NULL,
-    gewijzigd_door uuid,
-    gegevens jsonb NOT NULL
+    valid_from timestamp with time zone NOT NULL,
+    updated_by uuid,
+    data jsonb NOT NULL
 );
 
 
 --
--- Name: water_instellingen_historie_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+-- Name: water_settings_history_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-ALTER TABLE public.water_instellingen_historie ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
-    SEQUENCE NAME public.water_instellingen_historie_id_seq
+ALTER TABLE public.water_settings_history ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.water_settings_history_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1420,11 +1401,11 @@ ALTER TABLE ONLY public.document_types
 
 
 --
--- Name: hop_utilisatie_curve hop_utilisatie_curve_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: hop_utilization_curve hop_utilization_curve_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.hop_utilisatie_curve
-    ADD CONSTRAINT hop_utilisatie_curve_pkey PRIMARY KEY (kooktijd_min);
+ALTER TABLE ONLY public.hop_utilization_curve
+    ADD CONSTRAINT hop_utilization_curve_pkey PRIMARY KEY (boil_time_min);
 
 
 --
@@ -1508,11 +1489,11 @@ ALTER TABLE ONLY public.permission_modules
 
 
 --
--- Name: product_sheet_revisies product_sheet_revisies_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: product_sheet_revisions product_sheet_revisions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.product_sheet_revisies
-    ADD CONSTRAINT product_sheet_revisies_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.product_sheet_revisions
+    ADD CONSTRAINT product_sheet_revisions_pkey PRIMARY KEY (id);
 
 
 --
@@ -1524,11 +1505,11 @@ ALTER TABLE ONLY public.product_sheets
 
 
 --
--- Name: recipe_brouwspecificaties recipe_brouwspecificaties_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: recipe_brewing_specs recipe_brewing_specs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.recipe_brouwspecificaties
-    ADD CONSTRAINT recipe_brouwspecificaties_pkey PRIMARY KEY (recipe_id);
+ALTER TABLE ONLY public.recipe_brewing_specs
+    ADD CONSTRAINT recipe_brewing_specs_pkey PRIMARY KEY (recipe_id);
 
 
 --
@@ -1540,11 +1521,19 @@ ALTER TABLE ONLY public.recipe_comments
 
 
 --
--- Name: recipe_fermentatie recipe_fermentatie_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: recipe_costs recipe_costs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.recipe_fermentatie
-    ADD CONSTRAINT recipe_fermentatie_pkey PRIMARY KEY (recipe_id);
+ALTER TABLE ONLY public.recipe_costs
+    ADD CONSTRAINT recipe_costs_pkey PRIMARY KEY (recipe_id);
+
+
+--
+-- Name: recipe_fermentation recipe_fermentation_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recipe_fermentation
+    ADD CONSTRAINT recipe_fermentation_pkey PRIMARY KEY (recipe_id);
 
 
 --
@@ -1556,43 +1545,35 @@ ALTER TABLE ONLY public.recipe_ingredients
 
 
 --
--- Name: recipe_kosten recipe_kosten_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: recipe_packaging recipe_packaging_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.recipe_kosten
-    ADD CONSTRAINT recipe_kosten_pkey PRIMARY KEY (recipe_id);
-
-
---
--- Name: recipe_processtappen recipe_processtappen_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.recipe_processtappen
-    ADD CONSTRAINT recipe_processtappen_pkey PRIMARY KEY (recipe_id);
+ALTER TABLE ONLY public.recipe_packaging
+    ADD CONSTRAINT recipe_packaging_pkey PRIMARY KEY (recipe_id);
 
 
 --
--- Name: recipe_revisies recipe_revisies_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: recipe_process_steps recipe_process_steps_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.recipe_revisies
-    ADD CONSTRAINT recipe_revisies_pkey PRIMARY KEY (id);
-
-
---
--- Name: recipe_specificaties recipe_specificaties_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.recipe_specificaties
-    ADD CONSTRAINT recipe_specificaties_pkey PRIMARY KEY (recipe_id);
+ALTER TABLE ONLY public.recipe_process_steps
+    ADD CONSTRAINT recipe_process_steps_pkey PRIMARY KEY (recipe_id);
 
 
 --
--- Name: recipe_verpakking recipe_verpakking_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: recipe_revisions recipe_revisions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.recipe_verpakking
-    ADD CONSTRAINT recipe_verpakking_pkey PRIMARY KEY (recipe_id);
+ALTER TABLE ONLY public.recipe_revisions
+    ADD CONSTRAINT recipe_revisions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: recipe_specs recipe_specs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recipe_specs
+    ADD CONSTRAINT recipe_specs_pkey PRIMARY KEY (recipe_id);
 
 
 --
@@ -1668,19 +1649,19 @@ ALTER TABLE ONLY public.users
 
 
 --
--- Name: water_instellingen_historie water_instellingen_historie_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: water_settings_history water_settings_history_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.water_instellingen_historie
-    ADD CONSTRAINT water_instellingen_historie_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.water_settings_history
+    ADD CONSTRAINT water_settings_history_pkey PRIMARY KEY (id);
 
 
 --
--- Name: water_instellingen water_instellingen_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: water_settings water_settings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.water_instellingen
-    ADD CONSTRAINT water_instellingen_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.water_settings
+    ADD CONSTRAINT water_settings_pkey PRIMARY KEY (id);
 
 
 --
@@ -1817,17 +1798,17 @@ CREATE INDEX idx_stock_movements_movement_type ON public.stock_movements USING b
 
 
 --
--- Name: product_sheet_revisies_product_sheet_id_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: product_sheet_revisions_product_sheet_id_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX product_sheet_revisies_product_sheet_id_idx ON public.product_sheet_revisies USING btree (product_sheet_id);
+CREATE INDEX product_sheet_revisions_product_sheet_id_idx ON public.product_sheet_revisions USING btree (product_sheet_id);
 
 
 --
--- Name: product_sheets_recipe_group_id_actief_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: product_sheets_recipe_group_id_active_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE UNIQUE INDEX product_sheets_recipe_group_id_actief_idx ON public.product_sheets USING btree (recipe_group_id) WHERE (status <> 'gearchiveerd'::text);
+CREATE UNIQUE INDEX product_sheets_recipe_group_id_active_idx ON public.product_sheets USING btree (recipe_group_id) WHERE (status <> 'archived'::text);
 
 
 --
@@ -1845,24 +1826,24 @@ CREATE TRIGGER trg_ingredients_updated_at BEFORE UPDATE ON public.ingredients FO
 
 
 --
--- Name: recipes trg_recipes_gewijzigd_op; Type: TRIGGER; Schema: public; Owner: -
+-- Name: recipes trg_recipes_updated_at; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER trg_recipes_gewijzigd_op BEFORE UPDATE ON public.recipes FOR EACH ROW EXECUTE FUNCTION public.set_gewijzigd_op();
-
-
---
--- Name: water_instellingen trg_water_instellingen_log; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER trg_water_instellingen_log AFTER INSERT OR UPDATE ON public.water_instellingen FOR EACH ROW EXECUTE FUNCTION public.water_instellingen_log();
+CREATE TRIGGER trg_recipes_updated_at BEFORE UPDATE ON public.recipes FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
 
 --
--- Name: water_instellingen trg_water_instellingen_stempel; Type: TRIGGER; Schema: public; Owner: -
+-- Name: water_settings trg_water_settings_log; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER trg_water_instellingen_stempel BEFORE UPDATE ON public.water_instellingen FOR EACH ROW EXECUTE FUNCTION public.water_instellingen_stempel();
+CREATE TRIGGER trg_water_settings_log AFTER INSERT OR UPDATE ON public.water_settings FOR EACH ROW EXECUTE FUNCTION public.water_settings_log();
+
+
+--
+-- Name: water_settings trg_water_settings_stamp; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_water_settings_stamp BEFORE UPDATE ON public.water_settings FOR EACH ROW EXECUTE FUNCTION public.water_settings_stamp();
 
 
 --
@@ -2018,35 +1999,35 @@ ALTER TABLE ONLY public.lots
 
 
 --
--- Name: product_sheet_revisies product_sheet_revisies_product_sheet_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: product_sheet_revisions product_sheet_revisions_product_sheet_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.product_sheet_revisies
-    ADD CONSTRAINT product_sheet_revisies_product_sheet_id_fkey FOREIGN KEY (product_sheet_id) REFERENCES public.product_sheets(id) ON DELETE CASCADE;
-
-
---
--- Name: product_sheets product_sheets_aangemaakt_door_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.product_sheets
-    ADD CONSTRAINT product_sheets_aangemaakt_door_fkey FOREIGN KEY (aangemaakt_door) REFERENCES auth.users(id);
+ALTER TABLE ONLY public.product_sheet_revisions
+    ADD CONSTRAINT product_sheet_revisions_product_sheet_id_fkey FOREIGN KEY (product_sheet_id) REFERENCES public.product_sheets(id) ON DELETE CASCADE;
 
 
 --
--- Name: product_sheets product_sheets_bijgewerkt_door_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: product_sheets product_sheets_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.product_sheets
-    ADD CONSTRAINT product_sheets_bijgewerkt_door_fkey FOREIGN KEY (bijgewerkt_door) REFERENCES auth.users(id);
+    ADD CONSTRAINT product_sheets_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
 
 
 --
--- Name: recipe_brouwspecificaties recipe_brouwspecificaties_recipe_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: product_sheets product_sheets_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.recipe_brouwspecificaties
-    ADD CONSTRAINT recipe_brouwspecificaties_recipe_id_fkey FOREIGN KEY (recipe_id) REFERENCES public.recipes(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.product_sheets
+    ADD CONSTRAINT product_sheets_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id);
+
+
+--
+-- Name: recipe_brewing_specs recipe_brewing_specs_recipe_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recipe_brewing_specs
+    ADD CONSTRAINT recipe_brewing_specs_recipe_id_fkey FOREIGN KEY (recipe_id) REFERENCES public.recipes(id) ON DELETE CASCADE;
 
 
 --
@@ -2058,11 +2039,19 @@ ALTER TABLE ONLY public.recipe_comments
 
 
 --
--- Name: recipe_fermentatie recipe_fermentatie_recipe_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: recipe_costs recipe_costs_recipe_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.recipe_fermentatie
-    ADD CONSTRAINT recipe_fermentatie_recipe_id_fkey FOREIGN KEY (recipe_id) REFERENCES public.recipes(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.recipe_costs
+    ADD CONSTRAINT recipe_costs_recipe_id_fkey FOREIGN KEY (recipe_id) REFERENCES public.recipes(id) ON DELETE CASCADE;
+
+
+--
+-- Name: recipe_fermentation recipe_fermentation_recipe_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recipe_fermentation
+    ADD CONSTRAINT recipe_fermentation_recipe_id_fkey FOREIGN KEY (recipe_id) REFERENCES public.recipes(id) ON DELETE CASCADE;
 
 
 --
@@ -2082,51 +2071,43 @@ ALTER TABLE ONLY public.recipe_ingredients
 
 
 --
--- Name: recipe_kosten recipe_kosten_recipe_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: recipe_packaging recipe_packaging_recipe_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.recipe_kosten
-    ADD CONSTRAINT recipe_kosten_recipe_id_fkey FOREIGN KEY (recipe_id) REFERENCES public.recipes(id) ON DELETE CASCADE;
-
-
---
--- Name: recipe_processtappen recipe_processtappen_recipe_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.recipe_processtappen
-    ADD CONSTRAINT recipe_processtappen_recipe_id_fkey FOREIGN KEY (recipe_id) REFERENCES public.recipes(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.recipe_packaging
+    ADD CONSTRAINT recipe_packaging_recipe_id_fkey FOREIGN KEY (recipe_id) REFERENCES public.recipes(id) ON DELETE CASCADE;
 
 
 --
--- Name: recipe_revisies recipe_revisies_gebruiker_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: recipe_process_steps recipe_process_steps_recipe_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.recipe_revisies
-    ADD CONSTRAINT recipe_revisies_gebruiker_id_fkey FOREIGN KEY (gebruiker_id) REFERENCES auth.users(id);
-
-
---
--- Name: recipe_revisies recipe_revisies_recipe_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.recipe_revisies
-    ADD CONSTRAINT recipe_revisies_recipe_id_fkey FOREIGN KEY (recipe_id) REFERENCES public.recipes(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.recipe_process_steps
+    ADD CONSTRAINT recipe_process_steps_recipe_id_fkey FOREIGN KEY (recipe_id) REFERENCES public.recipes(id) ON DELETE CASCADE;
 
 
 --
--- Name: recipe_specificaties recipe_specificaties_recipe_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: recipe_revisions recipe_revisions_recipe_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.recipe_specificaties
-    ADD CONSTRAINT recipe_specificaties_recipe_id_fkey FOREIGN KEY (recipe_id) REFERENCES public.recipes(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.recipe_revisions
+    ADD CONSTRAINT recipe_revisions_recipe_id_fkey FOREIGN KEY (recipe_id) REFERENCES public.recipes(id) ON DELETE CASCADE;
 
 
 --
--- Name: recipe_verpakking recipe_verpakking_recipe_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: recipe_revisions recipe_revisions_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.recipe_verpakking
-    ADD CONSTRAINT recipe_verpakking_recipe_id_fkey FOREIGN KEY (recipe_id) REFERENCES public.recipes(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.recipe_revisions
+    ADD CONSTRAINT recipe_revisions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: recipe_specs recipe_specs_recipe_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recipe_specs
+    ADD CONSTRAINT recipe_specs_recipe_id_fkey FOREIGN KEY (recipe_id) REFERENCES public.recipes(id) ON DELETE CASCADE;
 
 
 --
@@ -2138,19 +2119,19 @@ ALTER TABLE ONLY public.recipe_water
 
 
 --
--- Name: recipes recipes_aangemaakt_door_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: recipes recipes_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recipes
-    ADD CONSTRAINT recipes_aangemaakt_door_fkey FOREIGN KEY (aangemaakt_door) REFERENCES auth.users(id);
+    ADD CONSTRAINT recipes_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
 
 
 --
--- Name: recipes recipes_gewijzigd_door_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: recipes recipes_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recipes
-    ADD CONSTRAINT recipes_gewijzigd_door_fkey FOREIGN KEY (gewijzigd_door) REFERENCES auth.users(id);
+    ADD CONSTRAINT recipes_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id);
 
 
 --
@@ -2226,19 +2207,19 @@ ALTER TABLE ONLY public.users
 
 
 --
--- Name: water_instellingen water_instellingen_gewijzigd_door_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: water_settings_history water_settings_history_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.water_instellingen
-    ADD CONSTRAINT water_instellingen_gewijzigd_door_fkey FOREIGN KEY (gewijzigd_door) REFERENCES public.users(id);
+ALTER TABLE ONLY public.water_settings_history
+    ADD CONSTRAINT water_settings_history_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id);
 
 
 --
--- Name: water_instellingen_historie water_instellingen_historie_gewijzigd_door_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: water_settings water_settings_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.water_instellingen_historie
-    ADD CONSTRAINT water_instellingen_historie_gewijzigd_door_fkey FOREIGN KEY (gewijzigd_door) REFERENCES public.users(id);
+ALTER TABLE ONLY public.water_settings
+    ADD CONSTRAINT water_settings_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id);
 
 
 --
@@ -2425,37 +2406,37 @@ CREATE POLICY document_types_update ON public.document_types FOR UPDATE USING (p
 
 
 --
--- Name: hop_utilisatie_curve; Type: ROW SECURITY; Schema: public; Owner: -
+-- Name: hop_utilization_curve; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
-ALTER TABLE public.hop_utilisatie_curve ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.hop_utilization_curve ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: hop_utilisatie_curve hop_utilisatie_curve_delete; Type: POLICY; Schema: public; Owner: -
+-- Name: hop_utilization_curve hop_utilization_curve_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY hop_utilisatie_curve_delete ON public.hop_utilisatie_curve FOR DELETE USING (public.can_delete('settings'::text));
-
-
---
--- Name: hop_utilisatie_curve hop_utilisatie_curve_insert; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY hop_utilisatie_curve_insert ON public.hop_utilisatie_curve FOR INSERT WITH CHECK (public.can_edit('settings'::text));
+CREATE POLICY hop_utilization_curve_delete ON public.hop_utilization_curve FOR DELETE USING (public.can_delete('settings'::text));
 
 
 --
--- Name: hop_utilisatie_curve hop_utilisatie_curve_select; Type: POLICY; Schema: public; Owner: -
+-- Name: hop_utilization_curve hop_utilization_curve_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY hop_utilisatie_curve_select ON public.hop_utilisatie_curve FOR SELECT USING (true);
+CREATE POLICY hop_utilization_curve_insert ON public.hop_utilization_curve FOR INSERT WITH CHECK (public.can_edit('settings'::text));
 
 
 --
--- Name: hop_utilisatie_curve hop_utilisatie_curve_update; Type: POLICY; Schema: public; Owner: -
+-- Name: hop_utilization_curve hop_utilization_curve_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY hop_utilisatie_curve_update ON public.hop_utilisatie_curve FOR UPDATE USING (public.can_edit('settings'::text)) WITH CHECK (public.can_edit('settings'::text));
+CREATE POLICY hop_utilization_curve_select ON public.hop_utilization_curve FOR SELECT USING (true);
+
+
+--
+-- Name: hop_utilization_curve hop_utilization_curve_update; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY hop_utilization_curve_update ON public.hop_utilization_curve FOR UPDATE USING (public.can_edit('settings'::text)) WITH CHECK (public.can_edit('settings'::text));
 
 
 --
@@ -2662,23 +2643,23 @@ CREATE POLICY permission_modules_select ON public.permission_modules FOR SELECT 
 
 
 --
--- Name: product_sheet_revisies; Type: ROW SECURITY; Schema: public; Owner: -
+-- Name: product_sheet_revisions; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
-ALTER TABLE public.product_sheet_revisies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.product_sheet_revisions ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: product_sheet_revisies product_sheet_revisies_insert; Type: POLICY; Schema: public; Owner: -
+-- Name: product_sheet_revisions product_sheet_revisions_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY product_sheet_revisies_insert ON public.product_sheet_revisies FOR INSERT WITH CHECK (public.can_edit('product_sheets'::text));
+CREATE POLICY product_sheet_revisions_insert ON public.product_sheet_revisions FOR INSERT WITH CHECK (public.can_edit('product_sheets'::text));
 
 
 --
--- Name: product_sheet_revisies product_sheet_revisies_select; Type: POLICY; Schema: public; Owner: -
+-- Name: product_sheet_revisions product_sheet_revisions_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY product_sheet_revisies_select ON public.product_sheet_revisies FOR SELECT USING (public.can_view('product_sheets'::text));
+CREATE POLICY product_sheet_revisions_select ON public.product_sheet_revisions FOR SELECT USING (public.can_view('product_sheets'::text));
 
 
 --
@@ -2716,37 +2697,37 @@ CREATE POLICY product_sheets_update ON public.product_sheets FOR UPDATE USING (p
 
 
 --
--- Name: recipe_brouwspecificaties; Type: ROW SECURITY; Schema: public; Owner: -
+-- Name: recipe_brewing_specs; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
-ALTER TABLE public.recipe_brouwspecificaties ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.recipe_brewing_specs ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: recipe_brouwspecificaties recipe_brouwspecificaties_delete; Type: POLICY; Schema: public; Owner: -
+-- Name: recipe_brewing_specs recipe_brewing_specs_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_brouwspecificaties_delete ON public.recipe_brouwspecificaties FOR DELETE USING (public.can_delete('recipes'::text));
-
-
---
--- Name: recipe_brouwspecificaties recipe_brouwspecificaties_insert; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY recipe_brouwspecificaties_insert ON public.recipe_brouwspecificaties FOR INSERT WITH CHECK (public.can_edit('recipes'::text));
+CREATE POLICY recipe_brewing_specs_delete ON public.recipe_brewing_specs FOR DELETE USING (public.can_delete('recipes'::text));
 
 
 --
--- Name: recipe_brouwspecificaties recipe_brouwspecificaties_select; Type: POLICY; Schema: public; Owner: -
+-- Name: recipe_brewing_specs recipe_brewing_specs_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_brouwspecificaties_select ON public.recipe_brouwspecificaties FOR SELECT USING (public.can_view('recipes'::text));
+CREATE POLICY recipe_brewing_specs_insert ON public.recipe_brewing_specs FOR INSERT WITH CHECK (public.can_edit('recipes'::text));
 
 
 --
--- Name: recipe_brouwspecificaties recipe_brouwspecificaties_update; Type: POLICY; Schema: public; Owner: -
+-- Name: recipe_brewing_specs recipe_brewing_specs_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_brouwspecificaties_update ON public.recipe_brouwspecificaties FOR UPDATE USING (public.can_edit('recipes'::text)) WITH CHECK (public.can_edit('recipes'::text));
+CREATE POLICY recipe_brewing_specs_select ON public.recipe_brewing_specs FOR SELECT USING (public.can_view('recipes'::text));
+
+
+--
+-- Name: recipe_brewing_specs recipe_brewing_specs_update; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY recipe_brewing_specs_update ON public.recipe_brewing_specs FOR UPDATE USING (public.can_edit('recipes'::text)) WITH CHECK (public.can_edit('recipes'::text));
 
 
 --
@@ -2784,37 +2765,71 @@ CREATE POLICY recipe_comments_update ON public.recipe_comments FOR UPDATE USING 
 
 
 --
--- Name: recipe_fermentatie; Type: ROW SECURITY; Schema: public; Owner: -
+-- Name: recipe_costs; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
-ALTER TABLE public.recipe_fermentatie ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.recipe_costs ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: recipe_fermentatie recipe_fermentatie_delete; Type: POLICY; Schema: public; Owner: -
+-- Name: recipe_costs recipe_costs_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_fermentatie_delete ON public.recipe_fermentatie FOR DELETE USING (public.can_delete('recipes'::text));
-
-
---
--- Name: recipe_fermentatie recipe_fermentatie_insert; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY recipe_fermentatie_insert ON public.recipe_fermentatie FOR INSERT WITH CHECK (public.can_edit('recipes'::text));
+CREATE POLICY recipe_costs_delete ON public.recipe_costs FOR DELETE USING (public.can_delete('recipes'::text));
 
 
 --
--- Name: recipe_fermentatie recipe_fermentatie_select; Type: POLICY; Schema: public; Owner: -
+-- Name: recipe_costs recipe_costs_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_fermentatie_select ON public.recipe_fermentatie FOR SELECT USING (public.can_view('recipes'::text));
+CREATE POLICY recipe_costs_insert ON public.recipe_costs FOR INSERT WITH CHECK (public.can_edit('recipes'::text));
 
 
 --
--- Name: recipe_fermentatie recipe_fermentatie_update; Type: POLICY; Schema: public; Owner: -
+-- Name: recipe_costs recipe_costs_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_fermentatie_update ON public.recipe_fermentatie FOR UPDATE USING (public.can_edit('recipes'::text)) WITH CHECK (public.can_edit('recipes'::text));
+CREATE POLICY recipe_costs_select ON public.recipe_costs FOR SELECT USING (public.can_view('recipes'::text));
+
+
+--
+-- Name: recipe_costs recipe_costs_update; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY recipe_costs_update ON public.recipe_costs FOR UPDATE USING (public.can_edit('recipes'::text)) WITH CHECK (public.can_edit('recipes'::text));
+
+
+--
+-- Name: recipe_fermentation; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.recipe_fermentation ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: recipe_fermentation recipe_fermentation_delete; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY recipe_fermentation_delete ON public.recipe_fermentation FOR DELETE USING (public.can_delete('recipes'::text));
+
+
+--
+-- Name: recipe_fermentation recipe_fermentation_insert; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY recipe_fermentation_insert ON public.recipe_fermentation FOR INSERT WITH CHECK (public.can_edit('recipes'::text));
+
+
+--
+-- Name: recipe_fermentation recipe_fermentation_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY recipe_fermentation_select ON public.recipe_fermentation FOR SELECT USING (public.can_view('recipes'::text));
+
+
+--
+-- Name: recipe_fermentation recipe_fermentation_update; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY recipe_fermentation_update ON public.recipe_fermentation FOR UPDATE USING (public.can_edit('recipes'::text)) WITH CHECK (public.can_edit('recipes'::text));
 
 
 --
@@ -2852,173 +2867,139 @@ CREATE POLICY recipe_ingredients_update ON public.recipe_ingredients FOR UPDATE 
 
 
 --
--- Name: recipe_kosten; Type: ROW SECURITY; Schema: public; Owner: -
+-- Name: recipe_packaging; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
-ALTER TABLE public.recipe_kosten ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.recipe_packaging ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: recipe_kosten recipe_kosten_delete; Type: POLICY; Schema: public; Owner: -
+-- Name: recipe_packaging recipe_packaging_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_kosten_delete ON public.recipe_kosten FOR DELETE USING (public.can_delete('recipes'::text));
-
-
---
--- Name: recipe_kosten recipe_kosten_insert; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY recipe_kosten_insert ON public.recipe_kosten FOR INSERT WITH CHECK (public.can_edit('recipes'::text));
+CREATE POLICY recipe_packaging_delete ON public.recipe_packaging FOR DELETE USING (public.can_delete('recipes'::text));
 
 
 --
--- Name: recipe_kosten recipe_kosten_select; Type: POLICY; Schema: public; Owner: -
+-- Name: recipe_packaging recipe_packaging_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_kosten_select ON public.recipe_kosten FOR SELECT USING (public.can_view('recipes'::text));
-
-
---
--- Name: recipe_kosten recipe_kosten_update; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY recipe_kosten_update ON public.recipe_kosten FOR UPDATE USING (public.can_edit('recipes'::text)) WITH CHECK (public.can_edit('recipes'::text));
+CREATE POLICY recipe_packaging_insert ON public.recipe_packaging FOR INSERT WITH CHECK (public.can_edit('recipes'::text));
 
 
 --
--- Name: recipe_processtappen; Type: ROW SECURITY; Schema: public; Owner: -
+-- Name: recipe_packaging recipe_packaging_select; Type: POLICY; Schema: public; Owner: -
 --
 
-ALTER TABLE public.recipe_processtappen ENABLE ROW LEVEL SECURITY;
-
---
--- Name: recipe_processtappen recipe_processtappen_delete; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY recipe_processtappen_delete ON public.recipe_processtappen FOR DELETE USING (public.can_delete('recipes'::text));
+CREATE POLICY recipe_packaging_select ON public.recipe_packaging FOR SELECT USING (public.can_view('recipes'::text));
 
 
 --
--- Name: recipe_processtappen recipe_processtappen_insert; Type: POLICY; Schema: public; Owner: -
+-- Name: recipe_packaging recipe_packaging_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_processtappen_insert ON public.recipe_processtappen FOR INSERT WITH CHECK (public.can_edit('recipes'::text));
-
-
---
--- Name: recipe_processtappen recipe_processtappen_select; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY recipe_processtappen_select ON public.recipe_processtappen FOR SELECT USING (public.can_view('recipes'::text));
+CREATE POLICY recipe_packaging_update ON public.recipe_packaging FOR UPDATE USING (public.can_edit('recipes'::text)) WITH CHECK (public.can_edit('recipes'::text));
 
 
 --
--- Name: recipe_processtappen recipe_processtappen_update; Type: POLICY; Schema: public; Owner: -
+-- Name: recipe_process_steps; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_processtappen_update ON public.recipe_processtappen FOR UPDATE USING (public.can_edit('recipes'::text)) WITH CHECK (public.can_edit('recipes'::text));
-
-
---
--- Name: recipe_revisies; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.recipe_revisies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.recipe_process_steps ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: recipe_revisies recipe_revisies_delete; Type: POLICY; Schema: public; Owner: -
+-- Name: recipe_process_steps recipe_process_steps_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_revisies_delete ON public.recipe_revisies FOR DELETE USING (public.can_delete('recipes'::text));
+CREATE POLICY recipe_process_steps_delete ON public.recipe_process_steps FOR DELETE USING (public.can_delete('recipes'::text));
 
 
 --
--- Name: recipe_revisies recipe_revisies_insert; Type: POLICY; Schema: public; Owner: -
+-- Name: recipe_process_steps recipe_process_steps_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_revisies_insert ON public.recipe_revisies FOR INSERT WITH CHECK (public.can_edit('recipes'::text));
-
-
---
--- Name: recipe_revisies recipe_revisies_select; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY recipe_revisies_select ON public.recipe_revisies FOR SELECT USING (public.can_view('recipes'::text));
+CREATE POLICY recipe_process_steps_insert ON public.recipe_process_steps FOR INSERT WITH CHECK (public.can_edit('recipes'::text));
 
 
 --
--- Name: recipe_revisies recipe_revisies_update; Type: POLICY; Schema: public; Owner: -
+-- Name: recipe_process_steps recipe_process_steps_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_revisies_update ON public.recipe_revisies FOR UPDATE USING (public.can_edit('recipes'::text)) WITH CHECK (public.can_edit('recipes'::text));
-
-
---
--- Name: recipe_specificaties; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.recipe_specificaties ENABLE ROW LEVEL SECURITY;
-
---
--- Name: recipe_specificaties recipe_specificaties_delete; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY recipe_specificaties_delete ON public.recipe_specificaties FOR DELETE USING (public.can_delete('recipes'::text));
+CREATE POLICY recipe_process_steps_select ON public.recipe_process_steps FOR SELECT USING (public.can_view('recipes'::text));
 
 
 --
--- Name: recipe_specificaties recipe_specificaties_insert; Type: POLICY; Schema: public; Owner: -
+-- Name: recipe_process_steps recipe_process_steps_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_specificaties_insert ON public.recipe_specificaties FOR INSERT WITH CHECK (public.can_edit('recipes'::text));
-
-
---
--- Name: recipe_specificaties recipe_specificaties_select; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY recipe_specificaties_select ON public.recipe_specificaties FOR SELECT USING (public.can_view('recipes'::text));
+CREATE POLICY recipe_process_steps_update ON public.recipe_process_steps FOR UPDATE USING (public.can_edit('recipes'::text)) WITH CHECK (public.can_edit('recipes'::text));
 
 
 --
--- Name: recipe_specificaties recipe_specificaties_update; Type: POLICY; Schema: public; Owner: -
+-- Name: recipe_revisions; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_specificaties_update ON public.recipe_specificaties FOR UPDATE USING (public.can_edit('recipes'::text)) WITH CHECK (public.can_edit('recipes'::text));
-
-
---
--- Name: recipe_verpakking; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.recipe_verpakking ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.recipe_revisions ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: recipe_verpakking recipe_verpakking_delete; Type: POLICY; Schema: public; Owner: -
+-- Name: recipe_revisions recipe_revisions_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_verpakking_delete ON public.recipe_verpakking FOR DELETE USING (public.can_delete('recipes'::text));
+CREATE POLICY recipe_revisions_delete ON public.recipe_revisions FOR DELETE USING (public.can_delete('recipes'::text));
 
 
 --
--- Name: recipe_verpakking recipe_verpakking_insert; Type: POLICY; Schema: public; Owner: -
+-- Name: recipe_revisions recipe_revisions_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_verpakking_insert ON public.recipe_verpakking FOR INSERT WITH CHECK (public.can_edit('recipes'::text));
-
-
---
--- Name: recipe_verpakking recipe_verpakking_select; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY recipe_verpakking_select ON public.recipe_verpakking FOR SELECT USING (public.can_view('recipes'::text));
+CREATE POLICY recipe_revisions_insert ON public.recipe_revisions FOR INSERT WITH CHECK (public.can_edit('recipes'::text));
 
 
 --
--- Name: recipe_verpakking recipe_verpakking_update; Type: POLICY; Schema: public; Owner: -
+-- Name: recipe_revisions recipe_revisions_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_verpakking_update ON public.recipe_verpakking FOR UPDATE USING (public.can_edit('recipes'::text)) WITH CHECK (public.can_edit('recipes'::text));
+CREATE POLICY recipe_revisions_select ON public.recipe_revisions FOR SELECT USING (public.can_view('recipes'::text));
+
+
+--
+-- Name: recipe_revisions recipe_revisions_update; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY recipe_revisions_update ON public.recipe_revisions FOR UPDATE USING (public.can_edit('recipes'::text)) WITH CHECK (public.can_edit('recipes'::text));
+
+
+--
+-- Name: recipe_specs; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.recipe_specs ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: recipe_specs recipe_specs_delete; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY recipe_specs_delete ON public.recipe_specs FOR DELETE USING (public.can_delete('recipes'::text));
+
+
+--
+-- Name: recipe_specs recipe_specs_insert; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY recipe_specs_insert ON public.recipe_specs FOR INSERT WITH CHECK (public.can_edit('recipes'::text));
+
+
+--
+-- Name: recipe_specs recipe_specs_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY recipe_specs_select ON public.recipe_specs FOR SELECT USING (public.can_view('recipes'::text));
+
+
+--
+-- Name: recipe_specs recipe_specs_update; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY recipe_specs_update ON public.recipe_specs FOR UPDATE USING (public.can_edit('recipes'::text)) WITH CHECK (public.can_edit('recipes'::text));
 
 
 --
@@ -3218,36 +3199,36 @@ CREATE POLICY users_write_admin ON public.users TO authenticated USING (public.i
 
 
 --
--- Name: water_instellingen; Type: ROW SECURITY; Schema: public; Owner: -
+-- Name: water_settings; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
-ALTER TABLE public.water_instellingen ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.water_settings ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: water_instellingen_historie; Type: ROW SECURITY; Schema: public; Owner: -
+-- Name: water_settings_history; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
-ALTER TABLE public.water_instellingen_historie ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.water_settings_history ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: water_instellingen_historie water_instellingen_historie_select; Type: POLICY; Schema: public; Owner: -
+-- Name: water_settings_history water_settings_history_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY water_instellingen_historie_select ON public.water_instellingen_historie FOR SELECT USING (true);
-
-
---
--- Name: water_instellingen water_instellingen_select; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY water_instellingen_select ON public.water_instellingen FOR SELECT USING (true);
+CREATE POLICY water_settings_history_select ON public.water_settings_history FOR SELECT USING (true);
 
 
 --
--- Name: water_instellingen water_instellingen_update; Type: POLICY; Schema: public; Owner: -
+-- Name: water_settings water_settings_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY water_instellingen_update ON public.water_instellingen FOR UPDATE USING (public.can_edit('settings'::text)) WITH CHECK (public.can_edit('settings'::text));
+CREATE POLICY water_settings_select ON public.water_settings FOR SELECT USING (true);
+
+
+--
+-- Name: water_settings water_settings_update; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY water_settings_update ON public.water_settings FOR UPDATE USING (public.can_edit('settings'::text)) WITH CHECK (public.can_edit('settings'::text));
 
 
 --
@@ -3333,13 +3314,6 @@ GRANT ALL ON FUNCTION public.product_sheet_relevant_recipe_id(p_recipe_group_id 
 
 
 --
--- Name: FUNCTION set_gewijzigd_op(); Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON FUNCTION public.set_gewijzigd_op() TO service_role;
-
-
---
 -- Name: FUNCTION set_last_login(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -3355,17 +3329,17 @@ GRANT ALL ON FUNCTION public.set_updated_at() TO service_role;
 
 
 --
--- Name: FUNCTION water_instellingen_log(); Type: ACL; Schema: public; Owner: -
+-- Name: FUNCTION water_settings_log(); Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON FUNCTION public.water_instellingen_log() TO service_role;
+GRANT ALL ON FUNCTION public.water_settings_log() TO service_role;
 
 
 --
--- Name: FUNCTION water_instellingen_stempel(); Type: ACL; Schema: public; Owner: -
+-- Name: FUNCTION water_settings_stamp(); Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON FUNCTION public.water_instellingen_stempel() TO service_role;
+GRANT ALL ON FUNCTION public.water_settings_stamp() TO service_role;
 
 
 --
@@ -3459,12 +3433,12 @@ GRANT ALL ON TABLE public.document_types TO service_role;
 
 
 --
--- Name: TABLE hop_utilisatie_curve; Type: ACL; Schema: public; Owner: -
+-- Name: TABLE hop_utilization_curve; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.hop_utilisatie_curve TO anon;
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.hop_utilisatie_curve TO authenticated;
-GRANT ALL ON TABLE public.hop_utilisatie_curve TO service_role;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.hop_utilization_curve TO anon;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.hop_utilization_curve TO authenticated;
+GRANT ALL ON TABLE public.hop_utilization_curve TO service_role;
 
 
 --
@@ -3594,21 +3568,21 @@ GRANT ALL ON TABLE public.permission_modules TO service_role;
 
 
 --
--- Name: TABLE product_sheet_revisies; Type: ACL; Schema: public; Owner: -
+-- Name: TABLE product_sheet_revisions; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.product_sheet_revisies TO anon;
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.product_sheet_revisies TO authenticated;
-GRANT ALL ON TABLE public.product_sheet_revisies TO service_role;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.product_sheet_revisions TO anon;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.product_sheet_revisions TO authenticated;
+GRANT ALL ON TABLE public.product_sheet_revisions TO service_role;
 
 
 --
--- Name: SEQUENCE product_sheet_revisies_id_seq; Type: ACL; Schema: public; Owner: -
+-- Name: SEQUENCE product_sheet_revisions_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.product_sheet_revisies_id_seq TO anon;
-GRANT SELECT,USAGE ON SEQUENCE public.product_sheet_revisies_id_seq TO authenticated;
-GRANT ALL ON SEQUENCE public.product_sheet_revisies_id_seq TO service_role;
+GRANT SELECT,USAGE ON SEQUENCE public.product_sheet_revisions_id_seq TO anon;
+GRANT SELECT,USAGE ON SEQUENCE public.product_sheet_revisions_id_seq TO authenticated;
+GRANT ALL ON SEQUENCE public.product_sheet_revisions_id_seq TO service_role;
 
 
 --
@@ -3639,12 +3613,12 @@ GRANT ALL ON SEQUENCE public.product_sheets_id_seq TO service_role;
 
 
 --
--- Name: TABLE recipe_brouwspecificaties; Type: ACL; Schema: public; Owner: -
+-- Name: TABLE recipe_brewing_specs; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_brouwspecificaties TO anon;
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_brouwspecificaties TO authenticated;
-GRANT ALL ON TABLE public.recipe_brouwspecificaties TO service_role;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_brewing_specs TO anon;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_brewing_specs TO authenticated;
+GRANT ALL ON TABLE public.recipe_brewing_specs TO service_role;
 
 
 --
@@ -3657,12 +3631,21 @@ GRANT ALL ON TABLE public.recipe_comments TO service_role;
 
 
 --
--- Name: TABLE recipe_fermentatie; Type: ACL; Schema: public; Owner: -
+-- Name: TABLE recipe_costs; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_fermentatie TO anon;
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_fermentatie TO authenticated;
-GRANT ALL ON TABLE public.recipe_fermentatie TO service_role;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_costs TO anon;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_costs TO authenticated;
+GRANT ALL ON TABLE public.recipe_costs TO service_role;
+
+
+--
+-- Name: TABLE recipe_fermentation; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_fermentation TO anon;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_fermentation TO authenticated;
+GRANT ALL ON TABLE public.recipe_fermentation TO service_role;
 
 
 --
@@ -3675,57 +3658,48 @@ GRANT ALL ON SEQUENCE public.recipe_ingredients_id_seq TO service_role;
 
 
 --
--- Name: TABLE recipe_kosten; Type: ACL; Schema: public; Owner: -
+-- Name: TABLE recipe_packaging; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_kosten TO anon;
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_kosten TO authenticated;
-GRANT ALL ON TABLE public.recipe_kosten TO service_role;
-
-
---
--- Name: TABLE recipe_processtappen; Type: ACL; Schema: public; Owner: -
---
-
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_processtappen TO anon;
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_processtappen TO authenticated;
-GRANT ALL ON TABLE public.recipe_processtappen TO service_role;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_packaging TO anon;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_packaging TO authenticated;
+GRANT ALL ON TABLE public.recipe_packaging TO service_role;
 
 
 --
--- Name: TABLE recipe_revisies; Type: ACL; Schema: public; Owner: -
+-- Name: TABLE recipe_process_steps; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_revisies TO anon;
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_revisies TO authenticated;
-GRANT ALL ON TABLE public.recipe_revisies TO service_role;
-
-
---
--- Name: SEQUENCE recipe_revisies_id_seq; Type: ACL; Schema: public; Owner: -
---
-
-GRANT SELECT,USAGE ON SEQUENCE public.recipe_revisies_id_seq TO anon;
-GRANT SELECT,USAGE ON SEQUENCE public.recipe_revisies_id_seq TO authenticated;
-GRANT ALL ON SEQUENCE public.recipe_revisies_id_seq TO service_role;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_process_steps TO anon;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_process_steps TO authenticated;
+GRANT ALL ON TABLE public.recipe_process_steps TO service_role;
 
 
 --
--- Name: TABLE recipe_specificaties; Type: ACL; Schema: public; Owner: -
+-- Name: TABLE recipe_revisions; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_specificaties TO anon;
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_specificaties TO authenticated;
-GRANT ALL ON TABLE public.recipe_specificaties TO service_role;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_revisions TO anon;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_revisions TO authenticated;
+GRANT ALL ON TABLE public.recipe_revisions TO service_role;
 
 
 --
--- Name: TABLE recipe_verpakking; Type: ACL; Schema: public; Owner: -
+-- Name: SEQUENCE recipe_revisions_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_verpakking TO anon;
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_verpakking TO authenticated;
-GRANT ALL ON TABLE public.recipe_verpakking TO service_role;
+GRANT SELECT,USAGE ON SEQUENCE public.recipe_revisions_id_seq TO anon;
+GRANT SELECT,USAGE ON SEQUENCE public.recipe_revisions_id_seq TO authenticated;
+GRANT ALL ON SEQUENCE public.recipe_revisions_id_seq TO service_role;
+
+
+--
+-- Name: TABLE recipe_specs; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_specs TO anon;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_specs TO authenticated;
+GRANT ALL ON TABLE public.recipe_specs TO service_role;
 
 
 --
@@ -3810,30 +3784,30 @@ GRANT ALL ON TABLE public.units TO service_role;
 
 
 --
--- Name: TABLE water_instellingen; Type: ACL; Schema: public; Owner: -
+-- Name: TABLE water_settings; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.water_instellingen TO anon;
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.water_instellingen TO authenticated;
-GRANT ALL ON TABLE public.water_instellingen TO service_role;
-
-
---
--- Name: TABLE water_instellingen_historie; Type: ACL; Schema: public; Owner: -
---
-
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.water_instellingen_historie TO anon;
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.water_instellingen_historie TO authenticated;
-GRANT ALL ON TABLE public.water_instellingen_historie TO service_role;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.water_settings TO anon;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.water_settings TO authenticated;
+GRANT ALL ON TABLE public.water_settings TO service_role;
 
 
 --
--- Name: SEQUENCE water_instellingen_historie_id_seq; Type: ACL; Schema: public; Owner: -
+-- Name: TABLE water_settings_history; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.water_instellingen_historie_id_seq TO anon;
-GRANT SELECT,USAGE ON SEQUENCE public.water_instellingen_historie_id_seq TO authenticated;
-GRANT ALL ON SEQUENCE public.water_instellingen_historie_id_seq TO service_role;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.water_settings_history TO anon;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.water_settings_history TO authenticated;
+GRANT ALL ON TABLE public.water_settings_history TO service_role;
+
+
+--
+-- Name: SEQUENCE water_settings_history_id_seq; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,USAGE ON SEQUENCE public.water_settings_history_id_seq TO anon;
+GRANT SELECT,USAGE ON SEQUENCE public.water_settings_history_id_seq TO authenticated;
+GRANT ALL ON SEQUENCE public.water_settings_history_id_seq TO service_role;
 
 
 --
