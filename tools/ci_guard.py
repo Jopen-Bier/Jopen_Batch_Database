@@ -2,9 +2,9 @@
 """Repo guard, run by .github/workflows/guard.yml on every push and PR.
 
 Checks
-1. Helper copies: no page or script defines its own copy of a helper that
-   lives in jopen-utils.js (also catches renamed copies such as
-   escapeHtmlLokaal / escapeHtmlLocal).
+1. Copies of shared functions: no page or script defines its own copy of a
+   function exported by jopen-utils.js or brew-calculations.js (also catches
+   renamed copies such as escapeHtmlLokaal, and the old Dutch names).
 2. Naming in new migrations: every table, column, view, function, type,
    index and trigger created or renamed in a migration newer than
    NAMING_BASELINE must be snake_case and must not contain Dutch words
@@ -49,12 +49,25 @@ def report(path, line, msg):
 
 
 # ---------------------------------------------------------------- helpers
+# Shared modules whose exported functions must never be copied into a page.
+SHARED_MODULES = ['jopen-utils.js', 'brew-calculations.js']
+# Old (Dutch) names of shared functions; a definition with one of these names
+# is a copy that slipped back in.
+LEGACY_COPIES = ['bepaalHopRendement', 'bepaalHopEbu', 'bepaalHopSgBucket', 'bepaalHopSgKolomIndex']
+
+
 def helper_names():
-    src = (ROOT / 'jopen-utils.js').read_text(encoding='utf-8')
-    m = re.search(r'module\.exports\s*=\s*\{([^}]*)\}', src)
-    if not m:
-        sys.exit('ci_guard: could not find module.exports in jopen-utils.js')
-    return [n.strip().split(':')[0].strip() for n in m.group(1).split(',') if n.strip()]
+    names = []
+    for module in SHARED_MODULES:
+        src = (ROOT / module).read_text(encoding='utf-8')
+        m = re.search(r'module\.exports\s*=\s*\{([^}]*)\}', src)
+        if not m:
+            sys.exit(f'ci_guard: could not find module.exports in {module}')
+        for n in m.group(1).split(','):
+            n = n.strip().split(':')[0].strip()
+            if n and not n.isupper():          # constants are not functions
+                names.append(n)
+    return names + LEGACY_COPIES
 
 
 def check_helper_copies():
@@ -66,15 +79,15 @@ def check_helper_copies():
         rf'(?:\bfunction\s+|\b(?:const|let|var)\s+)_?({alt})(?:Lokaal|Local|Copy|\d)?\s*(?:\(|=)'
     )
     for path in sorted(ROOT.rglob('*')):
-        if path.suffix not in ('.html', '.js') or path.name == 'jopen-utils.js':
+        if path.suffix not in ('.html', '.js') or path.name in SHARED_MODULES:
             continue
         if SKIP_DIRS & set(p.name for p in path.relative_to(ROOT).parents):
             continue
         for i, line in enumerate(path.read_text(encoding='utf-8', errors='replace').splitlines(), 1):
             m = pattern.search(line)
             if m:
-                report(path, i, f'Own copy of jopen-utils helper "{m.group(1)}" — '
-                                'use the one from jopen-utils.js (CLAUDE.md, Code).')
+                report(path, i, f'Own copy of shared function "{m.group(1)}" — '
+                                f'use the one from {" / ".join(SHARED_MODULES)} (CLAUDE.md, Code).')
 
 
 # ---------------------------------------------------------------- naming

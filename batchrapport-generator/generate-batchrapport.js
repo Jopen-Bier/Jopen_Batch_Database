@@ -34,6 +34,7 @@ const { createClient } = require('@supabase/supabase-js');
 const { XlsxDirectWriter, StylesManager } = require('./xlsx-direct');
 const { fromDb, fromDbResult } = require('../db-legacy-names.js');
 const { BEER_RISK_REPORT_TEXT, BEER_STATUS_REPORT_TEXT } = require('../recipe-values.js');
+const { hopUtilizationPct } = require('../brew-calculations.js');
 
 const SCALAR_MAP = require('./data/scalar_field_map.json');
 const INGREDIENT_MAP = require('./data/ingredient_field_map.json');
@@ -42,67 +43,6 @@ const FORMATEN_MAP = require('./data/formaten_field_map.json');
 
 const TEMPLATE_PATH = path.join(__dirname, 'Batchrapport_sjabloon.xlsx');
 const OUTPUT_DIR = path.join(__dirname, 'output');
-
-// ---------------------------------------------------------------------------
-// Hop rendement (utilization) & EBU — exact dezelfde tabel/logica als
-// recept-invoer.html / receptoverzicht.html (1-op-1 uit Moederdata.xlsm,
-// EBU Berekening!T2:AF27 + Recipe Sheet!K43). Bewust hier gedupliceerd
-// i.p.v. gedeeld via een <script>-bestand, omdat dit script in Node draait
-// en de webpagina's in de browser — zie qua onderhoud: als de tabel ooit
-// verandert, moet dat op ALLE drie plekken (hier, batchrapport-vullen.js,
-// en de twee HTML-bestanden).
-// ---------------------------------------------------------------------------
-const HOP_SG_BUCKETS = [1.02, 1.03, 1.04, 1.05, 1.06, 1.07, 1.08, 1.09, 1.10, 1.11, 1.12, 1.13];
-const HOP_RENDEMENT_TABEL = [
-  { kooktijd: 0,   rendement: [6.5, 6, 6, 5.5, 5, 3, 2.5, 2, 1.8, 1.7, 1.6, null] },
-  { kooktijd: 5,   rendement: [9.5, 9, 8, 7.5, 6, 3.5, 3, 2.8, 2.5, 2.4, 2.3, null] },
-  { kooktijd: 10,  rendement: [18, 16, 14, 11, 9, 7, 7, 6.5, 5, 4.8, 4.6, null] },
-  { kooktijd: 15,  rendement: [18, 17.5, 17, 15, 14, 12, 10, 9, 7, 6.5, 6.3, null] },
-  { kooktijd: 20,  rendement: [25, 23, 21, 20, 16, 14, 12, 11, 9, 8.5, 8.2, null] },
-  { kooktijd: 25,  rendement: [27.5, 26, 24.5, 23.68, 20, 17, 15, 14, 11, 10, 9.5, null] },
-  { kooktijd: 30,  rendement: [30, 28, 26, 24, 22, 20, 17, 16, 14, 13, 11, null] },
-  { kooktijd: 35,  rendement: [31, 29, 27, 25, 23, 21, 19, 17, 16, 15, 14.5, null] },
-  { kooktijd: 40,  rendement: [32, 30, 28, 26, 24, 22, 20, 19, 17, 16, 15, null] },
-  { kooktijd: 45,  rendement: [34, 32, 30, 27, 25, 24, 21, 20, 18, 17, 16, null] },
-  { kooktijd: 50,  rendement: [36, 34, 32, 28, 25, 25, 22, 21, 19, 18, 17, null] },
-  { kooktijd: 55,  rendement: [40, 37, 34, 29.5, 26, 25, 23, 22, 20, 19, 18, null] },
-  { kooktijd: 60,  rendement: [42, 39, 36, 31, 27.07, 26, 25, 23, 21, 20, 19, null] },
-  { kooktijd: 65,  rendement: [45, 41, 37, 33, 30, 28, 27, 25, 23, 21, 21, null] },
-  { kooktijd: 70,  rendement: [45, 42.5, 40, 35, 33, 32, 30, 27, 25, 23, 23, null] },
-  { kooktijd: 75,  rendement: [null, 44, 42, 38, 36, 35, 33, 30, 27, 25, 25, null] },
-  { kooktijd: 80,  rendement: [null, 44, 42, 38, 36, 35, 33, 30, 27, 25, 25, null] },
-  { kooktijd: 90,  rendement: [null, 44, 42, 38, 36, 35, 33, 30, 27, 25, 25, null] },
-  { kooktijd: 95,  rendement: [null, 44, 42, 38, 36, 35, 33, 30, 27, 25, 25, null] },
-  { kooktijd: 100, rendement: [null, 44, 42, 38, 36, 35, 33, 30, 27, 25, 25, null] },
-  { kooktijd: 105, rendement: [null, 44, 42, 38, 36, 35, 33, 30, 27, 25, 25, null] },
-  { kooktijd: 110, rendement: [null, 44, 42, 38, 36, 35, 33, 30, 27, 25, 25, null] },
-  { kooktijd: 115, rendement: [null, 44, 42, 38, 36, 35, 33, 30, 27, 25, 25, null] },
-  { kooktijd: 120, rendement: [null, 44, 42, 38, 36, 35, 33, 30, 27, 25, 25, null] },
-];
-function bepaalHopSgBucket(og) {
-  const p = parseInt(String(og).slice(0, 2), 10);
-  if (Number.isNaN(p)) return null;
-  return Math.round((259 / (259 - p)) * 100) / 100;
-}
-function bepaalHopSgKolomIndex(sgBucket) {
-  let idx = -1;
-  for (let i = 0; i < HOP_SG_BUCKETS.length; i++) if (HOP_SG_BUCKETS[i] <= sgBucket) idx = i;
-  return idx;
-}
-function bepaalHopRendement(kooktijd, og) {
-  const sgBucket = bepaalHopSgBucket(og);
-  if (sgBucket === null) return null;
-  const kolomIdx = bepaalHopSgKolomIndex(sgBucket);
-  if (kolomIdx === -1) return null;
-  const rij = HOP_RENDEMENT_TABEL.find(r => r.kooktijd === kooktijd);
-  return rij ? rij.rendement[kolomIdx] : null;
-}
-function bepaalHopEbu(gewichtGram, alphaPct, kooktijd, og, volumeKookHl) {
-  const rendementPct = bepaalHopRendement(kooktijd, og);
-  if (rendementPct === null || !volumeKookHl || !gewichtGram || alphaPct == null) return null;
-  const volumeLiter = volumeKookHl * 100;
-  return (gewichtGram * 1000) * (alphaPct / 100) * (rendementPct / 100) / volumeLiter;
-}
 
 // ---------------------------------------------------------------------------
 // Supabase ophalen
@@ -552,7 +492,7 @@ async function vulHopRendementEnEbu(writer, bundel, overloop) {
     }
     const kooktijd = regel.tijdstip !== null && regel.tijdstip !== undefined && regel.tijdstip !== ''
       ? Number(regel.tijdstip) : null;
-    const rendement = (kooktijd !== null && og) ? bepaalHopRendement(kooktijd, og) : null;
+    const rendement = (kooktijd !== null && og) ? hopUtilizationPct(kooktijd, og) : null;
 
     await writer.setCelWaarde(`Recipe Sheet!I${rij}`, rendement !== null ? Number(rendement.toFixed(1)) : null);
     if (rendement !== null) {
@@ -836,7 +776,7 @@ if (require.main === module) {
 }
 
 module.exports = {
-  bepaalHopRendement, bepaalHopEbu, vulScalaireVelden, vulWpKerkVelden, vulReceptnaamKruisVelden,
+  vulScalaireVelden, vulWpKerkVelden, vulReceptnaamKruisVelden,
   vulIngredientRijen, vulRevisies, vulFormaten, vulHopRendementEnEbu, zetHopGroepRanden,
   vulDryHopGlTotalen, voegOverloopRijenToe, genereerBatchrapportBuffer, haalBatchDataOp,
 };

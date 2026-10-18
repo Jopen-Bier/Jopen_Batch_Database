@@ -42,6 +42,7 @@ jopen-shared.css           shared styles
 jopen-utils.js             shared generic helpers (escapeHtml, fetchAllRows, …)
 db-legacy-names.js         translation layer for not-yet-translated pages (generated; §6a)
 waterzouten.js             water-salts calculation (shared module, has a test)
+brew-calculations.js       hop utilization, EBU, malt color (shared module, has a test)
 recipe-values.js           recipe value lists (codes -> labels, colours, report text; has a test)
 voorraad-forecast.js       consumption calculation (shared module)
 productsheet-*.js          product-sheet generation (browser)
@@ -216,8 +217,6 @@ Agreed table and column names per table: `supabase/rename-map.json`.
 | `rollen.html` | admin only (`role_management`) | roles, role_permissions, permission_modules |
 | `status.html` | admin only | counts on batches, recipes, ingredients, users |
 
-Not used by any page: view `brew_planning_changes` (kept for now).
-
 ---
 
 ## 5. How to change things
@@ -271,7 +270,7 @@ Not used by any page: view `brew_planning_changes` (kept for now).
 | Nightly database backup + trial restore | `.github/workflows/daily-backup.yml` → private `Jopen_Database_Backup` |
 | Nightly storage mirror | same workflow → private `Jopen_Storage_Backup` |
 | Weekly restore test | `.github/workflows/restore-test.yml` |
-| Guard on every push / PR | `.github/workflows/guard.yml` → `tools/ci_guard.py` (no copies of `jopen-utils.js` helpers; snake_case English names in new migrations, with `-- naming-ok: <name>` for a deliberate exception), `node --check`, `tests/*.test.js` |
+| Guard on every push / PR | `.github/workflows/guard.yml` → `tools/ci_guard.py` (no copies of `jopen-utils.js` / `brew-calculations.js` functions; snake_case English names in new migrations, with `-- naming-ok: <name>` for a deliberate exception), `node --check`, `tests/*.test.js` |
 | Drift detection | `.github/workflows/schema-snapshot.yml` → `supabase/schema.sql`; a commit "Schema gewijzigd" without a matching migration = drift |
 | Restore manual | `.github/backup/RESTORE.md` |
 
