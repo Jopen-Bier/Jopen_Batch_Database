@@ -52,7 +52,8 @@ rules that must not be skipped.
 ## Before every push
 - `node --check` on every changed `.js` file and on the extracted inline
   scripts of changed `.html` pages.
-- Run `node tests/*.test.js`.
+- Run `node tests/*.test.js` and `python3 tools/ci_guard.py` (the Guard
+  workflow runs both on every push; a red Guard means fix before merging).
 - For behaviour changes: jsdom test, with data injection and the call in one
   `window.eval(script + testCode)` (separate evals do not share `let`/`const`).
 - Commit as `git -c user.name="Claude" -c user.email="claude@anthropic.com" commit`;

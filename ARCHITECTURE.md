@@ -3,11 +3,13 @@
 The map of this system. Read it before adding a page, a table or a new app on
 the same database. The hard rules are summarised in `CLAUDE.md`.
 
-> **Database renamed (Oct 2026).** All tables, columns and value codes are
-> English (core → inventory → recipe → production, following
-> `supabase/rename-map.json`). A lot of page code is still Dutch and talks
-> to the database through the translation layer (§6a). Everything **new**
-> follows the conventions below.
+> **State (18 Oct 2026).** The database is fully English: every table,
+> column, view, function and value code (renamed in four steps — core,
+> inventory, recipe, production — per `supabase/rename-map.json`). Older
+> page code is still partly Dutch and reaches the database through the
+> translation layer (§6a); pages are translated one by one when they are
+> substantially reworked (§7). Everything **new** follows the conventions
+> below; the Guard workflow (§6) checks the naming of new migrations.
 
 ---
 
@@ -23,7 +25,7 @@ creation with Excel batch-report generation, users and roles.
 | Frontend | Plain HTML + vanilla JS, one file per page, no build step. Hosted on GitHub Pages from this repo. |
 | Backend | Supabase (Postgres 17, eu-central-1): Auth, RLS, Edge Functions, Storage. |
 | Excel output | `xlsx-direct.js` (JSZip + raw XML patching). ExcelJS only for simple new exports, never to load/save existing templates. |
-| Automation | GitHub Actions: nightly backup + restore check, weekly restore test, nightly schema snapshot. |
+| Automation | GitHub Actions: guard on every push, nightly backup + restore check, weekly restore test, nightly schema snapshot. |
 
 UI language: **English**. Database names and new code: **English**
 (older code is still partly Dutch — see §7).
@@ -52,8 +54,9 @@ supabase/
   schema.sql               full structure dump, refreshed nightly = the baseline
   rename-map.json          agreed Dutch → English names (transition source of truth)
   functions/               Edge Functions (generate-invite-link, delete-user)
-tests/                     Node tests for shared modules
-.github/workflows/         backup, restore test, schema snapshot
+tests/                     Node tests for shared modules (run by the Guard workflow)
+tools/                     translation-layer scripts + ci_guard.py (see tools/README.md)
+.github/workflows/         guard, backup, restore test, schema snapshot
 .github/backup/            backup/restore scripts + RESTORE.md
 ```
 
@@ -195,23 +198,25 @@ Agreed table and column names per table: `supabase/rename-map.json`.
 
 ## 4. Pages
 
-| Page | Permission module | Main tables (current names) |
+| Page | Permission module | Main tables / views |
 |---|---|---|
 | `index.html` | — (tiles per module) | |
-| `login.html`, `accept-invite.html` | — | auth |
-| `recept-invoer.html` | recipes | recipes, recipe_*, water_instellingen, units |
-| `receptoverzicht.html` | recipes | recipes, recipe_*, product_sheet_status, batches |
-| `ingredienten.html` | ingredients | ingredients + ingredient_*, document_types |
-| `productsheet.html`, `productsheet-invoer.html` | product_sheets | product_sheets, product_sheet_revisies |
-| `brouwplanning.html` | brewing_planning | brew_planning (+ splits, history), brew_capacity |
-| `verbruiksprognose.html` | brewing_planning (via menu) | ingredients (+ voorraad-forecast.js) |
-| `batchcreation.html` | batches | batches, recipes |
-| `voorraad-overzicht/inboeken/uitboeken.html` | inventory | lots, stock_movements, ingredients |
-| `statistics.html` | statistics | ingredients, ingredient_documents |
-| `settings.html` | settings | reference tables, water_instellingen |
-| `gebruikers.html` | admin only | users, roles |
-| `rollen.html` | admin only | roles, role_permissions, permission_modules |
-| `status.html` | admin only | counts |
+| `login.html`, `accept-invite.html` | — | auth only |
+| `recept-invoer.html` | recipes | recipes, recipe_* (brewing_specs, fermentation, water, ingredients, costs, process_steps, specs, packaging, comments, revisions), ingredients, units, water_settings |
+| `receptoverzicht.html` | recipes | recipes, recipe_*, product_sheet_status (view), batches |
+| `ingredienten.html` | ingredients | ingredients, ingredient_categories, ingredient_documents, ingredient_revisions, ingredient_declarations, ingredient_usage_counts (view), document_types, recipe_ingredients, units |
+| `productsheet.html`, `productsheet-invoer.html` | product_sheets | product_sheets, product_sheet_revisions, product_sheet_status (view), recipes |
+| `brouwplanning.html` | brewing_planning | brew_planning, brew_planning_splits, brew_capacity, brew_planning_history_detailed (view), recipes, users |
+| `verbruiksprognose.html` | brewing_planning (via menu) | ingredients, brew_planning, recipe_ingredients (via `voorraad-forecast.js`) |
+| `batchcreation.html` | batches | batches, recipes, recipe_fermentation (+ batch report via `batchrapport-vullen.js`) |
+| `voorraad-overzicht/inboeken/uitboeken.html` | inventory | lots, stock_movements, ingredients, batches, users |
+| `statistics.html` | statistics | ingredients, ingredient_documents, document_types |
+| `settings.html` | settings | units, ingredient_categories, document_types, ingredient_declarations, water_settings (+ _history) |
+| `gebruikers.html` | admin only (`user_management`) | users, roles, `admin_get_last_logins()` |
+| `rollen.html` | admin only (`role_management`) | roles, role_permissions, permission_modules |
+| `status.html` | admin only | counts on batches, recipes, ingredients, users |
+
+Not used by any page: view `brew_planning_changes` (kept for now).
 
 ---
 
@@ -266,12 +271,13 @@ Agreed table and column names per table: `supabase/rename-map.json`.
 | Nightly database backup + trial restore | `.github/workflows/daily-backup.yml` → private `Jopen_Database_Backup` |
 | Nightly storage mirror | same workflow → private `Jopen_Storage_Backup` |
 | Weekly restore test | `.github/workflows/restore-test.yml` |
+| Guard on every push / PR | `.github/workflows/guard.yml` → `tools/ci_guard.py` (no copies of `jopen-utils.js` helpers; snake_case English names in new migrations, with `-- naming-ok: <name>` for a deliberate exception), `node --check`, `tests/*.test.js` |
 | Drift detection | `.github/workflows/schema-snapshot.yml` → `supabase/schema.sql`; a commit "Schema gewijzigd" without a matching migration = drift |
 | Restore manual | `.github/backup/RESTORE.md` |
 
 ---
 
-## 6a. Translation layer (transition)
+## 6a. Translation layer (until every page is translated)
 
 The database is English; a lot of page code is still Dutch. Instead of
 rewriting every page at once, the boundary between the two is the query:
