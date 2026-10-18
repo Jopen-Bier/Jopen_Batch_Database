@@ -15,10 +15,53 @@
 //   supabaseClient.from('recipes').select('*').then(r => fromDbResult('recipes', r))
 //
 // When a page is translated to English, its toDb()/alias use goes away.
-// Domains covered: inventory, recipe.
+// Domains covered: inventory, recipe, production.
 // ============================================================================
 
 const DB_LEGACY_COLUMNS = {
+  "batches": {
+    "aangemaakt_door": "created_by",
+    "aangemaakt_op": "created_at",
+    "aantal_brouwsels": "brew_count",
+    "batchnummer": "batch_number",
+    "bitterheid": "bitterness",
+    "brouwdatum": "brew_date",
+    "datum_orderpicken": "order_picking_date",
+    "gist_bij_1e_brouwsel": "yeast_with_first_brew",
+    "gist_door": "yeast_pitched_by",
+    "gist_geent_op": "yeast_pitched_on",
+    "gist_gerehydrateerd": "yeast_rehydrated",
+    "gist_gewicht": "yeast_weight",
+    "gist_programma_aan": "yeast_program_on",
+    "gist_temp_max": "yeast_temp_max",
+    "gist_temp_start": "yeast_temp_start",
+    "giststam": "yeast_strain",
+    "glt_leeg": "glt_empty",
+    "kleur": "color",
+    "naam": "name",
+    "totaal_eindvolume": "total_final_volume"
+  },
+  "brew_capacity": {
+    "max_brouwsels": "max_brews"
+  },
+  "brew_planning": {
+    "aangemaakt_door": "created_by",
+    "aangemaakt_op": "created_at",
+    "aantal_brouwsels": "brew_count",
+    "bijgewerkt_op": "updated_at",
+    "notities": "notes",
+    "prio": "is_priority"
+  },
+  "brew_planning_history": {
+    "actie": "action",
+    "gewijzigd_door": "updated_by",
+    "gewijzigd_op": "updated_at",
+    "na": "after",
+    "voor": "before"
+  },
+  "brew_planning_splits": {
+    "aangemaakt_op": "created_at"
+  },
   "hop_utilization_curve": {
     "kooktijd_min": "boil_time_min",
     "rendement_pct": "utilization_pct"

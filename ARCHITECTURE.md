@@ -3,11 +3,11 @@
 The map of this system. Read it before adding a page, a table or a new app on
 the same database. The hard rules are summarised in `CLAUDE.md`.
 
-> **Transition in progress (Oct 2026).** Table and column names are being
-> renamed from Dutch to English, domain by domain (core → inventory →
-> recipe → production), following `supabase/rename-map.json`. Until a domain
-> has been renamed, its tables still carry their old Dutch names. Everything
-> **new** follows the conventions below.
+> **Database renamed (Oct 2026).** All tables, columns and value codes are
+> English (core → inventory → recipe → production, following
+> `supabase/rename-map.json`). A lot of page code is still Dutch and talks
+> to the database through the translation layer (§6a). Everything **new**
+> follows the conventions below.
 
 ---
 
@@ -292,10 +292,14 @@ rewriting every page at once, the boundary between the two is the query:
   `toDb('<table>', row)` from `db-legacy-names.js` (generated from
   `supabase/rename-map.json`; load it on pages that write).
 - **Status values** are English codes everywhere (data, filters,
-  comparisons). Users see labels; the recipe value lists and their labels
+  comparisons). Batch status: planned/brewing/fermenting/processing/filling/
+  completed. Users see labels; the recipe value lists and their labels
   live in `recipe-values.js` (location, status, addition type, beer
   risk/status). The Excel batch report still gets the Dutch beer risk/status
   text, because the template's conditional formatting matches on it.
+- **JSON snapshots** (`brew_planning_history.before/after`,
+  `product_sheets.sync_snapshot`, `water_settings_history.data`) use the
+  English column names as keys; read them with those keys, not via aliases.
 - When a page is translated to English, its aliases and `toDb()`/`fromDb()`
   calls go away. Search for `toDb(`, `fromDb` and `:` aliases to find what is
   left.

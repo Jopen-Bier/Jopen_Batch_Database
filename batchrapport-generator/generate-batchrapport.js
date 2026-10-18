@@ -32,7 +32,7 @@ const fs = require('fs');
 const JSZip = require('jszip');
 const { createClient } = require('@supabase/supabase-js');
 const { XlsxDirectWriter, StylesManager } = require('./xlsx-direct');
-const { fromDb } = require('../db-legacy-names.js');
+const { fromDb, fromDbResult } = require('../db-legacy-names.js');
 const { BEER_RISK_REPORT_TEXT, BEER_STATUS_REPORT_TEXT } = require('../recipe-values.js');
 
 const SCALAR_MAP = require('./data/scalar_field_map.json');
@@ -118,7 +118,8 @@ function reportFermentationText(row) {
 
 async function haalBatchDataOp(supabase, batchnummer) {
   const { data: batch, error: batchErr } = await supabase
-    .from('batches').select('*').eq('batchnummer', batchnummer).single();
+    .from('batches').select('*').eq('batch_number', batchnummer).single()
+    .then(r => fromDbResult('batches', r));
   if (batchErr || !batch) throw new Error(`Batch ${batchnummer} niet gevonden: ${batchErr?.message || ''}`);
 
   const recipeId = batch.recipe_id;

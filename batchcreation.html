@@ -261,7 +261,7 @@
       document.getElementById('bc-preview-locatie').textContent = locationLabel(recept.locatie);
       document.getElementById('bc-preview-hl').textContent = recept.brouwsel_hl ?? '—';
       document.getElementById('bc-preview-versie').textContent = `v${recept.versie_major}.${recept.versie_minor}`;
-      document.getElementById('bc-preview-status').textContent = recept.status;
+      document.getElementById('bc-preview-status').textContent = valueLabel(RECIPE_STATUS_LABELS, recept.status);
       document.getElementById('bc-preview-risico').textContent = valueLabel(BEER_RISK_LABELS, ferm && ferm.bier_risico);
       document.getElementById('bc-preview-beerstatus').textContent = valueLabel(BEER_STATUS_LABELS, ferm && ferm.bier_status);
       document.getElementById('bc-geselecteerd').style.display = 'block';
@@ -321,13 +321,13 @@
       melding.textContent = 'Creating…';
       melding.className = '';
 
-      const { error } = await supabaseClient.from('batches').insert({
+      const { error } = await supabaseClient.from('batches').insert(toDb('batches', {
         batchnummer: Number(batchnummerVal),
         recipe_id: recept.id,
         naam: recept.naam,
         aantal_brouwsels: Number(brouwselsVal),
         aangemaakt_door: gebruikerId,
-      });
+      }));
 
       if (error) {
         melding.textContent = error.code === '23505'
@@ -372,11 +372,11 @@
       for (let van = 0; ; van += PAGINA) {
         const { data, error } = await supabaseClient
           .from('batches')
-          .select('id, batchnummer, naam, aantal_brouwsels, aangemaakt_op, users(name), recipes(locatie:location, bierstijl:beer_style)')
+          .select('id, batchnummer:batch_number, naam:name, aantal_brouwsels:brew_count, aangemaakt_op:created_at, users(name), recipes(locatie:location, bierstijl:beer_style)')
           // aangemaakt_op alone isn't a reliable sort key: rows inserted in the same
           // statement (e.g. a bulk historical import) all share one timestamp, so ties
           // need a tiebreaker. id (insertion order) does that cheaply.
-          .order('aangemaakt_op', { ascending: false })
+          .order('created_at', { ascending: false })
           .order('id', { ascending: false })
           .range(van, van + PAGINA - 1);
         if (error) {
@@ -487,7 +487,7 @@
         const nr = Number(del.dataset.batchnummer);
         if (!confirm(`Delete batch ${nr}? This cannot be undone.`)) return;
         del.disabled = true;
-        const { error } = await supabaseClient.from('batches').delete().eq('batchnummer', nr);
+        const { error } = await supabaseClient.from('batches').delete().eq('batch_number', nr);
         if (error) {
           alert('Could not delete batch: ' + error.message);
           del.disabled = false;

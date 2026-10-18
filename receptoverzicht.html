@@ -467,7 +467,7 @@ async function loadRecipes() {
       .from('recipes')
       .select('id, naam:name, bierstijl:beer_style, locatie:location, status, versie_major:version_major, versie_minor:version_minor, recipe_group_id')
       .order('name'),
-    supabaseClient.from('batches').select('recipe_id, aangemaakt_op'),
+    supabaseClient.from('batches').select('recipe_id, aangemaakt_op:created_at'),
     fetchAllRows(supabaseClient.from('recipe_revisions').select('recipe_id, datum:date, door:changed_by_name')),
     supabaseClient.from('product_sheet_status').select('recipe_group_id, in_sync'),
   ]);

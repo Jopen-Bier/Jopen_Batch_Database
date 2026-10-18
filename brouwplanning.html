@@ -589,7 +589,7 @@
 
     async function laadCapaciteit(jaar) {
       const { data, error } = await supabaseClient
-        .from('brew_capacity').select('capacity_group, week_number, max_brouwsels').eq('iso_year', jaar);
+        .from('brew_capacity').select('capacity_group, week_number, max_brouwsels:max_brews').eq('iso_year', jaar);
       if (error) { console.error('Kon capaciteit niet laden:', error); return; }
       capaciteitMap = {};
       (data || []).forEach(r => { capaciteitMap[`${r.capacity_group}_${r.week_number}`] = Number(r.max_brouwsels); });
@@ -603,7 +603,7 @@
     async function laadPlanning(jaar) {
       const { data, error } = await supabaseClient
         .from('brew_planning')
-        .select('id, plan_group, week_number, recipe_id, recipe_group_id, aantal_brouwsels, hl, prio, sort_order, notities')
+        .select('id, plan_group, week_number, recipe_id, recipe_group_id, aantal_brouwsels:brew_count, hl, prio:is_priority, sort_order, notities:notes')
         .eq('iso_year', jaar).order('sort_order');
       if (error) { console.error('Kon brouwplanning niet laden:', error); return; }
       planningPerWeek = {};
@@ -674,13 +674,15 @@
     }
     function formatVeldWaarde(key, obj) {
       if (!obj) return '—';
-      if (key === 'prio') return obj.prio ? 'yes' : 'no';
+      if (key === 'is_priority') return obj.is_priority ? 'yes' : 'no';
       if (key === 'plan_group') return planGroupLabel(obj.plan_group);
       if (key === 'hl') return formatHl(obj.hl);
-      if (key === 'notities') return obj.notities || '(empty)';
+      if (key === 'notes') return obj.notes || '(empty)';
       const v = obj[key];
       return (v === null || v === undefined) ? '—' : String(v);
     }
+    // History snapshots (before/after) are stored with the English column
+    // names of brew_planning (brew_count, is_priority, notes, ...).
     // recept-naam voor een voor/na-snapshot uit de geschiedenis, resolvend
     // via dezelfde recipe_group_id-logica als de rest van het scherm
     function histReceptNaam(snapshot) {
@@ -785,7 +787,7 @@
       if (naamVoor !== naamNa) {
         regels.push(`<div><span class="veld">Recipe:</span> <span class="oud">${escapeHtml(naamVoor)}</span> &rarr; <span class="nieuw">${escapeHtml(naamNa)}</span></div>`);
       }
-      const LABELS = { week_number: 'Week', iso_year: 'Year', aantal_brouwsels: 'Brews', hl: 'Volume (hl)', prio: 'Priority', notities: 'Comment', plan_group: 'Group' };
+      const LABELS = { week_number: 'Week', iso_year: 'Year', brew_count: 'Brews', hl: 'Volume (hl)', is_priority: 'Priority', notes: 'Comment', plan_group: 'Group' };
       Object.keys(LABELS).forEach(key => {
         const vOud = voor ? voor[key] : undefined;
         const vNieuw = na ? na[key] : undefined;
@@ -798,8 +800,8 @@
     function bouwSamenvattingHtml(snapshot) {
       const naam = histReceptNaam(snapshot);
       return `${escapeHtml(naam)} — week ${snapshot.week_number ?? '—'}, ${planGroupLabel(snapshot.plan_group)}, `
-        + `${snapshot.aantal_brouwsels ?? '—'} brew(s)${snapshot.prio ? ', prio' : ''}`
-        + `${snapshot.notities ? `<br><span style="color:#999;">"${escapeHtml(snapshot.notities)}"</span>` : ''}`;
+        + `${snapshot.brew_count ?? '—'} brew(s)${snapshot.is_priority ? ', prio' : ''}`
+        + `${snapshot.notes ? `<br><span style="color:#999;">"${escapeHtml(snapshot.notes)}"</span>` : ''}`;
     }
 
     function renderHistEntry(entry) {
@@ -837,26 +839,26 @@
       const actieFilter = document.getElementById('bp-hist-actie-filter').value;
 
       let query = supabaseClient
-        .from('brew_planning_geschiedenis_verrijkt')
-        .select('*')
-        .order('gewijzigd_op', { ascending: false })
+        .from('brew_planning_history_detailed')
+        .select('id, brew_planning_id, actie:action, voor:before, na:after, gewijzigd_door:updated_by, gewijzigd_door_naam:updated_by_name, gewijzigd_op:updated_at')
+        .order('updated_at', { ascending: false })
         .range(histOffset, histOffset + HIST_PAGE_SIZE - 1);
 
-      if (gebruikerFilter) query = query.eq('gewijzigd_door', gebruikerFilter);
-      if (actieFilter) query = query.eq('actie', actieFilter);
-      if (jaarFilter) query = query.or(`na->>iso_year.eq.${jaarFilter},voor->>iso_year.eq.${jaarFilter}`);
-      if (weekFilter) query = query.or(`na->>week_number.eq.${weekFilter},voor->>week_number.eq.${weekFilter}`);
+      if (gebruikerFilter) query = query.eq('updated_by', gebruikerFilter);
+      if (actieFilter) query = query.eq('action', actieFilter);
+      if (jaarFilter) query = query.or(`after->>iso_year.eq.${jaarFilter},before->>iso_year.eq.${jaarFilter}`);
+      if (weekFilter) query = query.or(`after->>week_number.eq.${weekFilter},before->>week_number.eq.${weekFilter}`);
       if (histGekozenRecept) {
         if (histGekozenRecept.groupId) {
           // Alle recept-id's die ooit tot deze recipe_group behoorden erbij
           // pakken, want oudere geschiedenis-rijen (van vóór de
           // recipe_group_id-backfill) hebben soms alleen recipe_id gevuld.
           const ids = alleRecepten.filter(r => r.recipe_group_id === histGekozenRecept.groupId).map(r => r.id);
-          let expr = `na->>recipe_group_id.eq.${histGekozenRecept.groupId},voor->>recipe_group_id.eq.${histGekozenRecept.groupId}`;
-          if (ids.length) expr += `,na->>recipe_id.in.(${ids.join(',')}),voor->>recipe_id.in.(${ids.join(',')})`;
+          let expr = `after->>recipe_group_id.eq.${histGekozenRecept.groupId},before->>recipe_group_id.eq.${histGekozenRecept.groupId}`;
+          if (ids.length) expr += `,after->>recipe_id.in.(${ids.join(',')}),before->>recipe_id.in.(${ids.join(',')})`;
           query = query.or(expr);
         } else {
-          query = query.or(`na->>recipe_id.eq.${histGekozenRecept.id},voor->>recipe_id.eq.${histGekozenRecept.id}`);
+          query = query.or(`after->>recipe_id.eq.${histGekozenRecept.id},before->>recipe_id.eq.${histGekozenRecept.id}`);
         }
       }
 
@@ -1006,10 +1008,10 @@
           const groep = e.target.dataset.group;
           const week = Number(e.target.dataset.week);
           const waarde = Number(e.target.value) || 0;
-          const { error } = await supabaseClient.from('brew_capacity').upsert({
+          const { error } = await supabaseClient.from('brew_capacity').upsert(toDb('brew_capacity', {
             capacity_group: groep, iso_year: huidigJaar, week_number: week,
             max_brouwsels: waarde, updated_by: huidigeGebruikerId,
-          }, { onConflict: 'capacity_group,iso_year,week_number' });
+          }), { onConflict: 'capacity_group,iso_year,week_number' });
           if (error) { console.error(error); alert('Could not save capacity: ' + error.message); return; }
           await laadEnRenderAlles();
         });
@@ -1420,11 +1422,11 @@
         const comment = document.getElementById('bp-modal-comment').value.trim() || null;
 
         melding.textContent = 'Saving…'; melding.className = 'bp-modal-melding';
-        const { error } = await supabaseClient.from('brew_planning').update({
+        const { error } = await supabaseClient.from('brew_planning').update(toDb('brew_planning', {
           recipe_id: recept.id, recipe_group_id: recept.recipe_group_id, aantal_brouwsels: brouwsels, hl, prio,
           week_number: week, plan_group: planGroup, notities: comment,
           bijgewerkt_op: new Date().toISOString(),
-        }).eq('id', modalContext.item.id);
+        })).eq('id', modalContext.item.id);
         if (error) { melding.textContent = 'Could not save: ' + error.message; melding.className = 'bp-modal-melding fout'; return; }
 
         // Splits synchroniseren: eenvoudigweg de bestaande rijen voor dit
@@ -1442,7 +1444,7 @@
           if (splitRijen.length > 0) {
             const { error: insertSplitsError } = await supabaseClient
               .from('brew_planning_splits')
-              .insert(splitRijen.map(s => ({ ...s, brew_planning_id: modalContext.item.id })));
+              .insert(toDb('brew_planning_splits', splitRijen.map(s => ({ ...s, brew_planning_id: modalContext.item.id }))));
             if (insertSplitsError) {
               melding.textContent = 'Could not save splits: ' + insertSplitsError.message;
               melding.className = 'bp-modal-melding fout'; return;
@@ -1492,7 +1494,7 @@
       });
 
       melding.textContent = 'Saving…'; melding.className = 'bp-modal-melding';
-      const { error } = await supabaseClient.from('brew_planning').insert(rijenOmInTeVoegen);
+      const { error } = await supabaseClient.from('brew_planning').insert(toDb('brew_planning', rijenOmInTeVoegen));
       if (error) { melding.textContent = 'Could not save: ' + error.message; melding.className = 'bp-modal-melding fout'; return; }
 
       sluitModal();
@@ -1523,7 +1525,7 @@
       for (let w = 1; w <= weken; w++) maandVanWeek[w] = mondayOfIsoWeek(jaar, w).getUTCMonth();
 
       const { data, error } = await fetchAllRows(
-        supabaseClient.from('brew_planning').select('id, recipe_id, recipe_group_id, week_number, aantal_brouwsels, hl').eq('iso_year', jaar)
+        supabaseClient.from('brew_planning').select('id, recipe_id, recipe_group_id, week_number, aantal_brouwsels:brew_count, hl').eq('iso_year', jaar)
       );
       if (error) { console.error('Kon planning voor Total planned niet laden:', error); return {}; }
 

@@ -53,7 +53,7 @@ async function vfBerekenVerbruik(supabaseClient, periodes) {
   for (const { jaar, vanWeek, totWeek } of periodes) {
     const { data, error } = await supabaseClient
       .from('brew_planning')
-      .select('id, recipe_id, aantal_brouwsels, iso_year, week_number')
+      .select('id, recipe_id, aantal_brouwsels:brew_count, iso_year, week_number')
       .eq('iso_year', jaar)
       .gte('week_number', vanWeek)
       .lte('week_number', totWeek);
