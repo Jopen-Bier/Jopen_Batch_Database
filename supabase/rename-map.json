@@ -661,15 +661,6 @@
    },
    "domain": "recipe"
   },
-  "hop_utilisatie_curve": {
-   "name": "hop_utilization_curve",
-   "kind": "tabel",
-   "columns": {
-    "kooktijd_min": "boil_time_min",
-    "rendement_pct": "utilization_pct"
-   },
-   "domain": "recipe"
-  },
   "water_instellingen": {
    "name": "water_settings",
    "kind": "tabel",

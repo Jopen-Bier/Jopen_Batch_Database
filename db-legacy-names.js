@@ -62,10 +62,6 @@ const DB_LEGACY_COLUMNS = {
   "brew_planning_splits": {
     "aangemaakt_op": "created_at"
   },
-  "hop_utilization_curve": {
-    "kooktijd_min": "boil_time_min",
-    "rendement_pct": "utilization_pct"
-  },
   "ingredient_categories": {
     "uses_gistfactor": "uses_yeast_factor"
   },
