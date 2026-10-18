@@ -5,7 +5,8 @@ select 'anon_exec' as k, proname||' anon='||has_function_privilege('anon',oid,'e
 select 'index' as k, indexname as v from pg_indexes where schemaname='public' and indexname like 'idx_%_id' order by 2;
 -- triggers still fire for a role without EXECUTE on the trigger function
 create role t_noexec nologin bypassrls;
-grant usage on schema public to t_noexec;
+grant usage on schema public, auth to t_noexec;
+grant execute on function auth.uid() to t_noexec;
 grant select, update on public.brew_planning, public.water_settings to t_noexec;
 select 'history_before' as k, count(*)::text as v from public.brew_planning_history;
 select 'wsh_before' as k, count(*)::text as v from public.water_settings_history;
