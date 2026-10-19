@@ -96,6 +96,11 @@ their own screen). Filters: search, status, year (default all years), WP/JK.
   lauter tun JK) · Boiling · Whirlpool / end of boil · End · Hygiene & CIP
   (JK). Unit and recipe value right after the parameter. Grey calculated rows.
 - Result per brew at GLT (°P, hl, pH vs spec) and GLT total.
+- Built (phase 3): "Pitched by" is a user (default: who fills in "Pitched
+  on"); yeast strain and weight come from the batch's yeast lines, temp.
+  start · max from the recipe (pitching / main fermentation temp.). Deleting
+  a brew or comment needs delete rights on batches (Brewer has none today).
+  The GLT total becomes the first fermentation log entry in phase 4.
 
 ## Fermentation log (`mockup/Main.dc.html`)
 - Batch card: GLT, LT (tank dropdowns), today, beer risk/status, **Time 0**.

@@ -82,7 +82,11 @@ function toBatchRow(batch, stageRow) {
     stage: (stageRow && stageRow.stage) || 'raw',
     startDate: (stageRow && stageRow.start_date) || null,
     endDate: (stageRow && stageRow.end_date) || null,
-    tankCode: null,   // fermentation tank, from phase 4 (batches.glt_tank_id)
+    brewsPlanned: (stageRow && stageRow.brews_planned) || 0,
+    brewsStarted: (stageRow && stageRow.brews_started) || 0,
+    brewsEnded: (stageRow && stageRow.brews_ended) || 0,
+    lastBrewEndedAt: (stageRow && stageRow.last_brew_ended_at) || null,
+    tankCode: (batch.glt_tank && batch.glt_tank.code) || null,   // fermentation tank (batches.glt_tank_id)
     attention: [],    // "!" reasons; rules still to be agreed (open-questions #1)
   };
 }
@@ -174,9 +178,9 @@ function dayMonth(isoDate) {
 }
 
 /**
- * The two status lines of an Active batches tile: { line1, line2, isOk }.
- * Only Raw material preparation has data so far; the other stages get their
- * lines in the phase that creates their tables.
+ * The two status lines of an Active batches tile: { line1, line2, isOk,
+ * progress } (progress 0–1 for the bar, or null). Stages without data yet get
+ * their lines in the phase that creates their tables.
  */
 function tileLines(row) {
   if (row.stage === 'raw') {
@@ -184,9 +188,28 @@ function tileLines(row) {
       line1: row.orderPickingDate ? `Order picking ${dayMonth(row.orderPickingDate)}` : 'No order picking date',
       line2: row.orderPickingComplete ? '✓ Picked' : 'Not picked yet',
       isOk: row.orderPickingComplete,
+      progress: null,
     };
   }
-  return { line1: stageInfo(row.stage).label, line2: '', isOk: false };
+  if (row.stage === 'brewing') {
+    const planned = row.brewsPlanned || 0, ended = row.brewsEnded || 0;
+    const busy = (row.brewsStarted || 0) > ended;
+    return {
+      line1: `Brew ${ended} / ${planned}`,
+      line2: busy ? `Brewing: brew ${ended + 1}` : `Next: brew ${ended + 1}`,
+      isOk: false,
+      progress: planned ? Math.min(1, ended / planned) : null,
+    };
+  }
+  if (row.stage === 'fermentation') {
+    return {
+      line1: `${row.brewsEnded} ${row.brewsEnded === 1 ? 'brew' : 'brews'} in tank`,
+      line2: row.lastBrewEndedAt ? `Last brew ended ${dayMonth(row.lastBrewEndedAt)}` : '',
+      isOk: false,
+      progress: null,
+    };
+  }
+  return { line1: stageInfo(row.stage).label, line2: '', isOk: false, progress: null };
 }
 
 // Progress strip on the batch tabs: one step per process tab.

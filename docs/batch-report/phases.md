@@ -117,6 +117,12 @@ Migration: `batches.brewhouse_recipe_number`, `yeast_pitched_by` → uuid;
 calculated rows and results per brew + GLT total (module + test).
 `batch_stages`: brewing / fermentation rules. Active batches: Brewing tiles.
 
+## Between phase 3 and 4 — recipe editor
+- Save window (new version): when the comment is empty the window closes and
+  the recipe is **not** saved, while it looks saved. Keep the window open and
+  show the message in it; only close after a successful save (reported by
+  Jaap 19-10).
+
 ## Phase 4 — Fermentation log
 Migration: `batches.time_zero/glt_tank_id/lt_tank_id`; `cellar_action_tags`
 (+ seed); `recipe_cellar_steps` + `generate_recipe_cellar_steps()` + backfill
