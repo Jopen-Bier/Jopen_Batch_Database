@@ -107,7 +107,16 @@ a.br-tile:hover { border-color: var(--br-hop-dark); background: #fff; }
 .br-tile-bar div { height: 100%; background: var(--br-hop); }
 .br-bang { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; border-radius: 10px; background: var(--br-alert); color: #fff; font-size: 13px; font-weight: 800; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 3px rgba(0, 0, 0, .2); }
 
-/* Batch tabs: header, tab bar, save status (batch-report-shell.js) */
+/* Batch tabs: header, tab bar, save status (batch-report-shell.js).
+   The tab bar sticks below the nav bar on screens big enough to spare it. */
+.br-tabbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.br-tabbar .br-save { margin-left: auto; }
+.br-tabbar-batch { display: none; font-weight: 700; color: var(--br-hop-dark); white-space: nowrap; }
+@media (min-width: 700px) and (min-height: 600px) {
+  .br-tabbar { position: sticky; top: var(--jopen-nav-h, 0px); z-index: 20; background: var(--br-paper); padding: 6px 0; margin: -6px 0; }
+  .br-tabbar.stuck { box-shadow: 0 6px 8px -8px rgba(28, 43, 38, .35); }
+  .br-tabbar.stuck .br-tabbar-batch { display: inline; }
+}
 .br-beer { font-size: 28px; font-weight: 700; color: var(--br-hop-dark); }
 .br-version { font-weight: 400; color: #8a8273; }
 .br-title .br-jk { font-size: 12px; padding: 1px 6px; }

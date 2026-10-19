@@ -242,12 +242,24 @@ async function renderNav(huidigeGebruiker) {
   });
 }
 
+// The nav bar stays at the top of the screen (jopen-shared.css). Its height
+// goes into --jopen-nav-h so other sticky bars (batch report tabs) sit right
+// below it; the bar can wrap to more lines on narrow screens.
+function jopenVolgNavHoogte() {
+  const container = document.getElementById('jopen-nav');
+  if (!container || typeof ResizeObserver === 'undefined') return;
+  const zet = () => document.documentElement.style.setProperty('--jopen-nav-h', container.offsetHeight + 'px');
+  new ResizeObserver(zet).observe(container);
+  zet();
+}
+
 async function initJopenNav() {
   const magDoorgaan = await vereisIngelogd();
   if (!magDoorgaan) return; // pagina stuurt door naar login.html, verder niets doen
 
   const gebruiker = await getCurrentUser();
   await renderNav(gebruiker);
+  jopenVolgNavHoogte();
 
   onAuthChange(async () => {
     jopenWisRechtenCache();

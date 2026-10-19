@@ -23,6 +23,13 @@ a { color: var(--jopen-red); }
 
 /* --- Navigatiebalk --- */
 
+/* Always in view while scrolling, from tablet width up (on a phone the
+   wrapped bar would take too much of the screen). nav.js puts its height in
+   --jopen-nav-h for bars that stick below it. */
+@media (min-width: 700px) {
+  #jopen-nav { position: sticky; top: 0; z-index: 30; }
+}
+
 .jopen-nav {
   display: flex;
   align-items: center;

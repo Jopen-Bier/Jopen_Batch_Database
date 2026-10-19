@@ -11,7 +11,9 @@ amber, `jopen-shared.css`).
   changes saved" indicator, "Export batch report (.xlsx)" (keeps the existing
   Excel generator; later fed with report data).
 - **Tab bar**: Overview · Brewing · Fermentation log · Processing · Filling ·
-  Filling report. Suggested pages: `batch-overview.html?id=…`,
+  Filling report. Sticky below the (sticky) nav bar on screens of at least
+  700 × 600 px, with the batch number and the save status; on phones it
+  scrolls with the page. Suggested pages: `batch-overview.html?id=…`,
   `batch-brewing.html`, `batch-fermentation.html`, `batch-processing.html`,
   `batch-filling.html`, `batch-filling-report.html`, with a shared module for
   header/tabs/loading the batch (e.g. `batch-report-shell.js`).
