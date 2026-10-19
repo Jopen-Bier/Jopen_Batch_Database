@@ -42,6 +42,9 @@ Working on the digital batch report? Start at `docs/batch-report/README.md`.
   filters and values, `toDb()` for payloads. New code uses English names
   directly. Regenerate `db-legacy-names.js` from `rename-map.json`, never
   edit it by hand.
+- Embedding `users` (or any table a row points at more than once): always name
+  the foreign key, `users!batches_created_by_fkey(name)`. A second user column
+  on the table otherwise breaks the query ("more than one relationship").
 - Generic helpers come from `jopen-utils.js` — never copy them into a page.
   A helper needed on a second page moves to `jopen-utils.js`.
 - A calculation needed in more than one place becomes its own module with a
