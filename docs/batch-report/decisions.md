@@ -24,6 +24,10 @@ Agreed with Jaap. Date = when decided. Do not change without asking.
 | 19-10 | **Batch-level fields are columns on `batches`** (Time 0, GLT/LT, order picking complete, tasting, …) — no separate 1:1 table. |
 | 19-10 | **One permission module for the whole batch report: `batches`** (renamed "Batches & batch reports"). All new batch tables use `can_view/can_edit/can_delete('batches')`. |
 | 19-10 | **Stage of a batch is derived** in view `batch_stages`, never stored. `batches.status` stays `planned`/`completed`. |
+| 19-10 | GLT / CKT is chosen on the brew day: `batches.glt_tank_id` built in phase 3 (not 4). |
+| 19-10 | Brews needed = `brew_count` rounded up. A fractional brew count (3.33) is a dosing factor of a split batch (e.g. 130 hl ÷ 40 hl per brew), not physical brews; such batches get no brews. |
+| 19-10 | "Pitched by" (`batches.yeast_pitched_by`) is a user; default the person who fills in "Pitched on". |
+| 19-10 | Brewers get delete rights on batches (role matrix), consistent with edit (Jaap). |
 | 19-10 | **Lots per batch ingredient come from `stock_movements`** (consumption booked on the batch). No separate lot table. Corrections after deviations are stock movements with `is_correction` (existing accounting sign-off). |
 | 19-10 | HBT tables: `batch_hbts`, `hbt_readings`. `hbt`, `glt`, `lt`, `ckt` are kept as lowercase plant abbreviations. |
 | 09-10 | Dry hop and cellar amounts in the recipe are batch totals. |

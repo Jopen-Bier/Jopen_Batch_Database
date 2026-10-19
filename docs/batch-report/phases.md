@@ -156,6 +156,9 @@ summary. Closing/Mdrank stays parked (open-questions 8).
 ## Phase 8 — Splits
 Split / transfer popup on all three tabs, new batch from split (next number,
 0 brews), base beer lines, dosing on total volume. Needs open-questions 9.
+Consider storing the split batch's volume and deriving the dosing from it,
+instead of a fractional `brew_count` (3.33 = 130 hl ÷ 40 hl), which is used
+as a dosing factor today (Jaap, 19-10).
 
 ## Import 2026 batches (after phase 8)
 Agreed 19-10: once all phases are built, the 2026 batches are filled from
