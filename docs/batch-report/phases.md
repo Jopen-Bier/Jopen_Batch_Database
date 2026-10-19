@@ -151,6 +151,18 @@ summary. Closing/Mdrank stays parked (open-questions 8).
 Split / transfer popup on all three tabs, new batch from split (next number,
 0 brews), base beer lines, dosing on total volume. Needs open-questions 9.
 
+## Import 2026 batches (after phase 8)
+Agreed 19-10: once all phases are built, the 2026 batches are filled from
+their Excel batch reports, so their stage and data are right in the app.
+- Reader script: maps the cells of the template (`Batchrapport_sjabloon.xlsx`,
+  `batchrapport_cel_mapping.csv`) to the batch tables; sheets Brew Sheet,
+  Fermentation Chart, Processing, Filling, Filling Report.
+- Start with 3–4 sample workbooks from Jaap (finished, in cellar, JK, early
+  in the year); ask where the workbooks are kept, whether the template
+  changed during 2026, `.xlsm` or `.xlsx`.
+- Review spreadsheet per batch (read / missing / suspicious) for Jaap before
+  anything is written; dry run, then import.
+
 ## After phase 8 (separately agreed)
 Excel fallback export filled from report data; stock booking from the report
 (corrections, lots at batch creation); batch creation without Excel.

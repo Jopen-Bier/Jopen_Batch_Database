@@ -8,6 +8,7 @@ Agreed with Jaap. Date = when decided. Do not change without asking.
 | 07-10 | Batch report goes fully English (UI). Doubtful label translations go to Jaap first. |
 | 08-10 | Mockup first; the team reviews the mockup before a phase is built. |
 | 15-10 | Batch creation keeps the current Excel flow until the digital report has been tested, also administratively. |
+| 19-10 | The 2026 batches are imported from their Excel reports, **after** all phases are built (phases.md, "Import 2026 batches"). Older batches are not. |
 | 15-10 | **No pilot flag**: every batch gets the digital tabs, filled in voluntarily next to Excel. |
 | 15-10 | Build in process order: foundation → navigation → Overview → Brewing → Fermentation log → Processing → Filling → Filling report → Splits. |
 | 16-10 | Built with Claude Code, phase by phase, branch + PR; design stays in the chat. |
