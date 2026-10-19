@@ -10,7 +10,7 @@ without the open part and note it in the PR.
 | 3 | Fermentation → Lagering: when the cellar plan step "Cooling to [lagering temp]" is done (or LT set)? | 4 (view in 1 can treat cellar as one stage) |
 | 4 | Sample to lab: after the **last** cooling step only (assumed), or also after cooling to 16 °C? | 4 |
 | 5 | Cellar additions: `recipe_ingredients.timing` is free text (lagering, verwerking, HBT, centrifuge, …). Which lines become cellar plan steps, which are shown on Processing? Proposal: timing mentioning processing/verwerking/centrifuge/fuge/HBT → Processing; the rest → cellar plan on `cellar_addition_day`. | 4 |
-| 6 | Add `stock_movements.batch_ingredient_id` to link consumption exactly to added batch rows? | 2 |
+| 6 | Add `stock_movements.batch_ingredient_id` to link consumption exactly to added batch rows? Phase 2 matches lots by ingredient group, which also covers added rows; only needed if the same ingredient appears twice with different lots. | 2 (built without) |
 | 7 | Unused empty columns on `batches` (`operator`, `extract`, `alcohol`, `bitterness`, `color`, `ph`, `total_final_volume`, `brew_date`): drop later, or keep? `brew_date` duplicates brew 1 start. | any (separate cleanup) |
 | 8 | Who signs the filling report; four-eyes (not the person who completed it)? Fields for comments filling / Mdrank entry. (Parked: Jaap talks with the admin.) | 7 |
 | 9 | Base beer in a recipe: reference the source beer by recipe group (share in %), or as a normal ingredient per beer? | 8 |

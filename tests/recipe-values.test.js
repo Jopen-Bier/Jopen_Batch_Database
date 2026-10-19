@@ -20,4 +20,13 @@ assert.strictEqual(v.locationLabel(null), '—');
 assert.strictEqual(v.locationLabel('elsewhere'), 'elsewhere');
 assert.strictEqual(v.valueLabel(v.BEER_RISK_LABELS, 'contains_sugar'), 'Contains sugar');
 assert.ok(v.valueOptionsHtml(v.BEER_STATUS_LABELS, { empty: true }).startsWith('<option value="">'));
+// dry hop timing (same parsing as ontleedDryHopTijdstip in recept-invoer.html)
+assert.deepStrictEqual(v.parseDryHopTiming('cold_2.5'), { kind: 'cold', tempC: 2.5 });
+assert.deepStrictEqual(v.parseDryHopTiming('16c'), { kind: 'cold', tempC: 16 });
+assert.strictEqual(v.dryHopTimingLabel('warm'), 'Warm');
+assert.strictEqual(v.dryHopTimingLabel('cold_16'), '@16 °C');
+assert.strictEqual(v.dryHopTimingLabel('cold'), 'Cold');
+assert.strictEqual(v.dryHopTimingLabel('after day 3'), 'after day 3');
+assert.strictEqual(v.dryHopTimingLabel(null), '—');
+assert.deepStrictEqual(['cold_2', 'x', 'warm', 'cold_16'].sort((a, b) => v.dryHopSortValue(a) - v.dryHopSortValue(b)), ['warm', 'cold_16', 'cold_2', 'x']);
 console.log('recipe-values: all tests passed');

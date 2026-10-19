@@ -78,6 +78,7 @@ function toBatchRow(batch, stageRow) {
     location: recipe.location || null,
     brewCount: batch.brew_count,
     orderPickingDate: batch.order_picking_date || null,
+    orderPickingComplete: !!batch.order_picking_completed_at,
     stage: (stageRow && stageRow.stage) || 'raw',
     startDate: (stageRow && stageRow.start_date) || null,
     endDate: (stageRow && stageRow.end_date) || null,
@@ -179,14 +180,33 @@ function dayMonth(isoDate) {
  */
 function tileLines(row) {
   if (row.stage === 'raw') {
-    const brews = Number(row.brewCount) || 0;
     return {
       line1: row.orderPickingDate ? `Order picking ${dayMonth(row.orderPickingDate)}` : 'No order picking date',
-      line2: `${brews} ${brews === 1 ? 'brew' : 'brews'}`,
-      isOk: false,
+      line2: row.orderPickingComplete ? '✓ Picked' : 'Not picked yet',
+      isOk: row.orderPickingComplete,
     };
   }
   return { line1: stageInfo(row.stage).label, line2: '', isOk: false };
+}
+
+// Progress strip on the batch tabs: one step per process tab.
+const PROGRESS_STEPS = [
+  { key: 'brewing', label: 'Brewing', stages: ['brewing'] },
+  { key: 'fermentation', label: 'Fermentation & lagering', stages: ['fermentation', 'lagering'] },
+  { key: 'processing', label: 'Processing', stages: ['hbt'] },
+  { key: 'filling', label: 'Filling', stages: ['filling'] },
+  { key: 'filling-report', label: 'Filling report', stages: ['filled'] },
+];
+
+/** [{ key, label, state: 'done'|'now'|'todo' }] for the stage of a batch. */
+function progressSteps(stage) {
+  const current = stageOrder(stage);
+  return PROGRESS_STEPS.map((step) => {
+    const first = stageOrder(step.stages[0]);
+    const last = stageOrder(step.stages[step.stages.length - 1]);
+    const state = current > last ? 'done' : current >= first ? 'now' : 'todo';
+    return { key: step.key, label: step.label, state };
+  });
 }
 
 if (typeof module !== 'undefined' && module.exports) {
@@ -194,5 +214,6 @@ if (typeof module !== 'undefined' && module.exports) {
     BATCH_STAGES, ACTIVE_SECTIONS,
     stageInfo, stageOrder, batchYear, tankNumber, versionText, toBatchRow,
     filterBatches, sortBatches, compareByTank, groupActiveBatches, dayMonth, tileLines,
+    PROGRESS_STEPS, progressSteps,
   };
 }
