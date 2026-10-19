@@ -659,6 +659,7 @@
       <label for="veld-wijziging" id="re-modal-comment-label">Comment *</label>
       <textarea id="veld-wijziging" required placeholder="Describe what changed in this version."></textarea>
     </div>
+    <p id="re-modal-melding" class="re-melding fout" role="alert"></p>
     <div class="re-modal-actions">
       <button type="button" class="re-btn secundair" id="re-modal-cancel-btn">Cancel</button>
       <button type="button" class="re-btn opslaan" id="re-modal-confirm-btn">
@@ -2600,6 +2601,7 @@ function openSaveModal() {
     </label>
   `;
   document.getElementById('veld-wijziging').value = '';
+  toonModalMelding('');
   werkCommentVeldBij();
   groep.querySelectorAll('input[name="re-save-mode"]').forEach(r => r.addEventListener('change', werkCommentVeldBij));
   document.getElementById('re-save-modal-overlay').style.display = 'flex';
@@ -2617,6 +2619,11 @@ function werkCommentVeldBij() {
     label.textContent = 'Comment *';
     veld.required = true;
   }
+}
+
+// A problem found before saving stays in the window (empty text = no problem).
+function toonModalMelding(tekst) {
+  document.getElementById('re-modal-melding').textContent = tekst;
 }
 
 function closeSaveModal() {
@@ -2666,6 +2673,21 @@ document.getElementById('re-modal-confirm-btn').addEventListener('click', async 
   zetOpslaanKnoppenDisabled(true);
   const gekozen = document.querySelector('input[name="re-save-mode"]:checked');
   const mode = gekozen ? gekozen.value : 'klein';
+  // Check before closing: the window used to close first, and an empty
+  // comment then left the recipe unsaved while it looked saved.
+  const fout = !leesBasisgegevens().naam
+    ? 'Name is required: fill it in at the top of the recipe, then save again.'
+    : (mode !== 'overwrite' && !document.getElementById('veld-wijziging').value.trim())
+      ? 'Please describe what you changed. The recipe is not saved yet.'
+      : '';
+  if (fout) {
+    toonModalMelding(fout);
+    if (leesBasisgegevens().naam) document.getElementById('veld-wijziging').focus();
+    opslaanBezig = false;
+    zetOpslaanKnoppenDisabled(false);
+    return;
+  }
+  toonModalMelding('');
   closeSaveModal();
   try {
     await slaBestaandReceptOp(mode);

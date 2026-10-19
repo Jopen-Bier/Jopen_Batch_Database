@@ -67,16 +67,39 @@ function renderBatchHeader(container, ctx, activeTab) {
         ${ctx.recipe.location === 'jk' ? '<span class="br-jk">JK</span>' : ''}
         <span class="br-pill" style="background:${st.pill[0]}; color:${st.pill[1]};">${escapeHtml(st.label)}</span>
       </div>
-      <span class="br-save" id="br-save-status" role="status"></span>
-    </div>
-    <nav class="br-tabs" aria-label="Batch report tabs">${tabs}</nav>`;
-  const el = container.querySelector('#br-save-status');
+    </div>`;
+  // The tab bar goes right after the header, as a child of <main>: a sticky
+  // element only sticks within its parent, and the header ends here.
+  document.getElementById('br-tabbar')?.remove();
+  const bar = document.createElement('div');
+  bar.className = 'br-tabbar';
+  bar.id = 'br-tabbar';
+  bar.innerHTML = `
+      <span class="br-tabbar-batch">${escapeHtml(ctx.batch.batch_number)} · ${escapeHtml(ctx.batch.name || ctx.recipe.name || '')}</span>
+      <nav class="br-tabs" aria-label="Batch report tabs">${tabs}</nav>
+      <span class="br-save" id="br-save-status" role="status"></span>`;
+  container.after(bar);
+  watchStickyTabBar(bar);
+  const el = bar.querySelector('#br-save-status');
   let pending = 0;
   return {
     saving() { pending += 1; el.className = 'br-save'; el.textContent = 'Saving…'; },
     saved() { pending = Math.max(0, pending - 1); if (!pending) { el.className = 'br-save ok'; el.textContent = 'All changes saved'; } },
     failed(message) { pending = Math.max(0, pending - 1); el.className = 'br-save error'; el.textContent = 'Not saved: ' + message; },
   };
+}
+
+// The tab bar sticks below the nav bar (batch-report.css); once it is stuck
+// it also shows the batch number, as the big header has scrolled away.
+function watchStickyTabBar(bar) {
+  const update = () => {
+    const navHeight = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--jopen-nav-h')) || 0;
+    const stuck = getComputedStyle(bar).position === 'sticky' && bar.getBoundingClientRect().top <= navHeight + 1;
+    bar.classList.toggle('stuck', stuck);
+  };
+  window.addEventListener('scroll', update, { passive: true });
+  window.addEventListener('resize', update);
+  update();
 }
 
 /** Confirm dialog; resolves true when confirmed. */
