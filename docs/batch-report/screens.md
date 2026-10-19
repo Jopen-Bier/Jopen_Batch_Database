@@ -45,6 +45,8 @@ creation**, **Active batches** (count active, count "!"), **All batches**
   progress bar where relevant; an issue adds a red "!" badge and a red third
   line with the reason. Tile links to the matching tab.
   - Raw: "Order picking dd-mm" / "✓ Picked" (tile green) or "Not picked yet".
+    Until phase 2 (order picking checkbox): "Order picking dd-mm" or "No order
+    picking date" / "<n> brews". No tank chip while a batch has no tank.
   - Brewing: "Brew 2 / 3" / "Next: brew 3".
   - Cellar: "Day 4.2 · tasks 1/5" / "Next: <step>" (green "✓ …" when all done).
   - HBT: formats / "✓ Released" (tile green) or "1/2 released".
@@ -53,8 +55,8 @@ creation**, **Active batches** (count active, count "!"), **All batches**
 
 ## All batches (`mockup/AllBatches.dc.html`)
 Table: Batch · Name (+JK) · Version · Status (stage pill, colour per stage) ·
-Start date · End date. Sort by clicking headers. Filters: search, Active /
-Closed / All (default **All** — confirm, open-questions), status, year, WP/JK.
+Start date · End date. Sort by clicking headers. Always shows **all** batches (no Active/Closed toggle; active batches have
+their own screen). Filters: search, status, year (default all years), WP/JK.
 15 rows per page. Batch number links to the Overview. "Export (.xlsx)".
 
 ## Overview (`mockup/Overview.dc.html`)

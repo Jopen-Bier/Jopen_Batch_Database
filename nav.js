@@ -34,8 +34,10 @@ if (!JOPEN_PUBLIEKE_PAGINAS.includes(window.location.pathname.split('/').pop()))
 // renderNav() 'm kan verbergen als de rol van de gebruiker geen "can_view"
 // heeft voor die module. Items zonder moduleKey worden nooit verborgen.
 const JOPEN_MODULE_GROEPEN = [
-  { naam: 'Batches', items: [
-      { naam: 'Batch Creation', href: 'batchcreation.html', moduleKey: 'batches' },
+  { naam: 'Batch reports', items: [
+      { naam: 'Batch creation', href: 'batchcreation.html', moduleKey: 'batches' },
+      { naam: 'Active batches', href: 'active-batches.html', moduleKey: 'batches' },
+      { naam: 'All batches', href: 'all-batches.html', moduleKey: 'batches' },
   ]},
   { naam: 'Planning', items: [
       { naam: 'Brewing planning', href: 'brouwplanning.html', moduleKey: 'brewing_planning' },
