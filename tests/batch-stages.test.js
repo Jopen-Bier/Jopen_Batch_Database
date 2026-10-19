@@ -104,8 +104,16 @@ assert.strictEqual(brewRow('brewing').tankCode, 'GLT41');
 assert.deepStrictEqual(s.tileLines(brewRow('brewing', { brews_started: 2, brews_ended: 1 })),
   { line1: 'Brew 1 / 3', line2: 'Brewing: brew 2', isOk: false, progress: 1 / 3 });
 assert.strictEqual(s.tileLines(brewRow('brewing', { brews_started: 2, brews_ended: 2 })).line2, 'Next: brew 3');
-assert.deepStrictEqual(s.tileLines(brewRow('fermentation', { brews_started: 3, brews_ended: 3, last_brew_ended_at: '2026-10-21T13:40:00+00:00' })),
-  { line1: '3 brews in tank', line2: 'Last brew ended 21-10', isOk: false, progress: null });
+// Cellar tiles: day since Time 0, plan tasks, next step
+const cellarRow = (extra) => brewRow('fermentation', Object.assign({ brews_started: 3, brews_ended: 3, time_zero: '2026-10-21T12:00:00Z',
+  cellar_steps_total: 5, cellar_steps_done: 1, next_cellar_step: 'Cooling to 16 °C' }, extra));
+assert.deepStrictEqual(s.tileLines(cellarRow(), new Date('2026-10-25T16:48:00Z')),
+  { line1: 'Day 4.2 · tasks 1/5', line2: 'Next: Cooling to 16 °C', isOk: false, progress: 0.2 });
+assert.deepStrictEqual(s.tileLines(cellarRow({ stage: 'lagering', cellar_steps_done: 5, next_cellar_step: null }), new Date('2026-10-30T12:00:00Z')),
+  { line1: 'Day 9.0 · tasks 5/5', line2: '✓ All tasks done', isOk: true, progress: 1 });
+assert.strictEqual(s.tileLines(cellarRow({ time_zero: null, cellar_steps_total: 0, cellar_steps_done: 0, next_cellar_step: null })).line1, 'no cellar plan');
+// the lager tank wins once set
+assert.strictEqual(s.toBatchRow({ id: 1, batch_number: '1', glt_tank: { code: 'GLT7' }, lt_tank: { code: 'LT3' }, recipes: {} }, null).tankCode, 'LT3');
 assert.strictEqual(s.toBatchRow({ id: 1, batch_number: '1', recipes: {} }, null).tankCode, null);
 
 // Progress strip

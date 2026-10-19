@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jopen Brouwerij — Fermentation log</title>
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="stylesheet" href="jopen-shared.css" />
+  <link rel="stylesheet" href="batch-report.css" />
+</head>
+<body class="br-page">
+
+  <div id="jopen-nav"></div>
+
+  <main class="br-main">
+    <div id="fl-header" style="display:flex; flex-direction:column; gap:14px;"></div>
+    <div class="br-message" id="fl-message">Loading batch…</div>
+    <div id="fl-content" style="display:none; flex-direction:column; gap:16px;">
+      <div class="br-row2">
+        <div class="br-card br-cardpad" style="flex:1 1 340px; min-width:0;" id="fl-batch"></div>
+        <div class="br-card br-cardpad" style="flex:3 1 600px; min-width:0;" id="fl-specs"></div>
+      </div>
+      <div class="br-card br-cardpad" id="fl-plan"></div>
+      <div class="br-card br-cardpad" id="fl-log"></div>
+      <div class="br-card br-cardpad" id="fl-transfers"></div>
+      <div class="br-card br-cardpad" id="fl-chart"></div>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="jopen-utils.js"></script>
+  <script src="nav.js"></script>
+  <script src="batch-stages.js"></script>
+  <script src="batch-ingredients.js"></script>
+  <script src="batch-brews.js"></script>
+  <script src="fermentation-log.js"></script>
+  <script src="batch-report-shell.js"></script>
+  <script>
+    const TRASH_ICON = '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2.5 4h9M5.5 4V2.5h3V4M3.5 4l.6 8h5.8l.6-8"></path></svg>';
+
+    const page = {
+      user: null, canEdit: false, canDelete: false, ctx: null, save: null,
+      steps: [], entries: [], entryTags: [], tags: [], transfers: [], brews: [], tanks: [],
+      users: [], initialsOf: () => '', ferm: {}, specs: {}, ingredients: [], names: {},
+      transferDraft: null, calc: null,
+    };
+    const fmt = (v, digits) => (v === null || v === undefined || v === '' ? '—'
+      : Number(v).toLocaleString('en-GB', { maximumFractionDigits: digits ?? 2 }));
+    const numOrNull = (v) => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
+    const dis = () => (page.canEdit ? '' : ' disabled');
+    const dayText = (d) => (d === null ? '—' : (Math.abs(d) < 0.05 ? 0 : d).toFixed(1));
+    const timeZero = () => effectiveTimeZero(page.ctx.batch, page.ctx.stageRow);
+    const tagById = (id) => page.tags.find((t) => t.id === id) || { label: '?', code: '' };
+    const pad = (n) => String(n).padStart(2, '0');
+    const dmy = (at) => { const d = new Date(at); return `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()}`; };
+    const hm = (at) => { const d = new Date(at); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+
+    function showMessage(text, isError) {
+      const el = document.getElementById('fl-message');
+      el.textContent = text;
+      el.className = 'br-message' + (isError ? ' error' : '');
+      el.style.display = text ? '' : 'none';
+    }
+
+    // ------------------------------------------------------------ loading
+    async function loadAll(batchId) {
+      page.ctx = await loadBatchContext(batchId);
+      const recipeId = page.ctx.batch.recipe_id;
+      await Promise.all([
+        supabaseClient.rpc('snapshot_batch_ingredients', { p_batch_id: batchId }),
+        supabaseClient.rpc('snapshot_batch_cellar_steps', { p_batch_id: batchId }),
+      ]);
+      const one = (table) => supabaseClient.from(table).select('*').eq('recipe_id', recipeId).maybeSingle();
+      const [steps, entries, entryTags, tags, transfers, brews, tanks, users, ferm, specs, ingredients] = await Promise.all([
+        supabaseClient.from('batch_cellar_steps').select('*').eq('batch_id', batchId).order('sort_order').order('id'),
+        supabaseClient.from('fermentation_log_entries').select('*').eq('batch_id', batchId).order('measured_at').order('id'),
+        supabaseClient.from('fermentation_log_entry_tags').select('entry_id, tag_id, batch_id, created_by').eq('batch_id', batchId),
+        supabaseClient.from('cellar_action_tags').select('*').order('sort_order').order('id'),
+        supabaseClient.from('batch_transfers').select('*, to_batch:batches!batch_transfers_to_batch_id_fkey(batch_number)').eq('batch_id', batchId).order('transferred_at').order('id'),
+        supabaseClient.from('batch_brews').select('*').eq('batch_id', batchId).order('brew_number'),
+        supabaseClient.from('tanks').select('id, code, tank_type, number, location, volume_hl, is_active').in('tank_type', ['glt', 'ckt', 'lt']).order('number'),
+        loadUserInitials(),
+        one('recipe_fermentation'), one('recipe_specs'),
+        supabaseClient.from('batch_ingredients').select('id, recipe_ingredient_id, ingredient_id, addition_type, unit, quantity, note, is_removed').eq('batch_id', batchId),
+      ]);
+      for (const res of [steps, entries, entryTags, tags, transfers, brews, tanks, ingredients]) if (res.error) throw res.error;
+      page.steps = steps.data;
+      page.entries = entries.data;
+      page.entryTags = entryTags.data;
+      page.tags = tags.data;
+      page.transfers = transfers.data;
+      page.brews = brews.data;
+      page.tanks = tanks.data;
+      page.users = users.users;
+      page.initialsOf = users.initialsOf;
+      page.ferm = ferm.data || {};
+      page.specs = specs.data || {};
+      page.ingredients = ingredients.data.filter((r) => !r.is_removed);
+      const ids = [...new Set(page.ingredients.map((r) => r.ingredient_id).filter(Boolean))];
+      if (ids.length) {
+        const { data } = await supabaseClient.from('ingredients').select('id, name').in('id', ids);
+        (data || []).forEach((i) => { page.names[i.id] = i.name; });
+      }
+    }
+
+    // ------------------------------------------------------------ saving
+    const renderSoon = createRenderer(() => renderAll());
+    const saveBatch = (patch) => saveRowPatch({ table: 'batches', row: page.ctx.batch, patch, saveStatus: page.save, renderSoon, stampUpdatedBy: false });
+    const saveEntry = (row, patch) => saveRowPatch({ table: 'fermentation_log_entries', row, patch, saveStatus: page.save, renderSoon, userId: page.user.id });
+    const sortEntries = () => page.entries.sort((a, b) => new Date(a.measured_at) - new Date(b.measured_at) || a.id - b.id);
+
+    async function insertRow(table, values, list, { stampUpdatedBy = true, select = '*' } = {}) {
+      page.save.saving();
+      const payload = stampUpdatedBy ? { ...values, updated_by: page.user.id } : values;
+      const { data, error } = await supabaseClient.from(table).insert(payload).select(select).single();
+      if (error) { page.save.failed(error.message); return null; }
+      list.push(data);
+      page.save.saved();
+      return data;
+    }
+
+    async function addEntry(values, focusField = 'extract') {
+      const entry = await insertRow('fermentation_log_entries', { batch_id: page.ctx.batch.id, ...values }, page.entries);
+      if (!entry) return null;
+      sortEntries();
+      renderSoon(`[data-entry="${entry.id}"][data-field="${focusField}"]`);
+      return entry;
+    }
+
+    async function addTag(entryId, tagId) {
+      if (page.entryTags.some((t) => t.entry_id === entryId && t.tag_id === tagId)) return renderSoon();
+      const added = await insertRow('fermentation_log_entry_tags', { entry_id: entryId, tag_id: tagId, batch_id: page.ctx.batch.id },
+        page.entryTags, { stampUpdatedBy: false, select: 'entry_id, tag_id, batch_id, created_by' });
+      renderSoon();
+      return added;
+    }
+
+    async function removeTag(entryId, tagId) {
+      const label = tagById(tagId).label;
+      const ok = await confirmDialog({ title: `Remove tag “${label}”?`, text: 'You can undo this right after removing. The removal is recorded in the audit trail.', okLabel: 'Remove' });
+      if (!ok) return;
+      page.save.saving();
+      const { error } = await supabaseClient.from('fermentation_log_entry_tags').delete().eq('entry_id', entryId).eq('tag_id', tagId).select('entry_id').single();
+      if (error) { page.save.failed(error.message); return; }
+      page.entryTags = page.entryTags.filter((t) => !(t.entry_id === entryId && t.tag_id === tagId));
+      page.save.saved();
+      renderSoon();
+      showUndoToast(`Tag “${label}”`, () => addTag(entryId, tagId));
+    }
+
+    // Deleting an entry also deletes its tags; Undo puts both back.
+    async function deleteEntry(entry) {
+      const ok = await confirmDialog({ title: 'Delete this measurement?', text: 'You can undo this right after deleting. The deletion is recorded in the audit trail.' });
+      if (!ok) return;
+      const tags = page.entryTags.filter((t) => t.entry_id === entry.id).map((t) => t.tag_id);
+      page.save.saving();
+      const { error } = await supabaseClient.from('fermentation_log_entries').delete().eq('id', entry.id).select('id').single();
+      if (error) { page.save.failed(error.message); return; }
+      page.entries.splice(page.entries.indexOf(entry), 1);
+      page.entryTags = page.entryTags.filter((t) => t.entry_id !== entry.id);
+      page.save.saved();
+      renderSoon();
+      showUndoToast('Measurement', async () => {
+        const { id, created_at, updated_at, updated_by, ...values } = entry;
+        const restored = await insertRow('fermentation_log_entries', values, page.entries);
+        if (!restored) return;
+        sortEntries();
+        for (const tagId of tags) await addTag(restored.id, tagId);
+        renderSoon();
+      });
+    }
+
+    async function deleteTransfer(t) {
+      const ok = await confirmDialog({ title: 'Delete this transfer?', text: 'You can undo this right after deleting. The deletion is recorded in the audit trail.' });
+      if (!ok) return;
+      page.save.saving();
+      const { error } = await supabaseClient.from('batch_transfers').delete().eq('id', t.id).select('id').single();
+      if (error) { page.save.failed(error.message); return; }
+      page.transfers.splice(page.transfers.indexOf(t), 1);
+      page.save.saved();
+      renderSoon();
+      showUndoToast('Transfer', async () => {
+        const { id, created_at, updated_at, updated_by, to_batch, ...values } = t;
+        await insertRow('batch_transfers', values, page.transfers, { select: '*, to_batch:batches!batch_transfers_to_batch_id_fkey(batch_number)' });
+        renderSoon();
+      });
+    }
+
+    async function saveTransferDraft() {
+      const d = page.transferDraft;
+      const volume = parseNumberInput(d.volume);
+      if (!d.at) return transferProblem('Fill in the date and time of the transfer.');
+      if (!volume || volume <= 0) return transferProblem('Fill in the volume in hl (more than 0).');
+      let toBatchId = null;
+      if (d.destination === 'batch') {
+        const number = String(d.batchNumber || '').trim();
+        if (!number) return transferProblem('Fill in the batch number that receives the beer.');
+        const { data, error } = await supabaseClient.from('batches').select('id').eq('batch_number', number).maybeSingle();
+        if (error) return transferProblem(error.message);
+        if (!data) return transferProblem(`Batch ${number} does not exist.`);
+        if (data.id === page.ctx.batch.id) return transferProblem('A batch cannot transfer to itself.');
+        toBatchId = data.id;
+      } else if (!String(d.reason || '').trim()) {
+        return transferProblem('Give the reason for discarding.');
+      }
+      const saved = await insertRow('batch_transfers', {
+        batch_id: page.ctx.batch.id, transferred_at: new Date(d.at).toISOString(), volume_hl: volume,
+        from_tank_id: d.fromTankId ? Number(d.fromTankId) : null, destination: d.destination, to_batch_id: toBatchId,
+        reason: String(d.reason || '').trim() || null, comment: String(d.comment || '').trim() || null,
+      }, page.transfers, { select: '*, to_batch:batches!batch_transfers_to_batch_id_fkey(batch_number)' });
+      if (saved) { page.transferDraft = null; page.transfers.sort((a, b) => new Date(a.transferred_at) - new Date(b.transferred_at) || a.id - b.id); }
+      renderSoon();
+    }
+    function transferProblem(text) { page.transferDraft.problem = text; renderSoon(); }
+
+    // ------------------------------------------------------------ rendering
+    function renderAll() {
+      renderBatchCard();
+      renderSpecs();
+      renderPlan();
+      renderLog();
+      renderTransfers();
+      renderChart();
+      renderCalculator();
+    }
+
+    const kv = (label, value, unit, tol) => `<div class="br-kv"><span class="k">${escapeHtml(label)}</span>
+      <span class="v">${escapeHtml(value === null || value === undefined || value === '' ? '—' : String(value))}</span>
+      <span class="u">${escapeHtml(unit || '')}</span><span class="t">${tol !== null && tol !== undefined ? '±' + escapeHtml(fmt(tol)) : ''}</span></div>`;
+
+    function batchTanks() {
+      const b = page.ctx.batch;
+      return [b.glt_tank_id, b.lt_tank_id].filter(Boolean).map((id) => page.tanks.find((t) => t.id === id)).filter(Boolean);
+    }
+
+    function tankOptions(types, selected, exclude) {
+      const loc = page.ctx.recipe.location;
+      return '<option value="">—</option>' + page.tanks
+        .filter((t) => types.includes(t.tank_type) && (t.location === loc || !loc) && t.id !== exclude && (t.is_active || t.id === selected))
+        .map((t) => `<option value="${t.id}"${t.id === selected ? ' selected' : ''}>${escapeHtml(t.code)} · ${fmt(t.volume_hl)} hl</option>`).join('');
+    }
+
+    function renderBatchCard() {
+      const b = page.ctx.batch, jk = page.ctx.recipe.location === 'jk';
+      const t0 = timeZero(), now = new Date();
+      const lastBrew = page.ctx.stageRow && page.ctx.stageRow.last_brew_ended_at;
+      document.getElementById('fl-batch').innerHTML = `
+        <div class="br-label">Batch</div>
+        <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
+          <div class="br-field" style="width:150px; padding-top:0;"><label class="br-label" for="fl-glt">${jk ? 'CKT' : 'GLT'}</label>
+            <select id="fl-glt" class="br-input"${dis()}>${tankOptions(jk ? ['ckt'] : ['glt', 'lt'], b.glt_tank_id, b.lt_tank_id)}</select></div>
+          ${jk ? '' : `<div class="br-field" style="width:150px; padding-top:0;"><label class="br-label" for="fl-lt">LT</label>
+            <select id="fl-lt" class="br-input"${dis()}>${tankOptions(['lt', 'glt'], b.lt_tank_id, b.glt_tank_id)}</select></div>`}
+          <div style="margin-left:auto; text-align:right;"><div class="br-label">Today</div>
+            <b>${escapeHtml(now.toLocaleDateString('en-GB', { weekday: 'long' }))} ${dmy(now)}</b>
+            ${t0 ? `<div class="br-note">Day ${escapeHtml(fmt(Math.max(0, daysSince(now, t0)), 1))}</div>` : ''}</div>
+        </div>
+        <div style="display:flex; gap:16px; flex-wrap:wrap; padding-top:8px;">
+          <div><div class="br-label">Beer risk</div><span class="br-pill">${escapeHtml(page.ferm.beer_risk || '—')}</span></div>
+          <div><div class="br-label">Beer status</div><span class="br-pill">${escapeHtml(page.ferm.beer_status || '—')}</span></div>
+        </div>
+        <div class="br-field" style="padding-top:8px;"><label class="br-label" for="fl-t0">Time 0 · last brew in tank</label>
+          <input id="fl-t0" type="datetime-local" class="br-input" style="width:auto;" value="${escapeHtml(toDateTimeLocal(t0))}"${dis()}>
+          <span class="br-note">${b.time_zero
+            ? `Set by hand${lastBrew ? ` · <button type="button" class="br-linkbtn" id="fl-t0-reset"${dis()}>use end of last brew (${dmy(lastBrew)} ${hm(lastBrew)})</button>` : ''}`
+            : lastBrew ? 'End of the last brew' : 'No brew has ended yet'}</span></div>`;
+    }
+
+    function renderSpecs() {
+      const s = page.specs, f = page.ferm;
+      const { adf, abv } = attenuation(page.entries);
+      const alcTol = toleranceValue(s.alcohol_tol);
+      const abvOk = abv === null ? null : withinSpec(abv, s.alcohol, alcTol);
+      const abvClass = abvOk === null ? '' : abvOk ? ' ok' : ' bad';
+      document.getElementById('fl-specs').innerHTML = `
+        <div class="br-label">Specifications</div>
+        <div class="fl-kpis">
+          <div class="fl-kpi ok"><div class="br-label">ADF</div><b>${adf === null ? '—' : adf.toFixed(1)}</b><span> %w/w${s.adf_pct ? ' · spec ' + escapeHtml(fmt(s.adf_pct)) : ''}</span></div>
+          <div class="fl-kpi${abvClass}"><div class="br-label">Theoretical ABV</div><b>${abv === null ? '—' : abv.toFixed(2)}</b><span> %v/v${s.alcohol ? ' · spec ' + escapeHtml(fmt(s.alcohol)) : ''}</span></div>
+        </div>
+        <div class="br-note">From the first and the last Plato in the log: ADF = (first − last) / first; ABV = (first − last) × 0.533.</div>
+        <div class="br-specs">
+          <div>
+            <div class="br-kv hd"><span class="k">Fermentation</span><span class="v">Spec</span><span class="u">Unit</span><span class="t">Tol.</span></div>
+            ${kv('Original extract', s.original_extract, '°P', toleranceValue(s.original_extract_tol))}
+            ${kv('T pitching · T max', f.pitching_temp != null || f.main_ferm_temp != null ? `${fmt(f.pitching_temp)} · ${fmt(f.main_ferm_temp)}` : null, '°C')}
+            ${kv('T release', f.release_temp, '°C', toleranceValue(f.release_temp_tol))}
+            ${kv('Temp. warm dryhop 1', f.dry_hop_warm_temp, '°C', toleranceValue(f.dry_hop_warm_temp_tol))}
+            ${kv('Extract warm dryhop 1', f.dry_hop_warm_extract_1, '°P', toleranceValue(f.dry_hop_warm_extract_1_tol))}
+            ${kv('Fermentation time', f.fermentation_time, 'days', toleranceValue(f.fermentation_time_tol))}
+          </div>
+          <div>
+            <div class="br-kv hd"><span class="k">Lagering &amp; end product</span><span class="v">Spec</span><span class="u">Unit</span><span class="t">Tol.</span></div>
+            ${kv('Lagering temperature', f.lagering_temp, '°C', toleranceValue(f.lagering_temp_tol))}
+            ${kv('Lagering time', f.lagering_time, 'days', toleranceValue(f.lagering_time_tol))}
+            ${kv('Final extract', s.final_extract, '°P', toleranceValue(s.final_extract_tol))}
+            ${kv('pH end product', s.ph, '', toleranceValue(s.ph_tol))}
+            ${kv('Alcohol', s.alcohol, '%v/v', alcTol)}
+          </div>
+        </div>`;
+    }
+
+    function amountCtx() {
+      return { brewCount: page.ctx.batch.brew_count, brewVolumeHl: page.ctx.recipe.brew_volume_hl };
+    }
+
+    function linkedLines(step) {
+      return (step.recipe_ingredient_ids || []).map((rid) => page.ingredients.find((r) => r.recipe_ingredient_id === rid)).filter(Boolean)
+        .map((r) => {
+          const amount = batchAmount(r.addition_type, r.unit, r.quantity, amountCtx());
+          return `${page.names[r.ingredient_id] || r.note || '(no ingredient)'}${amount ? ' ' + formatAmount(amount) : ''}`;
+        });
+    }
+
+    function calculatorsAvailable() {
+      const names = page.ingredients.map((r) => (page.names[r.ingredient_id] || r.note || '').toLowerCase());
+      return {
+        nagardo: names.some((n) => n.includes('nagardo')),
+        alginate: page.ingredients.some((r) => r.addition_type === 'cellar_addition'
+          && /pga|alginat/.test((page.names[r.ingredient_id] || r.note || '').toLowerCase())),
+      };
+    }
+
+    function renderPlan() {
+      const progress = planProgress(page.steps, page.entries, page.entryTags);
+      const calc = calculatorsAvailable();
+      const rows = progress.rows.map(({ step, doneBy, isNext }, i) => {
+        const prev = i ? progress.rows[i - 1].step : null;
+        const what = [step.description, ...linkedLines(step)].filter(Boolean).map(escapeHtml).join(' · ');
+        const cls = doneBy ? 'done' : isNext ? 'next' : '';
+        const done = doneBy ? `${dmy(doneBy.measured_at)} ${hm(doneBy.measured_at)} · ${escapeHtml(page.initialsOf(doneBy.created_by))}` : isNext ? 'next' : '—';
+        return `<tr class="${cls}">
+          <td style="text-align:center;"><span class="fl-dot">${doneBy ? '✓' : isNext ? '→' : ''}</span></td>
+          <td class="fl-step">${escapeHtml(step.title)}${step.starts_lagering ? ' <span class="br-note">· lagering starts</span>' : ''}</td>
+          <td class="small">${what || '—'}</td>
+          <td class="small">${escapeHtml(stepWhen(step, prev, timeZero()))}</td>
+          <td><span class="br-chip">${escapeHtml(tagById(step.tag_id).label)}</span></td>
+          <td class="fl-done">${done}</td></tr>`;
+      }).join('');
+      document.getElementById('fl-plan').innerHTML = `
+        <div class="br-head" style="align-items:center;">
+          <div style="display:flex; gap:12px; align-items:baseline; flex-wrap:wrap;">
+            <div class="br-label">Cellar plan · from recipe</div>
+            <span class="br-note">${progress.done} of ${progress.total} done · ticked off by the action tags in the log below</span>
+          </div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+            <span class="br-label">Calculators</span>
+            ${calc.nagardo ? '<button class="br-ghost" type="button" data-calc="nagardo">Nagardo</button>' : ''}
+            ${calc.alginate ? '<button class="br-ghost" type="button" data-calc="alginate">PGA / alginate</button>' : ''}
+            ${!calc.nagardo && !calc.alginate ? '<span class="br-note">none for this recipe</span>' : ''}
+            <a href="settings.html#action-tags" class="br-note" style="margin-left:8px;">Manage action tags</a>
+          </div>
+        </div>
+        ${page.steps.length ? `<div class="br-table-wrap"><table class="br-ing fl-plan" style="min-width:900px;">
+          <thead><tr><th style="width:34px;"></th><th style="width:230px;">Step</th><th>What</th><th style="width:200px;">When</th><th style="width:120px;">Tag</th><th style="width:170px;">Done</th></tr></thead>
+          <tbody>${rows}</tbody></table></div>`
+          : '<div class="br-note">This batch has no cellar plan: its recipe had none when the batch was created. Log the actions with tags below.</div>'}`;
+    }
+
+    function tagSelect(entryId) {
+      const used = new Set(page.entryTags.filter((t) => t.entry_id === entryId).map((t) => t.tag_id));
+      return `<select class="fl-tagsel" data-add-tag="${entryId}" aria-label="Add action tag"${dis()}>
+        <option value="">+ tag</option>${page.tags.filter((t) => t.is_active && !used.has(t.id)).map((t) => `<option value="${t.id}">${escapeHtml(t.label)}</option>`).join('')}</select>`;
+    }
+
+    function gltTotal() {
+      const calcs = brewCalculations(page.brews);
+      const last = calcs[calcs.length - 1];
+      return last && last.glt.volumeHl && last.glt.extract !== null ? last.glt : null;
+    }
+
+    function renderLog() {
+      const t0 = timeZero();
+      // A run of more than 3 days without a measurement shows as one row.
+      const lines = [];
+      logLines(page.entries, t0).forEach((l) => {
+        const prev = lines[lines.length - 1];
+        if (l.kind === 'gap' && prev && prev.kind === 'gap') { (prev.run = prev.run || [prev]).push(l); return; }
+        lines.push(l);
+      });
+      const expanded = lines.flatMap((l) => (l.run && l.run.length > 3 ? [{ ...l, lastDate: l.run[l.run.length - 1].date, count: l.run.length }] : l.run || [l]));
+      const input = (e, field, label, extra = '') => `<input class="br-in${extra}" data-entry="${e.id}" data-field="${field}" aria-label="${label}"
+        value="${escapeHtml(e[field] === null || e[field] === undefined ? '' : String(e[field]))}"${field === 'comment' ? '' : ' inputmode="decimal"'}${dis()}>`;
+      const dmyOf = (iso) => iso.split('-').reverse().join('-');
+      const body = expanded.map((l) => {
+        if (l.kind === 'gap') {
+          return `<tr class="fl-gap"><td class="n">${l.days === null ? '' : dayText(l.days)}</td><td colspan="6" class="n">—</td>
+            <td${l.count ? ' colspan="2"' : ''}>${dmyOf(l.date)}${l.count ? ` – ${dmyOf(l.lastDate)} · ${l.count} days without a measurement` : ''}</td>
+            <td colspan="${l.count ? 4 : 5}">${page.canEdit ? `<button class="fl-fillbtn" type="button" data-gap-date="${l.date}">+ measurement ${l.count ? 'on ' + dmyOf(l.date).slice(0, 5) : 'this day'}</button>` : ''}</td></tr>`;
+        }
+        const e = l.entry;
+        const chips = page.entryTags.filter((t) => t.entry_id === e.id).map((t) => `<span class="br-chip">${escapeHtml(tagById(t.tag_id).label)}${page.canEdit
+          ? `<button type="button" data-remove-tag="${e.id}:${t.tag_id}" aria-label="Remove tag ${escapeHtml(tagById(t.tag_id).label)}">×</button>` : ''}</span>`).join('');
+        return `<tr>
+          <td class="n"><b>${dayText(l.days)}</b></td>
+          <td>${input(e, 'extract', 'Plato')}</td><td>${input(e, 'temp_high', 'Temperature high')}</td><td>${input(e, 'temp_low', 'Temperature low')}</td><td>${input(e, 'ph', 'pH')}</td>
+          <td class="cv">${l.decrease === null ? '' : fmt(l.decrease, 1)}</td><td class="cv">${l.hours === null ? '' : l.hours}</td>
+          <td><input class="br-in l" type="date" data-entry="${e.id}" data-field="date" value="${escapeHtml(localDate(e.measured_at))}" aria-label="Date"${dis()}></td>
+          <td><input class="br-in l" type="time" data-entry="${e.id}" data-field="time" value="${escapeHtml(hm(e.measured_at))}" aria-label="Time"${dis()}></td>
+          <td><div class="fl-tags">${chips}${page.canEdit ? tagSelect(e.id) : ''}</div></td>
+          <td>${input(e, 'comment', 'Comments', ' l')}</td>
+          <td class="small" style="text-align:center;">${escapeHtml(page.initialsOf(e.created_by))}</td>
+          <td>${page.canDelete ? `<button class="br-del" type="button" data-delete-entry="${e.id}" aria-label="Delete measurement">${TRASH_ICON}</button>` : ''}</td></tr>`;
+      }).join('');
+      const glt = gltTotal();
+      const offer = page.canEdit && !page.entries.length && glt && t0
+        ? `<div class="br-note-box">Brewing ended with a GLT total of <b>${glt.extract.toFixed(2)} °P</b>${glt.ph !== null ? ` · pH <b>${glt.ph.toFixed(2)}</b>` : ''} (${glt.volumeHl.toFixed(1)} hl).
+           <button class="br-primary" type="button" id="fl-add-glt">Add as first measurement at Time 0</button></div>` : '';
+      document.getElementById('fl-log').innerHTML = `
+        <div class="br-head" style="align-items:center;">
+          <div class="br-label">Measurements &amp; actions</div>
+          ${page.canEdit ? '<button class="br-primary" type="button" id="fl-add-entry">+ Add measurement</button>' : ''}
+        </div>
+        ${offer}
+        ${page.entries.length ? `<div class="br-table-wrap"><table class="br-ing fl-log" style="min-width:1210px;">
+          <thead><tr><th class="r" style="width:50px;">Days</th><th class="r" style="width:66px;">Plato</th><th class="r" style="width:72px;">Temp. high</th>
+            <th class="r" style="width:72px;">Temp. low</th><th class="r" style="width:60px;">pH</th><th class="r" style="width:72px;">Plato decr.</th>
+            <th class="r" style="width:60px;">Hours</th><th style="width:132px;">Date</th><th style="width:90px;">Time</th><th style="width:260px;">Action</th>
+            <th>Comments</th><th style="width:46px;">Op.</th><th style="width:34px;"></th></tr></thead>
+          <tbody>${body}</tbody></table></div>`
+          : `<div class="br-note">No measurements yet.${t0 ? '' : ' Days count from Time 0, the end of the last brew.'}</div>`}
+        <div class="br-note">Days count from Time 0. A tag on a measurement ticks off the next plan step with that tag.</div>`;
+    }
+
+    function renderTransfers() {
+      const tanks = batchTanks();
+      const tankCode = (id) => (page.tanks.find((t) => t.id === id) || {}).code || '—';
+      const rows = page.transfers.map((t) => `<tr>
+        <td>${dmy(t.transferred_at)} ${hm(t.transferred_at)}</td><td class="n">${fmt(t.volume_hl, 1)}</td><td>${escapeHtml(tankCode(t.from_tank_id))}</td>
+        <td>${t.destination === 'discard' ? 'Discard' : 'To batch'}</td>
+        <td>${t.to_batch ? `<a href="batch-overview.html?id=${t.to_batch_id}">${escapeHtml(t.to_batch.batch_number)}</a>` : '—'}</td>
+        <td class="small">${escapeHtml([t.reason, t.comment].filter(Boolean).join(' · ') || '—')}</td>
+        <td>${page.canDelete ? `<button class="br-del" type="button" data-delete-transfer="${t.id}" aria-label="Delete transfer">${TRASH_ICON}</button>` : ''}</td></tr>`).join('');
+      const d = page.transferDraft;
+      const draft = d ? `<tr class="fl-draft">
+        <td><input class="br-in l" type="datetime-local" data-draft="at" value="${escapeHtml(d.at || '')}" aria-label="Date and time"></td>
+        <td><input class="br-in" inputmode="decimal" data-draft="volume" value="${escapeHtml(d.volume || '')}" aria-label="Volume (hl)" placeholder="hl"></td>
+        <td><select class="br-in" data-draft="fromTankId" aria-label="From"><option value="">—</option>${tanks.map((t) => `<option value="${t.id}"${String(t.id) === String(d.fromTankId) ? ' selected' : ''}>${escapeHtml(t.code)}</option>`).join('')}</select></td>
+        <td><select class="br-in" data-draft="destination" aria-label="Destination"><option value="batch"${d.destination === 'batch' ? ' selected' : ''}>To batch</option><option value="discard"${d.destination === 'discard' ? ' selected' : ''}>Discard</option></select></td>
+        <td>${d.destination === 'batch' ? `<input class="br-in l" data-draft="batchNumber" value="${escapeHtml(d.batchNumber || '')}" placeholder="26…" aria-label="Receiving batch">` : '—'}</td>
+        <td><div style="display:flex; gap:6px;">${d.destination === 'discard' ? `<input class="br-in l" data-draft="reason" value="${escapeHtml(d.reason || '')}" placeholder="Reason (required)" aria-label="Reason">` : ''}
+          <input class="br-in l" data-draft="comment" value="${escapeHtml(d.comment || '')}" placeholder="Comment" aria-label="Comment"></div></td>
+        <td></td></tr>` : '';
+      document.getElementById('fl-transfers').innerHTML = `
+        <div class="br-head" style="align-items:baseline;">
+          <div class="br-label">Splits / transfers out</div>
+          <span class="br-note">Same record on Fermentation log, Processing and Filling report · fill in once</span>
+        </div>
+        ${page.transfers.length || d ? `<div class="br-table-wrap"><table class="br-ing" style="min-width:820px;">
+          <thead><tr><th style="width:170px;">Date</th><th class="r" style="width:90px;">Volume (hl)</th><th style="width:110px;">From</th>
+            <th style="width:130px;">Destination</th><th style="width:120px;">Batch</th><th>Reason · comment</th><th style="width:34px;"></th></tr></thead>
+          <tbody>${rows}${draft}</tbody></table></div>` : '<div class="br-note">No splits or transfers.</div>'}
+        ${d ? `<div class="br-buttons"><button class="br-primary" type="button" id="fl-transfer-save">Save transfer</button>
+            <button class="br-ghost" type="button" id="fl-transfer-cancel">Cancel</button>
+            <span class="br-note error" role="alert">${escapeHtml(d.problem || '')}</span></div>`
+          : page.canEdit ? '<div><button class="br-ghost" type="button" id="fl-transfer-add">+ Split / transfer</button></div>' : ''}`;
+    }
+
+    function renderChart() {
+      const t0 = timeZero();
+      const points = page.entries.map((e) => ({ d: daysSince(e.measured_at, t0), e })).filter((p) => p.d !== null);
+      const el = document.getElementById('fl-chart');
+      if (!points.length) {
+        el.innerHTML = '<div class="br-label">Fermentation curve</div><div class="br-note">The curve appears once there are measurements after Time 0.</div>';
+        return;
+      }
+      const values = (k) => points.map((p) => numOrNull(p.e[k])).filter((v) => v !== null);
+      const maxDay = Math.max(10, Math.ceil(Math.max(...points.map((p) => p.d))) + 1);
+      const maxP = Math.max(16, Math.ceil(Math.max(0, ...values('extract')) / 4) * 4);
+      const maxC = Math.max(24, Math.ceil(Math.max(0, ...values('temp_high'), ...values('temp_low')) / 4) * 4);
+      const X = (d) => 60 + Math.max(0, d) / maxDay * 880;
+      const YP = (v) => 260 - v / maxP * 240;
+      const YC = (v) => 260 - v / maxC * 240;
+      const series = (k, Y) => points.filter((p) => numOrNull(p.e[k]) !== null).map((p) => `${X(p.d).toFixed(1)},${Y(numOrNull(p.e[k])).toFixed(1)}`).join(' ');
+      const ticksY = [0, 0.25, 0.5, 0.75, 1].map((f) => `<line x1="60" x2="940" y1="${YP(f * maxP)}" y2="${YP(f * maxP)}" stroke="#f1eee5"/>
+        <text x="52" y="${YP(f * maxP) + 4}" text-anchor="end" font-size="11" fill="#6b6355">${fmt(f * maxP, 1)}</text>
+        <text x="948" y="${YP(f * maxP) + 4}" font-size="11" fill="#6b6355">${fmt(f * maxC, 1)}</text>`).join('');
+      const step = maxDay > 30 ? 5 : maxDay > 15 ? 2 : 1;
+      const ticksX = Array.from({ length: Math.floor(maxDay / step) + 1 }, (_, i) => i * step)
+        .map((d) => `<text x="${X(d)}" y="282" text-anchor="middle" font-size="11" fill="#6b6355">${d}</text>`).join('');
+      const spec = (v, label) => (numOrNull(v) === null ? '' : `<line x1="60" x2="940" y1="${YP(Number(v))}" y2="${YP(Number(v))}" stroke="#a80016" stroke-width="1.5" stroke-dasharray="2 4"/>
+        <text x="936" y="${YP(Number(v)) - 5}" text-anchor="end" font-size="11" fill="#a80016">${escapeHtml(label)} · ${fmt(v, 1)}</text>`);
+      const dots = points.filter((p) => numOrNull(p.e.extract) !== null)
+        .map((p) => `<circle cx="${X(p.d).toFixed(1)}" cy="${YP(Number(p.e.extract)).toFixed(1)}" r="4" fill="#33473a"/>`).join('');
+      el.innerHTML = `
+        <div class="br-head" style="align-items:center;">
+          <div class="br-label">Fermentation curve</div>
+          <div class="fl-legend"><span><i style="background:#33473a;"></i>Plato (°P)</span><span><i style="background:#b4772c;"></i>Temp. high (°C)</span>
+            <span><i class="dash"></i>Temp. low (°C)</span><span><i class="dot"></i>Spec</span></div>
+        </div>
+        <svg viewBox="0 0 1000 300" class="fl-svg" role="img" aria-label="Fermentation curve: Plato and temperatures against days since Time 0">
+          ${ticksY}${ticksX}
+          <text x="500" y="298" text-anchor="middle" font-size="11" fill="#6b6355">Days since Time 0</text>
+          <text x="20" y="20" font-size="11" fill="#33473a">°P</text><text x="960" y="20" font-size="11" fill="#b4772c">°C</text>
+          ${spec(page.specs.final_extract, 'Final extract')}${spec(page.ferm.dry_hop_warm_extract_1, 'Extract warm dryhop 1')}
+          <polyline points="${series('temp_high', YC)}" fill="none" stroke="#b4772c" stroke-width="2"/>
+          <polyline points="${series('temp_low', YC)}" fill="none" stroke="#b4772c" stroke-width="2" stroke-dasharray="6 4"/>
+          <polyline points="${series('extract', YP)}" fill="none" stroke="#33473a" stroke-width="2.5"/>
+          ${dots}
+        </svg>`;
+    }
+
+    // Calculators (business-rules.md "Calculators"); "Save to log" adds an Addition entry.
+    function batchVolumeL() {
+      const glt = gltTotal();
+      const hl = glt ? glt.volumeHl : (Number(page.ctx.batch.brew_count) || 0) * (Number(page.ctx.recipe.brew_volume_hl) || 0);
+      return hl ? Math.round(hl * 100) : '';
+    }
+
+    function calcResult(c) {
+      if (c.kind === 'nagardo') {
+        const r = nagardoDose(c.volume, c.rate);
+        return r && { lines: [['Nagardo', `${r.weightG.toFixed(1)} g`], ['Water (1 % solution)', `${r.waterL.toFixed(1)} l`]],
+          log: `Nagardo ${r.weightG.toFixed(1)} g in ${r.waterL.toFixed(1)} l water (${c.rate} ppm on ${c.volume} l)` };
+      }
+      const r = alginateDose(c.volume, c.rate);
+      return r && { lines: [['Volume before centrifuge', `${r.preL.toFixed(1)} l`], ['Alginate', `${r.alginateG.toFixed(1)} g`], ['Hot water', `${r.waterL.toFixed(1)} l`]],
+        log: `PGA/alginate ${r.alginateG.toFixed(1)} g in ${r.waterL.toFixed(1)} l hot water (${c.rate} l/hl on ${c.volume} l)` };
+    }
+
+    function renderCalculator() {
+      document.getElementById('fl-calc')?.remove();
+      const c = page.calc;
+      if (!c) return;
+      const r = calcResult(c);
+      const overlay = document.createElement('div');
+      overlay.className = 'br-dialog-overlay';
+      overlay.id = 'fl-calc';
+      overlay.innerHTML = `<div class="br-dialog" role="dialog" aria-modal="true" aria-labelledby="fl-calc-title">
+        <div class="br-dialog-title" id="fl-calc-title">${c.kind === 'nagardo' ? 'Nagardo' : 'PGA / alginate'}</div>
+        <div class="br-field"><label class="br-label" for="fl-calc-volume">Beer volume (l)</label><input class="br-input" id="fl-calc-volume" inputmode="decimal" value="${escapeHtml(String(c.volume))}"></div>
+        <div class="br-field"><label class="br-label" for="fl-calc-rate">${c.kind === 'nagardo' ? 'Dose (ppm)' : 'Rate (l/hl)'}</label><input class="br-input" id="fl-calc-rate" inputmode="decimal" value="${escapeHtml(String(c.rate))}"></div>
+        <div class="fl-calc-out">${r ? r.lines.map(([k, v]) => `<div><span>${escapeHtml(k)}</span><b>${escapeHtml(v)}</b></div>`).join('') : '<span class="br-note">Fill in both values.</span>'}</div>
+        <div class="br-dialog-buttons">
+          <button type="button" class="br-ghost" id="fl-calc-close">Close</button>
+          ${page.canEdit ? `<button type="button" class="br-primary" id="fl-calc-log"${r ? '' : ' disabled'}>Save to log</button>` : ''}
+        </div></div>`;
+      document.body.appendChild(overlay);
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) { page.calc = null; renderCalculator(); } });
+      overlay.addEventListener('input', (e) => {
+        if (e.target.id === 'fl-calc-volume') c.volume = e.target.value;
+        if (e.target.id === 'fl-calc-rate') c.rate = e.target.value;
+        const out = calcResult(c);
+        overlay.querySelector('.fl-calc-out').innerHTML = out ? out.lines.map(([k, v]) => `<div><span>${escapeHtml(k)}</span><b>${escapeHtml(v)}</b></div>`).join('') : '<span class="br-note">Fill in both values.</span>';
+        const btn = overlay.querySelector('#fl-calc-log');
+        if (btn) btn.disabled = !out;
+      });
+      overlay.querySelector('#fl-calc-close').addEventListener('click', () => { page.calc = null; renderCalculator(); });
+      overlay.querySelector('#fl-calc-log')?.addEventListener('click', async () => {
+        const out = calcResult(c);
+        if (!out) return;
+        page.calc = null;
+        renderCalculator();
+        const now = new Date(); now.setSeconds(0, 0);
+        const entry = await addEntry({ measured_at: now.toISOString(), comment: out.log }, 'comment');
+        const tag = page.tags.find((t) => t.code === 'addition');
+        if (entry && tag) await addTag(entry.id, tag.id);
+      });
+    }
+
+    // ------------------------------------------------------------ events
+    function bindEvents() {
+      const main = document.querySelector('main');
+      main.addEventListener('change', (e) => {
+        const el = e.target;
+        if (el.id === 'fl-glt') return saveBatch({ glt_tank_id: el.value ? Number(el.value) : null });
+        if (el.id === 'fl-lt') return saveBatch({ lt_tank_id: el.value ? Number(el.value) : null });
+        if (el.id === 'fl-t0') return saveBatch({ time_zero: el.value ? new Date(el.value).toISOString() : null });
+        if (el.dataset.draft) {
+          page.transferDraft[el.dataset.draft] = el.value;
+          if (el.dataset.draft === 'destination') renderSoon();
+          return;
+        }
+        if (el.dataset.addTag) {
+          if (el.value) addTag(Number(el.dataset.addTag), Number(el.value));
+          return;
+        }
+        if (el.dataset.entry) {
+          const entry = page.entries.find((x) => x.id === Number(el.dataset.entry));
+          const f = el.dataset.field;
+          if (f === 'date' || f === 'time') {
+            const date = f === 'date' ? el.value : localDate(entry.measured_at);
+            const time = f === 'time' ? el.value : hm(entry.measured_at);
+            if (!date) { el.classList.add('bad'); el.title = 'A measurement needs a date'; return; }
+            el.classList.remove('bad');
+            return saveEntry(entry, { measured_at: new Date(`${date}T${time || '00:00'}`).toISOString() }).then(() => { sortEntries(); renderSoon(); });
+          }
+          if (f === 'comment') return saveEntry(entry, { comment: el.value.trim() || null });
+          const v = parseNumberInput(el.value);
+          if (v === undefined) { el.classList.add('bad'); el.title = 'Not a number'; return; }
+          el.classList.remove('bad');
+          return saveEntry(entry, { [f]: v });
+        }
+      });
+      main.addEventListener('click', (e) => {
+        if (e.target.closest('#fl-t0-reset')) return saveBatch({ time_zero: null });
+        if (e.target.closest('#fl-add-entry')) {
+          const now = new Date(); now.setSeconds(0, 0);
+          return addEntry({ measured_at: now.toISOString() });
+        }
+        if (e.target.closest('#fl-add-glt')) {
+          const glt = gltTotal();
+          return addEntry({ measured_at: timeZero(), extract: Math.round(glt.extract * 100) / 100,
+            ph: glt.ph !== null ? Math.round(glt.ph * 100) / 100 : null, comment: `GLT total · ${glt.volumeHl.toFixed(1)} hl` }, 'temp_high');
+        }
+        const gap = e.target.closest('button[data-gap-date]');
+        if (gap) return addEntry({ measured_at: new Date(`${gap.dataset.gapDate}T08:00`).toISOString() });
+        const rm = e.target.closest('button[data-remove-tag]');
+        if (rm) { const [entryId, tagId] = rm.dataset.removeTag.split(':').map(Number); return removeTag(entryId, tagId); }
+        const del = e.target.closest('button[data-delete-entry]');
+        if (del) return deleteEntry(page.entries.find((x) => x.id === Number(del.dataset.deleteEntry)));
+        const delT = e.target.closest('button[data-delete-transfer]');
+        if (delT) return deleteTransfer(page.transfers.find((x) => x.id === Number(delT.dataset.deleteTransfer)));
+        if (e.target.closest('#fl-transfer-add')) {
+          const tanks = batchTanks();
+          page.transferDraft = { at: toDateTimeLocal(new Date()), volume: '', fromTankId: tanks.length ? tanks[tanks.length - 1].id : '', destination: 'batch', batchNumber: '', reason: '', comment: '' };
+          return renderSoon('[data-draft="volume"]');
+        }
+        if (e.target.closest('#fl-transfer-cancel')) { page.transferDraft = null; return renderSoon(); }
+        if (e.target.closest('#fl-transfer-save')) return saveTransferDraft();
+        const calc = e.target.closest('button[data-calc]');
+        if (calc) {
+          page.calc = { kind: calc.dataset.calc, volume: batchVolumeL(), rate: '' };
+          renderCalculator();
+          document.getElementById('fl-calc-rate').focus();
+        }
+      });
+      main.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && e.target.matches('input.br-in')) e.target.blur();
+      });
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && page.calc) { page.calc = null; renderCalculator(); }
+      });
+    }
+
+    async function initFermentationPage() {
+      page.user = await getCurrentUser();
+      if (!page.user) return; // nav.js redirects to login
+      if (!(await magBekijkenModule('batches'))) {
+        showMessage('You do not have access to batch reports. Ask an admin for view rights on "Batches & batch reports".');
+        return;
+      }
+      const batchId = batchIdFromUrl();
+      if (!batchId) { showMessage('No batch chosen. Open a batch from All batches or Active batches.', true); return; }
+      page.canEdit = await magBewerkenModule('batches');
+      page.canDelete = await magVerwijderenModule('batches');
+      try {
+        await loadAll(batchId);
+      } catch (err) {
+        showMessage('Could not load the batch: ' + (err.message || err), true);
+        return;
+      }
+      document.title = `Jopen Brouwerij — ${page.ctx.batch.batch_number} Fermentation log`;
+      page.save = renderBatchHeader(document.getElementById('fl-header'), page.ctx, 'fermentation');
+      showMessage('');
+      document.getElementById('fl-content').style.display = 'flex';
+      bindEvents();
+      renderAll();
+    }
+
+    document.addEventListener('DOMContentLoaded', initFermentationPage);
+  </script>
+</body>
+</html>

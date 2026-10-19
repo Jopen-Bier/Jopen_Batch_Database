@@ -41,6 +41,11 @@ Agreed with Jaap. Date = when decided. Do not change without asking.
 | 08-10 | Days in the recipe count from **Time 0** = last brew in the tank. |
 | 08-10 | Calculators (Nagardo, PGA/alginate, dealcoholisation/Nano Flavor) only show when the recipe has that ingredient/process. |
 | 13-10 | Removing a tag from a log row asks for confirmation. |
+| 19-10 | Lagering starts when the cellar plan step "Cooling to [lagering temp]" is done; setting an LT does not count. |
+| 19-10 | Sample to lab comes after the **last** cooling. |
+| 19-10 | Cellar additions go to the cellar plan or to Processing **by keywords** in their timing; the timing texts are streamlined to standard values (business-rules.md). |
+| 19-10 | No four-eyes check for Nagardo for now. |
+| 19-10 | The cellar plan regenerates from the recipe data on every recipe save; steps changed or added by hand are kept. The batch keeps the snapshot it got at creation. |
 
 ## Processing / filling
 | Date | Decision |

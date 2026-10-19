@@ -127,7 +127,10 @@ block (view/edit/reorder, copied with a new version). Settings: action tags.
 Page `batch-fermentation.html`: batch card, specs, cellar plan progress,
 measurements & actions with tags, calculators, transfers (simple form),
 curve. `batch_stages`: fermentation/lagering. Active batches: Cellar tiles.
-Needs answers: open-questions 3, 4, 5, 12.
+Needs answers: open-questions 3, 4, 5, 12 (answered 19-10).
+Follow-up (4b): after Jaap's review of the timing sheet, a data migration sets
+the standard timing values of cellar additions, plus a dropdown for them in
+the recipe editor (open-questions #5).
 
 ## Phase 5 — Processing
 Migration: `batches.cellar_additions_done/tasting_comment/tasting_result`;

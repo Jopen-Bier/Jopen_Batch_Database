@@ -337,6 +337,19 @@
   .re-loading { text-align: center; padding: 60px 20px; font-family: var(--mono); font-size: 13px; color: #7a7266; }
   .re-geen-rechten { text-align: center; padding: 60px 20px; font-family: var(--mono); font-size: 13px; color: #a33f2c; }
   .re-leeg { font-family: var(--mono); font-size: 12px; color: #7a7266; padding: 8px 0; }
+  /* Cellar plan block (recipe-cellar-plan.js) */
+  .re-cp-intro { font-size: 13px; color: #6b6355; margin: -4px 0 10px; }
+  .re-cp-table td { vertical-align: top; }
+  .re-cp-table input:disabled { background: #f3f1ec; }
+  .re-cp-move { white-space: nowrap; }
+  .re-cp-move button { border: 1px solid var(--line); background: #fff; border-radius: 4px; font-size: 10px; padding: 2px 5px; cursor: pointer; color: #6b6355; }
+  .re-cp-move button:disabled { opacity: .35; cursor: default; }
+  .re-cp-meta { font-family: var(--mono); font-size: 11px; color: #7a7266; margin-top: 3px; }
+  .re-cp-status.gen { color: #4c6b4f; }
+  .re-cp-status.edited { color: #b4772c; }
+  .re-cp-status.hand { color: #244766; }
+  .re-cp-hint { font-family: var(--mono); font-size: 11px; color: #a89f8e; cursor: help; }
+  .re-cp-del { border: 0; background: transparent; color: #a3492f; font-size: 18px; line-height: 1; cursor: pointer; padding: 4px 6px; }
 </style>
 </head>
 <body>
@@ -628,6 +641,13 @@
       </div>
 
       <div class="re-section">
+        <h2>Cellar plan</h2>
+        <p class="re-cp-intro">Steps on the fermentation log of every new batch. Steps marked "from recipe data" follow the dry hops, cellar additions and fermentation data each time you save; a step you change keeps your text. A log entry with the step's tag ticks the step off.</p>
+        <div id="re-cellar-plan"><div class="re-leeg">Loading…</div></div>
+        <button type="button" class="re-btn secundair" id="re-cellar-plan-add">+ Add step</button>
+      </div>
+
+      <div class="re-section">
         <h2>Costs</h2>
         <div class="re-param-columns" id="re-kosten-grid"></div>
       </div>
@@ -740,6 +760,7 @@
 <script src="nav.js"></script>
 <script src="waterzouten.js"></script>
 <script src="brew-calculations.js"></script>
+<script src="recipe-cellar-plan.js"></script>
 <script>
 const SPECS_FIELDS = [
   ['origineel_extract', 'Original extract', '°P', 'number'],
@@ -2182,6 +2203,8 @@ async function initReceptInvoer() {
   renderKleurSamenvatting();
 
   const id = urlParam('id');
+  bindCellarPlanEvents();
+  loadCellarPlan(id || null);
   if (id) {
     await laadBestaandRecept(id);
   } else {
@@ -2533,6 +2556,11 @@ async function maakNieuwRecept() {
     melding.className = 're-melding fout';
     return;
   }
+  if (cellarPlanProblem()) {
+    melding.textContent = cellarPlanProblem();
+    melding.className = 're-melding fout';
+    return;
+  }
 
   melding.textContent = 'Saving…';
   melding.className = 're-melding';
@@ -2679,7 +2707,7 @@ document.getElementById('re-modal-confirm-btn').addEventListener('click', async 
     ? 'Name is required: fill it in at the top of the recipe, then save again.'
     : (mode !== 'overwrite' && !document.getElementById('veld-wijziging').value.trim())
       ? 'Please describe what you changed. The recipe is not saved yet.'
-      : '';
+      : cellarPlanProblem();
   if (fout) {
     toonModalMelding(fout);
     if (leesBasisgegevens().naam) document.getElementById('veld-wijziging').focus();
@@ -2925,6 +2953,14 @@ async function schrijfGerelateerdeData(recipeId) {
     p_lines: toDb('recipe_ingredients', ingredientRegels),
   });
   if (ingredientErr) return 'ingredients: ' + ingredientErr.message;
+
+  // Cellar plan as shown, then regenerated from the saved recipe data. When
+  // the plan block did not load, only regenerate.
+  const cellarSteps = readCellarPlan();
+  const { error: cellarErr } = cellarSteps
+    ? await supabaseClient.rpc('save_recipe_cellar_steps', { p_recipe_id: recipeId, p_steps: cellarSteps })
+    : await supabaseClient.rpc('generate_recipe_cellar_steps', { p_recipe_id: recipeId });
+  if (cellarErr) return 'cellar plan: ' + cellarErr.message;
 
   return null;
 }

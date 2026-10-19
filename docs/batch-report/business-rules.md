@@ -14,7 +14,7 @@ Evaluated top-down, first match wins:
 | `filled` | the batch has ≥1 `batch_hbts` and every one has a filling session with `is_hbt_finished` |
 | `filling` | the batch has ≥1 `filling_sessions` row |
 | `hbt` | a `processing_sessions` row has `processing_date` |
-| `lagering` | `lt_tank_id` is set, **or** the `batch_cellar_steps` step with `starts_lagering` is done (open-questions: confirm) |
+| `lagering` | the `batch_cellar_steps` step with `starts_lagering` is done (decision #3: the cooling, not setting an LT) |
 | `fermentation` | number of brews with `brewing_ended_at` ≥ `batches.brew_count` rounded up (brew counts such as 3.33 occur); never for 0 brews |
 | `brewing` | a brew has `mash_in_started_at` |
 | `raw` | otherwise (batch report exists, not brewed yet) |
@@ -78,31 +78,73 @@ EBU total compared with `recipe_specs.bitterness` ± `bitterness_tol`.
   tol; hl at GLT vs `recipes.brew_volume_hl` ± 0.5.
 
 ## Time 0 and days
-- Time 0 default = `brewing_ended_at` of the last brew; editable.
+- Time 0 default = `brewing_ended_at` of the last brew; editable. Empty
+  `batches.time_zero` means the default; `batch_stages.time_zero` gives the
+  value in use.
 - Day of an entry = (measured_at − time_zero) in days, 1 decimal.
 - Recipe days (`recipe_process_steps.dry_hop_1_day`, `cellar_addition_day`)
   count from Time 0.
 
 ## Cellar plan generation (recipe → `recipe_cellar_steps`)
+Function `generate_recipe_cellar_steps(recipe_id)`, run on every recipe save
+(after the plan the editor shows is saved by `save_recipe_cellar_steps`).
 Fixed order, generated from recipe data:
 1. **Dry warm** — if the recipe has `dry_hop` lines with timing `warm`.
    Trigger: extract = `recipe_fermentation.dry_hop_warm_extract_1` ±
    `dry_hop_warm_extract_1_tol`; indicative day = `dry_hop_1_day`. Tag
    `dry_warm`. Links the warm dry hop lines.
-2. **Cooling to 16 °C** — only if the recipe has `dry_hop` with timing
-   `cold_16`. Trigger: after previous / end of fermentation (final extract).
-   Tag `cooling`.
-3. **Dryhopping @16 °C** — same condition. Trigger: after previous. Tag
-   `dryhopping`. Links the `cold_16` lines.
+   Cellar additions with timing *fermentation* follow here (one step each,
+   after previous).
+2. **Cooling to X °C** — per cold dry hop temperature `cold_X` above the
+   lagering temperature (warmest first). Trigger: final extract
+   (`recipe_specs.final_extract` ± tol) for the first cooling, else after
+   previous. Tag `cooling`.
+3. **Dryhopping @X °C** — right after its cooling. Tag `dryhopping`. Links
+   the `cold_X` lines. Dry hops **without** a timing get one step
+   "Dryhopping · timing not set" here, so they are not forgotten.
 4. **Cooling to [lagering temp]** — always; temperature =
-   `recipe_fermentation.lagering_temp`. Tag `cooling`. `starts_lagering = true`.
-5. **Sample to lab** — always, after step 4 (assumed after the *last* cooling
-   step — open-questions). Tag `sample_lab`.
-6. **Additions** — cellar additions on their day
-   (`cellar_addition_day`), tag `addition`, linking the `cellar_addition`
-   lines whose timing belongs to the cellar (open-questions: timing is free
-   text; lines for processing/centrifuge/HBT are shown on Processing
-   instead).
+   `recipe_fermentation.lagering_temp` ("lagering temperature" when empty).
+   Tag `cooling`. `starts_lagering = true`. A cold dry hop at or below the
+   lagering temperature (e.g. `cold_2` with lagering at 2 °C) follows this
+   step.
+5. **Sample to lab** — always, after the last cooling (decision #4). Tag
+   `sample_lab`.
+6. **Additions** — one step per cellar addition (tag `addition`): *after cold
+   dry hop*, then *lagering* (and timings that say nothing known) on
+   `cellar_addition_day`, then *after de-alcoholisation*.
+
+A final extract or warm dry hop extract of 0 counts as empty.
+
+Where a cellar addition goes (decision #5, by keywords; function
+`cellar_addition_timing(timing)`; the standard values are the codes):
+
+| Code | Label | Where |
+|---|---|---|
+| `fermentation` | During fermentation (see note) | cellar plan, before cooling |
+| `after_cold_dry_hop` | After cold dry hop | cellar plan |
+| `lagering` | Lagering | cellar plan, on `cellar_addition_day` |
+| `after_dealcoholisation` | After de-alcoholisation | cellar plan |
+| `processing` | Processing | Processing tab |
+| `centrifuge_inlet` | Inlet centrifuge | Processing tab |
+| `centrifuge_outlet` | After centrifuge | Processing tab |
+| `hbt` | HBT | Processing tab |
+
+Keywords, first match wins: HBT → hbt; after/exit + centrifuge → outlet;
+de-alc → after de-alcoholisation; before centrifuge / inlet / centrifugering /
+"fuge" alone → inlet; process / verwerking / dosing keg / in line / fuge →
+processing (so a text naming both lagering and processing goes to
+Processing); koude/cold dry hop → after cold dry hop; lager / maturation /
+Corpedo → lagering; warm / Plato / ferment / gist / yeast / "12 P" →
+fermentation. Unknown or empty → cellar plan, "timing to check in the recipe".
+
+**Regeneration**: a generated step (`is_generated`) is updated to the new
+recipe data and keeps its place; a step changed in the editor keeps its text
+and trigger (only its linked lines are refreshed); steps added by hand stay;
+generated steps the recipe no longer asks for are removed. Each generated
+step has a `generated_key` (`dry_warm`, `cooling_dry_hop:16`, `dry_hop:16`,
+`dry_hop:unset`, `cooling_lagering`, `sample_lab`, `addition:<line id>`).
+A new recipe version gets the plan of the previous version, then the
+generator links it to the new lines.
 
 `recipe_process_steps` checkboxes are **not** used to decide (unreliable:
 e.g. Mooie Nel has dry_hop_warm and bevasil false while the recipe uses them).

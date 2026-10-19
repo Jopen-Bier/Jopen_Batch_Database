@@ -62,14 +62,14 @@
 
     async function loadActiveBatches() {
       const stages = await fetchAllRows(supabaseClient.from('batch_stages')
-        .select('batch_id, stage, start_date, end_date, brews_planned, brews_started, brews_ended, last_brew_ended_at')
+        .select('batch_id, stage, start_date, end_date, brews_planned, brews_started, brews_ended, last_brew_ended_at, time_zero, cellar_steps_total, cellar_steps_done, next_cellar_step')
         .neq('stage', 'closed')
         .order('batch_id'));
       if (stages.error) throw stages.error;
       if (!stages.data.length) return [];
       const ids = stages.data.map((s) => s.batch_id);
       const batches = await fetchAllRows(supabaseClient.from('batches')
-        .select('id, batch_number, name, brew_count, order_picking_date, order_picking_completed_at, glt_tank:tanks!batches_glt_tank_id_fkey(code), recipes(name, version_major, version_minor, location)')
+        .select('id, batch_number, name, brew_count, order_picking_date, order_picking_completed_at, glt_tank:tanks!batches_glt_tank_id_fkey(code), lt_tank:tanks!batches_lt_tank_id_fkey(code), recipes(name, version_major, version_minor, location)')
         .in('id', ids)
         .order('id'));
       if (batches.error) throw batches.error;
@@ -83,7 +83,8 @@
       const cls = 'br-tile' + (issue ? ' warn' : lines.isOk ? ' ok' : '');
       const title = `${row.batchNumber} · ${row.name}${issue ? ' · ' + issue : ''}`;
       // Each stage links to its own tab once that tab exists, else to the Overview.
-      const href = (row.stage === 'brewing' && batchTabHref('brewing', row.id)) || `batch-overview.html?id=${row.id}`;
+      const tab = { brewing: 'brewing', fermentation: 'fermentation', lagering: 'fermentation' }[row.stage];
+      const href = (tab && batchTabHref(tab, row.id)) || `batch-overview.html?id=${row.id}`;
       return `<a class="${cls}" href="${href}" title="${escapeHtml(title)}">
         ${issue ? '<span class="br-bang" aria-label="Needs attention">!</span>' : ''}
         <div class="br-tile-top">

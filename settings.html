@@ -146,6 +146,25 @@
           <p id="documenttype-melding" class="jopen-form-melding"></p>
         </div>
 
+        <!-- Section: Cellar action tags -->
+        <div class="settings-sectie" id="sectie-action-tags" data-titel="Cellar action tags">
+          <h2>Cellar action tags</h2>
+          <p class="uitleg">Tags for the actions in the fermentation log. A milestone tag can tick off a step of the cellar plan: the n-th log entry with that tag ticks off the n-th plan step with that tag. Inactive tags are no longer offered but stay on old entries. A tag that is used can only be made inactive. Drag rows by the handle to reorder them.</p>
+
+          <div id="action-tags-list"><p class="jopen-subtitel">Loading…</p></div>
+
+          <table class="cat-tabel">
+            <tbody>
+              <tr class="cat-nieuw-rij">
+                <td><input type="text" id="action-tag-new-label" placeholder="Label, e.g. 'Gelatine'…" /></td>
+                <td class="cat-check"><label style="font-size:0.85em; color:#555;"><input type="checkbox" id="action-tag-new-milestone" /> Milestone</label></td>
+                <td><button id="action-tag-add-btn">Add</button></td>
+              </tr>
+            </tbody>
+          </table>
+          <p id="action-tag-message" class="jopen-form-melding"></p>
+        </div>
+
         <!-- Sectie: Ingredient declarations -->
         <div class="settings-sectie" id="sectie-declaraties" data-titel="Ingredient declarations">
           <h2>Ingredient declarations</h2>
@@ -185,6 +204,7 @@
       { id: 'documenttypen', titel: 'Document types', laadFn: laadDocumenttypenSectie },
       { id: 'declaraties', titel: 'Ingredient declarations', laadFn: laadDeclaratiesSectie },
       { id: 'water', titel: 'Water', laadFn: laadWaterSectie },
+      { id: 'action-tags', titel: 'Cellar action tags', laadFn: loadActionTagsSection },
     ];
 
     let alleCategorieen = [];
@@ -619,6 +639,165 @@
       document.getElementById('documenttype-nieuw-label').value = '';
       melding.textContent = 'Document type added.'; melding.className = 'jopen-form-melding ok';
       laadDocumenttypenSectie();
+    });
+
+    // ----------------------------------------------------------------
+    // Section: Cellar action tags (cellar_action_tags, batch report phase 4)
+    // Same layout as Document types: drag to reorder, save / delete per row.
+    // ----------------------------------------------------------------
+    let allActionTags = [];
+
+    function showActionTagMessage(text, kind) {
+      const el = document.getElementById('action-tag-message');
+      el.textContent = text;
+      el.className = 'jopen-form-melding' + (kind ? ' ' + kind : '');
+    }
+
+    async function loadActionTagsSection() {
+      const container = document.getElementById('action-tags-list');
+      const { data, error } = await supabaseClient.from('cellar_action_tags')
+        .select('id, code, label, is_milestone, sort_order, is_active').order('sort_order').order('id');
+      if (error) {
+        container.innerHTML = `<p class="jopen-form-melding fout">Could not load action tags: ${escapeHtml(error.message)}</p>`;
+        return;
+      }
+      // Used = on a log entry or in a cellar plan; such a tag cannot be deleted.
+      const uses = await Promise.all((data || []).map(async (t) => {
+        const [log, recipePlan, batchPlan] = await Promise.all(['fermentation_log_entry_tags', 'recipe_cellar_steps', 'batch_cellar_steps'].map((table) =>
+          supabaseClient.from(table).select('tag_id', { count: 'exact', head: true }).eq('tag_id', t.id)));
+        return { log: log.count || 0, plans: (recipePlan.count || 0) + (batchPlan.count || 0) };
+      }));
+      allActionTags = (data || []).map((t, i) => ({ ...t, usedInLog: uses[i].log, usedInPlans: uses[i].plans }));
+      renderActionTags();
+    }
+
+    function renderActionTags() {
+      const container = document.getElementById('action-tags-list');
+      if (!allActionTags.length) {
+        container.innerHTML = '<p class="jopen-subtitel">No action tags yet.</p>';
+        return;
+      }
+      const rows = allActionTags.map((t) => {
+        const used = t.usedInLog + t.usedInPlans > 0;
+        return `
+        <tr data-id="${t.id}"${t.is_active ? '' : ' style="color:#999;"'}>
+          <td class="eenheid-drag-handle" draggable="true" title="Drag to reorder">
+            <svg width="12" height="18" viewBox="0 0 12 18" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="3" cy="3" r="1.6"/><circle cx="9" cy="3" r="1.6"/>
+              <circle cx="3" cy="9" r="1.6"/><circle cx="9" cy="9" r="1.6"/>
+              <circle cx="3" cy="15" r="1.6"/><circle cx="9" cy="15" r="1.6"/>
+            </svg>
+          </td>
+          <td><input type="text" class="action-tag-label" value="${escapeHtml(t.label)}" aria-label="Label" /></td>
+          <td style="font-family:monospace; font-size:0.85em; color:#777;">${escapeHtml(t.code)}</td>
+          <td class="cat-check"><input type="checkbox" class="action-tag-milestone"${t.is_milestone ? ' checked' : ''} aria-label="Milestone" /></td>
+          <td class="cat-check"><input type="checkbox" class="action-tag-active"${t.is_active ? ' checked' : ''} aria-label="Active" /></td>
+          <td style="font-size:0.85em; color:#555;">${t.usedInLog} in logs · ${t.usedInPlans} in plans</td>
+          <td style="display:flex; gap:6px;">
+            <button class="action-tag-save-btn">Save</button>
+            ${used ? '' : '<button class="rij-verwijder-btn action-tag-delete-btn">Delete</button>'}
+          </td>
+        </tr>`;
+      }).join('');
+      container.innerHTML = `
+        <table class="cat-tabel">
+          <thead><tr><th></th><th>Label</th><th>Code</th><th class="cat-check">Milestone</th><th class="cat-check">Active</th><th>Used</th><th></th></tr></thead>
+          <tbody id="action-tags-tbody">${rows}</tbody>
+        </table>`;
+      container.querySelectorAll('tr[data-id]').forEach((tr) => {
+        tr.querySelector('.action-tag-save-btn').addEventListener('click', () => saveActionTag(tr));
+        tr.querySelector('.action-tag-delete-btn')?.addEventListener('click', () => deleteActionTag(tr));
+      });
+      makeActionTagsSortable();
+    }
+
+    function makeActionTagsSortable() {
+      const tbody = document.getElementById('action-tags-tbody');
+      if (!tbody) return;
+      let dragRow = null;
+      tbody.addEventListener('dragstart', (e) => {
+        const handle = e.target.closest('.eenheid-drag-handle');
+        if (!handle) { e.preventDefault(); return; }
+        dragRow = handle.closest('tr');
+        dragRow.classList.add('eenheid-slepend');
+        e.dataTransfer.effectAllowed = 'move';
+        try { e.dataTransfer.setData('text/plain', dragRow.dataset.id); } catch (err) { /* Firefox needs setData */ }
+      });
+      tbody.addEventListener('dragover', (e) => {
+        if (!dragRow) return;
+        e.preventDefault();
+        const overRow = e.target.closest('tr');
+        if (!overRow || overRow === dragRow || !tbody.contains(overRow)) return;
+        const rect = overRow.getBoundingClientRect();
+        tbody.insertBefore(dragRow, (e.clientY - rect.top) / rect.height > 0.5 ? overRow.nextSibling : overRow);
+      });
+      tbody.addEventListener('drop', (e) => { e.preventDefault(); });
+      tbody.addEventListener('dragend', async () => {
+        if (dragRow) dragRow.classList.remove('eenheid-slepend');
+        dragRow = null;
+        await saveActionTagOrder(tbody);
+      });
+    }
+
+    async function saveActionTagOrder(tbody) {
+      const order = Array.from(tbody.children).map((tr, i) => ({ id: Number(tr.dataset.id), sort_order: (i + 1) * 10 }));
+      if (order.every((o, i) => allActionTags[i] && allActionTags[i].id === o.id)) return;
+      showActionTagMessage('Saving order…');
+      const results = await Promise.all(order.map(({ id, sort_order }) =>
+        supabaseClient.from('cellar_action_tags').update({ sort_order }).eq('id', id)));
+      const failed = results.find((r) => r.error);
+      showActionTagMessage(failed ? 'Could not save order: ' + failed.error.message : 'Order saved.', failed ? 'fout' : 'ok');
+      loadActionTagsSection();
+    }
+
+    async function saveActionTag(tr) {
+      const label = tr.querySelector('.action-tag-label').value.trim();
+      if (!label) { showActionTagMessage('Label cannot be empty.', 'fout'); return; }
+      const { error } = await supabaseClient.from('cellar_action_tags').update({
+        label,
+        is_milestone: tr.querySelector('.action-tag-milestone').checked,
+        is_active: tr.querySelector('.action-tag-active').checked,
+      }).eq('id', tr.dataset.id);
+      if (error) { showActionTagMessage('Save failed: ' + error.message, 'fout'); return; }
+      showActionTagMessage('Saved.', 'ok');
+      loadActionTagsSection();
+    }
+
+    async function deleteActionTag(tr) {
+      if (!confirm('Delete this action tag?')) return;
+      const { error } = await supabaseClient.from('cellar_action_tags').delete().eq('id', tr.dataset.id);
+      if (error) {
+        showActionTagMessage(error.code === '23503'
+          ? 'Could not delete: this tag is used in a log or a cellar plan. Make it inactive instead.'
+          : 'Delete failed: ' + error.message, 'fout');
+        return;
+      }
+      showActionTagMessage('Deleted.', 'ok');
+      loadActionTagsSection();
+    }
+
+    /** 'Dry hop @2 °C' -> 'dry_hop_2_c'. */
+    function actionTagCode(label) {
+      return label.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    }
+
+    document.getElementById('action-tag-add-btn').addEventListener('click', async () => {
+      const label = document.getElementById('action-tag-new-label').value.trim();
+      const code = actionTagCode(label);
+      if (!code) { showActionTagMessage('Enter a label for the new tag.', 'fout'); return; }
+      const { error } = await supabaseClient.from('cellar_action_tags').insert({
+        code, label,
+        is_milestone: document.getElementById('action-tag-new-milestone').checked,
+        sort_order: (Math.max(0, ...allActionTags.map((t) => t.sort_order || 0)) + 10),
+      });
+      if (error) {
+        showActionTagMessage(error.code === '23505' ? 'A tag with that name already exists.' : 'Add failed: ' + error.message, 'fout');
+        return;
+      }
+      document.getElementById('action-tag-new-label').value = '';
+      document.getElementById('action-tag-new-milestone').checked = false;
+      showActionTagMessage('Action tag added.', 'ok');
+      loadActionTagsSection();
     });
 
     // ----------------------------------------------------------------
