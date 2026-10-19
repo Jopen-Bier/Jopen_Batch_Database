@@ -128,11 +128,11 @@ is replaced (`create or replace view` cannot change a column type).
 | deviation_reason | text | required in the UI as soon as the row deviates |
 | note | text | copied from the recipe line |
 
-Built (phase 2), different from the first design: `recept-invoer.html`
-deletes and re-inserts every recipe line on each save, so
-`recipe_ingredient_id` is set null after the next recipe save. "Added" is
-therefore its own column (`is_added`), and the batch keeps its own frozen
-recipe values. 51 recipe lines (19-10) have no ingredient (blend notes and
+Built (phase 2), different from the first design: "Added" is its own column
+(`is_added`), and the batch keeps its own frozen recipe values. (At the time
+`recept-invoer.html` re-inserted every recipe line on save; since PR #7 lines
+keep their id via `save_recipe_ingredients()`, so the trace survives a recipe
+save and is only cleared when the line itself is deleted.) 51 recipe lines (19-10) have no ingredient (blend notes and
 similar); they are copied with their `note`, hence `ingredient_id` nullable.
 
 Function `snapshot_batch_ingredients(p_batch_id bigint)` — inserts from
@@ -154,6 +154,11 @@ exact matching of added rows (open-questions).
 ### `batches` (new column)
 `brewhouse_recipe_number` text — "Recipe number Braukon". (The brewhouse
 software recipe *name* stays in `recipe_brewing_specs.brewhouse_recipe_name_wp/_jk`.)
+
+Built (phase 3): `glt_tank_id` (→ `tanks`) is added here instead of phase 4 —
+the GLT / CKT is chosen on the brew day and Active batches sorts by tank.
+`batch_stages` gets extra columns `brews_planned` (= `brew_count` rounded
+up), `brews_started`, `brews_ended`, `last_brew_ended_at`.
 
 `yeast_pitched_by` is text and empty in all rows → change to uuid → users in
 this phase (pitched by = chosen user, default the logged-in user).
@@ -218,7 +223,7 @@ total, total brewing time (business-rules.md).
 | Column | Type | Notes |
 |---|---|---|
 | time_zero | timestamptz | "Time 0 · last brew in tank"; default = `brewing_ended_at` of the last brew, editable |
-| glt_tank_id | bigint → tanks | fermentation tank (GLT or CKT) |
+| glt_tank_id | bigint → tanks | fermentation tank (GLT or CKT) — **built in phase 3** |
 | lt_tank_id | bigint → tanks | lager tank when pushed over; null = stays in GLT |
 
 ### `cellar_action_tags` (new)

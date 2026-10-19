@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jopen Brouwerij — Batch brewing</title>
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="stylesheet" href="jopen-shared.css" />
+  <link rel="stylesheet" href="batch-report.css" />
+</head>
+<body class="br-page">
+
+  <div id="jopen-nav"></div>
+
+  <main class="br-main">
+    <div id="bw-header" style="display:flex; flex-direction:column; gap:14px;"></div>
+    <div class="br-message" id="bw-message">Loading batch…</div>
+    <div id="bw-content" style="display:none; flex-direction:column; gap:16px;">
+      <div class="br-row2">
+        <div style="flex:1 1 340px; min-width:0; display:flex; flex-direction:column; gap:16px;">
+          <div class="br-card br-cardpad" id="bw-brewday"></div>
+          <div class="br-card br-cardpad" id="bw-recipe-comments"></div>
+        </div>
+        <div class="br-card br-cardpad" style="flex:3 1 600px; min-width:0;" id="bw-specs"></div>
+      </div>
+      <div class="br-grid2">
+        <div class="br-card br-cardpad" id="bw-mash"></div>
+        <div class="br-card br-cardpad" id="bw-additions"></div>
+      </div>
+      <div class="br-grid2">
+        <div class="br-card br-cardpad" id="bw-yeast"></div>
+        <div class="br-card br-cardpad" id="bw-comments"></div>
+      </div>
+      <div class="br-card br-cardpad" id="bw-log"></div>
+      <div class="br-card br-cardpad" id="bw-results" style="max-width:820px;"></div>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="jopen-utils.js"></script>
+  <script src="nav.js"></script>
+  <script src="recipe-values.js"></script>
+  <script src="batch-stages.js"></script>
+  <script src="batch-ingredients.js"></script>
+  <script src="batch-brews.js"></script>
+  <script src="batch-report-shell.js"></script>
+  <script>
+    const BREWERY_NAMES = { wp: 'Waarderpolder', jk: 'Jopenkerk' };
+    const TRASH_ICON = '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2.5 4h9M5.5 4V2.5h3V4M3.5 4l.6 8h5.8l.6-8"></path></svg>';
+
+    const page = {
+      user: null, canEdit: false, canDelete: false, ctx: null, save: null,
+      brews: [], comments: [], users: [], initialsOf: () => '', tanks: [],
+      brewing: {}, specs: {}, ferm: {}, recipeComments: [], ingredients: [], names: {},
+      commentDraft: false,
+    };
+    const location_ = () => page.ctx.recipe.location;
+    const fmt = (v, digits) => (v === null || v === undefined || v === '' ? '—'
+      : Number(v).toLocaleString('en-GB', { maximumFractionDigits: digits ?? 2 }));
+    const dis = () => (page.canEdit ? '' : ' disabled');
+
+    function showMessage(text, isError) {
+      const el = document.getElementById('bw-message');
+      el.textContent = text;
+      el.className = 'br-message' + (isError ? ' error' : '');
+      el.style.display = text ? '' : 'none';
+    }
+
+    // ------------------------------------------------------------ loading
+    async function loadAll(batchId) {
+      page.ctx = await loadBatchContext(batchId);
+      const recipeId = page.ctx.batch.recipe_id;
+      await supabaseClient.rpc('snapshot_batch_ingredients', { p_batch_id: batchId });
+      const one = (table) => supabaseClient.from(table).select('*').eq('recipe_id', recipeId).maybeSingle();
+      const [brews, comments, users, tanks, brewing, specs, ferm, recipeComments, ingredients] = await Promise.all([
+        supabaseClient.from('batch_brews').select('*').eq('batch_id', batchId).order('brew_number'),
+        supabaseClient.from('batch_brew_comments').select('*').eq('batch_id', batchId).order('comment_time', { nullsFirst: false }).order('id'),
+        loadUserInitials(),
+        supabaseClient.from('tanks').select('id, code, tank_type, number, location, volume_hl, is_active').in('tank_type', ['glt', 'ckt', 'lt']).order('number'),
+        one('recipe_brewing_specs'), one('recipe_specs'), one('recipe_fermentation'), one('recipe_comments'),
+        supabaseClient.from('batch_ingredients').select('*').eq('batch_id', batchId)
+          .in('addition_type', ['boil_hop', 'brewhouse_addition', 'yeast']).eq('is_removed', false).order('sort_order').order('id'),
+      ]);
+      for (const res of [brews, comments, tanks, ingredients]) if (res.error) throw res.error;
+      page.brews = brews.data;
+      page.comments = comments.data;
+      page.users = users.users.filter((u) => u.is_active);
+      page.initialsOf = users.initialsOf;
+      page.tanks = tanks.data;
+      page.brewing = brewing.data || {};
+      page.specs = specs.data || {};
+      page.ferm = ferm.data || {};
+      page.recipeComments = ((recipeComments.data && recipeComments.data.comments) || [])
+        .map((c) => String(c || '').trim()).filter((c) => c && c !== '0');
+      page.ingredients = ingredients.data;
+      const ids = [...new Set(page.ingredients.map((r) => r.ingredient_id).filter(Boolean))];
+      if (ids.length) {
+        const { data } = await supabaseClient.from('ingredients').select('id, name').in('id', ids);
+        (data || []).forEach((i) => { page.names[i.id] = i.name; });
+      }
+    }
+
+    // ------------------------------------------------------------ saving
+    const renderSoon = createRenderer(() => renderAll());
+    const saveBatch = (patch) => saveRowPatch({ table: 'batches', row: page.ctx.batch, patch, saveStatus: page.save, renderSoon, stampUpdatedBy: false });
+    const saveBrew = (row, patch) => saveRowPatch({ table: 'batch_brews', row, patch, saveStatus: page.save, renderSoon, userId: page.user.id });
+    const saveComment = (row, patch) => saveRowPatch({ table: 'batch_brew_comments', row, patch, saveStatus: page.save, renderSoon, userId: page.user.id });
+
+    async function insertRow(table, values, list) {
+      page.save.saving();
+      const { data, error } = await supabaseClient.from(table).insert({ ...values, updated_by: page.user.id }).select('*').single();
+      if (error) { page.save.failed(error.message); return null; }
+      list.push(data);
+      page.save.saved();
+      return data;
+    }
+
+    // Delete with confirm, then "deleted · Undo" which inserts the same row again.
+    async function deleteRow(table, row, list, label) {
+      const ok = await confirmDialog({ title: `Delete ${label}?`, text: 'You can undo this right after deleting. The deletion is recorded in the audit trail.' });
+      if (!ok) return;
+      page.save.saving();
+      const { error } = await supabaseClient.from(table).delete().eq('id', row.id).select('id').single();
+      if (error) { page.save.failed(error.message); return; }
+      list.splice(list.indexOf(row), 1);
+      page.save.saved();
+      renderSoon();
+      showUndoToast(label.charAt(0).toUpperCase() + label.slice(1), async () => {
+        const { id, created_at, updated_at, ...values } = row;
+        const restored = await insertRow(table, values, list);
+        if (restored) { list.sort((a, b) => (a.brew_number ?? 0) - (b.brew_number ?? 0) || a.id - b.id); renderSoon(); }
+      });
+    }
+
+    async function addBrew() {
+      const brew = await insertRow('batch_brews', { batch_id: page.ctx.batch.id, brew_number: nextBrewNumber(page.brews), brewer_id: page.user.id }, page.brews);
+      if (brew) renderSoon(`[data-brew="${brew.id}"][data-field="software_order_number"]`);
+    }
+
+    // ------------------------------------------------------------ rendering
+    function renderAll() {
+      renderBrewDay();
+      renderSpecs();
+      renderMashAndAdditions();
+      renderYeast();
+      renderComments();
+      renderLog();
+      renderResults();
+    }
+
+    const kr = (label, value) => `<div class="br-kr"><span class="k">${label}</span><span class="c">${value}</span></div>`;
+    const kv = (label, value, unit) => `<div class="br-kv br-kv3"><span class="k">${escapeHtml(label)}</span>
+      <span class="v">${escapeHtml(value === null || value === undefined || value === '' ? '—' : String(value))}</span><span class="u">${escapeHtml(unit || '')}</span></div>`;
+
+    function renderBrewDay() {
+      const { batch, recipe } = page.ctx;
+      const loc = location_();
+      const brews = Number(batch.brew_count) || 0;
+      const hl = Number(recipe.brew_volume_hl) || null;
+      const softwareName = loc === 'jk' ? page.brewing.brewhouse_recipe_name_jk : page.brewing.brewhouse_recipe_name_wp;
+      const tankTypes = loc === 'jk' ? ['ckt'] : ['glt', 'lt'];
+      const tanks = page.tanks.filter((t) => (t.location === loc || !loc) && tankTypes.includes(t.tank_type) && (t.is_active || t.id === batch.glt_tank_id));
+      const firstStart = page.brews.map((b) => b.mash_in_started_at).filter(Boolean).sort()[0];
+      document.getElementById('bw-brewday').innerHTML = `
+        <div class="br-label">Brew day</div>
+        ${kr('Brewhouse <span class="br-note">· from recipe</span>', escapeHtml(BREWERY_NAMES[loc] || '—'))}
+        ${kr('Recipe name software', `<span style="font-size:12px;">${escapeHtml(softwareName || '—')}</span>`)}
+        ${loc === 'wp' && (page.brewing.special_bin_load_kg || page.brewing.special_bin_name)
+          ? kr('Special bin dump', escapeHtml(`${page.brewing.special_bin_load_kg ? fmt(page.brewing.special_bin_load_kg) + ' kg' : ''}${page.brewing.special_bin_name ? ' · ' + page.brewing.special_bin_name : ''}`)) : ''}
+        ${kr('Brews', escapeHtml(`${fmt(brews)}${hl ? ` × ${fmt(hl)} hl = ${fmt(brews * hl, 1)} hl` : ''}`))}
+        <div style="display:flex; gap:12px; padding-top:6px; flex-wrap:wrap;">
+          <div class="br-field" style="width:150px; padding-top:0;"><label class="br-label" for="bw-glt">${loc === 'jk' ? 'CKT' : 'GLT'}</label>
+            <select id="bw-glt" class="br-input"${dis()}>
+              <option value="">—</option>
+              ${tanks.map((t) => `<option value="${t.id}"${t.id === batch.glt_tank_id ? ' selected' : ''}>${escapeHtml(t.code)} · ${fmt(t.volume_hl)} hl</option>`).join('')}
+            </select></div>
+          ${loc === 'jk' ? `<div class="br-field" style="width:170px; padding-top:0;"><label class="br-label" for="bw-braukon">Recipe number Braukon</label>
+            <input id="bw-braukon" value="${escapeHtml(batch.brewhouse_recipe_number || '')}"${dis()}></div>` : ''}
+          <div class="br-field" style="flex:1; min-width:150px; padding-top:0;"><span class="br-label">Date first brew</span>
+            <div class="br-calc-box">${escapeHtml(firstStart ? formatDate(firstStart) : 'Not started')}</div></div>
+        </div>`;
+      document.getElementById('bw-recipe-comments').innerHTML = `
+        <div class="br-label">Recipe comments</div>
+        ${page.recipeComments.length ? page.recipeComments.map((c) => `<div class="br-recipe-note">${escapeHtml(c)}</div>`).join('') : '<div class="br-note">No comments in the recipe.</div>'}`;
+    }
+
+    function renderSpecs() {
+      const w = page.brewing, s = page.specs, f = page.ferm, loc = location_();
+      const sparges = [w.sparge_1, w.sparge_2, w.sparge_3, w.sparge_4].filter((x) => x !== null && x !== undefined);
+      const range = (v) => (v === null || v === undefined || v === '' ? null : String(v).replace(/\s*-\s*/, ' – '));
+      document.getElementById('bw-specs').innerHTML = `
+        <div class="br-label">Brew specifications · from recipe</div>
+        <div class="br-specs">
+          <div>
+            <div class="br-kv br-kv3 hd"><span class="k">Brewhouse settings</span><span class="v">Spec</span><span class="u">Unit</span></div>
+            ${kv('Mash water', w.mash_water, 'hl')}
+            ${kv('Mash thickness', w.mash_thickness ? '1 : ' + fmt(w.mash_thickness) : null, '')}
+            ${kv('Expected extract start boil', w.expected_extract_boil_start, '°P')}
+            ${kv('Volume boil', w.boil_volume, 'hl')}
+            ${kv('Wort pre-cooler temp.', w.wort_precooler_temp, '°C')}
+            ${kv('Desired evaporation', w.target_evaporation, '%')}
+            ${kv('Boil intensity', w.boil_intensity, 'kJ/s')}
+            ${kv('Whirlpool rest', w.whirlpool_rest, 'min')}
+            ${loc === 'jk'
+              ? kv('Lauter factor', w.lauter_factor, '') + kv('First runnings · sparge water · sparge runnings', [w.first_wort, w.sparge_water, w.sparge_runoff].map((x) => fmt(x)).join(' · '), 'hl') + kv('Total filtered volume', w.total_lautered_volume, 'hl')
+              : kv('Chambers mash filter', w.mash_filter_chambers, '') + kv('Sparging ' + sparges.map((_, i) => ['1st', '2nd', '3rd', '4th'][i]).join(' · '), sparges.length ? sparges.map((x) => fmt(x)).join(' · ') : null, 'hl/h')}
+          </div>
+          <div>
+            <div class="br-kv br-kv3 hd"><span class="k">Recipe targets</span><span class="v">Spec</span><span class="u">Unit</span></div>
+            ${kv('Desired original gravity', s.original_extract, '°P')}
+            ${kv('Desired final gravity', s.final_extract, '°P')}
+            ${kv('pH mash', range(w.ph_mash), '')}
+            ${kv('pH start boil', range(w.ph_boil_start), '')}
+            ${kv('pH end boil', range(w.ph_boil_end), '')}
+            ${kv('Aeration', w.aeration, 'ppm')}
+            ${kv('Wort to GLT temp.', f.pitching_temp, '°C')}
+            ${loc === 'jk' ? '' : kv('Cumulative sparging volume', w.cumulative_sparge_volume, 'hl') + kv('Auto dosing acid · boil / inline sparge', w.boil_acid_l != null || w.inline_sparge_acid_l != null ? `${fmt(w.boil_acid_l)} / ${fmt(w.inline_sparge_acid_l)}` : null, 'l')}
+          </div>
+        </div>`;
+    }
+
+    function renderMashAndAdditions() {
+      const w = page.brewing;
+      const steps = [['Mash-in', w.mash_in_temp, w.mash_in_time], ['Raise to', w.mash_step1_temp, w.mash_step1_time], ['Raise to', w.mash_step2_temp, w.mash_step2_time],
+        ['Raise to', w.mash_step3_temp, w.mash_step3_time], ['Raise to', w.mash_step4_temp, w.mash_step4_time], ['Mash-out', w.mash_out_temp, w.mash_out_time]]
+        .filter((x) => x[1] !== null && x[1] !== undefined);
+      const arrow = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#a89f8e" stroke-width="2" aria-hidden="true"><path d="M5 3l5 5-5 5"></path></svg>';
+      const hops = page.ingredients.filter((r) => r.addition_type === 'boil_hop')
+        .sort((a, b) => (boilTimeMin(b.timing) ?? -1) - (boilTimeMin(a.timing) ?? -1) || (a.sort_order ?? 0) - (b.sort_order ?? 0));
+      const name = (r) => page.names[r.ingredient_id] || r.note || '(no ingredient)';
+      document.getElementById('bw-mash').innerHTML = `
+        <div class="br-label">Mash schedule</div>
+        ${steps.length ? `<div class="br-steps">${steps.map((x, i) => `${i ? arrow : ''}<div class="br-step${x[0] === 'Mash-out' ? ' out' : ''}"><span>${x[0]}</span><b>${fmt(x[1])} °C</b><span>${x[2] !== null && x[2] !== undefined ? fmt(x[2]) + ' min' : '—'}</span></div>`).join('')}</div>`
+          : '<div class="br-note">No mash schedule in the recipe.</div>'}
+        <div class="br-label" style="margin-top:6px;">Hop dosing · per brew</div>
+        <table class="br-ing"><thead><tr><th style="width:52px;">Min</th><th>Hop</th><th class="r" style="width:80px;">Gram</th><th style="width:52px;">HDT</th></tr></thead>
+          <tbody>${hops.map((r) => `<tr><td class="n">${escapeHtml(boilTimeMin(r.timing) ?? r.timing ?? '—')}</td><td>${escapeHtml(name(r))}</td>
+            <td class="n">${fmt(r.quantity, 0)}</td><td class="small">${r.hop_dosing_tank ? 'HDT ' + r.hop_dosing_tank : 'No'}</td></tr>`).join('')
+            || '<tr><td colspan="4" class="small">No boil hops.</td></tr>'}</tbody></table>`;
+      const ctx = { brewCount: page.ctx.batch.brew_count, brewVolumeHl: page.ctx.recipe.brew_volume_hl };
+      const adds = page.ingredients.filter((r) => r.addition_type === 'brewhouse_addition');
+      document.getElementById('bw-additions').innerHTML = `
+        <div class="br-label">Additions brewers · per brew</div>
+        <table class="br-ing"><thead><tr><th>Addition</th><th class="r" style="width:120px;">Amount</th><th style="width:150px;">Moment</th></tr></thead>
+          <tbody>${adds.map((r) => {
+            const amount = r.all_in_first_brew ? batchAmount(r.addition_type, r.unit, r.quantity, ctx) : brewAmount(r.addition_type, r.unit, r.quantity, ctx);
+            return `<tr><td>${escapeHtml(name(r))}</td><td class="n">${escapeHtml(formatAmount(amount))}${r.all_in_first_brew ? ' <span class="br-note">brew 1 only</span>' : ''}</td><td>${escapeHtml(r.timing || '—')}</td></tr>`;
+          }).join('') || '<tr><td colspan="3" class="small">No brewing additions.</td></tr>'}</tbody></table>`;
+    }
+
+    function yesNo(id, value) {
+      return `<div class="br-seg" role="group">
+        <button type="button" data-yesno="${id}" data-value="true" class="${value === true ? 'on' : ''}"${dis()}>Yes</button>
+        <button type="button" data-yesno="${id}" data-value="false" class="${value === false ? 'on' : ''}"${dis()}>No</button></div>`;
+    }
+
+    function userOptions(selected) {
+      return '<option value="">—</option>' + page.users.map((u) =>
+        `<option value="${u.id}"${u.id === selected ? ' selected' : ''}>${escapeHtml(u.initials || '')} · ${escapeHtml(u.name)}</option>`).join('');
+    }
+
+    function renderYeast() {
+      const b = page.ctx.batch;
+      const ctx = { brewCount: b.brew_count, brewVolumeHl: page.ctx.recipe.brew_volume_hl };
+      const yeasts = page.ingredients.filter((r) => r.addition_type === 'yeast');
+      const strain = yeasts.map((r) => page.names[r.ingredient_id] || r.note).filter(Boolean).join(' + ') || '—';
+      const weight = yeasts.map((r) => {
+        const a = batchAmount('yeast', r.unit, r.quantity, ctx);
+        return a ? `${formatAmount(a)}${/\/hl$/.test(r.unit || '') ? ` <span class="br-note">(${fmt(r.quantity)} ${escapeHtml(r.unit)} × ${fmt((Number(b.brew_count) || 0) * (Number(page.ctx.recipe.brew_volume_hl) || 0), 1)} hl)</span>` : ''}` : '—';
+      }).join(' + ') || '—';
+      document.getElementById('bw-yeast').innerHTML = `
+        <div class="br-label">Dry yeast pitching</div>
+        ${kr('Yeast strain', escapeHtml(strain))}
+        ${kr('Weight', weight)}
+        ${kr('Temp. start · temp. max', escapeHtml(`${fmt(page.ferm.pitching_temp)} °C · ${fmt(page.ferm.main_ferm_temp)} °C`))}
+        <div style="display:flex; gap:12px 22px; padding-top:6px; flex-wrap:wrap; align-items:flex-end;">
+          <div class="br-field" style="padding-top:0;"><span class="br-label">Rehydrated?</span>${yesNo('yeast_rehydrated', b.yeast_rehydrated)}</div>
+          <div class="br-field" style="padding-top:0;"><span class="br-label">At 1st brew?</span>${yesNo('yeast_with_first_brew', b.yeast_with_first_brew)}</div>
+          <div class="br-field" style="padding-top:0;"><span class="br-label">Yeast program on?</span>${yesNo('yeast_program_on', b.yeast_program_on)}</div>
+          <div class="br-field" style="width:160px; padding-top:0;"><label class="br-label" for="bw-pitched-on">Pitched on</label>
+            <input id="bw-pitched-on" type="date" value="${escapeHtml(b.yeast_pitched_on || '')}"${dis()}></div>
+          <div class="br-field" style="width:200px; padding-top:0;"><label class="br-label" for="bw-pitched-by">Pitched by</label>
+            <select id="bw-pitched-by" class="br-input"${dis()}>${userOptions(b.yeast_pitched_by)}</select></div>
+        </div>`;
+    }
+
+    function renderComments() {
+      const brewOptions = (selected) => '<option value="">All</option>' + page.brews.map((b) =>
+        `<option value="${b.brew_number}"${b.brew_number === selected ? ' selected' : ''}>Brew ${b.brew_number}</option>`).join('');
+      const row = (c) => `<tr>
+        <td style="width:96px;"><input class="br-in l" type="time" data-comment="${c.id}" data-field="comment_time" value="${escapeHtml((c.comment_time || '').slice(0, 5))}" aria-label="Time"${dis()}></td>
+        <td style="width:96px;"><select class="br-in" data-comment="${c.id}" data-field="brew_number" aria-label="Brew"${dis()}>${brewOptions(c.brew_number)}</select></td>
+        <td><textarea class="br-in l br-textarea" rows="1" data-comment="${c.id}" data-field="comment" aria-label="Comment" placeholder="What happened, deviations, actions…"${dis()}>${escapeHtml(c.comment)}</textarea></td>
+        <td class="small" style="width:46px; text-align:center;">${escapeHtml(page.initialsOf(c.created_by))}</td>
+        <td style="width:34px;">${page.canDelete ? `<button class="br-del" type="button" data-delete-comment="${c.id}" aria-label="Delete comment">${TRASH_ICON}</button>` : ''}</td></tr>`;
+      const draft = page.commentDraft ? `<tr>
+        <td><input class="br-in l" type="time" id="bw-draft-time" aria-label="Time"></td>
+        <td><select class="br-in" id="bw-draft-brew" aria-label="Brew">${brewOptions(null)}</select></td>
+        <td><textarea class="br-in l br-textarea" rows="1" id="bw-draft-comment" aria-label="Comment" placeholder="What happened, deviations, actions… (saved when you leave the field)"></textarea></td>
+        <td class="small" style="text-align:center;">${escapeHtml(page.initialsOf(page.user.id))}</td><td></td></tr>` : '';
+      document.getElementById('bw-comments').innerHTML = `
+        <div class="br-label">Brewer's comments · brew day</div>
+        <table class="br-ing"><thead><tr><th>Time</th><th>Brew</th><th>Comment</th><th>Op.</th><th></th></tr></thead>
+          <tbody>${page.comments.map(row).join('')}${draft}${page.comments.length || page.commentDraft ? '' : '<tr><td colspan="5" class="small">No comments yet.</td></tr>'}</tbody></table>
+        ${page.canEdit ? '<div><button class="br-ghost" type="button" id="bw-add-comment">+ Comment</button></div>' : ''}`;
+    }
+
+    function cellHtml(row, brew, calc) {
+      if (row.kind === 'calc') {
+        let v = '—';
+        if (row.key === 'evaporation_pct' && calc.evaporationPct !== null) v = calc.evaporationPct.toFixed(1);
+        if (row.key === 'volume_to_glt_hl' && calc.volumeToGltHl !== null) v = calc.volumeToGltHl.toFixed(1);
+        if (row.key === 'extract_to_glt' && calc.extractToGlt !== null) v = calc.extractToGlt.toFixed(2);
+        if (row.key === 'total_brewing_h' && calc.totalBrewingH !== null) v = calc.totalBrewingH.toFixed(1);
+        if (row.key === 'glt_total' && calc.glt.volumeHl) v = `${calc.glt.volumeHl.toFixed(1)} hl · ${calc.glt.extract.toFixed(2)} °P`;
+        return `<td class="cv${row.key === 'glt_total' ? ' small-calc' : ''}">${escapeHtml(v)}</td>`;
+      }
+      const attrs = `data-brew="${brew.id}" data-field="${row.key}" aria-label="${escapeHtml(row.label)} · brew ${brew.brew_number}"${dis()}`;
+      const value = brew[row.key];
+      if (row.kind === 'yesno') {
+        return `<td><select class="br-in" ${attrs}><option value="">—</option><option value="true"${value === true ? ' selected' : ''}>Yes</option><option value="false"${value === false ? ' selected' : ''}>No</option></select></td>`;
+      }
+      if (row.kind === 'select') {
+        return `<td><select class="br-in" ${attrs}><option value="">—</option>${row.options.map((o) => `<option${o === value ? ' selected' : ''}>${escapeHtml(o)}</option>`).join('')}</select></td>`;
+      }
+      if (row.kind === 'user') return `<td><select class="br-in" ${attrs}>${userOptions(value)}</select></td>`;
+      if (row.kind === 'datetime') return `<td><input class="br-in l" type="datetime-local" ${attrs} value="${escapeHtml(toDateTimeLocal(value))}"></td>`;
+      if (row.kind === 'text') return `<td><input class="br-in l" ${attrs} value="${escapeHtml(value || '')}"></td>`;
+      return `<td><input class="br-in" inputmode="decimal" ${attrs} value="${escapeHtml(value === null || value === undefined ? '' : String(value))}"></td>`;
+    }
+
+    function recipeValue(key) {
+      if (!key) return '';
+      const v = key === 'original_extract' ? page.specs.original_extract
+        : key === 'brew_volume_hl' ? page.ctx.recipe.brew_volume_hl
+        : page.brewing[key];
+      return v === null || v === undefined ? '' : String(v).replace(/\s*-\s*/, ' – ');
+    }
+
+    function renderLog() {
+      const rows = brewLogRows(location_());
+      const calcs = brewCalculations(page.brews);
+      const planned = Math.ceil(Number(page.ctx.batch.brew_count) || 0);
+      const span = 3 + page.brews.length;
+      const head = page.brews.map((b) => `<th class="br-brewcol"><div class="br-brewhead"><span>Brew ${b.brew_number}</span>
+        ${page.canDelete ? `<button class="br-del" type="button" data-delete-brew="${b.id}" aria-label="Delete brew ${b.brew_number}">${TRASH_ICON}</button>` : ''}</div></th>`).join('');
+      const body = rows.map((r) => {
+        if (r.kind === 'section') return `<tr class="sec"><td colspan="${span}">${escapeHtml(r.label)}</td></tr>`;
+        return `<tr><td class="p">${escapeHtml(r.label)}</td><td class="u">${escapeHtml(r.unit || '')}</td><td class="r">${escapeHtml(recipeValue(r.recipe))}</td>
+          ${page.brews.map((b, i) => cellHtml(r, b, calcs[i])).join('')}</tr>`;
+      }).join('');
+      document.getElementById('bw-log').innerHTML = `
+        <div class="br-head" style="align-items:center;">
+          <div class="br-label">Brew log · fill in on the brew day</div>
+          <span class="br-note">${page.brews.length} of ${planned} ${planned === 1 ? 'brew' : 'brews'}</span>
+          ${page.canEdit ? `<button class="br-primary" type="button" id="bw-add-brew">+ Add brew</button>` : ''}
+        </div>
+        ${page.brews.length ? `<div class="br-table-wrap"><table class="br-matrix">
+          <thead><tr><th class="br-paramcol">Parameter</th><th>Unit</th><th class="r">Recipe</th>${head}</tr></thead>
+          <tbody>${body}</tbody></table></div>`
+          : `<div class="br-note">No brews yet.${page.canEdit ? ' "Add brew" starts the log of brew 1; its start of mashing moves the batch to Brewing.' : ''}</div>`}
+        <div class="br-note">Grey cells are calculated. Volume and extract to GLT include the water addition; the GLT total is volume-weighted over all brews.</div>`;
+    }
+
+    function renderResults() {
+      const calcs = brewCalculations(page.brews);
+      const og = page.specs.original_extract;
+      const ogTol = toleranceValue(page.specs.original_extract_tol);
+      const hl = page.ctx.recipe.brew_volume_hl;
+      const badge = (ok) => (ok === null ? '<span class="br-note">—</span>' : `<span class="br-okbadge ${ok ? 'ok' : 'bad'}">${ok ? 'OK' : 'Out'}</span>`);
+      const last = calcs[calcs.length - 1];
+      document.getElementById('bw-results').innerHTML = `
+        <div class="br-label">Result per brew · at GLT</div>
+        <table class="br-ing"><thead><tr><th>Brew</th><th class="r">°P at GLT</th><th>vs ${escapeHtml(fmt(og, 1))}${ogTol !== null ? ' ±' + fmt(ogTol) : ''}</th>
+          <th class="r">hl at GLT</th><th>vs ${escapeHtml(fmt(hl))} ±${VOLUME_TOL_HL}</th><th class="r">pH</th></tr></thead>
+          <tbody>${calcs.map((c, i) => `<tr><td><b>Brew ${c.brewNumber}</b></td>
+            <td class="n">${c.extractToGlt !== null ? c.extractToGlt.toFixed(2) : '—'}</td><td>${badge(withinSpec(c.extractToGlt, og, ogTol))}</td>
+            <td class="n">${c.volumeToGltHl !== null ? c.volumeToGltHl.toFixed(1) : '—'}</td><td>${badge(withinSpec(c.volumeToGltHl, hl, VOLUME_TOL_HL))}</td>
+            <td class="n">${escapeHtml(fmt(page.brews.find((b) => b.brew_number === c.brewNumber).whirlpool_ph))}</td></tr>`).join('')}
+            <tr class="tot"><td>GLT total</td><td class="n">${last && last.glt.extract !== null ? last.glt.extract.toFixed(2) : '—'}</td><td></td>
+              <td class="n">${last && last.glt.volumeHl ? last.glt.volumeHl.toFixed(1) : '—'}</td><td></td>
+              <td class="n">${last && last.glt.ph !== null ? last.glt.ph.toFixed(2) : '—'}</td></tr></tbody></table>
+        <div class="br-note">The GLT total extract and average pH become the first measurement of the fermentation log.</div>`;
+    }
+
+    // ------------------------------------------------------------ events
+    function valueFor(el, kind) {
+      if (kind === 'num') {
+        const v = parseNumberInput(el.value);
+        if (v === undefined) { el.classList.add('bad'); el.title = 'Not a number'; return undefined; }
+        el.classList.remove('bad');
+        return v;
+      }
+      if (kind === 'yesno') return el.value === '' ? null : el.value === 'true';
+      if (kind === 'datetime') return el.value ? new Date(el.value).toISOString() : null;
+      if (kind === 'user' || kind === 'select') return el.value || null;
+      return el.value.trim() || null;
+    }
+
+    async function saveDraftComment() {
+      const text = document.getElementById('bw-draft-comment').value.trim();
+      if (!text || page.commentDraft === 'saving') return;
+      page.commentDraft = 'saving';
+      const brew = document.getElementById('bw-draft-brew').value;
+      const saved = await insertRow('batch_brew_comments', {
+        batch_id: page.ctx.batch.id, comment: text,
+        comment_time: document.getElementById('bw-draft-time').value || null,
+        brew_number: brew ? Number(brew) : null,
+      }, page.comments);
+      page.commentDraft = saved ? false : true;
+      renderSoon();
+    }
+
+    function bindEvents() {
+      const main = document.querySelector('main');
+      main.addEventListener('change', (e) => {
+        const el = e.target;
+        const b = page.ctx.batch;
+        if (el.id === 'bw-glt') return saveBatch({ glt_tank_id: el.value ? Number(el.value) : null });
+        if (el.id === 'bw-braukon') return saveBatch({ brewhouse_recipe_number: el.value.trim() || null });
+        if (el.id === 'bw-pitched-by') return saveBatch({ yeast_pitched_by: el.value || null });
+        if (el.id === 'bw-pitched-on') {
+          const patch = { yeast_pitched_on: el.value || null };
+          if (el.value && !b.yeast_pitched_by) patch.yeast_pitched_by = page.user.id;   // default: who fills it in
+          return saveBatch(patch);
+        }
+        if (el.id === 'bw-draft-comment') return saveDraftComment();
+        if (el.dataset.brew) {
+          const brew = page.brews.find((x) => x.id === Number(el.dataset.brew));
+          const row = BREW_LOG_ROWS.find((r) => r.key === el.dataset.field);
+          const value = valueFor(el, row.kind);
+          if (value !== undefined) saveBrew(brew, { [row.key]: value });
+          return;
+        }
+        if (el.dataset.comment) {
+          const c = page.comments.find((x) => x.id === Number(el.dataset.comment));
+          const f = el.dataset.field;
+          if (f === 'comment') {
+            if (!el.value.trim()) { el.classList.add('bad'); el.title = 'A comment cannot be empty; use the bin to delete it'; return; }
+            el.classList.remove('bad');
+            return saveComment(c, { comment: el.value.trim() });
+          }
+          if (f === 'comment_time') return saveComment(c, { comment_time: el.value || null });
+          if (f === 'brew_number') return saveComment(c, { brew_number: el.value ? Number(el.value) : null });
+        }
+      });
+      main.addEventListener('click', (e) => {
+        const yn = e.target.closest('button[data-yesno]');
+        if (yn) return saveBatch({ [yn.dataset.yesno]: page.ctx.batch[yn.dataset.yesno] === (yn.dataset.value === 'true') ? null : yn.dataset.value === 'true' });
+        if (e.target.closest('#bw-add-brew')) return addBrew();
+        if (e.target.closest('#bw-add-comment')) { page.commentDraft = true; return renderSoon('#bw-draft-comment'); }
+        const delBrew = e.target.closest('button[data-delete-brew]');
+        if (delBrew) {
+          const brew = page.brews.find((x) => x.id === Number(delBrew.dataset.deleteBrew));
+          return deleteRow('batch_brews', brew, page.brews, `brew ${brew.brew_number}`);
+        }
+        const delComment = e.target.closest('button[data-delete-comment]');
+        if (delComment) return deleteRow('batch_brew_comments', page.comments.find((x) => x.id === Number(delComment.dataset.deleteComment)), page.comments, 'comment');
+      });
+      main.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && e.target.matches('input.br-in')) e.target.blur();
+        if (e.key === 'Escape' && e.target.id === 'bw-draft-comment') { page.commentDraft = false; renderSoon(); }
+      });
+    }
+
+    async function initBrewingPage() {
+      page.user = await getCurrentUser();
+      if (!page.user) return; // nav.js redirects to login
+      if (!(await magBekijkenModule('batches'))) {
+        showMessage('You do not have access to batch reports. Ask an admin for view rights on "Batches & batch reports".');
+        return;
+      }
+      const batchId = batchIdFromUrl();
+      if (!batchId) { showMessage('No batch chosen. Open a batch from All batches or Active batches.', true); return; }
+      page.canEdit = await magBewerkenModule('batches');
+      page.canDelete = await magVerwijderenModule('batches');
+      try {
+        await loadAll(batchId);
+      } catch (err) {
+        showMessage('Could not load the batch: ' + (err.message || err), true);
+        return;
+      }
+      document.title = `Jopen Brouwerij — ${page.ctx.batch.batch_number} Brewing`;
+      page.save = renderBatchHeader(document.getElementById('bw-header'), page.ctx, 'brewing');
+      showMessage('');
+      document.getElementById('bw-content').style.display = 'flex';
+      bindEvents();
+      renderAll();
+    }
+
+    document.addEventListener('DOMContentLoaded', initBrewingPage);
+  </script>
+</body>
+</html>

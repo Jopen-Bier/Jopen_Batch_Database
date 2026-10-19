@@ -15,7 +15,7 @@ Evaluated top-down, first match wins:
 | `filling` | the batch has ≥1 `filling_sessions` row |
 | `hbt` | a `processing_sessions` row has `processing_date` |
 | `lagering` | `lt_tank_id` is set, **or** the `batch_cellar_steps` step with `starts_lagering` is done (open-questions: confirm) |
-| `fermentation` | number of brews with `brewing_ended_at` = `batches.brew_count` |
+| `fermentation` | number of brews with `brewing_ended_at` ≥ `batches.brew_count` rounded up (brew counts such as 3.33 occur); never for 0 brews |
 | `brewing` | a brew has `mash_in_started_at` |
 | `raw` | otherwise (batch report exists, not brewed yet) |
 

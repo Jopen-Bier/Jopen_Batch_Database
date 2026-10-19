@@ -140,37 +140,14 @@
     }
 
     // ------------------------------------------------------------ saving
-    async function saveRow(id, patch) {
-      const row = page.rows.find((r) => r.id === id);
-      const before = { ...row };
-      Object.assign(row, patch);
-      renderSoon();
-      page.save.saving();
-      const { error } = await supabaseClient.from('batch_ingredients')
-        .update({ ...patch, updated_by: page.user.id }).eq('id', id).select('id').single();
-      if (error) {
-        Object.assign(row, before);
-        renderSoon();
-        page.save.failed(error.message);
-        return false;
-      }
-      page.save.saved();
-      return true;
+    function saveRow(id, patch) {
+      return saveRowPatch({ table: 'batch_ingredients', row: page.rows.find((r) => r.id === id), patch,
+        saveStatus: page.save, renderSoon, userId: page.user.id });
     }
 
-    async function saveBatch(patch) {
-      const before = { ...page.ctx.batch };
-      Object.assign(page.ctx.batch, patch);
-      renderSoon();
-      page.save.saving();
-      const { error } = await supabaseClient.from('batches').update(patch).eq('id', page.ctx.batch.id).select('id').single();
-      if (error) {
-        Object.assign(page.ctx.batch, before);
-        renderSoon();
-        page.save.failed(error.message);
-        return;
-      }
-      page.save.saved();
+    function saveBatch(patch) {
+      // batches has no updated_by column
+      return saveRowPatch({ table: 'batches', row: page.ctx.batch, patch, saveStatus: page.save, renderSoon, stampUpdatedBy: false });
     }
 
     async function addRow(type, ingredient) {
@@ -203,31 +180,7 @@
     }
 
     // ------------------------------------------------------------ rendering
-    let renderTimer = null;
-    let focusAfterRender = null;
-    // Render after the current event, keeping focus on the field the user
-    // moved to (a change event fires before focus leaves the input).
-    function renderSoon(focusSelector) {
-      if (focusSelector) focusAfterRender = focusSelector;
-      clearTimeout(renderTimer);
-      renderTimer = setTimeout(() => {
-        const key = focusAfterRender || focusKey(document.activeElement);
-        focusAfterRender = null;
-        renderAll();
-        const target = key && document.querySelector(key);
-        if (target) target.focus();
-      }, 0);
-    }
-
-    // Selector that finds the same control again after a re-render.
-    function focusKey(el) {
-      if (!el || !el.dataset) return null;
-      if (el.id && el.id.startsWith('ov-')) return '#' + el.id;
-      if (el.dataset.field) return `[data-id="${el.dataset.id}"][data-field="${el.dataset.field}"]`;
-      if (el.dataset.remove) return `[data-remove="${el.dataset.remove}"]`;
-      if (el.dataset.add) return `[data-add="${el.dataset.add}"]`;
-      return null;
-    }
+    const renderSoon = createRenderer(() => renderAll());
 
     function renderAll() {
       renderStrip();

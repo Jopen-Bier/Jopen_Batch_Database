@@ -9,7 +9,7 @@
 // Tabs in order; page = null until the phase that builds it.
 const BATCH_TABS = [
   { key: 'overview', label: 'Overview', page: 'batch-overview.html' },
-  { key: 'brewing', label: 'Brewing', page: null, phase: 3 },
+  { key: 'brewing', label: 'Brewing', page: 'batch-brewing.html' },
   { key: 'fermentation', label: 'Fermentation log', page: null, phase: 4 },
   { key: 'processing', label: 'Processing', page: null, phase: 5 },
   { key: 'filling', label: 'Filling', page: null, phase: 6 },
@@ -124,6 +124,86 @@ function showUndoToast(label, onUndo) {
   _brToastTimer = setTimeout(close, 10000);
 }
 
+// ---------------------------------------------------------------- autosave
+
+/**
+ * Selector that finds the same control again after a re-render: its id, or
+ * all its data-* attributes (e.g. [data-id="12"][data-field="quantity"]).
+ */
+function focusKeyOf(el) {
+  if (!el || el === document.body || !el.dataset) return null;
+  if (el.id) return '#' + CSS.escape(el.id);
+  const attrs = Object.keys(el.dataset);
+  if (!attrs.length) return null;
+  return attrs.map((k) => `[data-${k.replace(/[A-Z]/g, (c) => '-' + c.toLowerCase())}="${CSS.escape(el.dataset[k])}"]`).join('');
+}
+
+/**
+ * Returns renderSoon(focusSelector?): re-renders after the current event and
+ * puts focus back on the control the user moved to (a change event fires
+ * before focus leaves the input), or on focusSelector when given.
+ */
+function createRenderer(render) {
+  let timer = null, wanted = null;
+  return function renderSoon(focusSelector) {
+    if (focusSelector) wanted = focusSelector;
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      const key = wanted || focusKeyOf(document.activeElement);
+      wanted = null;
+      render();
+      const target = key && document.querySelector(key);
+      if (target) target.focus();
+    }, 0);
+  };
+}
+
+/**
+ * Optimistic save of one row: patch the local `row`, re-render, write
+ * `patch` (+ updated_by when the table has it) to `table`, and roll back on
+ * an error. Returns true when saved.
+ */
+async function saveRowPatch({ table, row, patch, saveStatus, renderSoon, userId, stampUpdatedBy = true }) {
+  const before = { ...row };
+  Object.assign(row, patch);
+  renderSoon();
+  saveStatus.saving();
+  const payload = stampUpdatedBy && userId ? { ...patch, updated_by: userId } : patch;
+  const { error } = await supabaseClient.from(table).update(payload).eq('id', row.id).select('id').single();
+  if (error) {
+    Object.keys(row).forEach((k) => { if (!(k in before)) delete row[k]; });
+    Object.assign(row, before);
+    renderSoon();
+    saveStatus.failed(error.message);
+    return false;
+  }
+  saveStatus.saved();
+  return true;
+}
+
+/** Number from an input ('2,75' → 2.75); undefined when the text is not a number, null when empty. */
+function parseNumberInput(text) {
+  const t = String(text ?? '').trim();
+  if (t === '') return null;
+  const n = Number(t.replace(',', '.'));
+  return Number.isFinite(n) ? n : undefined;
+}
+
+/** Value for a datetime-local input from a timestamptz (local time). */
+function toDateTimeLocal(value) {
+  if (!value) return '';
+  const d = new Date(value);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** Initials per user id, from users.initials. */
+async function loadUserInitials() {
+  const { data } = await supabaseClient.from('users').select('id, name, initials, is_active').order('name');
+  const users = data || [];
+  return { users, initialsOf: (id) => (users.find((u) => u.id === id) || {}).initials || '' };
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { BATCH_TABS, batchIdFromUrl, batchTabHref };
+  module.exports = { BATCH_TABS, batchIdFromUrl, batchTabHref, parseNumberInput };
 }

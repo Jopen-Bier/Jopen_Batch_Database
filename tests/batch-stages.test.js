@@ -91,10 +91,22 @@ assert.strictEqual(ga.attentionTotal, 1);
 
 // Tile lines (raw)
 assert.deepStrictEqual(s.tileLines(row({ id: 9, no: '26400', stage: 'raw', pick: '2026-10-14' })),
-  { line1: 'Order picking 14-10', line2: 'Not picked yet', isOk: false });
+  { line1: 'Order picking 14-10', line2: 'Not picked yet', isOk: false, progress: null });
 assert.strictEqual(s.tileLines(row({ id: 9, no: '26400', stage: 'raw' })).line1, 'No order picking date');
 assert.deepStrictEqual(s.tileLines(row({ id: 9, no: '26400', stage: 'raw', picked: true })),
-  { line1: 'No order picking date', line2: '✓ Picked', isOk: true });
+  { line1: 'No order picking date', line2: '✓ Picked', isOk: true, progress: null });
+
+// Brewing and fermentation tiles (stage row from batch_stages, tank from batches.glt_tank_id)
+const brewRow = (stage, extra) => s.toBatchRow(
+  { id: 20, batch_number: '26420', name: 'Bokbier', brew_count: 3, glt_tank: { code: 'GLT41' }, recipes: { location: 'wp' } },
+  Object.assign({ stage, brews_planned: 3, brews_started: 0, brews_ended: 0, last_brew_ended_at: null }, extra));
+assert.strictEqual(brewRow('brewing').tankCode, 'GLT41');
+assert.deepStrictEqual(s.tileLines(brewRow('brewing', { brews_started: 2, brews_ended: 1 })),
+  { line1: 'Brew 1 / 3', line2: 'Brewing: brew 2', isOk: false, progress: 1 / 3 });
+assert.strictEqual(s.tileLines(brewRow('brewing', { brews_started: 2, brews_ended: 2 })).line2, 'Next: brew 3');
+assert.deepStrictEqual(s.tileLines(brewRow('fermentation', { brews_started: 3, brews_ended: 3, last_brew_ended_at: '2026-10-21T13:40:00+00:00' })),
+  { line1: '3 brews in tank', line2: 'Last brew ended 21-10', isOk: false, progress: null });
+assert.strictEqual(s.toBatchRow({ id: 1, batch_number: '1', recipes: {} }, null).tankCode, null);
 
 // Progress strip
 const states = (stage) => s.progressSteps(stage).map((x) => x.state).join(' ');

@@ -48,6 +48,7 @@
   <script src="jopen-utils.js"></script>
   <script src="nav.js"></script>
   <script src="batch-stages.js"></script>
+  <script src="batch-report-shell.js"></script>
   <script>
     let allRows = [];
     const view = { q: '', location: '', attentionOnly: false };
@@ -61,14 +62,14 @@
 
     async function loadActiveBatches() {
       const stages = await fetchAllRows(supabaseClient.from('batch_stages')
-        .select('batch_id, stage, start_date, end_date')
+        .select('batch_id, stage, start_date, end_date, brews_planned, brews_started, brews_ended, last_brew_ended_at')
         .neq('stage', 'closed')
         .order('batch_id'));
       if (stages.error) throw stages.error;
       if (!stages.data.length) return [];
       const ids = stages.data.map((s) => s.batch_id);
       const batches = await fetchAllRows(supabaseClient.from('batches')
-        .select('id, batch_number, name, brew_count, order_picking_date, order_picking_completed_at, recipes(name, version_major, version_minor, location)')
+        .select('id, batch_number, name, brew_count, order_picking_date, order_picking_completed_at, glt_tank:tanks!batches_glt_tank_id_fkey(code), recipes(name, version_major, version_minor, location)')
         .in('id', ids)
         .order('id'));
       if (batches.error) throw batches.error;
@@ -81,8 +82,9 @@
       const issue = row.attention[0] || '';
       const cls = 'br-tile' + (issue ? ' warn' : lines.isOk ? ' ok' : '');
       const title = `${row.batchNumber} · ${row.name}${issue ? ' · ' + issue : ''}`;
-      // Every stage links to the Overview until its own tab exists.
-      return `<a class="${cls}" href="batch-overview.html?id=${row.id}" title="${escapeHtml(title)}">
+      // Each stage links to its own tab once that tab exists, else to the Overview.
+      const href = (row.stage === 'brewing' && batchTabHref('brewing', row.id)) || `batch-overview.html?id=${row.id}`;
+      return `<a class="${cls}" href="${href}" title="${escapeHtml(title)}">
         ${issue ? '<span class="br-bang" aria-label="Needs attention">!</span>' : ''}
         <div class="br-tile-top">
           ${row.tankCode ? `<span class="br-tank">${escapeHtml(row.tankCode)}</span>` : ''}
@@ -92,6 +94,7 @@
         <div class="br-tile-name">${escapeHtml(row.name)}</div>
         <div class="br-tile-line">${escapeHtml(lines.line1)}</div>
         <div class="br-tile-line${lines.isOk ? ' ok' : ''}">${escapeHtml(lines.line2)}</div>
+        ${lines.progress !== null ? `<div class="br-tile-bar"><div style="width:${Math.round(lines.progress * 100)}%;"></div></div>` : ''}
         ${issue ? `<div class="br-tile-line alert">${escapeHtml(issue)}</div>` : ''}
       </a>`;
     }

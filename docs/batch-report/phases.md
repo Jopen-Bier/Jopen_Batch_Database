@@ -117,6 +117,12 @@ Migration: `batches.brewhouse_recipe_number`, `yeast_pitched_by` → uuid;
 calculated rows and results per brew + GLT total (module + test).
 `batch_stages`: brewing / fermentation rules. Active batches: Brewing tiles.
 
+## Between phase 3 and 4 — recipe editor
+- Save window (new version): when the comment is empty the window closes and
+  the recipe is **not** saved, while it looks saved. Keep the window open and
+  show the message in it; only close after a successful save (reported by
+  Jaap 19-10).
+
 ## Phase 4 — Fermentation log
 Migration: `batches.time_zero/glt_tank_id/lt_tank_id`; `cellar_action_tags`
 (+ seed); `recipe_cellar_steps` + `generate_recipe_cellar_steps()` + backfill
@@ -150,6 +156,9 @@ summary. Closing/Mdrank stays parked (open-questions 8).
 ## Phase 8 — Splits
 Split / transfer popup on all three tabs, new batch from split (next number,
 0 brews), base beer lines, dosing on total volume. Needs open-questions 9.
+Consider storing the split batch's volume and deriving the dosing from it,
+instead of a fractional `brew_count` (3.33 = 130 hl ÷ 40 hl), which is used
+as a dosing factor today (Jaap, 19-10).
 
 ## Import 2026 batches (after phase 8)
 Agreed 19-10: once all phases are built, the 2026 batches are filled from
