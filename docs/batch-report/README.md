@@ -45,7 +45,9 @@ Out of scope for now (later, separately agreed):
 - Replacing the Excel flow. **Batch creation keeps generating the Excel**
   until the digital report has been tested in production, also
   administratively. Both run side by side; every batch gets the digital tabs.
-- Historical batches (no migration of old Excel data).
+- Historical batches before 2026 (no migration of old Excel data). The 2026
+  batches **are** imported from their Excel reports, after phase 8 (see
+  `phases.md`, "Import 2026 batches").
 
 ## Working agreement (per phase)
 1. Branch `batch-report-phase-<n>`.
