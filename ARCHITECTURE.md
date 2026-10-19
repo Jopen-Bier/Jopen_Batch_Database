@@ -55,6 +55,7 @@ supabase/
   schema.sql               full structure dump, refreshed nightly = the baseline
   rename-map.json          agreed Dutch → English names (transition source of truth)
   functions/               Edge Functions (generate-invite-link, delete-user)
+docs/batch-report/         brief for the digital batch report (decisions, data model, rules, screens, phases, mockup)
 tests/                     Node tests for shared modules (run by the Guard workflow)
 tools/                     translation-layer scripts + ci_guard.py (see tools/README.md)
 .github/workflows/         guard, backup, restore test, schema snapshot
@@ -165,6 +166,10 @@ Use these terms in table names, column names, code and UI labels.
 | Cellar | kelder | cellar |
 | Cellar | splitsing / overdracht / mengen | split / transfer / blend |
 | Cellar | troebeling | turbidity |
+| Cellar | GLT / LT / CKT / HBT (tanks) | `glt` / `lt` / `ckt` / `hbt` (plant abbreviations; HBT = helderbiertank, bright beer tank) |
+| Cellar | Time 0 (laatste brouwsel in tank) | time zero (`time_zero`) |
+| Cellar | kelderplan / actietag | cellar plan / action tag |
+| Batch report | afwijking (van recept) | deviation |
 | Processing | verwerking | processing |
 | Filling | afvullen / afvulverslag | filling / filling report |
 | Filling | fles / blik / fust | bottle / can / keg |

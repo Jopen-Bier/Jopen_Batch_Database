@@ -1,0 +1,471 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Filling</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;background:#f6f4ee}
+a{color:#33473a}a:hover{color:#1c2b26}
+.card{background:#fff;border:1px solid #e2ddd0;border-radius:10px;box-shadow:0 1px 2px rgba(28,43,38,.05)}
+.lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:#6b6355}
+.num{font-variant-numeric:tabular-nums}
+.kv{display:grid;grid-template-columns:minmax(0,1fr) 58px 42px 48px;align-items:center;column-gap:8px;padding:3px 0;border-bottom:1px solid #f1eee5;font-size:13.5px}
+.kv .k{color:#1c2b26;min-width:0}
+.kv .v{font-weight:700;font-variant-numeric:tabular-nums;background:#f6f4ee;border:1px solid #e2ddd0;color:#1c2b26;border-radius:5px;padding:1px 6px;text-align:center}
+.kv .u{font-size:12px;color:#6b6355}
+.kv .t{font-size:12px;color:#6b6355;font-variant-numeric:tabular-nums}
+.kv.hd{padding:0 0 4px;border-bottom:2px solid #33473a;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:#6b6355}
+.kv.hd .k{font-weight:700;color:#33473a;text-transform:none;letter-spacing:0;font-size:12.5px}
+.kv.hd .v{background:none;border:0;font-weight:400;color:#6b6355;padding:0;font-size:10.5px}
+.kv.hd .u,.kv.hd .t{font-size:10.5px}
+.kr{display:flex;align-items:center;gap:8px;padding:3px 0;border-bottom:1px solid #f1eee5;font-size:13.5px}
+.kr .k{flex:1;color:#1c2b26}
+.kr .c{font-weight:700;font-variant-numeric:tabular-nums;color:#33473a}
+.pill{display:inline-block;border-radius:12px;padding:3px 10px;font-size:12px;font-weight:700;background:#e1ead9;color:#33473a}
+.fld{display:flex;flex-direction:column;gap:4px;min-width:0}
+.fld input,.fld select{border:1px solid #e2ddd0;border-radius:6px;padding:7px 9px;font:inherit;font-size:14px;background:#fffbe6;box-sizing:border-box;width:100%;min-height:38px}
+.fld input:focus,.fld select:focus{outline:none;border-color:#4c6b4f;background:#fff}
+.calcv{border:1px solid #ece8dc;border-radius:6px;padding:7px 9px;font-size:14px;background:#f5f5f3;color:#33473a;font-weight:700;min-height:38px;box-sizing:border-box;font-variant-numeric:tabular-nums}
+.seg{display:inline-flex;background:#ece8dc;border-radius:20px;padding:3px;gap:2px}
+.seg button{border:0;background:transparent;border-radius:17px;padding:6px 12px;font:inherit;font-size:13px;cursor:pointer;color:#6b6355;min-height:32px}
+.seg button.on{background:#33473a;color:#fff;font-weight:700}
+.lg{border-collapse:separate;border-spacing:0;font-size:13px;width:100%}
+.lg th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:#6b6355;font-weight:700;padding:8px 6px;border-bottom:2px solid #33473a;white-space:nowrap}
+.lg th.r{text-align:right}
+.lg td{padding:3px 6px;border-bottom:1px solid #ece8dc;height:34px}
+.lg td.c{color:#6b6355;text-align:right;font-variant-numeric:tabular-nums}
+.lg td.h{font-size:12.5px;color:#33473a;font-weight:700;white-space:nowrap}
+.lg input,.lg select{width:100%;box-sizing:border-box;border:1px solid transparent;border-radius:5px;background:#fffbe6;font:inherit;padding:5px 6px;text-align:right;font-variant-numeric:tabular-nums}
+.lg input:hover,.lg select:hover{border-color:#e6dcb8}
+.lg input:focus,.lg select:focus{outline:none;border-color:#4c6b4f;background:#fff}
+.lg input.l{text-align:left}
+.lg input.bad{background:#f8dcd3;border-color:#d99a85;color:#8f2909;font-weight:700}
+.btn{background:#b4772c;color:#fff;border:0;border-radius:20px;padding:9px 16px;font:inherit;font-size:13px;font-weight:700;letter-spacing:.03em;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:8px;min-height:40px;box-sizing:border-box}
+.btn:hover{background:#96601f;color:#fff}
+.ghost{background:#f6f4ee;color:#33473a;border:1px solid #e2ddd0;border-radius:20px;padding:7px 14px;font:inherit;font-size:13px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px;min-height:36px;box-sizing:border-box}
+.ghost:hover{border-color:#33473a;color:#1c2b26}
+.chk{display:flex;gap:10px;align-items:center;font-size:13px;padding:4px 0}
+.chk input{width:18px;height:18px;accent-color:#33473a;flex-shrink:0;cursor:pointer}
+.note{font-size:13px;background:#fdf1d8;color:#6a4511;border-radius:8px;padding:9px 12px}
+.blk{border:1px solid #e2ddd0;border-radius:10px;padding:12px 14px;background:#fcfbf8;display:flex;flex-direction:column;gap:10px}
+.res{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border-radius:8px;background:#f5f5f3;min-width:0}
+.res b{font-size:18px;font-variant-numeric:tabular-nums}
+.del{border:0;background:transparent;color:#a89f8e;width:30px;height:30px;border-radius:15px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0;flex-shrink:0}
+.del:hover{background:#f8dcd3;color:#8f2909}
+</style>
+</helmet>
+<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, Helvetica, sans-serif; color: #1c2b26; background: #f6f4ee; min-height: 100%;">
+
+  <div style="display: flex; align-items: center; gap: 24px; padding: 10px 20px; background: #E0001D; color: #fff; flex-wrap: wrap;">
+    <div style="display: flex; align-items: center; gap: 8px; font-weight: 700;">
+      <div style="width: 32px; height: 32px; border-radius: 50%; background: #fff; color: #E0001D; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 15px;">J</div>
+      Jopen
+    </div>
+    <div style="display: flex; gap: 18px; flex: 1; flex-wrap: wrap; font-size: 15px; color: #fce3e5;">
+      <span>Recipes</span><span>Ingredients</span><span style="color: #fff; border-bottom: 2px solid #fff;">Batches</span><span>Planning</span><span>Inventory</span><span>Statistics</span>
+    </div>
+    <div style="font-size: 14px; border: 1px solid rgba(255,255,255,.5); border-radius: 4px; padding: 6px 12px;">Jaap · Admin</div>
+  </div>
+
+  <div style="max-width: 1400px; margin: 0 auto; padding: 20px 24px 60px; box-sizing: border-box; display: flex; flex-direction: column; gap: 16px;">
+
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+      <div style="display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;">
+        <h1 style="margin: 0; font-size: 28px;">26-0398</h1>
+        <span style="font-size: 28px; font-weight: 700; color: #33473a;">Mooie Nel <span style="font-weight: 400; color: #8a8273;">v12.0</span></span>
+        <span class="pill" style="background: #33473a; color: #fff;">Filling</span>
+      </div>
+      <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
+        <span style="font-size: 12px; color: #4c6b4f;">All changes saved</span>
+        <button class="ghost" type="button">Export batch report (.xlsx)</button>
+      </div>
+    </div>
+
+    <div style="display: flex; gap: 2px; background: #ece8dc; border-radius: 22px; padding: 3px; align-self: flex-start; flex-wrap: wrap;">
+      <a href="Overview.dc.html" style="padding: 8px 16px; text-decoration: none; color: #6b6355; font-size: 13px; border-radius: 20px;">Overview</a>
+      <a href="Brewing.dc.html" style="padding: 8px 16px; text-decoration: none; color: #6b6355; font-size: 13px; border-radius: 20px;">Brewing</a>
+      <a href="Main.dc.html" style="padding: 8px 16px; text-decoration: none; color: #6b6355; font-size: 13px; border-radius: 20px;">Fermentation log</a>
+      <a href="Processing.dc.html" style="padding: 8px 16px; text-decoration: none; color: #6b6355; font-size: 13px; border-radius: 20px;">Processing</a>
+      <a href="#" style="padding: 8px 16px; text-decoration: none; color: #fff; background: #33473a; font-size: 13px; font-weight: 700; border-radius: 20px;">Filling</a>
+      <a href="FillingReport.dc.html" style="padding: 8px 16px; text-decoration: none; color: #6b6355; font-size: 13px; border-radius: 20px;">Filling report</a>
+    </div>
+
+    <div style="display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start;">
+      <div style="flex: 1 1 340px; min-width: 0; display: flex; flex-direction: column; gap: 16px;">
+        <div class="card" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 10px;">
+          <div class="lbl">Batch</div>
+          <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+            <span class="lbl">Beer risk</span><span class="pill">Standaard</span>
+            <span style="font-size: 12px; color: #6b6355;">No preference for time of filling</span>
+          </div>
+          <div style="font-size: 12.5px; color: #33473a; margin-top: 2px;">Ready in HBT · from Processing</div>
+          <sc-for list="{{hbtStatus}}" as="h" hint-placeholder-count="2">
+            <div class="kr"><span class="k">{{h.label}}</span><span class="c">{{h.hl}} hl</span><span class="pill" style="{{h.style}}">{{h.text}}</span></div>
+          </sc-for>
+          <div style="font-size: 12px; color: #6b6355;">{{finSummary}}</div>
+          <div class="kr" style="border-bottom: 0;"><span class="k">Day number</span><span class="c">{{dayNumber}}</span></div>
+        </div>
+      </div>
+      <div style="flex: 3 1 600px; min-width: 0;">
+        <div class="card" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 8px;">
+          <div class="lbl">Specifications</div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); column-gap: 28px; row-gap: 12px;">
+            <div>
+              <div class="kv hd"><span class="k">Bottle / can</span><span class="v">Spec</span><span class="u">Unit</span><span class="t">Tol.</span></div>
+              <div class="kv"><span class="k">TPO</span><span class="v">100</span><span class="u">ppb</span><span class="t">&lt;</span></div>
+              <div class="kv"><span class="k">HSO</span><span class="v">50</span><span class="u">ppb</span><span class="t">&lt;</span></div>
+              <div class="kv"><span class="k">DO</span><span class="v">50</span><span class="u">ppb</span><span class="t">&lt;</span></div>
+              <div class="kv"><span class="k">CO2 (20 °C)</span><span class="v">5.5</span><span class="u">g/l</span><span class="t">±0.1</span></div>
+            </div>
+            <div>
+              <div class="kv hd"><span class="k">Keg</span><span class="v">Spec</span><span class="u">Unit</span><span class="t">Tol.</span></div>
+              <div class="kv"><span class="k">CO2</span><span class="v">4.7</span><span class="u">g/l</span><span class="t">±0.1</span></div>
+              <div class="kv"><span class="k">Oxygen</span><span class="v">50</span><span class="u">ppb</span><span class="t">&lt;</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+        <div class="lbl">Filling sessions</div>
+        <button class="btn" type="button" onClick="{{addSession}}">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 2v10M2 7h10"></path></svg>
+          Add filling session
+        </button>
+      </div>
+      <sc-for list="{{sessions}}" as="s" hint-placeholder-count="2">
+        <div class="blk">
+          <div style="display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;">
+            <div style="font-weight: 700; font-size: 15px; padding-bottom: 9px; min-width: 80px;">{{s.title}}</div>
+            <div class="fld" style="width: 150px;"><span class="lbl">Date</span><input type="date" value="{{s.date}}" aria-label="Date"></div>
+            <div class="fld" style="width: 190px;"><span class="lbl">HBT</span>
+              <select value="{{s.hbt}}" onChange="{{s.setHbt}}" aria-label="HBT">
+                <option value="">Choose HBT</option>
+                <option value="12">HBT 12 · 40.5 hl</option>
+                <option value="14">HBT 14 · 35.0 hl</option>
+              </select>
+            </div>
+            <div class="fld" style="width: 120px;"><span class="lbl">Package</span>
+              <select value="{{s.pkg}}" onChange="{{s.setPkg}}" aria-label="Package">
+                <option value="">Choose</option><option value="can">Can</option><option value="bottle">Bottle</option><option value="keg">Keg</option>
+              </select>
+            </div>
+            <div class="fld" style="width: 100px;"><span class="lbl">Volume (hl)</span><input value="{{s.vol}}" onChange="{{s.setVol}}" aria-label="Volume"></div>
+            <div class="fld" style="width: 100px;"><span class="lbl">Start filling</span><input type="time" value="{{s.start}}" aria-label="Start filling"></div>
+            <div class="fld" style="width: 100px;"><span class="lbl">End filling</span><input type="time" value="{{s.end}}" aria-label="End filling"></div>
+            <div class="fld" style="width: 90px;"><span class="lbl">Filled by</span><input value="{{s.filledBy}}" aria-label="Filled by"></div>
+            <div class="fld" style="width: 100px;"><span class="lbl">Sampled by</span><input value="{{s.sampledBy}}" aria-label="Sampled by"></div>
+            <div style="margin-left: auto; padding-bottom: 4px;"><button class="del" type="button" onClick="{{s.del}}" aria-label="Delete filling session"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2.5 4h9M5.5 4V2.5h3V4M3.5 4l.6 8h5.8l.6-8"></path></svg></button></div>
+          </div>
+          <div style="display: flex; gap: 6px 22px; flex-wrap: wrap;">
+            <label class="chk"><input type="checkbox" checked="{{s.c1}}" onChange="{{s.t1}}">First package check (two operators)</label>
+            <label class="chk"><input type="checkbox" checked="{{s.c2}}" onChange="{{s.t2}}">Fill tube detection check · first package</label>
+            <label class="chk"><input type="checkbox" checked="{{s.c3}}" onChange="{{s.t3}}">Fill tube detection check · end of batch</label>
+            <sc-if value="{{s.isBottle}}" hint-placeholder-val="{{false}}">
+              <label class="chk"><input type="checkbox" checked="{{s.c4}}" onChange="{{s.t4}}">Burst bottles under control</label>
+            </sc-if>
+            <label class="chk" style="margin-left: auto; font-weight: 700; color: #33473a; background: {{s.finBg}}; border-radius: 8px; padding: 4px 10px;"><input type="checkbox" checked="{{s.fin}}" onChange="{{s.tFin}}">{{s.finLbl}}</label>
+          </div>
+          <sc-if value="{{s.isPack}}" hint-placeholder-val="{{true}}">
+            <div style="overflow-x: auto;">
+              <table class="lg" style="min-width: 860px;">
+                <thead><tr><th style="width: 90px;">Time</th><th class="r">TPO ppb</th><th class="r">HSO ppb</th><th class="r">DO ppb</th><th class="r">HS vol.</th><th class="r">Pressure</th><th class="r">Temp. (0 °C)</th><th class="r">CO2 g/l (20 °C)</th><th style="width: 34px;"></th></tr></thead>
+                <tbody>
+                  <sc-for list="{{s.rows}}" as="r" hint-placeholder-count="3">
+                    <tr>
+                      <td><input class="l" type="time" value="{{r.time}}" aria-label="Time"></td>
+                      <td><input class="{{r.tpoCls}}" value="{{r.tpo}}" onChange="{{r.setTpo}}" aria-label="TPO"></td>
+                      <td><input class="{{r.hsoCls}}" value="{{r.hso}}" onChange="{{r.setHso}}" aria-label="HSO"></td>
+                      <td><input class="{{r.doCls}}" value="{{r.dO}}" onChange="{{r.setDo}}" aria-label="DO"></td>
+                      <td><input value="{{r.hsv}}" aria-label="Headspace volume"></td>
+                      <td><input value="{{r.p}}" aria-label="Pressure"></td>
+                      <td><input value="{{r.t}}" aria-label="Temperature"></td>
+                      <td><input class="{{r.co2Cls}}" value="{{r.co2}}" onChange="{{r.setCo2}}" aria-label="CO2"></td>
+                      <td><button class="del" type="button" onClick="{{r.del}}" aria-label="Delete measurement"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2.5 4h9M5.5 4V2.5h3V4M3.5 4l.6 8h5.8l.6-8"></path></svg></button></td>
+                    </tr>
+                  </sc-for>
+                </tbody>
+              </table>
+            </div>
+          </sc-if>
+          <sc-if value="{{s.isKeg}}" hint-placeholder-val="{{false}}">
+            <table class="lg" style="max-width: 520px;">
+              <thead><tr><th style="width: 90px;">Time</th><th class="r">CO2 keg g/l</th><th class="r">Oxygen keg ppb</th><th style="width: 34px;"></th></tr></thead>
+              <tbody>
+                <sc-for list="{{s.rows}}" as="r" hint-placeholder-count="2">
+                  <tr>
+                    <td><input class="l" type="time" value="{{r.time}}" aria-label="Time"></td>
+                    <td><input class="{{r.kco2Cls}}" value="{{r.kco2}}" onChange="{{r.setKco2}}" aria-label="CO2 keg"></td>
+                    <td><input class="{{r.ko2Cls}}" value="{{r.ko2}}" onChange="{{r.setKo2}}" aria-label="Oxygen keg"></td>
+                    <td><button class="del" type="button" onClick="{{r.del}}" aria-label="Delete measurement"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2.5 4h9M5.5 4V2.5h3V4M3.5 4l.6 8h5.8l.6-8"></path></svg></button></td>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+          </sc-if>
+          <div><button class="ghost" type="button" onClick="{{s.addRow}}">+ Measurement</button></div>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 16px;">
+      <div class="card" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap;">
+          <div class="lbl">Quality · process capability</div>
+          <div style="font-size: 12px; color: #6b6355;">Calculated from all filling measurements</div>
+        </div>
+        <table class="lg">
+          <thead><tr><th>Parameter</th><th class="r">n</th><th class="r">Average</th><th class="r">Std</th><th class="r">Cpk</th><th class="r">Est. in spec</th></tr></thead>
+          <tbody>
+            <sc-for list="{{quality}}" as="q" hint-placeholder-count="6">
+              <tr>
+                <td class="h">{{q.name}}</td>
+                <td class="c">{{q.n}}</td>
+                <td class="c">{{q.avg}}</td>
+                <td class="c">{{q.sd}}</td>
+                <td class="c" style="font-weight: 700; {{q.cpkStyle}}">{{q.cpk}}</td>
+                <td class="c" style="font-weight: 700; {{q.inStyle}}">{{q.inSpec}}</td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <sc-if value="{{cf.open}}" hint-placeholder-val="{{false}}">
+    <div style="position: fixed; inset: 0; background: rgba(28,43,38,.35); z-index: 60; display: flex; align-items: center; justify-content: center; padding: 16px;">
+      <div role="alertdialog" aria-label="Confirm delete" style="background: #fff; border-radius: 10px; padding: 18px 20px; width: 100%; max-width: 380px; box-shadow: 0 16px 48px rgba(0,0,0,.25); display: flex; flex-direction: column; gap: 10px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, Helvetica, sans-serif; color: #1c2b26;">
+        <div style="font-weight: 700; font-size: 16px;">Delete {{cf.label}}?</div>
+        <div style="font-size: 13px; color: #6b6355;">You can undo this right after deleting. The deletion is recorded in the audit trail.</div>
+        <div style="display: flex; justify-content: flex-end; gap: 10px; padding-top: 4px;">
+          <button type="button" onClick="{{cf.cancel}}" style="background: #f6f4ee; color: #33473a; border: 1px solid #e2ddd0; border-radius: 20px; padding: 8px 16px; font: inherit; font-size: 13px; cursor: pointer; min-height: 36px;">Cancel</button>
+          <button type="button" onClick="{{cf.ok}}" style="background: #a3492f; color: #fff; border: 0; border-radius: 20px; padding: 8px 16px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; min-height: 36px;">Delete</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+  <sc-if value="{{tst.open}}" hint-placeholder-val="{{false}}">
+    <div role="status" style="position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #1c2b26; color: #fff; border-radius: 22px; padding: 6px 8px 6px 18px; display: flex; gap: 12px; align-items: center; z-index: 61; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, Helvetica, sans-serif; font-size: 13px; box-shadow: 0 8px 24px rgba(0,0,0,.2);">
+      <span>{{tst.label}} deleted</span>
+      <button type="button" onClick="{{tst.undo}}" style="background: #b4772c; color: #fff; border: 0; border-radius: 16px; padding: 6px 14px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; min-height: 32px;">Undo</button>
+      <button type="button" onClick="{{tst.close}}" aria-label="Dismiss" style="background: transparent; color: #cfd8cc; border: 0; width: 32px; height: 32px; border-radius: 16px; cursor: pointer; font-size: 16px;">×</button>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":2800}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.defs = {
+      bottle: [
+        ['Bottle type', ['33cl Jopen LN', '33cl LN', '30cl BNR', '75cl', 'Other (see comments)']],
+        ['Labels', ['NL', 'Cat 1', 'Cat 2', 'Cat 3', 'Blank', 'Other (see comments)']],
+        ['Bottle coding', ['Standard', 'Deviating (see comments)']],
+        ['Crown cork', ['Jopen', 'Blue', 'Silver', 'Black']],
+        ['Box type', ['Blank 12x33cl', 'Jopen 12x33cl', 'Blank 24x33cl', 'Jopen 24x33cl', 'Jopen 6x75cl', 'Other (see comments)']],
+        ['Box coding', ['Standard', 'Deviating (see comments)']],
+        ['Box EAN code', ['No EAN code', 'Add EAN code (see specifications)']],
+        ['Box logo', ['No logo', 'Logo (see recipe)']]
+      ],
+      can: [
+        ['Can type', ['Labelled', 'Silver bullet']],
+        ['Labels', ['NL', 'Cat 1', 'Cat 2', 'Cat 3', 'Blank', 'Other (see comments)']],
+        ['Can coding', ['Standard', 'Deviating (see comments)']],
+        ['Lid', ['Silver', 'Black']],
+        ['Box type', ['Blank 12x33cl', 'Jopen 12x33cl', 'Blank 24x33cl', 'Jopen 24x33cl', 'Other (see comments)']],
+        ['Box coding', ['Standard', 'Deviating (see comments)']],
+        ['Box EAN code', ['No EAN code', 'Add EAN code (see specifications)']],
+        ['Box logo', ['No logo', 'Logo (see recipe)']]
+      ],
+      keg: [
+        ['Keg size', ['Keg 20 l', 'Keg 30 l', 'Keg 50 l', 'KeyKeg 20 l', 'KeyKeg 30 l', 'PolyKeg 20 l A', 'PolyKeg 20 l S', 'Other (see comments)']],
+        ['Logo', ['No logo', 'Logo (see recipe)']],
+        ['EAN code', ['No EAN code', 'Add EAN code (see specifications)']]
+      ]
+    };
+    const init = (type, picks) => ({ type: type, vals: this.defs[type].map((d, i) => (picks && picks[i] !== undefined ? d[1][picks[i]] : d[1][0])) });
+    this.state = {
+      lines: [init('can', [0, 2, 0, 0, 1, 0, 1, 1]), init('keg', [3, 1, 0])],
+      sessions: [
+        { date: '2026-10-07', hbt: '12', pkg: 'can', vol: '40.5', start: '06:30', end: '10:45', filledBy: 'RB', sampledBy: 'SV', c1: true, c2: true, c3: true, c4: false, fin: true, rows: [
+          { time: '06:45', tpo: '78', hso: '41', dO: '37', hsv: '4.1', p: '2.6', t: '0.8', co2: '5.52' },
+          { time: '08:00', tpo: '70', hso: '35', dO: '35', hsv: '3.9', p: '2.6', t: '0.9', co2: '5.49' },
+          { time: '09:30', tpo: '65', hso: '30', dO: '35', hsv: '4.0', p: '2.7', t: '1.0', co2: '5.46' },
+          { time: '10:30', tpo: '101', hso: '56', dO: '45', hsv: '4.4', p: '2.6', t: '1.1', co2: '5.44' }
+        ] },
+        { date: '2026-10-07', hbt: '14', pkg: 'bottle', vol: '20.0', start: '11:15', end: '13:30', filledBy: 'RB', sampledBy: 'SV', c1: true, c2: true, c3: true, c4: true, fin: false, rows: [
+          { time: '11:30', tpo: '72', hso: '38', dO: '34', hsv: '3.2', p: '2.5', t: '0.9', co2: '5.51' },
+          { time: '13:00', tpo: '69', hso: '33', dO: '36', hsv: '3.1', p: '2.5', t: '1.0', co2: '5.48' }
+        ] },
+        { date: '2026-10-08', hbt: '14', pkg: 'keg', vol: '15.0', start: '07:30', end: '08:45', filledBy: 'SV', sampledBy: 'SV', c1: true, c2: true, c3: false, c4: false, fin: false, rows: [
+          { time: '07:45', kco2: '4.72', ko2: '28' },
+          { time: '08:30', kco2: '4.69', ko2: '31' }
+        ] }
+      ],
+      pack: 'can330', tare: '14.2',
+      samples: ['348.9', '349.4', '348.1', '350.2', '349.0', '348.7', '349.8', '347.9', '349.3', '348.5', '349.6', '350.0', '348.8', '349.1', '348.4', '349.7', '349.2', '348.6', '349.9', '349.3'],
+      oee: [{ type: 'Can', a: '78', p: '85', q: '99' }, { type: 'Keg', a: '90', p: '92', q: '100' }]
+    };
+  }
+  setS(i, p) { this.setState({ sessions: this.state.sessions.map((s, j) => (j === i ? Object.assign({}, s, p) : s)) }); }
+  setR(i, k, p) { const s = this.state.sessions[i]; this.setS(i, { rows: s.rows.map((r, j) => (j === k ? Object.assign({}, r, p) : r)) }); }
+  askDelete(label, fn) { this.setState({ __cf: { label: label, fn: fn } }); }
+  doDelete() {
+    const cf = this.state.__cf; if (!cf) return;
+    const snap = Object.assign({}, this.state); delete snap.__cf; delete snap.__tst;
+    this.setState({ __cf: null });
+    cf.fn();
+    const base = cf.label.replace(/^this /, '');
+    this.setState({ __tst: { label: base.charAt(0).toUpperCase() + base.slice(1), snap: snap } });
+    clearTimeout(this.__t); this.__t = setTimeout(() => this.setState({ __tst: null }), 10000);
+  }
+  undoDelete() { const t = this.state.__tst; if (!t) return; clearTimeout(this.__t); this.setState(Object.assign({}, t.snap, { __tst: null, __cf: null })); }
+  renderVals() {
+    const st = this.state;
+    const n = (v) => { const x = parseFloat(String(v === undefined ? '' : v).replace(',', '.')); return isNaN(x) ? null : x; };
+    const phi = (z) => { const t = 1 / (1 + 0.2316419 * Math.abs(z)); const d = 0.3989423 * Math.exp(-z * z / 2); const p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274)))); return z > 0 ? 1 - p : p; };
+    const stats = (xs) => { const m = xs.reduce((a, b) => a + b, 0) / xs.length; const sd = xs.length > 1 ? Math.sqrt(xs.reduce((a, b) => a + (b - m) * (b - m), 0) / (xs.length - 1)) : 0; return [m, sd]; };
+    const hbtPkg = { '12': 'can', '14': 'keg' };
+    const lim = { tpo: 100, hso: 50, dO: 50, ko2: 50 };
+
+    const counts = { bottle: 0, can: 0, keg: 0 };
+    const lines = st.lines.map((ln, i) => {
+      counts[ln.type] += 1;
+      const name = { bottle: 'Bottle line', can: 'Can line', keg: 'Keg line' }[ln.type];
+      return {
+        title: name + ' ' + counts[ln.type],
+        remove: () => this.setState({ lines: st.lines.filter((x, j) => j !== i) }),
+        fields: this.defs[ln.type].map((d, k) => ({
+          label: d[0], options: d[1], value: ln.vals[k],
+          set: (e) => this.setState({ lines: st.lines.map((x, j) => (j === i ? { type: x.type, vals: x.vals.map((v, m) => (m === k ? e.target.value : v)) } : x)) })
+        }))
+      };
+    });
+    const addLine = (type) => () => this.setState({ lines: st.lines.concat([{ type: type, vals: this.defs[type].map((d) => d[1][0]) }]) });
+
+    const all = { tpo: [], hso: [], dO: [], co2: [], kco2: [], ko2: [] };
+    const sessions = st.sessions.map((s, i) => {
+      const pkg = s.pkg || '';
+      const rows = s.rows.map((r, k) => {
+        Object.keys(all).forEach((key) => { const v = n(r[key]); if (v !== null) all[key].push(v); });
+        const over = (key) => { const v = n(r[key]); return v !== null && v >= lim[key] ? 'bad' : ''; };
+        const co2 = n(r.co2), kco2 = n(r.kco2);
+        return Object.assign({}, r, {
+          tpoCls: over('tpo'), hsoCls: over('hso'), doCls: over('dO'), ko2Cls: over('ko2'),
+          co2Cls: co2 !== null && Math.abs(co2 - 5.5) > 0.1 + 1e-9 ? 'bad' : '',
+          kco2Cls: kco2 !== null && Math.abs(kco2 - 4.7) > 0.1 + 1e-9 ? 'bad' : '',
+          setTpo: (e) => this.setR(i, k, { tpo: e.target.value }),
+          setHso: (e) => this.setR(i, k, { hso: e.target.value }),
+          setDo: (e) => this.setR(i, k, { dO: e.target.value }),
+          setCo2: (e) => this.setR(i, k, { co2: e.target.value }),
+          setKco2: (e) => this.setR(i, k, { kco2: e.target.value }),
+          setKo2: (e) => this.setR(i, k, { ko2: e.target.value }),
+          del: () => this.askDelete('this measurement', () => this.setS(i, { rows: s.rows.filter((x, j) => j !== k) }))
+        });
+      });
+      return Object.assign({}, s, {
+        title: 'Session ' + (i + 1), rows: rows,
+        isPack: pkg !== 'keg', isKeg: pkg === 'keg', isBottle: pkg === 'bottle',
+        setHbt: (e) => this.setS(i, { hbt: e.target.value }),
+        setPkg: (e) => this.setS(i, { pkg: e.target.value }),
+        setVol: (e) => this.setS(i, { vol: e.target.value }),
+        del: () => this.askDelete('this session', () => this.setState({ sessions: st.sessions.filter((x, j) => j !== i) })),
+        t1: () => this.setS(i, { c1: !s.c1 }), t2: () => this.setS(i, { c2: !s.c2 }),
+        t3: () => this.setS(i, { c3: !s.c3 }), t4: () => this.setS(i, { c4: !s.c4 }),
+        tFin: () => this.setS(i, { fin: !s.fin }),
+        finLbl: (s.hbt ? 'HBT ' + s.hbt : 'HBT') + ' finished?',
+        finBg: s.fin ? '#e1ead9' : '#f6f4ee',
+        addRow: () => this.setS(i, { rows: s.rows.concat([{ time: '', tpo: '', hso: '', dO: '', hsv: '', p: '', t: '', co2: '', kco2: '', ko2: '' }]) })
+      });
+    });
+
+    const qdef = [
+      ['CO2 bottle/can', 'co2', 5.4, 5.6, 2], ['HSO bottle/can', 'hso', null, 50, 0], ['DO bottle/can', 'dO', null, 50, 0],
+      ['TPO bottle/can', 'tpo', null, 100, 0], ['CO2 keg', 'kco2', 4.6, 4.8, 2], ['Oxygen keg', 'ko2', null, 50, 0]
+    ];
+    const quality = qdef.map((q) => {
+      const xs = all[q[1]];
+      if (xs.length < 2) return { name: q[0], n: xs.length, avg: '—', sd: '—', cpk: '—', inSpec: '—', cpkStyle: '', inStyle: '' };
+      const r = stats(xs), m = r[0], sd = r[1] || 0.0001;
+      const lo = q[2], hi = q[3];
+      const cpk = lo === null ? (hi - m) / (3 * sd) : Math.min(hi - m, m - lo) / (3 * sd);
+      const pin = lo === null ? phi((hi - m) / sd) : phi((hi - m) / sd) - phi((lo - m) / sd);
+      return {
+        name: q[0], n: xs.length, avg: m.toFixed(q[4] === 2 ? 2 : 0), sd: sd.toFixed(q[4] === 2 ? 3 : 1),
+        cpk: cpk.toFixed(2), inSpec: (pin * 100).toFixed(1) + ' %',
+        cpkStyle: cpk >= 1.33 ? 'color:#33473a;' : (cpk >= 1 ? 'color:#96601f;' : 'color:#8f2909;'),
+        inStyle: pin >= 0.99 ? 'color:#33473a;' : 'color:#8f2909;'
+      };
+    });
+
+    const packs = { can275: [275, 9], can330: [330, 9.9], can440: [440, 13.2], bottle330: [330, 9.9], bottle750: [750, 15] };
+    const dens = 1.012;
+    const pk = packs[st.pack], tare = n(st.tare) || 0;
+    const ws = st.samples.map(n).filter((x) => x !== null);
+    const nom = pk[0], tne = pk[1];
+    const t1 = (nom - tne) * dens + tare, t2 = (nom - 2 * tne) * dens + tare;
+    let nc = { avg: '—', nom: nom, t1: t1.toFixed(1), t2: t2.toFixed(1), tne: tne.toFixed(1), pct: '—', belowT2: '—', avgStyle: '', pctStyle: '', t2Style: '' };
+    if (ws.length > 1) {
+      const r = stats(ws), avgMl = (r[0] - tare) / dens, sdMl = (r[1] || 0.0001) / dens;
+      const pct = 100 * phi(((nom - tne) - avgMl) / sdMl);
+      const below = ws.filter((w) => w < t2).length;
+      const good = 'background:#eef0e6;color:#33473a;', bad = 'background:#f8dcd3;color:#8f2909;';
+      nc = Object.assign(nc, {
+        avg: avgMl.toFixed(1), pct: pct < 0.01 ? '< 0.01' : pct.toFixed(2), belowT2: String(below),
+        avgStyle: avgMl >= nom ? good : bad, pctStyle: pct <= 2.5 ? good : bad, t2Style: below === 0 ? good : bad
+      });
+    }
+    const samples = st.samples.map((v, i) => {
+      const x = n(v), low = x !== null && x < t1;
+      return {
+        v: v, lbl: 'Contents ' + (i + 1),
+        bg: low ? '#f8dcd3' : '#fffbe6', border: low ? '#d99a85' : '#e2ddd0',
+        set: (e) => this.setState({ samples: st.samples.map((y, j) => (j === i ? e.target.value : y)) })
+      };
+    });
+
+    const oee = st.oee.map((o, i) => {
+      const a = n(o.a), p = n(o.p), q = n(o.q);
+      const upd = (key) => (e) => this.setState({ oee: st.oee.map((x, j) => { if (j !== i) return x; const c = Object.assign({}, x); c[key] = e.target.value; return c; }) });
+      return Object.assign({}, o, { oee: (a !== null && p !== null && q !== null) ? (a * p * q / 10000).toFixed(1) + ' %' : '—', setA: upd('a'), setP: upd('p'), setQ: upd('q') });
+    });
+
+    const tanksDef = [{ id: '12', label: 'HBT 12 · Can', hl: '40.5' }, { id: '14', label: 'HBT 14 · Bottle + Keg', hl: '35.0' }];
+    const hbtStatus = tanksDef.map((t) => {
+      const ss = st.sessions.filter((s) => s.hbt === t.id);
+      const fin = ss.some((s) => s.fin);
+      const text = fin ? '✓ Finished' : (ss.length ? 'Filling' : 'Not started');
+      return { label: t.label, hl: t.hl, text: text, style: fin ? 'background:#4c6b4f;color:#fff;' : (ss.length ? 'background:#dde7f0;color:#244766;' : 'background:#f1eee5;color:#6b6355;'), fin: fin };
+    });
+    const nFin = hbtStatus.filter((h) => h.fin).length;
+    const finSummary = nFin === hbtStatus.length ? 'All HBTs finished · batch moves to Filled until the filling report is completed and signed' : nFin + ' of ' + hbtStatus.length + ' HBTs finished · tick "HBT finished?" in the last session of a tank';
+    const dayNumber = Math.round((new Date('2026-10-06T12:00').getTime() - new Date('2023-12-31T12:00').getTime()) / 86400000);
+    return {
+      cf: { open: !!this.state.__cf, label: this.state.__cf ? this.state.__cf.label : '', ok: () => this.doDelete(), cancel: () => this.setState({ __cf: null }) },
+      tst: { open: !!this.state.__tst, label: this.state.__tst ? this.state.__tst.label : '', undo: () => this.undoDelete(), close: () => this.setState({ __tst: null }) },
+      dayNumber: String(dayNumber), hbtStatus: hbtStatus, finSummary: finSummary,
+      lines: lines, addBottle: addLine('bottle'), addCan: addLine('can'), addKeg: addLine('keg'),
+      sessions: sessions,
+      addSession: () => this.setState({ sessions: st.sessions.concat([{ date: '2026-10-08', hbt: '', pkg: '', vol: '', start: '', end: '', filledBy: '', sampledBy: '', c1: false, c2: false, c3: false, c4: false, rows: [{ time: '', tpo: '', hso: '', dO: '', hsv: '', p: '', t: '', co2: '', kco2: '', ko2: '' }] }]) }),
+      quality: quality,
+      pack: st.pack, tare: st.tare, density: dens.toFixed(3),
+      setPack: (e) => this.setState({ pack: e.target.value }),
+      setTare: (e) => this.setState({ tare: e.target.value }),
+      samples: samples, nc: nc,
+      oee: oee
+    };
+  }
+}
+</script>
+</body>
+</html>

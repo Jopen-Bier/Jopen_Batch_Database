@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Split / transfer</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#33473a}a:hover{color:#1c2b26}
+.lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:#6b6355}
+.f{display:flex;flex-direction:column;gap:4px;min-width:0}
+.f label,.f .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#6b6355}
+.f input,.f select{border:1px solid #d8d2c4;border-radius:6px;padding:8px 10px;font:inherit;font-size:14px;background:#fffbe6;min-height:40px;box-sizing:border-box;width:100%}
+.f input:focus,.f select:focus{outline:none;border-color:#4c6b4f;background:#fff}
+.ro{border:1px solid #ece8dc;border-radius:6px;padding:8px 10px;font-size:14px;background:#f5f5f3;color:#33473a;font-weight:700;min-height:40px;box-sizing:border-box;font-variant-numeric:tabular-nums;display:flex;align-items:center;gap:8px}
+.ro small{font-weight:400;color:#6b6355;font-size:12px}
+.seg{display:inline-flex;background:#ece8dc;border-radius:20px;padding:3px;gap:2px;flex-wrap:wrap}
+.seg button{border:0;background:transparent;border-radius:17px;padding:8px 14px;font:inherit;font-size:13px;cursor:pointer;color:#6b6355;min-height:36px}
+.seg button.on{background:#33473a;color:#fff;font-weight:700}
+.note{font-size:12.5px;background:#fdf1d8;color:#6a4511;border-radius:8px;padding:8px 11px}
+.lg{border-collapse:separate;border-spacing:0;font-size:13px;width:100%}
+.lg th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:#6b6355;font-weight:700;padding:7px 6px;border-bottom:2px solid #33473a;white-space:nowrap}
+.lg th.r{text-align:right}
+.lg td{padding:4px 6px;border-bottom:1px solid #ece8dc;height:32px}
+.lg td.n{text-align:right;font-variant-numeric:tabular-nums;font-weight:700}
+.lg td.c{text-align:right;font-variant-numeric:tabular-nums;color:#6b6355}
+.lg input{width:72px;box-sizing:border-box;border:1px solid transparent;border-radius:5px;background:#fffbe6;font:inherit;padding:4px 6px;text-align:right;font-variant-numeric:tabular-nums}
+.lg input:focus{outline:none;border-color:#4c6b4f;background:#fff}
+.lg tr.tot td{border-top:2px solid #33473a;border-bottom:0;font-weight:700}
+.lg tr.this td{background:#eef0e6}
+.btn{background:#b4772c;color:#fff;border:0;border-radius:20px;padding:10px 18px;font:inherit;font-size:13px;font-weight:700;letter-spacing:.03em;cursor:pointer;min-height:40px}
+.btn:hover{background:#96601f}
+.btn2{background:#fff;color:#1c2b26;border:1px solid #d8d2c4;border-radius:20px;padding:9px 16px;font:inherit;font-size:13px;cursor:pointer;min-height:40px}
+.ghost{background:#f6f4ee;color:#33473a;border:1px solid #e2ddd0;border-radius:20px;padding:7px 14px;font:inherit;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;min-height:36px;box-sizing:border-box}
+.ghost:hover{border-color:#33473a;color:#1c2b26}
+.x{border:0;background:transparent;cursor:pointer;color:#6b6355;width:40px;height:40px;border-radius:20px;display:flex;align-items:center;justify-content:center}
+.x:hover{background:#f1eee5}
+.del{border:0;background:transparent;color:#a89f8e;width:30px;height:30px;border-radius:15px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0}
+.del:hover{background:#f8dcd3;color:#8f2909}
+.st{font-size:12px;font-weight:700;white-space:nowrap}
+</style>
+</helmet>
+<div style="width: 1200px; height: 1240px; box-sizing: border-box; background: rgba(28,43,38,.45); padding: 48px 40px; display: flex; gap: 28px; justify-content: center; align-items: flex-start; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, Helvetica, sans-serif; color: #1c2b26;">
+
+  <div role="dialog" aria-label="Split or transfer out" style="width: 470px; flex-shrink: 0; background: #fff; border-radius: 10px; box-shadow: 0 16px 48px rgba(0,0,0,.25); display: flex; flex-direction: column;">
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: 18px 22px 10px;">
+      <div>
+        <div style="font-size: 12px; color: #6b6355;">Batch 26-0398 · Mooie Nel v12.0</div>
+        <div style="font-size: 20px; font-weight: 700;">Split / transfer out</div>
+      </div>
+      <button class="x" type="button" aria-label="Close"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13"></path></svg></button>
+    </div>
+
+    <div style="padding: 6px 22px 18px; display: flex; flex-direction: column; gap: 14px;">
+      <div style="display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 12px;">
+        <div class="f"><label for="sd">Transfer moment</label><input id="sd" type="datetime-local" value="{{when}}" onChange="{{setWhen}}"></div>
+        <div class="f"><label for="sv">Volume (hl)</label><input id="sv" value="{{vol}}" onChange="{{setVol}}" inputmode="decimal" style="text-align: right; font-weight: 700;"></div>
+      </div>
+      <div class="f"><label for="sf">From tank</label>
+        <select id="sf" value="{{tank}}" onChange="{{setTank}}">
+          <option value="GLT 7">GLT 7 · 80.0 hl</option><option value="LT 4">LT 4</option><option value="HBT 12">HBT 12 · 40.5 hl</option><option value="HBT 14">HBT 14 · 35.0 hl</option>
+        </select>
+      </div>
+      <div style="font-size: 12px; color: #6b6355; margin-top: -6px;">Volume counts on both batches from the transfer moment.</div>
+
+      <div class="f"><span class="lbl">Destination</span>
+        <div class="seg">
+          <button class="{{dNew}}" type="button" onClick="{{pickNew}}">New batch</button>
+          <button class="{{dEx}}" type="button" onClick="{{pickEx}}">Existing batch</button>
+          <button class="{{dDis}}" type="button" onClick="{{pickDis}}">Discard</button>
+        </div>
+      </div>
+
+      <sc-if value="{{isNew}}" hint-placeholder-val="{{true}}">
+        <div style="display: flex; flex-direction: column; gap: 12px; padding: 12px; border: 1px solid #e2ddd0; border-radius: 8px; background: #fcfbf8;">
+          <div class="f"><label for="sr">Recipe of the new product</label>
+            <select id="sr" value="{{recipe}}" onChange="{{setRecipe}}">
+              <option value="fr">Nel Framboos v1.3</option>
+              <option value="ba">Mooie Nel Barrel Aged v1.0</option>
+            </select>
+          </div>
+          <div style="font-size: 12px; color: #6b6355; margin-top: -4px;">Only existing recipes · not listed? Create it in Recipes first.</div>
+          <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;">
+            <div class="f"><span class="lbl">New batch number</span><div class="ro">26-0421 <small>next in sequence</small></div></div>
+            <div class="f"><span class="lbl">Brews</span><div class="ro">0 <small>no brewhouse</small></div></div>
+          </div>
+        </div>
+      </sc-if>
+      <sc-if value="{{isEx}}" hint-placeholder-val="{{false}}">
+        <div class="f"><label for="se">Receiving batch</label>
+          <select id="se" value="{{exBatch}}" onChange="{{setEx}}">
+            <option value="0420">26-0420 · Winter blend v2.0</option>
+          </select>
+        </div>
+      </sc-if>
+      <sc-if value="{{isDis}}" hint-placeholder-val="{{false}}">
+        <div class="f"><label for="sx">Reason</label><input id="sx" value="{{reason}}" onChange="{{setReason}}" placeholder="e.g. off-flavour, tank bottom"></div>
+      </sc-if>
+
+      <div style="display: flex; justify-content: space-between; gap: 10px; padding: 10px 12px; background: #f5f5f3; border-radius: 8px; font-size: 13px; font-variant-numeric: tabular-nums;">
+        <span>{{tank}} after transfer</span><b>{{remain}} hl</b>
+      </div>
+    </div>
+
+    <div style="border-top: 1px solid #ece8dc; padding: 14px 22px; display: flex; flex-direction: column; gap: 10px;">
+      <div style="font-size: 12px; color: #6b6355;">Saving adds a log entry with tag <b>Transfer</b> on this batch:</div>
+      <div style="font-size: 13px; background: #faf9f5; border: 1px dashed #d8d2c4; border-radius: 6px; padding: 8px 10px;">{{logText}}</div>
+      <div style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button class="btn2" type="button">Cancel</button>
+        <button class="btn" type="button">{{saveLabel}}</button>
+      </div>
+    </div>
+  </div>
+
+  <div style="width: 610px; flex-shrink: 0; background: #fff; border-radius: 10px; box-shadow: 0 16px 48px rgba(0,0,0,.25); display: flex; flex-direction: column;">
+    <sc-if value="{{hasTarget}}" hint-placeholder-val="{{true}}">
+      <div style="padding: 18px 22px 12px; border-bottom: 1px solid #ece8dc;">
+        <div class="lbl">Preview · receiving batch</div>
+        <div style="display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-top: 4px;">
+          <span style="font-size: 20px; font-weight: 700;">{{tNum}}</span>
+          <span style="font-size: 18px; font-weight: 700; color: #33473a;">{{tName}} <span style="font-weight: 400; color: #8a8273;">{{tVer}}</span></span>
+          <span style="display: inline-block; border-radius: 12px; padding: 3px 10px; font-size: 12px; font-weight: 700; background: #e1ead9; color: #33473a;">{{tStatus}}</span>
+        </div>
+      </div>
+
+      <div style="padding: 14px 22px; display: flex; flex-direction: column; gap: 8px;">
+        <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 10px;">
+          <div class="lbl">Incoming beer</div>
+          <span style="font-size: 12px; color: #6b6355;">One line per source beer</span>
+        </div>
+        <table class="lg">
+          <thead><tr><th style="width: 80px;">Batch</th><th>Beer</th><th style="width: 70px;">Tank</th><th style="width: 92px;">Moment</th><th class="r" style="width: 80px;">hl</th><th style="width: 34px;"></th></tr></thead>
+          <tbody>
+            <sc-for list="{{incoming}}" as="r" hint-placeholder-count="2">
+              <tr class="{{r.cls}}">
+                <td style="font-weight: 700;">{{r.batch}}</td>
+                <td>{{r.beer}} <span style="font-size: 11.5px; color: #6b6355;">{{r.tag}}</span></td>
+                <td style="color: #6b6355;">{{r.tank}}</td>
+                <td style="color: #6b6355; font-size: 12px;">{{r.when}}</td>
+                <sc-if value="{{r.edit}}" hint-placeholder-val="{{false}}"><td style="text-align: right;"><input value="{{r.hl}}" onChange="{{r.setHl}}" aria-label="Volume from batch"></td></sc-if>
+                <sc-if value="{{r.fixed}}" hint-placeholder-val="{{true}}"><td class="n">{{r.hl}}</td></sc-if>
+                <td><sc-if value="{{r.edit}}" hint-placeholder-val="{{false}}"><button class="del" type="button" onClick="{{r.del}}" aria-label="Remove this source beer"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2.5 4h9M5.5 4V2.5h3V4M3.5 4l.6 8h5.8l.6-8"></path></svg></button></sc-if></td>
+              </tr>
+            </sc-for>
+            <tr class="tot"><td colspan="4">Total volume new batch</td><td class="n">{{total}}</td><td></td></tr>
+          </tbody>
+        </table>
+        <sc-if value="{{canAddSrc}}" hint-placeholder-val="{{true}}">
+          <div><button class="ghost" type="button" onClick="{{addSrc}}">+ Beer from another batch</button></div>
+        </sc-if>
+      </div>
+
+      <div style="padding: 4px 22px 18px; display: flex; flex-direction: column; gap: 8px;">
+        <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 10px;">
+          <div class="lbl">Recipe ingredients · dosed on total volume</div>
+          <span style="font-size: 12px; color: #6b6355;">Lots by FIFO</span>
+        </div>
+        <sc-if value="{{hasIngs}}" hint-placeholder-val="{{true}}">
+          <table class="lg">
+            <thead><tr><th>Ingredient</th><th class="r" style="width: 80px;">Dosing</th><th class="r" style="width: 90px;">Amount</th><th style="width: 110px;">Lot</th><th style="width: 110px;">Status</th></tr></thead>
+            <tbody>
+              <sc-for list="{{ings}}" as="g" hint-placeholder-count="2">
+                <tr>
+                  <td style="font-weight: 700;">{{g.name}}</td>
+                  <td class="c">{{g.rate}} {{g.unit}}</td>
+                  <td class="n">{{g.amount}} kg</td>
+                  <td style="font-size: 12px; color: #6b6355;">{{g.lot}}</td>
+                  <td><span class="st" style="{{g.stStyle}}">{{g.status}}</span></td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+        </sc-if>
+        <sc-if value="{{noIngs}}" hint-placeholder-val="{{false}}">
+          <div style="font-size: 13px; color: #6b6355; padding: 8px 0;">No additional ingredients in this recipe · only the incoming beer.</div>
+        </sc-if>
+        <div class="note">Amounts follow the total volume: adding or changing a source beer recalculates every dosing.</div>
+      </div>
+    </sc-if>
+    <sc-if value="{{isDis}}" hint-placeholder-val="{{false}}">
+      <div style="padding: 22px; display: flex; flex-direction: column; gap: 8px;">
+        <div class="lbl">Preview</div>
+        <div style="font-size: 16px; font-weight: 700;">No receiving batch</div>
+        <div style="font-size: 13px; color: #6b6355;">{{vol}} hl is booked as discarded on 26-0398 and shows in the volume balance of the Filling report.</div>
+      </div>
+    </sc-if>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1200,"height":1240}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { when: '2026-10-06T10:30', vol: '20.0', tank: 'GLT 7', dest: 'new', recipe: 'fr', exBatch: '0420', reason: '', extra: [] };
+    this.recipes = {
+      fr: { name: 'Nel Framboos', ver: 'v1.3', ings: [
+        { name: 'Raspberry purée', rate: 12, unit: 'kg/hl', stock: 300, lot: 'FR-2609-01' },
+        { name: 'Lactose', rate: 2, unit: 'kg/hl', stock: 50, lot: 'LA-2608-14' }
+      ] },
+      ba: { name: 'Mooie Nel Barrel Aged', ver: 'v1.0', ings: [] }
+    };
+    this.existing = { '0420': { num: '26-0420', name: 'Winter blend', ver: 'v2.0',
+      incoming: [{ batch: '26-0350', beer: 'Jopen Bok', tank: 'LT 3', when: '01-10 14:00', hl: '12.0' }],
+      ings: [{ name: 'Oak chips', rate: 0.2, unit: 'kg/hl', stock: 10, lot: 'OK-2605-02' }] } };
+    this.tankVol = { 'GLT 7': 80, 'LT 4': 0, 'HBT 12': 40.5, 'HBT 14': 35 };
+  }
+  renderVals() {
+    const s = this.state;
+    const n = (v) => { const x = parseFloat(String(v).replace(',', '.')); return isNaN(x) ? 0 : x; };
+    const f1 = (x) => x.toLocaleString('en-GB', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    const whenTxt = (() => { const m = (s.when || '').match(/^\d{4}-(\d{2})-(\d{2})T(\d{2}:\d{2})/); return m ? m[2] + '-' + m[1] + ' ' + m[3] : '—'; })();
+    const isNew = s.dest === 'new', isEx = s.dest === 'existing', isDis = s.dest === 'discard';
+    const thisRow = { batch: '26-0398', beer: 'Mooie Nel', tag: '· this transfer', tank: s.tank, when: whenTxt, hl: f1(n(s.vol)), cls: 'this', edit: false, fixed: true };
+    let incoming = [], ingsSrc = [], tNum = '', tName = '', tVer = '', tStatus = '';
+    if (isNew) {
+      const r = this.recipes[s.recipe];
+      tNum = '26-0421'; tName = r.name; tVer = r.ver; tStatus = 'New · 0 brews';
+      incoming = [thisRow].concat(s.extra.map((x, i) => ({ batch: x.batch, beer: x.beer, tag: '· transfer saved on ' + x.batch, tank: x.tank, when: whenTxt, hl: x.hl, cls: '', edit: true, fixed: false,
+        setHl: (e) => this.setState({ extra: s.extra.map((y, j) => (j === i ? Object.assign({}, y, { hl: e.target.value }) : y)) }),
+        del: () => this.setState({ extra: s.extra.filter((y, j) => j !== i) }) })));
+      ingsSrc = r.ings;
+    } else if (isEx) {
+      const b = this.existing[s.exBatch];
+      tNum = b.num; tName = b.name; tVer = b.ver; tStatus = 'Lagering';
+      incoming = b.incoming.map((x) => Object.assign({}, x, { tag: '· already in', cls: '', edit: false, fixed: true })).concat([thisRow]);
+      ingsSrc = b.ings;
+    }
+    const total = incoming.reduce((t, r) => t + n(r.hl), 0);
+    const ings = ingsSrc.map((g) => {
+      const need = g.rate * total; const ok = need <= g.stock;
+      return { name: g.name, rate: String(g.rate), unit: g.unit, amount: f1(need), lot: g.lot,
+        status: ok ? 'OK · in stock' : f1(need - g.stock) + ' kg short',
+        stStyle: ok ? 'color:#33473a;' : 'color:#8f2909;' };
+    });
+    const remain = (this.tankVol[s.tank] || 0) - n(s.vol);
+    const destTxt = isNew ? 'new batch 26-0421 (' + this.recipes[s.recipe].name + ')' : (isEx ? 'batch ' + this.existing[s.exBatch].num : 'discard' + (s.reason ? ' · ' + s.reason : ''));
+    const set = (k) => (e) => { const o = {}; o[k] = e.target.value; this.setState(o); };
+    return {
+      when: s.when, vol: s.vol, tank: s.tank, recipe: s.recipe, exBatch: s.exBatch, reason: s.reason,
+      setWhen: set('when'), setVol: set('vol'), setTank: set('tank'), setRecipe: set('recipe'), setEx: set('exBatch'), setReason: set('reason'),
+      isNew: isNew, isEx: isEx, isDis: isDis, hasTarget: !isDis,
+      dNew: isNew ? 'on' : '', dEx: isEx ? 'on' : '', dDis: isDis ? 'on' : '',
+      pickNew: () => this.setState({ dest: 'new' }), pickEx: () => this.setState({ dest: 'existing' }), pickDis: () => this.setState({ dest: 'discard' }),
+      remain: f1(remain),
+      logText: whenTxt + ' · Transfer · ' + f1(n(s.vol)) + ' hl from ' + s.tank + ' to ' + destTxt,
+      saveLabel: isNew ? 'Create 26-0421 & save transfer' : (isEx ? 'Save transfer' : 'Save discard'),
+      tNum: tNum, tName: tName, tVer: tVer, tStatus: tStatus,
+      incoming: incoming, total: f1(total),
+      canAddSrc: isNew && s.extra.length === 0,
+      addSrc: () => this.setState({ extra: s.extra.concat([{ batch: '26-0377', beer: 'Hoppenbier', tank: 'GLT 3', hl: '4.0' }]) }),
+      ings: ings, hasIngs: ings.length > 0, noIngs: ings.length === 0
+    };
+  }
+}
+</script>
+</body>
+</html>

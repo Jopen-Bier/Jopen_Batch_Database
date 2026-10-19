@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Nano Flavor dealcoholisation</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#33473a}a:hover{color:#1c2b26}
+.f{display:flex;flex-direction:column;gap:4px}
+.f label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#6b6355}
+.f input{border:1px solid #d8d2c4;border-radius:4px;padding:9px 10px;font:inherit;font-size:15px;background:#fff7c7;text-align:right;min-height:40px;box-sizing:border-box;width:100%}
+.f input:focus{outline:2px solid #4c6b4f}
+.out{display:flex;justify-content:space-between;align-items:baseline;padding:10px 12px;background:#f5f5f3;border:1px solid #e2ddd0;border-radius:4px;font-variant-numeric:tabular-nums}
+.out span:first-child{font-size:13px;color:#33473a}
+.out b{font-size:18px}
+.xl{border-collapse:collapse;font-size:13px;width:100%}
+.xl th{background:#ece8dc;font-size:12px;padding:6px 8px;border:1px solid #c9c1ae}
+.xl td{border:1px solid #d8d2c4;padding:4px 6px;height:30px;font-variant-numeric:tabular-nums}
+.inp{background:#fff7c7}
+.inp input{width:100%;box-sizing:border-box;border:0;background:transparent;font:inherit;text-align:right;padding:4px 2px}
+.inp input:focus{outline:2px solid #4c6b4f;background:#fff}
+.btn{background:#b4772c;color:#fff;border:0;border-radius:20px;padding:10px 18px;font:inherit;font-size:13px;font-weight:700;letter-spacing:.04em;cursor:pointer;min-height:40px}
+.btn:hover{background:#96601f}
+.btn2{background:#fff;color:#1c2b26;border:1px solid #d8d2c4;border-radius:4px;padding:9px 14px;font:inherit;font-size:13px;cursor:pointer;min-height:40px}
+.step{width:28px;height:28px;border-radius:14px;background:#33473a;color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.del{border:0;background:transparent;color:#a89f8e;width:30px;height:30px;border-radius:15px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0;flex-shrink:0}
+.del:hover{background:#f8dcd3;color:#8f2909}
+</style>
+</helmet>
+<div style="width: 1200px; height: 980px; box-sizing: border-box; background: rgba(28,43,38,.45); padding: 40px 48px; display: flex; justify-content: center; align-items: flex-start; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, Helvetica, sans-serif; color: #1c2b26;">
+  <div role="dialog" aria-label="Nano Flavor dealcoholisation" style="width: 1080px; background: #fff; border-radius: 10px; box-shadow: 0 16px 48px rgba(0,0,0,.25);">
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: 18px 24px 12px; border-bottom: 1px solid #ece8dc;">
+      <div>
+        <div style="font-size: 12px; color: #6b6355;">Batch 26-0388 · recipe marked "dealcoholised"</div>
+        <div style="font-size: 20px; font-weight: 700;">Nano Flavor dealcoholisation</div>
+      </div>
+      <span style="font-size: 12px; background: #fdf1d8; color: #7a4f17; border-radius: 12px; padding: 4px 10px;">Concept — to be worked out together</span>
+    </div>
+
+    <div style="display: flex; gap: 24px; padding: 20px 24px; flex-wrap: wrap;">
+
+      <div style="flex: 1 1 360px; display: flex; flex-direction: column; gap: 14px;">
+        <div style="display: flex; gap: 10px; align-items: center;"><div class="step">1</div><div style="font-weight: 700;">Pre-concentration</div></div>
+        <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px;">
+          <div class="f"><label for="re">Rest extract (°P)</label><input id="re" value="{{re}}" onChange="{{setRe}}"></div>
+          <div class="f"><label for="iv">Initial volume (hl)</label><input id="iv" value="{{iv}}" onChange="{{setIv}}"></div>
+          <div class="f"><label for="tr">Target rest extract (°P)</label><input id="tr" value="{{tre}}" onChange="{{setTre}}"></div>
+        </div>
+        <div style="font-size: 12px; color: #6b6355;">Rest extract from the Anton Paar result, volume from the tank overview.</div>
+        <div class="out"><span>Volume to remove via permeate line</span><b>{{perm}} hl</b></div>
+        <div style="font-size: 13px; color: #33473a; background: #eef0e6; border-radius: 4px; padding: 10px 12px;">Enter this volume in the Nano Flavor order start. When it is removed, Nano Flavor switches to dialysis.</div>
+      </div>
+
+      <div style="flex: 1.4 1 520px; display: flex; flex-direction: column; gap: 14px;">
+        <div style="display: flex; gap: 10px; align-items: center;"><div class="step">2</div><div style="font-weight: 700;">Dialysis</div></div>
+        <table class="xl">
+          <thead><tr><th style="width: 120px;">Date / time</th><th>Deaerated water added (hl)</th><th>Alcohol · Anton Paar (%)</th><th style="width: 70px;">Operator</th><th style="width: 34px;"></th></tr></thead>
+          <tbody>
+            <sc-for list="{{readings}}" as="r" hint-placeholder-count="4">
+              <tr>
+                <td>{{r.when}}</td>
+                <td class="inp"><input value="{{r.vol}}" onChange="{{r.setVol}}" aria-label="Deaerated water added"></td>
+                <td class="inp"><input value="{{r.alc}}" onChange="{{r.setAlc}}" aria-label="Alcohol"></td>
+                <td style="text-align: center; font-size: 12px;">{{r.op}}</td>
+                <td><button class="del" type="button" onClick="{{r.del}}" aria-label="Delete reading"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2.5 4h9M5.5 4V2.5h3V4M3.5 4l.6 8h5.8l.6-8"></path></svg></button></td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+        <div><button class="btn2" type="button" onClick="{{addReading}}">+ Add reading</button></div>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;">
+          <div class="f"><label for="ta">Target alcohol (%)</label><input id="ta" value="{{ta}}" onChange="{{setTa}}"></div>
+          <div class="f"><label for="fl">Current permeate flow (hl/h)</label><input id="fl" value="{{flow}}" onChange="{{setFlow}}"></div>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;">
+          <div class="out"><span>Total water needed</span><b>{{total}} hl</b></div>
+          <div class="out"><span>Water remaining</span><b>{{remaining}} hl</b></div>
+          <div class="out"><span>Time remaining</span><b>{{hours}} h</b></div>
+          <div class="out"><span>Expected finish</span><b>{{finish}}</b></div>
+        </div>
+        <div style="font-size: 12px; color: #6b6355;">Estimate from an exponential fit of alcohol against water added, over all readings (same method as the Excel LINEST). Readings are stored per batch, with time and operator.</div>
+      </div>
+    </div>
+
+    <div style="border-top: 1px solid #ece8dc; padding: 14px 24px; display: flex; justify-content: flex-end; gap: 10px;">
+      <button class="btn2" type="button">Close</button>
+      <button class="btn" type="button">Save</button>
+    </div>
+  </div>
+
+  <sc-if value="{{cf.open}}" hint-placeholder-val="{{false}}">
+    <div style="position: fixed; inset: 0; background: rgba(28,43,38,.35); z-index: 60; display: flex; align-items: center; justify-content: center; padding: 16px;">
+      <div role="alertdialog" aria-label="Confirm delete" style="background: #fff; border-radius: 10px; padding: 18px 20px; width: 100%; max-width: 380px; box-shadow: 0 16px 48px rgba(0,0,0,.25); display: flex; flex-direction: column; gap: 10px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, Helvetica, sans-serif; color: #1c2b26;">
+        <div style="font-weight: 700; font-size: 16px;">Delete {{cf.label}}?</div>
+        <div style="font-size: 13px; color: #6b6355;">You can undo this right after deleting. The deletion is recorded in the audit trail.</div>
+        <div style="display: flex; justify-content: flex-end; gap: 10px; padding-top: 4px;">
+          <button type="button" onClick="{{cf.cancel}}" style="background: #f6f4ee; color: #33473a; border: 1px solid #e2ddd0; border-radius: 20px; padding: 8px 16px; font: inherit; font-size: 13px; cursor: pointer; min-height: 36px;">Cancel</button>
+          <button type="button" onClick="{{cf.ok}}" style="background: #a3492f; color: #fff; border: 0; border-radius: 20px; padding: 8px 16px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; min-height: 36px;">Delete</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+  <sc-if value="{{tst.open}}" hint-placeholder-val="{{false}}">
+    <div role="status" style="position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #1c2b26; color: #fff; border-radius: 22px; padding: 6px 8px 6px 18px; display: flex; gap: 12px; align-items: center; z-index: 61; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, Helvetica, sans-serif; font-size: 13px; box-shadow: 0 8px 24px rgba(0,0,0,.2);">
+      <span>{{tst.label}} deleted</span>
+      <button type="button" onClick="{{tst.undo}}" style="background: #b4772c; color: #fff; border: 0; border-radius: 16px; padding: 6px 14px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; min-height: 32px;">Undo</button>
+      <button type="button" onClick="{{tst.close}}" aria-label="Dismiss" style="background: transparent; color: #cfd8cc; border: 0; width: 32px; height: 32px; border-radius: 16px; cursor: pointer; font-size: 16px;">×</button>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1200,"height":980}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      re: '3.0', iv: '80', tre: '7.5', ta: '0.5', flow: '12',
+      readings: [
+        { when: '06-10 07:30', vol: '0', alc: '6.4', op: 'JL' },
+        { when: '06-10 09:10', vol: '20', alc: '4.1', op: 'JL' },
+        { when: '06-10 10:50', vol: '40', alc: '2.6', op: 'RB' },
+        { when: '06-10 12:30', vol: '60', alc: '1.7', op: 'RB' }
+      ]
+    };
+  }
+  setR(i, patch) {
+    this.setState({ readings: this.state.readings.map((r, j) => (j === i ? Object.assign({}, r, patch) : r)) });
+  }
+  askDelete(label, fn) { this.setState({ __cf: { label: label, fn: fn } }); }
+  doDelete() {
+    const cf = this.state.__cf; if (!cf) return;
+    const snap = Object.assign({}, this.state); delete snap.__cf; delete snap.__tst;
+    this.setState({ __cf: null });
+    cf.fn();
+    const base = cf.label.replace(/^this /, '');
+    this.setState({ __tst: { label: base.charAt(0).toUpperCase() + base.slice(1), snap: snap } });
+    clearTimeout(this.__t); this.__t = setTimeout(() => this.setState({ __tst: null }), 10000);
+  }
+  undoDelete() { const t = this.state.__tst; if (!t) return; clearTimeout(this.__t); this.setState(Object.assign({}, t.snap, { __tst: null, __cf: null })); }
+  renderVals() {
+    const n = (v) => { const x = parseFloat(String(v).replace(',', '.')); return isNaN(x) ? null : x; };
+    const s = this.state;
+    const re = n(s.re), iv = n(s.iv), tre = n(s.tre);
+    const perm = (re !== null && iv !== null && tre) ? (iv - (re * iv) / tre) : null;
+    const pts = s.readings.map((r) => [n(r.vol), n(r.alc)]).filter((p) => p[0] !== null && p[1] !== null && p[1] > 0);
+    let total = null, remaining = null, hours = null, finish = '—';
+    if (pts.length >= 2) {
+      const xs = pts.map((p) => p[0]), ys = pts.map((p) => Math.log(p[1]));
+      const mx = xs.reduce((a, b) => a + b, 0) / xs.length, my = ys.reduce((a, b) => a + b, 0) / ys.length;
+      let sxy = 0, sxx = 0;
+      xs.forEach((x, i) => { sxy += (x - mx) * (ys[i] - my); sxx += (x - mx) * (x - mx); });
+      const k = sxx ? sxy / sxx : 0, b = my - k * mx;
+      const ta = n(s.ta), fl = n(s.flow);
+      if (k < 0 && ta) {
+        total = (Math.log(ta) - b) / k;
+        const added = Math.max.apply(null, xs);
+        remaining = Math.max(0, total - added);
+        if (fl) {
+          hours = remaining / fl;
+          const end = new Date(new Date('2026-10-06T12:30').getTime() + hours * 3600000);
+          finish = end.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+        }
+      }
+    }
+    const f = (x) => (x === null ? '—' : x.toFixed(1));
+    return {
+      cf: { open: !!this.state.__cf, label: this.state.__cf ? this.state.__cf.label : '', ok: () => this.doDelete(), cancel: () => this.setState({ __cf: null }) },
+      tst: { open: !!this.state.__tst, label: this.state.__tst ? this.state.__tst.label : '', undo: () => this.undoDelete(), close: () => this.setState({ __tst: null }) },
+      re: s.re, iv: s.iv, tre: s.tre, ta: s.ta, flow: s.flow,
+      setRe: (e) => this.setState({ re: e.target.value }),
+      setIv: (e) => this.setState({ iv: e.target.value }),
+      setTre: (e) => this.setState({ tre: e.target.value }),
+      setTa: (e) => this.setState({ ta: e.target.value }),
+      setFlow: (e) => this.setState({ flow: e.target.value }),
+      perm: f(perm), total: f(total), remaining: f(remaining), hours: f(hours), finish: finish,
+      readings: s.readings.map((r, i) => Object.assign({}, r, {
+        setVol: (e) => this.setR(i, { vol: e.target.value }),
+        setAlc: (e) => this.setR(i, { alc: e.target.value }),
+        del: () => this.askDelete('this reading', () => this.setState({ readings: s.readings.filter((x, j) => j !== i) }))
+      })),
+      addReading: () => this.setState({ readings: s.readings.concat([{ when: '06-10 15:20', vol: '', alc: '', op: 'JL' }]) })
+    };
+  }
+}
+</script>
+</body>
+</html>
