@@ -1149,6 +1149,9 @@ function voegIngredientRegelToe(tbodyId, rollenLijst, regel = {}) {
   const tbody = document.getElementById(tbodyId);
   const tr = document.createElement('tr');
   tr.id = 'ing-rij-' + (ingredientRegelTeller++);
+  // Database id of the line, so saving updates it instead of re-creating it
+  // (save_recipe_ingredients). Lines of another recipe become new lines there.
+  if (regel.id) tr.dataset.lineId = regel.id;
 
   const meerdereRollen = rollenLijst.length > 1;
   const isHopSectie = tbodyId === 're-ing-hop-tbody';
@@ -1431,6 +1434,7 @@ function leesIngredientRegelsUit(tbodyId) {
     const heelBatchEl = tr.querySelector('.re-ing-heel-batch');
 
     return {
+      id: tr.dataset.lineId ? Number(tr.dataset.lineId) : null,
       rol,
       ingredient_id: tr.querySelector('.re-ing-ingredient').value === '' ? null : Number(tr.querySelector('.re-ing-ingredient').value),
       hoeveelheid: tr.querySelector('.re-ing-hoeveelheid').value === '' ? null : Number(tr.querySelector('.re-ing-hoeveelheid').value),
@@ -2887,15 +2891,13 @@ async function schrijfGerelateerdeData(recipeId) {
   const { error: commentsErr } = await supabaseClient.from('recipe_comments').upsert(toDb('recipe_comments', { recipe_id: recipeId, comments }));
   if (commentsErr) return 'comments: ' + commentsErr.message;
 
-  const { error: verwijderErr } = await supabaseClient.from('recipe_ingredients').delete().eq('recipe_id', recipeId);
-  if (verwijderErr) return 'ingredients (clearing old rows): ' + verwijderErr.message;
-
-  if (ingredientRegels.length > 0) {
-    const { error: insertErr } = await supabaseClient
-      .from('recipe_ingredients')
-      .insert(toDb('recipe_ingredients', ingredientRegels.map(r => ({ ...r, recipe_id: recipeId }))));
-    if (insertErr) return 'ingredients: ' + insertErr.message;
-  }
+  // One transaction: existing lines are updated (they keep their id), new ones
+  // inserted, removed ones deleted. A failure leaves the old lines untouched.
+  const { error: ingredientErr } = await supabaseClient.rpc('save_recipe_ingredients', {
+    p_recipe_id: recipeId,
+    p_lines: toDb('recipe_ingredients', ingredientRegels),
+  });
+  if (ingredientErr) return 'ingredients: ' + ingredientErr.message;
 
   return null;
 }
