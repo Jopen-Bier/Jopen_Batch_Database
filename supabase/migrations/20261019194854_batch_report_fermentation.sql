@@ -16,6 +16,13 @@
 
 begin;
 
+-- The texts below contain ° and ·: stop when the script was not read as UTF-8.
+do $$ begin
+  if length('°·') <> 2 or '°' <> chr(176) then
+    raise exception 'This script was not read as UTF-8; nothing was changed';
+  end if;
+end $$;
+
 -- 1. Batch columns -----------------------------------------------------------
 
 alter table public.batches add column if not exists time_zero timestamptz;
@@ -396,7 +403,13 @@ begin
     case when v_after_cold then null else tolerance_value(v_spec.final_extract_tol) end,
     null, '{}', true);
 
-  -- Cold dry hop at or below the lagering temperature: after that cooling.
+  -- 5. Sample to lab: after the last cooling (decision #4).
+  v_n := v_n + 1;
+  insert into _gen_steps values (v_n, 'sample_lab', 'sample_lab', 'Sample to lab', 'Always after cooling',
+    'after_previous', null, null, null, '{}', false);
+
+  -- Cold dry hop at or below the lagering temperature (e.g. cold_2 with
+  -- lagering at 2 °C): after the sample, which follows the last cooling (Jaap).
   for v_cold in
     select (substring(lower(btrim(timing)) from '^cold_(-?[0-9]+(?:\.[0-9]+)?)$'))::numeric as temp,
            array_agg(id order by sort_order, id) as ids
@@ -412,11 +425,6 @@ begin
       nullif(concat_ws(' · ', nullif(btrim(v_ps.dry_hop_method_16c), ''), nullif(btrim(v_ps.dry_hop_comment_16c), '')), ''),
       'after_previous', null, null, null, v_cold.ids, false);
   end loop;
-
-  -- 5. Sample to lab: after the last cooling (decision #4).
-  v_n := v_n + 1;
-  insert into _gen_steps values (v_n, 'sample_lab', 'sample_lab', 'Sample to lab', 'Always after cooling',
-    'after_previous', null, null, null, '{}', false);
 
   -- 6. Cellar additions: after the cold dry hop, on the addition day, after
   --    de-alcoholisation; a timing that says nothing known also lands here.
@@ -687,12 +695,14 @@ grant select on public.batch_stages to authenticated;
 
 -- 12. Backfill ----------------------------------------------------------------
 
--- Cellar plan for every active recipe.
+-- Cellar plan for every active recipe and every recipe of a planned batch.
 do $$
 declare
   r record;
 begin
-  for r in select id from public.recipes where status = 'active' order by id loop
+  for r in select id from public.recipes
+           where status = 'active' or id in (select recipe_id from public.batches where status = 'planned')
+           order by id loop
     perform public.generate_recipe_cellar_steps(r.id);
   end loop;
 end $$;

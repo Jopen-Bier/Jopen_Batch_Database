@@ -256,7 +256,7 @@ Function `generate_recipe_cellar_steps(p_recipe_id)` implements the rules in
 business-rules.md; `save_recipe_cellar_steps(p_recipe_id, p_steps jsonb)`
 saves the editor's plan (as `save_recipe_ingredients`) and then regenerates.
 Helpers `tolerance_value(text)` and `cellar_addition_timing(text)`. Backfill
-for active recipes. RLS via `recipes`.
+for active recipes and the recipes of planned batches. RLS via `recipes`.
 
 ### `batch_cellar_steps` (new) — snapshot per batch
 Same columns as `recipe_cellar_steps` minus `is_generated`/`generated_key`,

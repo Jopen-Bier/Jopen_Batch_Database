@@ -104,11 +104,11 @@ Fixed order, generated from recipe data:
    "Dryhopping · timing not set" here, so they are not forgotten.
 4. **Cooling to [lagering temp]** — always; temperature =
    `recipe_fermentation.lagering_temp` ("lagering temperature" when empty).
-   Tag `cooling`. `starts_lagering = true`. A cold dry hop at or below the
-   lagering temperature (e.g. `cold_2` with lagering at 2 °C) follows this
-   step.
-5. **Sample to lab** — always, after the last cooling (decision #4). Tag
-   `sample_lab`.
+   Tag `cooling`. `starts_lagering = true`.
+5. **Sample to lab** — always, right after the last cooling (decision #4). Tag
+   `sample_lab`. A cold dry hop at or below the lagering temperature (e.g.
+   `cold_2` with lagering at 2 °C) comes after the sample: cooling → sample →
+   dry hop (Jaap, 19-10).
 6. **Additions** — one step per cellar addition (tag `addition`): *after cold
    dry hop*, then *lagering* (and timings that say nothing known) on
    `cellar_addition_day`, then *after de-alcoholisation*.
