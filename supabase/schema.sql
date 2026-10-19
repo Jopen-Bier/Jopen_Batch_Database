@@ -125,23 +125,24 @@ $$;
 
 
 --
--- Name: log_brew_planning_wijziging(); Type: FUNCTION; Schema: public; Owner: -
+-- Name: log_brew_planning_change(); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.log_brew_planning_wijziging() RETURNS trigger
+CREATE FUNCTION public.log_brew_planning_change() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
     AS $$
 begin
   if (TG_OP = 'INSERT') then
-    insert into brew_planning_geschiedenis (brew_planning_id, actie, na, gewijzigd_door)
+    insert into brew_planning_history (brew_planning_id, action, after, updated_by)
     values (new.id, 'created', to_jsonb(new), auth.uid());
     return new;
   elsif (TG_OP = 'UPDATE') then
-    insert into brew_planning_geschiedenis (brew_planning_id, actie, voor, na, gewijzigd_door)
+    insert into brew_planning_history (brew_planning_id, action, before, after, updated_by)
     values (new.id, 'updated', to_jsonb(old), to_jsonb(new), auth.uid());
     return new;
   elsif (TG_OP = 'DELETE') then
-    insert into brew_planning_geschiedenis (brew_planning_id, actie, voor, gewijzigd_door)
+    insert into brew_planning_history (brew_planning_id, action, before, updated_by)
     values (old.id, 'deleted', to_jsonb(old), auth.uid());
     return old;
   end if;
@@ -156,6 +157,7 @@ $$;
 
 CREATE FUNCTION public.product_sheet_calculated_color(p_recipe_id bigint) RETURNS numeric
     LANGUAGE sql STABLE
+    SET search_path TO 'public'
     AS $$
                                                                                                                                                                                              select round(
                                                                                                                                                                                                  coalesce(sum(ri.quantity * ri.color_ebc * 0.08), 0) / nullif(r.brew_volume_hl, 0) + 1.75
@@ -173,6 +175,7 @@ CREATE FUNCTION public.product_sheet_calculated_color(p_recipe_id bigint) RETURN
 
 CREATE FUNCTION public.product_sheet_relevant_hash(p_recipe_group_id uuid) RETURNS text
     LANGUAGE sql STABLE
+    SET search_path TO 'public'
     AS $$
                                                                                                                                                                                                              select md5(
                                                                                                                                                                                                                  coalesce(s.original_extract::text,'') || '|' || coalesce(s.original_extract_tol,'') || '|' ||
@@ -213,6 +216,7 @@ CREATE FUNCTION public.product_sheet_relevant_hash(p_recipe_group_id uuid) RETUR
 
 CREATE FUNCTION public.product_sheet_relevant_recipe_id(p_recipe_group_id uuid) RETURNS bigint
     LANGUAGE sql STABLE
+    SET search_path TO 'public'
     AS $$
                                                                                                                                                                                      select id from recipes
                                                                                                                                                                                        where recipe_group_id = p_recipe_group_id
@@ -241,6 +245,7 @@ $$;
 
 CREATE FUNCTION public.set_updated_at() RETURNS trigger
     LANGUAGE plpgsql
+    SET search_path TO 'public'
     AS $$
 begin
   new.updated_at := now();
@@ -271,6 +276,7 @@ CREATE FUNCTION public.water_settings_log() RETURNS trigger
 
 CREATE FUNCTION public.water_settings_stamp() RETURNS trigger
     LANGUAGE plpgsql
+    SET search_path TO 'public'
     AS $$
                                                                      begin
                                                                        new.updated_at := now();
@@ -290,34 +296,33 @@ SET default_table_access_method = heap;
 
 CREATE TABLE public.batches (
     id bigint NOT NULL,
-    batchnummer text NOT NULL,
+    batch_number text NOT NULL,
     recipe_id bigint NOT NULL,
-    aantal_brouwsels numeric,
-    brouwdatum date,
-    status text DEFAULT 'gepland'::text NOT NULL,
+    brew_count numeric,
+    brew_date date,
+    status text DEFAULT 'planned'::text NOT NULL,
     operator text,
-    gist_temp_start numeric,
-    gist_temp_max numeric,
-    giststam text,
-    gist_gerehydrateerd boolean,
-    gist_gewicht numeric,
-    gist_bij_1e_brouwsel boolean,
-    gist_geent_op date,
-    gist_door text,
-    gist_programma_aan boolean,
-    datum_orderpicken date,
+    yeast_temp_start numeric,
+    yeast_temp_max numeric,
+    yeast_strain text,
+    yeast_rehydrated boolean,
+    yeast_weight numeric,
+    yeast_with_first_brew boolean,
+    yeast_pitched_on date,
+    yeast_pitched_by text,
+    yeast_program_on boolean,
+    order_picking_date date,
     "extract" numeric,
     alcohol numeric,
-    bitterheid numeric,
-    kleur numeric,
+    bitterness numeric,
+    color numeric,
     ph numeric,
-    glt_leeg boolean,
-    totaal_eindvolume numeric,
-    created_at timestamp with time zone DEFAULT now(),
-    naam text,
-    aangemaakt_op timestamp with time zone DEFAULT now() NOT NULL,
-    aangemaakt_door uuid,
-    CONSTRAINT batches_status_check CHECK ((status = ANY (ARRAY['gepland'::text, 'brouwen'::text, 'vergisting'::text, 'verwerking'::text, 'afvullen'::text, 'afgerond'::text])))
+    glt_empty boolean,
+    total_final_volume numeric,
+    name text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    CONSTRAINT batches_status_check CHECK ((status = ANY (ARRAY['planned'::text, 'brewing'::text, 'fermenting'::text, 'processing'::text, 'filling'::text, 'completed'::text])))
 );
 
 
@@ -344,7 +349,7 @@ CREATE TABLE public.brew_capacity (
     capacity_group text NOT NULL,
     iso_year integer NOT NULL,
     week_number integer NOT NULL,
-    max_brouwsels numeric DEFAULT 0 NOT NULL,
+    max_brews numeric DEFAULT 0 NOT NULL,
     updated_by uuid,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT brew_capacity_capacity_group_check CHECK ((capacity_group = ANY (ARRAY['jk'::text, 'wp'::text]))),
@@ -362,32 +367,32 @@ CREATE TABLE public.brew_planning (
     iso_year integer NOT NULL,
     week_number integer NOT NULL,
     recipe_id bigint,
-    aantal_brouwsels numeric DEFAULT 1 NOT NULL,
+    brew_count numeric DEFAULT 1 NOT NULL,
     hl numeric,
-    prio boolean DEFAULT false NOT NULL,
+    is_priority boolean DEFAULT false NOT NULL,
     sort_order integer DEFAULT 0 NOT NULL,
-    notities text,
-    aangemaakt_door uuid,
-    aangemaakt_op timestamp with time zone DEFAULT now() NOT NULL,
-    bijgewerkt_op timestamp with time zone DEFAULT now() NOT NULL,
+    notes text,
+    created_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
     recipe_group_id uuid,
     CONSTRAINT brew_planning_week_number_check CHECK (((week_number >= 1) AND (week_number <= 53)))
 );
 
 
 --
--- Name: brew_planning_geschiedenis; Type: TABLE; Schema: public; Owner: -
+-- Name: brew_planning_history; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.brew_planning_geschiedenis (
+CREATE TABLE public.brew_planning_history (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     brew_planning_id uuid NOT NULL,
-    actie text NOT NULL,
-    voor jsonb,
-    na jsonb,
-    gewijzigd_door uuid,
-    gewijzigd_op timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT brew_planning_geschiedenis_actie_check CHECK ((actie = ANY (ARRAY['created'::text, 'updated'::text, 'deleted'::text])))
+    action text NOT NULL,
+    before jsonb,
+    after jsonb,
+    updated_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT brew_planning_history_action_check CHECK ((action = ANY (ARRAY['created'::text, 'updated'::text, 'deleted'::text])))
 );
 
 
@@ -406,21 +411,21 @@ CREATE TABLE public.users (
 
 
 --
--- Name: brew_planning_geschiedenis_verrijkt; Type: VIEW; Schema: public; Owner: -
+-- Name: brew_planning_history_detailed; Type: VIEW; Schema: public; Owner: -
 --
 
-CREATE VIEW public.brew_planning_geschiedenis_verrijkt WITH (security_invoker='true') AS
- SELECT g.id,
-    g.brew_planning_id,
-    g.actie,
-    g.voor,
-    g.na,
-    g.gewijzigd_door,
-    u.name AS gewijzigd_door_naam,
-    g.gewijzigd_op
-   FROM (public.brew_planning_geschiedenis g
-     LEFT JOIN public.users u ON ((u.id = g.gewijzigd_door)))
-  ORDER BY g.gewijzigd_op DESC;
+CREATE VIEW public.brew_planning_history_detailed WITH (security_invoker='true') AS
+ SELECT h.id,
+    h.brew_planning_id,
+    h.action,
+    h.before,
+    h.after,
+    h.updated_by,
+    u.name AS updated_by_name,
+    h.updated_at
+   FROM (public.brew_planning_history h
+     LEFT JOIN public.users u ON ((u.id = h.updated_by)))
+  ORDER BY h.updated_at DESC;
 
 
 --
@@ -434,30 +439,8 @@ CREATE TABLE public.brew_planning_splits (
     recipe_group_id uuid,
     hl numeric NOT NULL,
     sort_order integer DEFAULT 0 NOT NULL,
-    aangemaakt_op timestamp with time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL
 );
-
-
---
--- Name: brew_planning_wijzigingen; Type: VIEW; Schema: public; Owner: -
---
-
-CREATE VIEW public.brew_planning_wijzigingen AS
- SELECT h.id,
-    h.brew_planning_id,
-    h.actie,
-    ((h.voor ->> 'week_number'::text))::integer AS week_voor,
-    ((h.na ->> 'week_number'::text))::integer AS week_na,
-    ((h.voor ->> 'iso_year'::text))::integer AS jaar_voor,
-    ((h.na ->> 'iso_year'::text))::integer AS jaar_na,
-    ((h.na ->> 'aantal_brouwsels'::text))::numeric AS brouwsels_na,
-    ((h.na ->> 'prio'::text))::boolean AS prio_na,
-    (h.na ->> 'plan_group'::text) AS plan_group_na,
-    h.gewijzigd_door,
-    g.name AS gewijzigd_door_naam,
-    h.gewijzigd_op
-   FROM (public.brew_planning_geschiedenis h
-     LEFT JOIN public.users g ON ((g.id = h.gewijzigd_door)));
 
 
 --
@@ -470,16 +453,6 @@ CREATE TABLE public.document_types (
     label text,
     sort_order integer DEFAULT 0 NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL
-);
-
-
---
--- Name: hop_utilization_curve; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.hop_utilization_curve (
-    boil_time_min integer NOT NULL,
-    utilization_pct numeric NOT NULL
 );
 
 
@@ -1329,11 +1302,11 @@ ALTER TABLE public.water_settings_history ALTER COLUMN id ADD GENERATED ALWAYS A
 
 
 --
--- Name: batches batches_batchnummer_key; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: batches batches_batch_number_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.batches
-    ADD CONSTRAINT batches_batchnummer_key UNIQUE (batchnummer);
+    ADD CONSTRAINT batches_batch_number_key UNIQUE (batch_number);
 
 
 --
@@ -1361,11 +1334,11 @@ ALTER TABLE ONLY public.brew_capacity
 
 
 --
--- Name: brew_planning_geschiedenis brew_planning_geschiedenis_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: brew_planning_history brew_planning_history_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.brew_planning_geschiedenis
-    ADD CONSTRAINT brew_planning_geschiedenis_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.brew_planning_history
+    ADD CONSTRAINT brew_planning_history_pkey PRIMARY KEY (id);
 
 
 --
@@ -1398,14 +1371,6 @@ ALTER TABLE ONLY public.document_types
 
 ALTER TABLE ONLY public.document_types
     ADD CONSTRAINT document_types_pkey PRIMARY KEY (id);
-
-
---
--- Name: hop_utilization_curve hop_utilization_curve_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.hop_utilization_curve
-    ADD CONSTRAINT hop_utilization_curve_pkey PRIMARY KEY (boil_time_min);
 
 
 --
@@ -1672,10 +1637,10 @@ CREATE INDEX brew_planning_splits_brew_planning_id_idx ON public.brew_planning_s
 
 
 --
--- Name: idx_batches_batchnummer; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_batches_batch_number; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_batches_batchnummer ON public.batches USING btree (batchnummer DESC);
+CREATE INDEX idx_batches_batch_number ON public.batches USING btree (batch_number DESC);
 
 
 --
@@ -1693,17 +1658,17 @@ CREATE INDEX idx_brew_capacity_year_week ON public.brew_capacity USING btree (is
 
 
 --
--- Name: idx_brew_planning_geschiedenis_gewijzigd_op; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_brew_planning_history_planning_id; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_brew_planning_geschiedenis_gewijzigd_op ON public.brew_planning_geschiedenis USING btree (gewijzigd_op DESC);
+CREATE INDEX idx_brew_planning_history_planning_id ON public.brew_planning_history USING btree (brew_planning_id);
 
 
 --
--- Name: idx_brew_planning_geschiedenis_planning_id; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_brew_planning_history_updated_at; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_brew_planning_geschiedenis_planning_id ON public.brew_planning_geschiedenis USING btree (brew_planning_id);
+CREATE INDEX idx_brew_planning_history_updated_at ON public.brew_planning_history USING btree (updated_at DESC);
 
 
 --
@@ -1718,6 +1683,13 @@ CREATE INDEX idx_brew_planning_recipe ON public.brew_planning USING btree (recip
 --
 
 CREATE INDEX idx_brew_planning_recipe_group_id ON public.brew_planning USING btree (recipe_group_id);
+
+
+--
+-- Name: idx_brew_planning_splits_recipe_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_brew_planning_splits_recipe_id ON public.brew_planning_splits USING btree (recipe_id);
 
 
 --
@@ -1770,6 +1742,27 @@ CREATE INDEX idx_lots_status ON public.lots USING btree (status);
 
 
 --
+-- Name: idx_recipe_ingredients_ingredient_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_recipe_ingredients_ingredient_id ON public.recipe_ingredients USING btree (ingredient_id);
+
+
+--
+-- Name: idx_recipe_ingredients_recipe_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_recipe_ingredients_recipe_id ON public.recipe_ingredients USING btree (recipe_id);
+
+
+--
+-- Name: idx_recipe_revisions_recipe_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_recipe_revisions_recipe_id ON public.recipe_revisions USING btree (recipe_id);
+
+
+--
 -- Name: idx_recipes_recipe_group_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1798,6 +1791,13 @@ CREATE INDEX idx_stock_movements_movement_type ON public.stock_movements USING b
 
 
 --
+-- Name: idx_stock_movements_recipe_ingredient_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_stock_movements_recipe_ingredient_id ON public.stock_movements USING btree (recipe_ingredient_id);
+
+
+--
 -- Name: product_sheet_revisions_product_sheet_id_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1812,10 +1812,10 @@ CREATE UNIQUE INDEX product_sheets_recipe_group_id_active_idx ON public.product_
 
 
 --
--- Name: brew_planning trg_brew_planning_geschiedenis; Type: TRIGGER; Schema: public; Owner: -
+-- Name: brew_planning trg_brew_planning_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER trg_brew_planning_geschiedenis AFTER INSERT OR DELETE OR UPDATE ON public.brew_planning FOR EACH ROW EXECUTE FUNCTION public.log_brew_planning_wijziging();
+CREATE TRIGGER trg_brew_planning_history AFTER INSERT OR DELETE OR UPDATE ON public.brew_planning FOR EACH ROW EXECUTE FUNCTION public.log_brew_planning_change();
 
 
 --
@@ -1847,11 +1847,11 @@ CREATE TRIGGER trg_water_settings_stamp BEFORE UPDATE ON public.water_settings F
 
 
 --
--- Name: batches batches_aangemaakt_door_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: batches batches_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.batches
-    ADD CONSTRAINT batches_aangemaakt_door_fkey FOREIGN KEY (aangemaakt_door) REFERENCES public.users(id);
+    ADD CONSTRAINT batches_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
 
 
 --
@@ -1871,19 +1871,19 @@ ALTER TABLE ONLY public.brew_capacity
 
 
 --
--- Name: brew_planning brew_planning_aangemaakt_door_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: brew_planning brew_planning_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.brew_planning
-    ADD CONSTRAINT brew_planning_aangemaakt_door_fkey FOREIGN KEY (aangemaakt_door) REFERENCES public.users(id);
+    ADD CONSTRAINT brew_planning_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
 
 
 --
--- Name: brew_planning_geschiedenis brew_planning_geschiedenis_gewijzigd_door_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: brew_planning_history brew_planning_history_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.brew_planning_geschiedenis
-    ADD CONSTRAINT brew_planning_geschiedenis_gewijzigd_door_fkey FOREIGN KEY (gewijzigd_door) REFERENCES public.users(id);
+ALTER TABLE ONLY public.brew_planning_history
+    ADD CONSTRAINT brew_planning_history_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id);
 
 
 --
@@ -2304,16 +2304,16 @@ CREATE POLICY brew_planning_delete ON public.brew_planning FOR DELETE USING (pub
 
 
 --
--- Name: brew_planning_geschiedenis; Type: ROW SECURITY; Schema: public; Owner: -
+-- Name: brew_planning_history; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
-ALTER TABLE public.brew_planning_geschiedenis ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.brew_planning_history ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: brew_planning_geschiedenis brew_planning_geschiedenis_select; Type: POLICY; Schema: public; Owner: -
+-- Name: brew_planning_history brew_planning_history_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY brew_planning_geschiedenis_select ON public.brew_planning_geschiedenis FOR SELECT USING (public.can_view('brewing_planning'::text));
+CREATE POLICY brew_planning_history_select ON public.brew_planning_history FOR SELECT USING (public.can_view('brewing_planning'::text));
 
 
 --
@@ -2403,40 +2403,6 @@ CREATE POLICY document_types_select ON public.document_types FOR SELECT USING (t
 --
 
 CREATE POLICY document_types_update ON public.document_types FOR UPDATE USING (public.can_edit('settings'::text)) WITH CHECK (public.can_edit('settings'::text));
-
-
---
--- Name: hop_utilization_curve; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.hop_utilization_curve ENABLE ROW LEVEL SECURITY;
-
---
--- Name: hop_utilization_curve hop_utilization_curve_delete; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY hop_utilization_curve_delete ON public.hop_utilization_curve FOR DELETE USING (public.can_delete('settings'::text));
-
-
---
--- Name: hop_utilization_curve hop_utilization_curve_insert; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY hop_utilization_curve_insert ON public.hop_utilization_curve FOR INSERT WITH CHECK (public.can_edit('settings'::text));
-
-
---
--- Name: hop_utilization_curve hop_utilization_curve_select; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY hop_utilization_curve_select ON public.hop_utilization_curve FOR SELECT USING (true);
-
-
---
--- Name: hop_utilization_curve hop_utilization_curve_update; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY hop_utilization_curve_update ON public.hop_utilization_curve FOR UPDATE USING (public.can_edit('settings'::text)) WITH CHECK (public.can_edit('settings'::text));
 
 
 --
@@ -3077,6 +3043,20 @@ CREATE POLICY recipes_update ON public.recipes FOR UPDATE USING (public.can_edit
 ALTER TABLE public.role_permissions ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: role_permissions role_permissions_delete_admin; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY role_permissions_delete_admin ON public.role_permissions FOR DELETE USING (public.is_admin());
+
+
+--
+-- Name: role_permissions role_permissions_insert_admin; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY role_permissions_insert_admin ON public.role_permissions FOR INSERT WITH CHECK (public.is_admin());
+
+
+--
 -- Name: role_permissions role_permissions_select; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -3084,10 +3064,10 @@ CREATE POLICY role_permissions_select ON public.role_permissions FOR SELECT USIN
 
 
 --
--- Name: role_permissions role_permissions_write_admin; Type: POLICY; Schema: public; Owner: -
+-- Name: role_permissions role_permissions_update_admin; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY role_permissions_write_admin ON public.role_permissions USING (public.is_admin()) WITH CHECK (public.is_admin());
+CREATE POLICY role_permissions_update_admin ON public.role_permissions FOR UPDATE USING (public.is_admin()) WITH CHECK (public.is_admin());
 
 
 --
@@ -3097,6 +3077,20 @@ CREATE POLICY role_permissions_write_admin ON public.role_permissions USING (pub
 ALTER TABLE public.roles ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: roles roles_delete_admin; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY roles_delete_admin ON public.roles FOR DELETE USING (public.is_admin());
+
+
+--
+-- Name: roles roles_insert_admin; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY roles_insert_admin ON public.roles FOR INSERT WITH CHECK (public.is_admin());
+
+
+--
 -- Name: roles roles_select; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -3104,10 +3098,10 @@ CREATE POLICY roles_select ON public.roles FOR SELECT USING (true);
 
 
 --
--- Name: roles roles_write_admin; Type: POLICY; Schema: public; Owner: -
+-- Name: roles roles_update_admin; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY roles_write_admin ON public.roles USING (public.is_admin()) WITH CHECK (public.is_admin());
+CREATE POLICY roles_update_admin ON public.roles FOR UPDATE USING (public.is_admin()) WITH CHECK (public.is_admin());
 
 
 --
@@ -3185,6 +3179,20 @@ CREATE POLICY units_update ON public.units FOR UPDATE USING (public.can_edit('se
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: users users_delete_admin; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY users_delete_admin ON public.users FOR DELETE TO authenticated USING (public.is_admin());
+
+
+--
+-- Name: users users_insert_admin; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY users_insert_admin ON public.users FOR INSERT TO authenticated WITH CHECK (public.is_admin());
+
+
+--
 -- Name: users users_select; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -3192,10 +3200,10 @@ CREATE POLICY users_select ON public.users FOR SELECT TO authenticated USING (tr
 
 
 --
--- Name: users users_write_admin; Type: POLICY; Schema: public; Owner: -
+-- Name: users users_update_admin; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY users_write_admin ON public.users TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin());
+CREATE POLICY users_update_admin ON public.users FOR UPDATE TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin());
 
 
 --
@@ -3286,10 +3294,11 @@ GRANT ALL ON FUNCTION public.is_admin() TO service_role;
 
 
 --
--- Name: FUNCTION log_brew_planning_wijziging(); Type: ACL; Schema: public; Owner: -
+-- Name: FUNCTION log_brew_planning_change(); Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON FUNCTION public.log_brew_planning_wijziging() TO service_role;
+REVOKE ALL ON FUNCTION public.log_brew_planning_change() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.log_brew_planning_change() TO service_role;
 
 
 --
@@ -3317,6 +3326,7 @@ GRANT ALL ON FUNCTION public.product_sheet_relevant_recipe_id(p_recipe_group_id 
 -- Name: FUNCTION set_last_login(); Type: ACL; Schema: public; Owner: -
 --
 
+REVOKE ALL ON FUNCTION public.set_last_login() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.set_last_login() TO service_role;
 GRANT ALL ON FUNCTION public.set_last_login() TO authenticated;
 
@@ -3332,6 +3342,7 @@ GRANT ALL ON FUNCTION public.set_updated_at() TO service_role;
 -- Name: FUNCTION water_settings_log(); Type: ACL; Schema: public; Owner: -
 --
 
+REVOKE ALL ON FUNCTION public.water_settings_log() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.water_settings_log() TO service_role;
 
 
@@ -3379,12 +3390,12 @@ GRANT ALL ON TABLE public.brew_planning TO service_role;
 
 
 --
--- Name: TABLE brew_planning_geschiedenis; Type: ACL; Schema: public; Owner: -
+-- Name: TABLE brew_planning_history; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.brew_planning_geschiedenis TO anon;
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.brew_planning_geschiedenis TO authenticated;
-GRANT ALL ON TABLE public.brew_planning_geschiedenis TO service_role;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.brew_planning_history TO anon;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.brew_planning_history TO authenticated;
+GRANT ALL ON TABLE public.brew_planning_history TO service_role;
 
 
 --
@@ -3397,12 +3408,12 @@ GRANT ALL ON TABLE public.users TO service_role;
 
 
 --
--- Name: TABLE brew_planning_geschiedenis_verrijkt; Type: ACL; Schema: public; Owner: -
+-- Name: TABLE brew_planning_history_detailed; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.brew_planning_geschiedenis_verrijkt TO anon;
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.brew_planning_geschiedenis_verrijkt TO authenticated;
-GRANT ALL ON TABLE public.brew_planning_geschiedenis_verrijkt TO service_role;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.brew_planning_history_detailed TO anon;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.brew_planning_history_detailed TO authenticated;
+GRANT ALL ON TABLE public.brew_planning_history_detailed TO service_role;
 
 
 --
@@ -3415,30 +3426,12 @@ GRANT ALL ON TABLE public.brew_planning_splits TO service_role;
 
 
 --
--- Name: TABLE brew_planning_wijzigingen; Type: ACL; Schema: public; Owner: -
---
-
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.brew_planning_wijzigingen TO anon;
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.brew_planning_wijzigingen TO authenticated;
-GRANT ALL ON TABLE public.brew_planning_wijzigingen TO service_role;
-
-
---
 -- Name: TABLE document_types; Type: ACL; Schema: public; Owner: -
 --
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.document_types TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.document_types TO authenticated;
 GRANT ALL ON TABLE public.document_types TO service_role;
-
-
---
--- Name: TABLE hop_utilization_curve; Type: ACL; Schema: public; Owner: -
---
-
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.hop_utilization_curve TO anon;
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.hop_utilization_curve TO authenticated;
-GRANT ALL ON TABLE public.hop_utilization_curve TO service_role;
 
 
 --
