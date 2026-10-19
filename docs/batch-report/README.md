@@ -5,8 +5,8 @@ workbook per batch) into the app: brewing, fermentation log, processing,
 filling and filling report become screens backed by tables, so production
 data becomes analysable. This folder is the brief for building it.
 
-Status (19-10-2026): design agreed (mockup), data model agreed, nothing built
-yet. Built phase by phase, each on its own branch with a pull request.
+Status (19-10-2026): design agreed (mockup), data model agreed. Phase 0
+(foundation) on branch `batch-report-phase-0`. Built phase by phase, each on its own branch with a pull request.
 
 ## Read in this order
 1. **`decisions.md`** — what has been decided and why. Do not reopen these

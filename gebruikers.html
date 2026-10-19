@@ -21,6 +21,7 @@
     .inactive { color: #999; font-style: italic; }
     .no-access { padding: 40px 0; color: #555; }
     .user-role-select { padding: 4px 6px; border: 1px solid #ccc; border-radius: 4px; }
+    .user-initials-input { width: 4em; padding: 4px 6px; border: 1px solid #ccc; border-radius: 4px; text-transform: uppercase; }
     .user-save-btn { padding: 4px 10px; border: 1px solid #ccc; border-radius: 4px; background: #fff; cursor: pointer; }
     .user-delete-btn { padding: 4px 10px; border: 1px solid #A80016; color: #A80016; border-radius: 4px; background: #fff; cursor: pointer; }
     .user-delete-btn:hover { background: #fbe4e6; }
@@ -222,7 +223,7 @@
       const [{ data, error }, loginsResult] = await Promise.all([
         supabaseClient
           .from('users')
-          .select('id, name, role_id, is_active, created_at')
+          .select('id, name, initials, role_id, is_active, created_at')
           .order('name'),
         // auth.users.last_sign_in_at is Supabase's own, always current source
         // (users.last_login_at is not maintained by the app).
@@ -252,6 +253,9 @@
         return `
         <tr data-id="${u.id}">
           <td>${escapeHtml(u.name)}</td>
+          <td><input type="text" class="user-initials-input" maxlength="4"
+                     value="${escapeHtml(u.initials || '')}"
+                     title="Leave empty to generate from the name" /></td>
           <td>
             ${isSelf
               ? `<span class="role-badge ${uRole === 'admin' ? 'admin' : ''}">${escapeHtml(rolLabel(uRole))}</span>`
@@ -261,7 +265,8 @@
           <td>${formatLastLogin(lastLoginByUser[u.id])}</td>
           <td>
             ${isSelf
-              ? `<span class="user-self">(you)</span>`
+              ? `<button class="user-save-btn">Save</button>
+                 <span class="user-self">(you)</span>`
               : `<button class="user-save-btn">Save</button>
                  <button class="user-delete-btn">Delete</button>`}
           </td>
@@ -270,34 +275,39 @@
 
       container.innerHTML = `
         <table class="users-table">
-          <thead><tr><th>Name</th><th>Role</th><th>Active</th><th>Last login</th><th></th></tr></thead>
+          <thead><tr><th>Name</th><th>Initials</th><th>Role</th><th>Active</th><th>Last login</th><th></th></tr></thead>
           <tbody>${rows}</tbody>
         </table>`;
 
       container.querySelectorAll('tr[data-id]').forEach(tr => {
         const saveBtn = tr.querySelector('.user-save-btn');
         const deleteBtn = tr.querySelector('.user-delete-btn');
-        if (saveBtn) saveBtn.addEventListener('click', () => saveRole(tr));
+        if (saveBtn) saveBtn.addEventListener('click', () => saveUser(tr));
         if (deleteBtn) deleteBtn.addEventListener('click', () => deleteUser(tr));
       });
     }
 
-    async function saveRole(tr) {
+    // Saves initials and, for other users, the role. Empty initials are
+    // regenerated from the name by the database trigger.
+    async function saveUser(tr) {
       const msg = document.getElementById('list-message');
       const id = tr.dataset.id;
-      const newRoleId = Number(tr.querySelector('.user-role-select').value);
+      const initials = tr.querySelector('.user-initials-input').value.trim().toUpperCase();
+      const changes = { initials: initials || null };
+      const roleSelect = tr.querySelector('.user-role-select');
+      if (roleSelect) changes.role_id = Number(roleSelect.value);
 
-      setMessage(msg, 'Saving role…');
+      setMessage(msg, 'Saving…');
       const { error } = await supabaseClient
         .from('users')
-        .update({ role_id: newRoleId })
+        .update(changes)
         .eq('id', id);
 
       if (error) {
         setMessage(msg, 'Save failed: ' + error.message, 'error');
         return;
       }
-      setMessage(msg, 'Role updated.', 'ok');
+      setMessage(msg, 'User updated.', 'ok');
       loadUserList();
     }
 

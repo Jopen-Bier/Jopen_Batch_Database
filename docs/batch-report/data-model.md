@@ -51,12 +51,15 @@ Seed (from Jaap, 15-10):
   and lagering.
 
 RLS: select for every logged-in user; insert/update/delete via `settings`.
+No access for `anon`.
 
 ### `users.initials` (new column)
 text, nullable. Trigger `set_user_initials()` before insert/update of `name`:
 if `initials` is null → upper(first letter of first word + first letter of
-last word). Backfill existing users. Single-word names get one letter; Jaap
-corrects by hand. Editable on `gebruikers.html` (admin).
+last word), via `initials_from_name(name)`. Backfill existing users.
+Single-word names get one letter; Jaap corrects by hand. Editable on
+`gebruikers.html` (admin); saving an empty value regenerates them. On a
+change of name, generated initials follow the new name, hand-typed ones stay.
 
 ### Permission module
 `update permission_modules set name = 'Batches & batch reports' where module_key = 'batches'`.
@@ -79,14 +82,19 @@ Generic trigger function `log_batch_change()` (security definer, fixed
 (each phase attaches its own tables). `batch_id` = `NEW/OLD.batch_id`, or via
 the parent for child tables (pass the lookup as a trigger argument, or give
 child tables a `batch_id` column too — preferred: every batch table has
-`batch_id`). RLS: select `can_view('batches')`; no insert/update/delete
-policies (trigger only).
+`batch_id`). Built (phase 0): every batch table has `batch_id`; `row_id` =
+the `id` column, or for a composite key the columns passed as trigger
+arguments joined with `:` (`log_batch_change('entry_id', 'tag_id')`);
+updates that change nothing are not logged. RLS: select
+`can_view('batches')`; no insert/update/delete policies (trigger only).
 
 ### View `batch_stages` (new, `security_invoker = true`)
 One row per batch: `batch_id`, `stage`, `start_date`, `end_date`, plus the
 fields Active batches needs. Stage logic in business-rules.md. **Phase 0
 version**: `planned` → `raw`, `completed` → `closed` (the process tables do
-not exist yet); each later phase extends the view.
+not exist yet); each later phase extends the view. `start_date` / `end_date`
+are `date` (start = brew 1 mash-in, local date) — keep the type when the view
+is replaced (`create or replace view` cannot change a column type).
 
 ---
 
