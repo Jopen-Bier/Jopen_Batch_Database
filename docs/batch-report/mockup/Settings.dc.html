@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fermentation action tags</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#33473a}a:hover{color:#1c2b26}
+.t{border-collapse:collapse;width:100%;background:#fff}
+.t th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#6b6355;padding:10px 12px;border-bottom:2px solid #33473a}
+.t td{padding:8px 12px;border-bottom:1px solid #d8d2c4;font-size:14px}
+.t input[type=text]{border:1px solid #d8d2c4;border-radius:4px;padding:7px 9px;font:inherit;width:100%;box-sizing:border-box;min-height:36px}
+.t input[type=text]:focus{outline:2px solid #4c6b4f}
+.t input[type=checkbox]{width:18px;height:18px;accent-color:#33473a;cursor:pointer}
+.mv{border:1px solid #d8d2c4;background:#fff;border-radius:4px;width:32px;height:32px;cursor:pointer;color:#33473a;display:inline-flex;align-items:center;justify-content:center}
+.mv:hover{border-color:#33473a}
+.btn{background:#b4772c;color:#fff;border:0;border-radius:20px;padding:10px 18px;font:inherit;font-size:13px;font-weight:700;letter-spacing:.04em;cursor:pointer;min-height:40px}
+.btn:hover{background:#96601f}
+.off td{color:#a89f8e}
+.del{border:0;background:transparent;color:#a89f8e;width:30px;height:30px;border-radius:15px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0;flex-shrink:0}
+.del:hover{background:#f8dcd3;color:#8f2909}
+</style>
+</helmet>
+<div style="width: 1000px; height: 800px; box-sizing: border-box; background: #f6f4ee; padding: 28px 32px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, Helvetica, sans-serif; color: #1c2b26; display: flex; flex-direction: column; gap: 14px;">
+  <div style="font-size: 13px; color: #6b6355;">Settings · Batch report</div>
+  <div style="display: flex; justify-content: space-between; align-items: flex-end; gap: 16px;">
+    <div>
+      <h1 style="margin: 0; font-size: 28px;">Fermentation action tags</h1>
+      <div style="font-size: 13px; color: #6b6355; margin-top: 4px;">Tags brewers can add to a measurement row. Milestone tags show their first date in the milestone bar and in analyses.</div>
+    </div>
+    <button class="btn" type="button" onClick="{{add}}">+ New tag</button>
+  </div>
+  <div style="overflow: auto; flex: 1; border: 1px solid #d8d2c4; border-radius: 6px;">
+    <table class="t">
+      <thead><tr><th style="width: 90px;">Order</th><th>Label</th><th style="width: 110px;">Milestone</th><th style="width: 90px;">Active</th><th style="width: 110px;">Used</th><th style="width: 44px;"></th></tr></thead>
+      <tbody>
+        <sc-for list="{{tags}}" as="t" hint-placeholder-count="10">
+          <tr class="{{t.cls}}">
+            <td>
+              <button class="mv" type="button" onClick="{{t.up}}" aria-label="Move up"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 8l4-4 4 4"></path></svg></button>
+              <button class="mv" type="button" onClick="{{t.down}}" aria-label="Move down"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 4l4 4 4-4"></path></svg></button>
+            </td>
+            <td><input type="text" value="{{t.label}}" onChange="{{t.setLabel}}" aria-label="Label"></td>
+            <td><input type="checkbox" checked="{{t.ms}}" onChange="{{t.toggleMs}}" aria-label="Milestone"></td>
+            <td><input type="checkbox" checked="{{t.active}}" onChange="{{t.toggleActive}}" aria-label="Active"></td>
+            <td style="font-size: 13px; color: #6b6355;">{{t.used}}</td>
+            <td><button class="del" type="button" onClick="{{t.del}}" aria-label="Delete tag"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2.5 4h9M5.5 4V2.5h3V4M3.5 4l.6 8h5.8l.6-8"></path></svg></button></td>
+          </tr>
+        </sc-for>
+      </tbody>
+    </table>
+  </div>
+  <div style="font-size: 12px; color: #6b6355;">Tags that have been used cannot be deleted, only made inactive, so historic batches keep their meaning.</div>
+
+  <sc-if value="{{cf.open}}" hint-placeholder-val="{{false}}">
+    <div style="position: fixed; inset: 0; background: rgba(28,43,38,.35); z-index: 60; display: flex; align-items: center; justify-content: center; padding: 16px;">
+      <div role="alertdialog" aria-label="Confirm delete" style="background: #fff; border-radius: 10px; padding: 18px 20px; width: 100%; max-width: 380px; box-shadow: 0 16px 48px rgba(0,0,0,.25); display: flex; flex-direction: column; gap: 10px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, Helvetica, sans-serif; color: #1c2b26;">
+        <div style="font-weight: 700; font-size: 16px;">Delete {{cf.label}}?</div>
+        <div style="font-size: 13px; color: #6b6355;">You can undo this right after deleting. The deletion is recorded in the audit trail.</div>
+        <div style="display: flex; justify-content: flex-end; gap: 10px; padding-top: 4px;">
+          <button type="button" onClick="{{cf.cancel}}" style="background: #f6f4ee; color: #33473a; border: 1px solid #e2ddd0; border-radius: 20px; padding: 8px 16px; font: inherit; font-size: 13px; cursor: pointer; min-height: 36px;">Cancel</button>
+          <button type="button" onClick="{{cf.ok}}" style="background: #a3492f; color: #fff; border: 0; border-radius: 20px; padding: 8px 16px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; min-height: 36px;">Delete</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+  <sc-if value="{{tst.open}}" hint-placeholder-val="{{false}}">
+    <div role="status" style="position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #1c2b26; color: #fff; border-radius: 22px; padding: 6px 8px 6px 18px; display: flex; gap: 12px; align-items: center; z-index: 61; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, Helvetica, sans-serif; font-size: 13px; box-shadow: 0 8px 24px rgba(0,0,0,.2);">
+      <span>{{tst.label}} deleted</span>
+      <button type="button" onClick="{{tst.undo}}" style="background: #b4772c; color: #fff; border: 0; border-radius: 16px; padding: 6px 14px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; min-height: 32px;">Undo</button>
+      <button type="button" onClick="{{tst.close}}" aria-label="Dismiss" style="background: transparent; color: #cfd8cc; border: 0; width: 32px; height: 32px; border-radius: 16px; cursor: pointer; font-size: 16px;">×</button>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1000,"height":800}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const L = [['24h purge',0,41],['Purge',0,388],['Spunding',0,96],['Dry warm',1,72],['Dryhopping',1,104],['Tasting',0,57],['Cooling',1,112],['Addition',1,63],['Pump start',0,19],['Pump stop',0,19],['Transfer',0,23],['Transport',0,4],['Processing',0,110],['Sample to lab',1,98],['Blending',0,6],['Other',0,31]];
+    this.state = { next: 100, tags: L.map((x, i) => ({ id: i + 1, label: x[0], ms: !!x[1], active: true, used: 0 })) };
+  }
+  upd(id, p) { this.setState({ tags: this.state.tags.map((t) => (t.id === id ? Object.assign({}, t, p) : t)) }); }
+  move(i, d) {
+    const a = this.state.tags.slice(), j = i + d;
+    if (j < 0 || j >= a.length) return;
+    const tmp = a[i]; a[i] = a[j]; a[j] = tmp;
+    this.setState({ tags: a });
+  }
+  askDelete(label, fn) { this.setState({ __cf: { label: label, fn: fn } }); }
+  doDelete() {
+    const cf = this.state.__cf; if (!cf) return;
+    const snap = Object.assign({}, this.state); delete snap.__cf; delete snap.__tst;
+    this.setState({ __cf: null });
+    cf.fn();
+    const base = cf.label.replace(/^this /, '');
+    this.setState({ __tst: { label: base.charAt(0).toUpperCase() + base.slice(1), snap: snap } });
+    clearTimeout(this.__t); this.__t = setTimeout(() => this.setState({ __tst: null }), 10000);
+  }
+  undoDelete() { const t = this.state.__tst; if (!t) return; clearTimeout(this.__t); this.setState(Object.assign({}, t.snap, { __tst: null, __cf: null })); }
+  renderVals() {
+    return {
+      cf: { open: !!this.state.__cf, label: this.state.__cf ? this.state.__cf.label : '', ok: () => this.doDelete(), cancel: () => this.setState({ __cf: null }) },
+      tst: { open: !!this.state.__tst, label: this.state.__tst ? this.state.__tst.label : '', undo: () => this.undoDelete(), close: () => this.setState({ __tst: null }) },
+      add: () => this.setState({ next: this.state.next + 1, tags: this.state.tags.concat([{ id: this.state.next, label: '', ms: false, active: true, used: 0 }]) }),
+      tags: this.state.tags.map((t, i) => ({
+        label: t.label, ms: t.ms, active: t.active,
+        used: t.used ? t.used + ' rows' : 'not used',
+        cls: t.active ? '' : 'off',
+        setLabel: (e) => this.upd(t.id, { label: e.target.value }),
+        toggleMs: () => this.upd(t.id, { ms: !t.ms }),
+        toggleActive: () => this.upd(t.id, { active: !t.active }),
+        up: () => this.move(i, -1),
+        down: () => this.move(i, 1),
+        del: () => this.askDelete('this tag', () => { if (!t.used) this.setState({ tags: this.state.tags.filter((x) => x.id !== t.id) }); })
+      }))
+    };
+  }
+}
+</script>
+</body>
+</html>

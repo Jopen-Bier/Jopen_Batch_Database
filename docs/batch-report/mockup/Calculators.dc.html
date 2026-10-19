@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Dosing calculators</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#33473a}a:hover{color:#1c2b26}
+.f{display:flex;flex-direction:column;gap:4px}
+.f label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#6b6355}
+.f input{border:1px solid #d8d2c4;border-radius:4px;padding:9px 10px;font:inherit;font-size:15px;background:#fff7c7;text-align:right;min-height:40px;box-sizing:border-box}
+.f input:focus{outline:2px solid #4c6b4f}
+.out{display:flex;justify-content:space-between;align-items:baseline;padding:10px 12px;background:#f5f5f3;border:1px solid #e2ddd0;border-radius:4px;font-variant-numeric:tabular-nums}
+.out span:first-child{font-size:13px;color:#33473a}
+.out b{font-size:18px}
+.btn{background:#b4772c;color:#fff;border:0;border-radius:20px;padding:10px 18px;font:inherit;font-size:13px;font-weight:700;letter-spacing:.04em;cursor:pointer;min-height:40px}
+.btn:hover{background:#96601f}
+.btn2{background:#fff;color:#1c2b26;border:1px solid #d8d2c4;border-radius:4px;padding:9px 14px;font:inherit;font-size:13px;cursor:pointer;min-height:40px}
+.x{border:0;background:transparent;cursor:pointer;color:#6b6355;width:40px;height:40px;border-radius:20px;display:flex;align-items:center;justify-content:center}
+.x:hover{background:#f1eee5}
+</style>
+</helmet>
+<div style="width: 1200px; height: 860px; box-sizing: border-box; background: rgba(28,43,38,.45); padding: 56px 48px; display: flex; gap: 40px; justify-content: center; align-items: flex-start; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, Helvetica, sans-serif; color: #1c2b26;">
+
+  <div role="dialog" aria-label="Nagardo dosing calculator" style="width: 500px; background: #fff; border-radius: 10px; box-shadow: 0 16px 48px rgba(0,0,0,.25); display: flex; flex-direction: column;">
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: 18px 22px 10px;">
+      <div>
+        <div style="font-size: 12px; color: #6b6355;">Batch 26-0412 · Mooie Nel</div>
+        <div style="font-size: 20px; font-weight: 700;">Nagardo dosing calculator</div>
+      </div>
+      <button class="x" type="button" aria-label="Close"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l10 10M13 3L3 13"></path></svg></button>
+    </div>
+    <div style="padding: 8px 22px 18px; display: flex; flex-direction: column; gap: 14px;">
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px;">
+        <div class="f"><label for="nv">Batch volume (l)</label><input id="nv" value="{{nVol}}" onChange="{{setNVol}}" inputmode="decimal"></div>
+        <div class="f"><label for="nd">Dosage (ppm)</label><input id="nd" value="{{nPpm}}" onChange="{{setNPpm}}" inputmode="decimal"></div>
+      </div>
+      <div style="font-size: 12px; color: #6b6355;">Volume pre-filled: 2 brews × 40 hl. Dosage pre-filled from the recipe when Nagardo is in it.</div>
+      <div class="out"><span>Nagardo weight</span><b>{{nWeight}} g</b></div>
+      <div class="out"><span>Water volume (1% solution)</span><b>{{nWater}} l</b></div>
+    </div>
+    <div style="border-top: 1px solid #ece8dc; padding: 14px 22px; display: flex; flex-direction: column; gap: 10px;">
+      <div style="font-size: 12px; color: #6b6355;">Saving adds a log entry with tag <b>Addition</b>:</div>
+      <div style="font-size: 13px; background: #faf9f5; border: 1px dashed #d8d2c4; border-radius: 4px; padding: 8px 10px;">{{nLog}}</div>
+      <div style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button class="btn2" type="button">Close</button>
+        <button class="btn" type="button">Save to log</button>
+      </div>
+    </div>
+  </div>
+
+  <div role="dialog" aria-label="PGA / alginate dosing calculator" style="width: 500px; background: #fff; border-radius: 10px; box-shadow: 0 16px 48px rgba(0,0,0,.25); display: flex; flex-direction: column;">
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: 18px 22px 10px;">
+      <div>
+        <div style="font-size: 12px; color: #6b6355;">Batch 26-0412 · Mooie Nel</div>
+        <div style="font-size: 20px; font-weight: 700;">PGA / alginate dosing calculator</div>
+      </div>
+      <button class="x" type="button" aria-label="Close"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l10 10M13 3L3 13"></path></svg></button>
+    </div>
+    <div style="padding: 8px 22px 18px; display: flex; flex-direction: column; gap: 14px;">
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px;">
+        <div class="f"><label for="pv">Batch volume (l)</label><input id="pv" value="{{pVol}}" onChange="{{setPVol}}" inputmode="decimal"></div>
+        <div class="f"><label for="pd">Dosage (l/hl)</label><input id="pd" value="{{pRate}}" onChange="{{setPRate}}" inputmode="decimal"></div>
+      </div>
+      <div style="font-size: 12px; color: #6b6355;">Dosage pre-filled from the recipe cellar addition (default 0.4 l/hl).</div>
+      <div class="out"><span>Volume before centrifuge</span><b>{{pPre}} l</b></div>
+      <div class="out"><span>Alginate</span><b>{{pAlg}} g</b></div>
+      <div class="out"><span>Hot water (2% solution)</span><b>{{pWater}} l</b></div>
+    </div>
+    <div style="border-top: 1px solid #ece8dc; padding: 14px 22px; display: flex; flex-direction: column; gap: 10px;">
+      <div style="font-size: 12px; color: #6b6355;">Saving adds a log entry with tag <b>Addition</b>:</div>
+      <div style="font-size: 13px; background: #faf9f5; border: 1px dashed #d8d2c4; border-radius: 4px; padding: 8px 10px;">{{pLog}}</div>
+      <div style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button class="btn2" type="button">Close</button>
+        <button class="btn" type="button">Save to log</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1200,"height":860}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { nVol: '8000', nPpm: '2.5', pVol: '8000', pRate: '0.4' };
+  }
+  renderVals() {
+    const n = (v) => { const x = parseFloat(String(v).replace(',', '.')); return isNaN(x) ? 0 : x; };
+    const f1 = (x) => x.toLocaleString('en-GB', { maximumFractionDigits: 1, minimumFractionDigits: 1 });
+    const nW = n(this.state.nVol) * n(this.state.nPpm) / 1000;
+    const nWater = nW / (1000 * 0.01);
+    const pre = n(this.state.pRate) * n(this.state.pVol) / 100;
+    const alg = pre * 0.02 * 1000;
+    return {
+      nVol: this.state.nVol, nPpm: this.state.nPpm, pVol: this.state.pVol, pRate: this.state.pRate,
+      setNVol: (e) => this.setState({ nVol: e.target.value }),
+      setNPpm: (e) => this.setState({ nPpm: e.target.value }),
+      setPVol: (e) => this.setState({ pVol: e.target.value }),
+      setPRate: (e) => this.setState({ pRate: e.target.value }),
+      nWeight: f1(nW), nWater: f1(nWater),
+      pPre: f1(pre), pAlg: f1(alg), pWater: f1(pre),
+      nLog: 'Nagardo ' + f1(nW) + ' g in ' + f1(nWater) + ' l water (' + this.state.nPpm + ' ppm on ' + this.state.nVol + ' l)',
+      pLog: 'PGA/alginate ' + f1(alg) + ' g in ' + f1(pre) + ' l hot water (' + this.state.pRate + ' l/hl on ' + this.state.pVol + ' l)'
+    };
+  }
+}
+</script>
+</body>
+</html>

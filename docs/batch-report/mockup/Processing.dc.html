@@ -1,0 +1,583 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Processing</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;background:#f6f4ee}
+a{color:#33473a}a:hover{color:#1c2b26}
+.card{background:#fff;border:1px solid #e2ddd0;border-radius:10px;box-shadow:0 1px 2px rgba(28,43,38,.05)}
+.lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:#6b6355}
+.num{font-variant-numeric:tabular-nums}
+.kv{display:grid;grid-template-columns:minmax(0,1fr) 58px 42px 48px;align-items:center;column-gap:8px;padding:3px 0;border-bottom:1px solid #f1eee5;font-size:13.5px}
+.kv .k{color:#1c2b26;min-width:0}
+.kv .v{font-weight:700;font-variant-numeric:tabular-nums;background:#f6f4ee;border:1px solid #e2ddd0;color:#1c2b26;border-radius:5px;padding:1px 6px;text-align:center}
+.kv .u{font-size:12px;color:#6b6355}
+.kv .t{font-size:12px;color:#6b6355;font-variant-numeric:tabular-nums}
+.kv.hd{padding:0 0 4px;border-bottom:2px solid #33473a;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:#6b6355}
+.kv.hd .k{font-weight:700;color:#33473a;text-transform:none;letter-spacing:0;font-size:12.5px}
+.kv.hd .v{background:none;border:0;font-weight:400;color:#6b6355;padding:0;font-size:10.5px}
+.kv.hd .u,.kv.hd .t{font-size:10.5px}
+.kr{display:flex;align-items:center;gap:8px;padding:3px 0;border-bottom:1px solid #f1eee5;font-size:13.5px}
+.kr .k{flex:1;color:#1c2b26}
+.kr .u,.kr .t{font-size:12px;color:#6b6355}
+.kr .c{font-weight:700;font-variant-numeric:tabular-nums;background:#eef0e6;color:#33473a;border-radius:6px;padding:3px 8px;min-width:38px;text-align:center}
+.pill{display:inline-block;border-radius:12px;padding:3px 10px;font-size:12px;font-weight:700;background:#e1ead9;color:#33473a}
+.fld{display:flex;flex-direction:column;gap:4px;min-width:0}
+.fld input,.fld select{border:1px solid #e2ddd0;border-radius:6px;padding:7px 9px;font:inherit;font-size:14px;background:#fffbe6;box-sizing:border-box;width:100%;min-height:38px}
+.fld input:focus,.fld select:focus{outline:none;border-color:#4c6b4f;background:#fff}
+.calcv{border:1px solid #ece8dc;border-radius:6px;padding:7px 9px;font-size:14px;background:#f5f5f3;color:#33473a;font-weight:700;min-height:38px;box-sizing:border-box;font-variant-numeric:tabular-nums}
+.seg{display:inline-flex;background:#ece8dc;border-radius:20px;padding:3px;gap:2px}
+.seg button{border:0;background:transparent;border-radius:17px;padding:7px 14px;font:inherit;font-size:13px;cursor:pointer;color:#6b6355;min-height:34px}
+.seg button.on{background:#33473a;color:#fff;font-weight:700}
+.seg button.go{background:#4c6b4f;color:#fff;font-weight:700}
+.seg button.nogo{background:#a3492f;color:#fff;font-weight:700}
+.lg{border-collapse:separate;border-spacing:0;font-size:13px;width:100%}
+.lg th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:#6b6355;font-weight:700;padding:8px 6px;border-bottom:2px solid #33473a;white-space:nowrap}
+.lg th.r{text-align:right}
+.lg td{padding:3px 6px;border-bottom:1px solid #ece8dc;height:34px}
+.lg td.c{color:#6b6355;text-align:right;font-variant-numeric:tabular-nums}
+.lg td.h{font-size:12px;color:#33473a;font-weight:700;white-space:nowrap}
+.lg input,.lg select{width:100%;box-sizing:border-box;border:1px solid transparent;border-radius:5px;background:#fffbe6;font:inherit;padding:5px 6px;text-align:right;font-variant-numeric:tabular-nums}
+.lg select{text-align:left;cursor:pointer}
+.lg input:hover,.lg select:hover{border-color:#e6dcb8}
+.lg input:focus,.lg select:focus{outline:none;border-color:#4c6b4f;background:#fff}
+.lg input.l{text-align:left}
+.lg input.bad{background:#f8dcd3;border-color:#d99a85;color:#8f2909;font-weight:700}
+.btn{background:#b4772c;color:#fff;border:0;border-radius:20px;padding:9px 16px;font:inherit;font-size:13px;font-weight:700;letter-spacing:.03em;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:8px;min-height:40px;box-sizing:border-box}
+.btn:hover{background:#96601f;color:#fff}
+.ghost{background:#f6f4ee;color:#33473a;border:1px solid #e2ddd0;border-radius:20px;padding:7px 14px;font:inherit;font-size:13px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px;min-height:36px;box-sizing:border-box}
+.ghost:hover{border-color:#33473a;color:#1c2b26}
+.chk{display:flex;gap:10px;align-items:flex-start;font-size:13.5px;padding:6px 0;border-bottom:1px solid #f1eee5}
+.chk input{width:18px;height:18px;accent-color:#33473a;margin-top:1px;flex-shrink:0;cursor:pointer}
+.auto{font-size:11px;color:#4c6b4f;background:#eef0e6;border-radius:10px;padding:1px 7px;margin-left:auto;white-space:nowrap}
+.note{font-size:13px;background:#fdf1d8;color:#6a4511;border-radius:8px;padding:9px 12px}
+.del{border:0;background:transparent;color:#a89f8e;width:30px;height:30px;border-radius:15px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0;flex-shrink:0}
+.del:hover{background:#f8dcd3;color:#8f2909}
+.rel{border:1px solid #d8d2c4;background:#fff;color:#6b6355;border-radius:20px;padding:7px 14px;font:inherit;font-size:13px;cursor:pointer;min-height:36px;display:inline-flex;gap:6px;align-items:center;white-space:nowrap}
+.rel:hover{border-color:#33473a;color:#33473a}
+.rel.on{background:#4c6b4f;border-color:#4c6b4f;color:#fff;font-weight:700}
+</style>
+</helmet>
+<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, Helvetica, sans-serif; color: #1c2b26; background: #f6f4ee; min-height: 100%;">
+
+  <div style="display: flex; align-items: center; gap: 24px; padding: 10px 20px; background: #E0001D; color: #fff; flex-wrap: wrap;">
+    <div style="display: flex; align-items: center; gap: 8px; font-weight: 700;">
+      <div style="width: 32px; height: 32px; border-radius: 50%; background: #fff; color: #E0001D; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 15px;">J</div>
+      Jopen
+    </div>
+    <div style="display: flex; gap: 18px; flex: 1; flex-wrap: wrap; font-size: 15px; color: #fce3e5;">
+      <span>Recipes</span><span>Ingredients</span><span style="color: #fff; border-bottom: 2px solid #fff;">Batches</span><span>Planning</span><span>Inventory</span><span>Statistics</span>
+    </div>
+    <div style="font-size: 14px; border: 1px solid rgba(255,255,255,.5); border-radius: 4px; padding: 6px 12px;">Jaap · Admin</div>
+  </div>
+
+  <div style="max-width: 1400px; margin: 0 auto; padding: 20px 24px 60px; box-sizing: border-box; display: flex; flex-direction: column; gap: 16px;">
+
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+      <div style="display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;">
+        <h1 style="margin: 0; font-size: 28px;">26-0398</h1>
+        <span style="font-size: 28px; font-weight: 700; color: #33473a;">Mooie Nel <span style="font-weight: 400; color: #8a8273;">v12.0</span></span>
+        <span class="pill" style="background: #33473a; color: #fff;">Processing</span>
+      </div>
+      <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
+        <span style="font-size: 12px; color: #4c6b4f;">All changes saved</span>
+        <button class="ghost" type="button">Export batch report (.xlsx)</button>
+      </div>
+    </div>
+
+    <div style="display: flex; gap: 2px; background: #ece8dc; border-radius: 22px; padding: 3px; align-self: flex-start; flex-wrap: wrap;">
+      <a href="Overview.dc.html" style="padding: 8px 16px; text-decoration: none; color: #6b6355; font-size: 13px; border-radius: 20px;">Overview</a>
+      <a href="Brewing.dc.html" style="padding: 8px 16px; text-decoration: none; color: #6b6355; font-size: 13px; border-radius: 20px;">Brewing</a>
+      <a href="Main.dc.html" style="padding: 8px 16px; text-decoration: none; color: #6b6355; font-size: 13px; border-radius: 20px;">Fermentation log</a>
+      <a href="#" style="padding: 8px 16px; text-decoration: none; color: #fff; background: #33473a; font-size: 13px; font-weight: 700; border-radius: 20px;">Processing</a>
+      <a href="Filling.dc.html" style="padding: 8px 16px; text-decoration: none; color: #6b6355; font-size: 13px; border-radius: 20px;">Filling</a>
+      <a href="FillingReport.dc.html" style="padding: 8px 16px; text-decoration: none; color: #6b6355; font-size: 13px; border-radius: 20px;">Filling report</a>
+    </div>
+
+    <div style="display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start;">
+      <div style="flex: 1 1 420px; min-width: 0; display: flex; flex-direction: column; gap: 16px;">
+      <div class="card" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 8px;">
+        <div class="lbl">Check before processing</div>
+        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+          <span class="lbl">Beer risk category</span><span class="pill">Standaard</span>
+        </div>
+        <div style="font-size: 12px; color: #6b6355;">No preference for time of processing / filling.</div>
+        <div>
+          <label class="chk"><input type="checkbox" checked="{{true}}" disabled="{{true}}"><span>Minimum maturation = 5 days</span><span class="auto">auto · 7.3 days</span></label>
+          <label class="chk"><input type="checkbox" checked="{{chkAdds}}" onChange="{{toggleAdds}}"><span>Cellar adds completed</span></label>
+        </div>
+      </div>
+      </div>
+      <div style="flex: 1 1 420px; min-width: 0; display: flex; flex-direction: column; gap: 16px;">
+      <div class="card" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 8px;">
+        <div class="lbl">Specifications</div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); column-gap: 28px; row-gap: 12px;">
+          <div>
+            <div class="kv hd"><span class="k">Processing</span><span class="v">Spec</span><span class="u">Unit</span><span class="t">Tol.</span></div>
+            <div class="kv"><span class="k">Turbidity after centrifuge</span><span class="v">15</span><span class="u">EBC</span><span class="t">≤</span></div>
+            <div class="kv"><span class="k">Pasteurisation</span><span class="v">15</span><span class="u">PU</span><span class="t">±2</span></div>
+            <div class="kv"><span class="k">O2 in HBT</span><span class="v">50</span><span class="u">ppb</span><span class="t">&lt;</span></div>
+          </div>
+          <div>
+            <div class="kv hd"><span class="k">CO2 in HBT</span><span class="v">Spec</span><span class="u">Unit</span><span class="t">Tol.</span></div>
+            <div class="kv"><span class="k">Bottle</span><span class="v">5.5</span><span class="u">g/l</span><span class="t">±0.0</span></div>
+            <div class="kv"><span class="k">Keg</span><span class="v">4.7</span><span class="u">g/l</span><span class="t">±0.3</span></div>
+            <div class="kv"><span class="k">Can</span><span class="v">5.5</span><span class="u">g/l</span><span class="t">±0.0</span></div>
+          </div>
+        </div>
+      </div>
+      </div>
+    </div>
+
+    <div class="card" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 14px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+          <div class="lbl">Processing session</div>
+          <div class="seg">
+            <sc-for list="{{sessTabs}}" as="t" hint-placeholder-count="1">
+              <button class="{{t.cls}}" type="button" onClick="{{t.pick}}">{{t.label}}</button>
+            </sc-for>
+            <button type="button" onClick="{{addSession}}">+ session</button>
+          </div>
+          <sc-if value="{{canDelSession}}" hint-placeholder-val="{{false}}"><button class="del" type="button" onClick="{{delSession}}" aria-label="Delete this session"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2.5 4h9M5.5 4V2.5h3V4M3.5 4l.6 8h5.8l.6-8"></path></svg></button></sc-if>
+        </div>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+          <sc-if value="{{hasCalc}}" hint-placeholder-val="{{false}}">
+            <span class="lbl" style="margin-right: 4px;">Calculators</span>
+            <sc-if value="{{showNagardo}}" hint-placeholder-val="{{false}}"><a class="ghost" href="Calculators.dc.html">Nagardo</a></sc-if>
+            <sc-if value="{{showPga}}" hint-placeholder-val="{{false}}"><a class="ghost" href="Calculators.dc.html">PGA / alginate</a></sc-if>
+            <sc-if value="{{showDilution}}" hint-placeholder-val="{{false}}"><a class="ghost" href="#">Dilution</a></sc-if>
+          </sc-if>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px;">
+        <div class="fld"><label class="lbl" for="os">Operator start</label><input id="os" value="{{cur.opS}}" onChange="{{set.opS}}"></div>
+        <div class="fld"><label class="lbl" for="oe">Operator end</label><input id="oe" value="{{cur.opE}}" onChange="{{set.opE}}"></div>
+        <div class="fld"><label class="lbl" for="pd">Date of processing</label><input id="pd" type="date" value="{{cur.date}}" onChange="{{set.date}}"></div>
+        <div class="fld"><label class="lbl" for="st">Start of processing</label><input id="st" type="time" value="{{cur.start}}" onChange="{{set.start}}"></div>
+        <div class="fld"><label class="lbl" for="et">End of processing</label><input id="et" type="time" value="{{cur.end}}" onChange="{{set.end}}"></div>
+        <div class="fld"><span class="lbl">Duration</span><div class="calcv">{{duration}}</div></div>
+      </div>
+
+      <div style="display: flex; gap: 22px; flex-wrap: wrap; align-items: flex-end;">
+        <div class="fld" style="width: 110px;"><label class="lbl" for="ft">Processed from (G)LT</label><input id="ft" value="{{cur.tank}}" onChange="{{set.tank}}"></div>
+        <div class="fld"><span class="lbl">Outlet</span>
+          <div class="seg">
+            <button class="{{outStand}}" type="button" onClick="{{pickStand}}">Standpipe</button>
+            <button class="{{outBottom}}" type="button" onClick="{{pickBottom}}">Bottom valve</button>
+          </div>
+        </div>
+        <div style="display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap;">
+          <div class="fld" style="width: 100px;"><label class="lbl" for="ls">Discharges</label><input id="ls" value="{{cur.dis}}" onChange="{{set.dis}}"></div>
+          <div class="fld" style="width: 130px;"><label class="lbl" for="fq">Interval (min)</label><input id="fq" value="{{cur.intv}}" onChange="{{set.intv}}"></div>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 6px; padding-top: 12px; border-top: 1px solid #f1eee5;">
+        <div class="lbl">Start measurements</div>
+        <div style="overflow-x: auto;">
+          <table class="lg" style="min-width: 660px; max-width: 920px;">
+            <thead>
+              <tr>
+                <th style="width: 160px;">Measurement</th>
+                <th style="width: 100px;">Time</th>
+                <th class="r">O2 (ppb)</th>
+                <th class="r">CO2 (g/l)</th>
+                <th class="r">Start flow (hl/h)</th>
+                <th class="r">Start turbidity (EBC)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="h">Centrifuge in</td>
+                <td><input class="l" type="time" value="{{cur.inTime}}" onChange="{{set.inTime}}" aria-label="Time centrifuge in"></td>
+                <td><input value="{{cur.inO2}}" onChange="{{set.inO2}}" aria-label="O2 centrifuge in"></td>
+                <td><input value="{{cur.inCo2}}" onChange="{{set.inCo2}}" aria-label="CO2 centrifuge in"></td>
+                <td class="c">—</td>
+                <td class="c">—</td>
+              </tr>
+              <tr>
+                <td class="h">Centrifuge out</td>
+                <td><input class="l" type="time" value="{{cur.outTime}}" onChange="{{set.outTime}}" aria-label="Time centrifuge out"></td>
+                <td><input class="{{outO2cls}}" value="{{cur.outO2}}" onChange="{{set.outO2}}" aria-label="O2 centrifuge out"></td>
+                <td><input value="{{cur.outCo2}}" onChange="{{set.outCo2}}" aria-label="CO2 centrifuge out"></td>
+                <td><input value="{{cur.flow}}" onChange="{{set.flow}}" aria-label="Start flow"></td>
+                <td><input class="{{outTurbcls}}" value="{{cur.turb}}" onChange="{{set.turb}}" aria-label="Start turbidity"></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px; align-items: start;">
+      <div class="card" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 10px;">
+        <div class="lbl">Comments processing</div>
+        <div class="note">From recipe: add 40 ml/hl Bevasil in line — record lot no.</div>
+        <table class="lg">
+          <thead><tr><th style="width: 90px;">Time</th><th>Comment</th><th style="width: 50px;">Op.</th><th style="width: 34px;"></th></tr></thead>
+          <tbody>
+            <sc-for list="{{comments}}" as="c" hint-placeholder-count="2">
+              <tr><td><input class="l" type="time" value="{{c.time}}" aria-label="Time"></td><td><input class="l" value="{{c.text}}" onChange="{{c.set}}" aria-label="Comment"></td><td class="c">{{c.op}}</td><td><button class="del" type="button" onClick="{{c.del}}" aria-label="Delete comment"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2.5 4h9M5.5 4V2.5h3V4M3.5 4l.6 8h5.8l.6-8"></path></svg></button></td></tr>
+            </sc-for>
+          </tbody>
+        </table>
+        <div><button class="ghost" type="button" onClick="{{addComment}}">+ Comment</button></div>
+      </div>
+      <div class="card" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 10px;">
+        <div class="lbl">Tasting</div>
+        <div class="fld"><label class="lbl" for="tc">Comments tasting</label>
+          <textarea id="tc" rows="3" style="border: 1px solid #e2ddd0; border-radius: 6px; padding: 8px 10px; font: inherit; font-size: 14px; background: #fffbe6; resize: vertical;">Clean, tropical hop aroma, no diacetyl.</textarea>
+        </div>
+        <div style="display: flex; gap: 12px; align-items: center;">
+          <span class="lbl">Go / Not go</span>
+          <div class="seg">
+            <button class="{{goCls}}" type="button" onClick="{{pickGo}}">Go</button>
+            <button class="{{nogoCls}}" type="button" onClick="{{pickNogo}}">Not go</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+        <div class="lbl">Bright beer tanks (HBT)</div>
+        <button class="btn" type="button" onClick="{{addHbt}}">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 2v10M2 7h10"></path></svg>
+          Add HBT
+        </button>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 14px;">
+        <sc-for list="{{hbts}}" as="b" hint-placeholder-count="2">
+          <div style="border: 1px solid #e2ddd0; border-radius: 10px; padding: 12px 14px; background: #fcfbf8; display: flex; flex-direction: column; gap: 8px;">
+            <div style="display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;">
+              <div class="fld" style="width: 90px;"><label class="lbl">HBT</label><input value="{{b.tank}}" onChange="{{b.setTank}}" aria-label="HBT number" style="font-weight: 700; font-size: 16px; text-align: center;"></div>
+              <div class="fld"><span class="lbl">Filled in session</span><div style="font-size: 13px; font-weight: 700; color: #33473a; padding: 8px 0 7px; white-space: nowrap;">{{b.sessText}}</div></div>
+              <div class="fld"><span class="lbl">Intended for</span>
+                <div class="seg">
+                  <sc-for list="{{b.pkgToggles}}" as="t" hint-placeholder-count="3">
+                    <button class="{{t.cls}}" type="button" onClick="{{t.toggle}}">{{t.label}}</button>
+                  </sc-for>
+                </div>
+              </div>
+              <div class="fld"><span class="lbl">Release</span>
+                <button class="{{b.relCls}}" type="button" onClick="{{b.toggleRel}}" aria-pressed="{{b.relPressed}}"><sc-if value="{{b.released}}" hint-placeholder-val="{{false}}"><svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2.5 7.5l3 3 6-7"></path></svg></sc-if>{{b.relText}}</button>
+              </div>
+              <div style="margin-left: auto; text-align: right;">
+                <div class="lbl">End value</div>
+                <div class="num" style="font-size: 15px; font-weight: 700; color: #33473a;">{{b.endText}}</div>
+              </div>
+              <button class="del" type="button" onClick="{{b.del}}" aria-label="Delete HBT"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2.5 4h9M5.5 4V2.5h3V4M3.5 4l.6 8h5.8l.6-8"></path></svg></button>
+            </div>
+            <table class="lg">
+              <thead><tr><th style="width: 30px;"></th><th style="width: 96px;">Session</th><th class="r" style="width: 58px;">HL</th><th class="r" style="width: 58px;">O2 ppb</th><th class="r" style="width: 58px;">CO2 g/l</th><th style="width: 92px;">CO2 target</th><th style="width: 70px;">Spec</th><th>Comments</th><th style="width: 34px;"></th></tr></thead>
+              <tbody>
+                <sc-for list="{{b.rows}}" as="r" hint-placeholder-count="2">
+                  <tr style="{{r.rowStyle}}">
+                    <td style="font-size: 11px; color: #6b6355; white-space: nowrap;">{{r.tag}}</td>
+                    <td>
+                      <select value="{{r.sess}}" onChange="{{r.setSess}}" aria-label="Session">
+                        <sc-for list="{{sessOpts}}" as="o" hint-placeholder-count="2"><option value="{{o.v}}">{{o.l}}</option></sc-for>
+                      </select>
+                    </td>
+                    <td><input value="{{r.hl}}" onChange="{{r.setHl}}" aria-label="HL"></td>
+                    <td><input class="{{r.o2cls}}" value="{{r.o2}}" onChange="{{r.setO2}}" aria-label="O2"></td>
+                    <td><input class="{{r.co2cls}}" value="{{r.co2}}" onChange="{{r.setCo2}}" aria-label="CO2"></td>
+                    <td>
+                      <select value="{{r.pkg}}" onChange="{{r.setPkg}}" aria-label="CO2 target">
+                        <option value="">—</option><option value="can">Can</option><option value="bottle">Bottle</option><option value="keg">Keg</option>
+                      </select>
+                    </td>
+                    <td style="font-size: 12px; white-space: nowrap; {{r.statStyle}}">{{r.stat}}</td>
+                    <td><input class="l" value="{{r.comment}}" onChange="{{r.setComment}}" aria-label="Comments"></td>
+                    <td><button class="del" type="button" onClick="{{r.del}}" aria-label="Delete reading"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2.5 4h9M5.5 4V2.5h3V4M3.5 4l.6 8h5.8l.6-8"></path></svg></button></td>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+            <div style="display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; align-items: center;">
+              <button class="ghost" type="button" onClick="{{b.addRow}}">+ Reading</button>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div class="card" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 10px;">
+      <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap;">
+        <div class="lbl">Total measured volumes</div>
+        <div style="font-size: 12px; color: #6b6355;">End value = last reading of each HBT block · averages are entered by the operator per HBT fill</div>
+      </div>
+      <div style="overflow-x: auto;">
+        <table class="lg" style="min-width: 1000px;">
+          <thead>
+            <tr>
+              <th style="width: 80px;">HBT</th>
+              <th style="width: 130px;">Intended for</th>
+              <th class="r" style="width: 64px;">HL</th>
+              <th class="r" style="width: 72px;">O2 (ppb)</th>
+              <th class="r" style="width: 72px;">CO2 (g/l)</th>
+              <th class="r" style="border-left: 1px solid #e2ddd0;">Avg. in-line O2 (ppb)</th>
+              <th class="r">Avg. PU</th>
+              <th class="r">Avg. turbidity (EBC)</th>
+              <th class="r">Avg. flow (hl/h)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <sc-for list="{{ends}}" as="e" hint-placeholder-count="2">
+              <tr>
+                <td class="h">{{e.tank}}</td>
+                <td>{{e.pkg}}</td>
+                <td class="c">{{e.hl}}</td>
+                <td class="c">{{e.o2}}</td>
+                <td class="c">{{e.co2}}</td>
+                <td style="border-left: 1px solid #e2ddd0;"><input value="{{e.avgO2}}" onChange="{{e.setAvgO2}}" aria-label="Average in-line O2"></td>
+                <td><input class="{{e.puCls}}" value="{{e.avgPu}}" onChange="{{e.setAvgPu}}" aria-label="Average PU"></td>
+                <td><input class="{{e.turbCls}}" value="{{e.avgTurb}}" onChange="{{e.setAvgTurb}}" aria-label="Average turbidity"></td>
+                <td><input value="{{e.avgFlow}}" onChange="{{e.setAvgFlow}}" aria-label="Average flow"></td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </div>
+      <div style="display: flex; gap: 28px; align-items: center; flex-wrap: wrap; padding-top: 6px;">
+        <div style="display: flex; flex-direction: column;">
+          <span class="lbl">Total end volume</span>
+          <span class="num" style="font-size: 24px; font-weight: 700;">{{totalEnd}} <span style="font-size: 13px; font-weight: 400; color: #6b6355;">hl</span></span>
+        </div>
+        <div style="display: flex; flex-direction: column;">
+          <span class="lbl">Cellar loss</span>
+          <span class="num" style="font-size: 24px; font-weight: 700; color: #6b6355;">{{loss}} <span style="font-size: 13px; font-weight: 400;">hl · 80.0 hl in GLT − {{splitPre}} hl split</span></span>
+        </div>
+        <div style="display: flex; gap: 10px; align-items: center; margin-left: auto;">
+          <span class="lbl">GLT empty?</span>
+          <div class="seg">
+            <button class="{{emptyYes}}" type="button" onClick="{{pickEmptyYes}}">Yes</button>
+            <button class="{{emptyNo}}" type="button" onClick="{{pickEmptyNo}}">No</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 10px;">
+      <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap;">
+        <div class="lbl">Splits / transfers out</div>
+        <div style="font-size: 12px; color: #6b6355;">Same record on Fermentation log, Processing and Filling report · fill in once</div>
+      </div>
+      <div style="overflow-x: auto;">
+        <table class="lg" style="min-width: 760px;">
+          <thead><tr><th style="width: 130px;">Date</th><th class="r" style="width: 80px;">Volume (hl)</th><th style="width: 120px;">From</th><th style="width: 160px;">Destination</th><th style="width: 110px;">Batch</th><th>Comment</th><th style="width: 34px;"></th></tr></thead>
+          <tbody>
+            <sc-for list="{{splits}}" as="x" hint-placeholder-count="1">
+              <tr>
+                <td><input class="l" type="date" value="{{x.date}}" onChange="{{x.setDate}}" aria-label="Date"></td>
+                <td><input value="{{x.vol}}" onChange="{{x.setVol}}" aria-label="Volume"></td>
+                <td><select value="{{x.from}}" onChange="{{x.setFrom}}" aria-label="From"><option value="GLT 7">GLT 7</option><option value="LT">LT</option><option value="HBT 12">HBT 12</option><option value="HBT 14">HBT 14</option></select></td>
+                <td><select value="{{x.dest}}" onChange="{{x.setDest}}" aria-label="Destination"><option value="blend">To batch</option><option value="discard">Discard</option></select></td>
+                <td><sc-if value="{{x.hasBatch}}" hint-placeholder-val="{{true}}"><input class="l" value="{{x.batch}}" onChange="{{x.setBatch}}" placeholder="26-…" aria-label="Batch"></sc-if><sc-if value="{{x.noBatch}}" hint-placeholder-val="{{false}}"><span style="font-size: 12px; color: #a89f8e;">—</span></sc-if></td>
+                <td><input class="l" value="{{x.comment}}" onChange="{{x.setComment}}" aria-label="Comment"></td>
+                <td><button class="del" type="button" onClick="{{x.del}}" aria-label="Delete split"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2.5 4h9M5.5 4V2.5h3V4M3.5 4l.6 8h5.8l.6-8"></path></svg></button></td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </div>
+      <div style="display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; align-items: center;">
+        <a class="ghost" href="SplitBatch.dc.html">+ Split / transfer</a>
+        <span style="font-size: 12px; color: #6b6355;">Opens the transfer popup · the receiving batch gets an incoming line automatically</span>
+      </div>
+    </div>
+
+  </div>
+
+  <sc-if value="{{cf.open}}" hint-placeholder-val="{{false}}">
+    <div style="position: fixed; inset: 0; background: rgba(28,43,38,.35); z-index: 60; display: flex; align-items: center; justify-content: center; padding: 16px;">
+      <div role="alertdialog" aria-label="Confirm delete" style="background: #fff; border-radius: 10px; padding: 18px 20px; width: 100%; max-width: 380px; box-shadow: 0 16px 48px rgba(0,0,0,.25); display: flex; flex-direction: column; gap: 10px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, Helvetica, sans-serif; color: #1c2b26;">
+        <div style="font-weight: 700; font-size: 16px;">Delete {{cf.label}}?</div>
+        <div style="font-size: 13px; color: #6b6355;">You can undo this right after deleting. The deletion is recorded in the audit trail.</div>
+        <div style="display: flex; justify-content: flex-end; gap: 10px; padding-top: 4px;">
+          <button type="button" onClick="{{cf.cancel}}" style="background: #f6f4ee; color: #33473a; border: 1px solid #e2ddd0; border-radius: 20px; padding: 8px 16px; font: inherit; font-size: 13px; cursor: pointer; min-height: 36px;">Cancel</button>
+          <button type="button" onClick="{{cf.ok}}" style="background: #a3492f; color: #fff; border: 0; border-radius: 20px; padding: 8px 16px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; min-height: 36px;">Delete</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+  <sc-if value="{{tst.open}}" hint-placeholder-val="{{false}}">
+    <div role="status" style="position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #1c2b26; color: #fff; border-radius: 22px; padding: 6px 8px 6px 18px; display: flex; gap: 12px; align-items: center; z-index: 61; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, Helvetica, sans-serif; font-size: 13px; box-shadow: 0 8px 24px rgba(0,0,0,.2);">
+      <span>{{tst.label}} deleted</span>
+      <button type="button" onClick="{{tst.undo}}" style="background: #b4772c; color: #fff; border: 0; border-radius: 16px; padding: 6px 14px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; min-height: 32px;">Undo</button>
+      <button type="button" onClick="{{tst.close}}" aria-label="Dismiss" style="background: transparent; color: #cfd8cc; border: 0; width: 32px; height: 32px; border-radius: 16px; cursor: pointer; font-size: 16px;">×</button>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"recipeHasNagardo":{"editor":"boolean","default":false,"section":"Scenario"},"recipeHasPga":{"editor":"boolean","default":false,"section":"Scenario"},"recipeDilution":{"editor":"boolean","default":false,"section":"Scenario"},"$preview":{"width":1440,"height":2100}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      go: 'go', empty: 'yes', chkAdds: true, active: 0,
+      splits: [{ date: '2026-10-06', vol: '3.0', from: 'GLT 7', dest: 'blend', batch: '26-0420', comment: 'Base for blend 26-0420' }],
+      sessions: [
+        { opS: 'RB', opE: 'SV', date: '2026-10-06', start: '07:30', end: '09:50', tank: '7', outlet: 'stand', dis: '1', intv: '10',
+          inTime: '07:20', inO2: '18', inCo2: '4.9', outTime: '07:45', outO2: '32', outCo2: '5.0', flow: '40', turb: '8' },
+        { opS: 'SV', opE: 'SV', date: '2026-10-07', start: '07:00', end: '07:40', tank: '7', outlet: 'bottom', dis: '1', intv: '10',
+          inTime: '06:50', inO2: '20', inCo2: '5.0', outTime: '07:05', outO2: '29', outCo2: '5.1', flow: '40', turb: '10' }
+      ],
+      comments: [
+        { time: '07:40', text: 'Desludge check OK, start centrifuge', op: 'RB' },
+        { time: '09:05', text: 'Switched HBT 12 → HBT 14', op: 'SV' }
+      ],
+      hbts: [
+        { tank: '12', pkgs: ['can'], released: true, relBy: 'SV · 08-10 14:20', avgO2: '24', avgPu: '16', avgTurb: '9.5', avgFlow: '45', rows: [
+          { sess: '0', hl: '10', o2: '41', co2: '5.4', pkg: 'can', comment: '' },
+          { sess: '0', hl: '25', o2: '30', co2: '5.5', pkg: 'can', comment: '' },
+          { sess: '0', hl: '40.5', o2: '27', co2: '5.5', pkg: 'can', comment: '' }
+        ] },
+        { tank: '14', pkgs: ['bottle', 'keg'], released: false, relBy: '', avgO2: '27', avgPu: '16', avgTurb: '10.2', avgFlow: '43', rows: [
+          { sess: '0', hl: '12', o2: '58', co2: '5.4', pkg: 'bottle', comment: 'O2 high at start, flushed' },
+          { sess: '0', hl: '22', o2: '33', co2: '5.5', pkg: 'bottle', comment: 'Stopped at end of day' },
+          { sess: '1', hl: '35', o2: '31', co2: '5.5', pkg: 'bottle', comment: 'Finished next day' }
+        ] }
+      ]
+    };
+  }
+  set(list, i, p) { const a = this.state[list].map((x, j) => (j === i ? Object.assign({}, x, p) : x)); const o = {}; o[list] = a; this.setState(o); }
+  setCur(p) { const i = this.state.active; this.setState({ sessions: this.state.sessions.map((x, j) => (j === i ? Object.assign({}, x, p) : x)) }); }
+  drop(list, i) { const o = {}; o[list] = this.state[list].filter((x, j) => j !== i); this.setState(o); }
+  setB(i, p) { this.setState({ hbts: this.state.hbts.map((b, j) => (j === i ? Object.assign({}, b, p) : b)) }); }
+  setRow(i, k, p) { const b = this.state.hbts[i]; this.setB(i, { rows: b.rows.map((r, j) => (j === k ? Object.assign({}, r, p) : r)) }); }
+  askDelete(label, fn) { this.setState({ __cf: { label: label, fn: fn } }); }
+  doDelete() {
+    const cf = this.state.__cf; if (!cf) return;
+    const snap = Object.assign({}, this.state); delete snap.__cf; delete snap.__tst;
+    this.setState({ __cf: null });
+    cf.fn();
+    const base = cf.label.replace(/^this /, '');
+    this.setState({ __tst: { label: base.charAt(0).toUpperCase() + base.slice(1), snap: snap } });
+    clearTimeout(this.__t); this.__t = setTimeout(() => this.setState({ __tst: null }), 10000);
+  }
+  undoDelete() { const t = this.state.__tst; if (!t) return; clearTimeout(this.__t); this.setState(Object.assign({}, t.snap, { __tst: null, __cf: null })); }
+  renderVals() {
+    const s = this.state;
+    const n = (v) => { const x = parseFloat(String(v).replace(',', '.')); return isNaN(x) ? null : x; };
+    const mins = (t) => { const p = (t || '').split(':'); return p.length === 2 ? (+p[0]) * 60 + (+p[1]) : null; };
+    const cur = s.sessions[s.active] || s.sessions[0];
+    const a = mins(cur.start), b = mins(cur.end);
+    const duration = (a !== null && b !== null && b >= a) ? (Math.floor((b - a) / 60) + 'h ' + String((b - a) % 60).padStart(2, '0') + 'm') : '—';
+    const spec = { can: [5.5, 0.0], bottle: [5.5, 0.0], keg: [4.7, 0.3] };
+    const pkgName = { can: 'Can', bottle: 'Bottle', keg: 'Keg' };
+    const ends = [];
+    const sessLbl = (k) => { const x = s.sessions[+k]; if (!x) return '—'; const p = (x.date || '').split('-'); return (+k + 1) + ' · ' + (p.length === 3 ? p[2] + '-' + p[1] : '—'); };
+    const hbts = s.hbts.map((blk, i) => {
+      const last = blk.rows.length - 1;
+      const rows = blk.rows.map((r, k) => {
+        const o2 = n(r.o2), co2 = n(r.co2), sp = spec[r.pkg];
+        let stat = '—', statStyle = 'color:#a89f8e;', co2cls = '';
+        if (co2 !== null && sp) {
+          const ok = Math.abs(co2 - sp[0]) <= sp[1] + 1e-9;
+          stat = (ok ? 'OK' : (co2 > sp[0] ? 'High' : 'Low')) + ' · ' + sp[0].toFixed(1);
+          statStyle = ok ? 'color:#33473a;font-weight:700;' : 'color:#8f2909;font-weight:700;';
+          co2cls = ok ? '' : 'bad';
+        }
+        return Object.assign({}, r, {
+          tag: k === last ? 'End' : String(k + 1),
+          rowStyle: k === last ? 'background:#eef0e6;' : '',
+          o2cls: o2 !== null && o2 >= 50 ? 'bad' : '', co2cls: co2cls, stat: stat, statStyle: statStyle,
+          setHl: (e) => this.setRow(i, k, { hl: e.target.value }),
+          setO2: (e) => this.setRow(i, k, { o2: e.target.value }),
+          setCo2: (e) => this.setRow(i, k, { co2: e.target.value }),
+          setPkg: (e) => this.setRow(i, k, { pkg: e.target.value }),
+          setSess: (e) => this.setRow(i, k, { sess: e.target.value }),
+          setComment: (e) => this.setRow(i, k, { comment: e.target.value }),
+          del: () => this.askDelete('this measurement', () => this.setB(i, { rows: blk.rows.filter((x, j) => j !== k) }))
+        });
+      });
+      const lr = blk.rows[last];
+      const endText = lr && lr.hl ? (lr.hl + ' hl · ' + (lr.o2 || '—') + ' ppb · ' + (lr.co2 || '—') + ' g/l') : '—';
+      if (lr) {
+        const pu = n(blk.avgPu), tb = n(blk.avgTurb);
+        ends.push({ tank: 'HBT ' + (blk.tank || '?'), pkg: blk.pkgs.map((x) => pkgName[x]).join(' + ') || '—', hl: lr.hl || '—', o2: lr.o2 || '—', co2: lr.co2 || '—', hlNum: n(lr.hl) || 0,
+          avgO2: blk.avgO2 || '', avgPu: blk.avgPu || '', avgTurb: blk.avgTurb || '', avgFlow: blk.avgFlow || '',
+          puCls: pu !== null && Math.abs(pu - 15) > 2 ? 'bad' : '',
+          turbCls: tb !== null && tb > 15 ? 'bad' : '',
+          setAvgO2: (e) => this.setB(i, { avgO2: e.target.value }),
+          setAvgPu: (e) => this.setB(i, { avgPu: e.target.value }),
+          setAvgTurb: (e) => this.setB(i, { avgTurb: e.target.value }),
+          setAvgFlow: (e) => this.setB(i, { avgFlow: e.target.value }) });
+      }
+      return {
+        tank: blk.tank, rows: rows, endText: endText,
+        sessText: (() => { const u = []; blk.rows.forEach((r) => { if (r.sess !== undefined && u.indexOf(r.sess) < 0) u.push(r.sess); }); return u.length ? u.map(sessLbl).join(' + ') : '—'; })(),
+        pkgToggles: ['bottle', 'can', 'keg'].map((x) => ({
+          label: pkgName[x], cls: blk.pkgs.indexOf(x) >= 0 ? 'on' : '',
+          toggle: () => this.setB(i, { pkgs: blk.pkgs.indexOf(x) >= 0 ? blk.pkgs.filter((y) => y !== x) : blk.pkgs.concat([x]) })
+        })),
+        setTank: (e) => this.setB(i, { tank: e.target.value }),
+        released: !!blk.released, relPressed: blk.released ? 'true' : 'false',
+        relCls: blk.released ? 'rel on' : 'rel',
+        relText: blk.released ? 'Released · ' + blk.relBy : 'Mark as released',
+        toggleRel: () => this.setB(i, blk.released ? { released: false, relBy: '' } : { released: true, relBy: 'JL · 13-10 16:35' }),
+        addRow: () => this.setB(i, { rows: blk.rows.concat([{ sess: String(s.active), hl: '', o2: '', co2: '', pkg: lr ? lr.pkg : (blk.pkgs[0] || ''), comment: '' }]) }),
+        del: () => this.askDelete('this HBT block and its readings', () => this.drop('hbts', i))
+      };
+    });
+    const total = ends.reduce((t, e) => t + e.hlNum, 0);
+    const st = s;
+    const splitRows = st.splits.map((x, i) => {
+      const up = (k) => (e) => this.setState({ splits: st.splits.map((y, j) => { if (j !== i) return y; const c = Object.assign({}, y); c[k] = e.target.value; return c; }) });
+      return Object.assign({}, x, {
+        hasBatch: x.dest !== 'discard', noBatch: x.dest === 'discard',
+        setDate: up('date'), setVol: up('vol'), setFrom: up('from'), setDest: up('dest'), setBatch: up('batch'), setComment: up('comment'),
+        del: () => this.askDelete('this split', () => this.setState({ splits: st.splits.filter((y, j) => j !== i) }))
+      });
+    });
+    const splitHl = (pre) => st.splits.reduce((t, x) => t + ((pre ? x.from.indexOf('HBT') < 0 : x.from.indexOf('HBT') === 0) ? (parseFloat(String(x.vol).replace(',', '.')) || 0) : 0), 0);
+
+    const setters = {};
+    ['opS', 'opE', 'date', 'start', 'end', 'tank', 'dis', 'intv', 'inTime', 'inO2', 'inCo2', 'outTime', 'outO2', 'outCo2', 'flow', 'turb'].forEach((k) => { setters[k] = (e) => { const o = {}; o[k] = e.target.value; this.setCur(o); }; });
+    const fmtD = (d) => { const p = (d || '').split('-'); return p.length === 3 ? p[2] + '-' + p[1] : '—'; };
+    return {
+      cf: { open: !!this.state.__cf, label: this.state.__cf ? this.state.__cf.label : '', ok: () => this.doDelete(), cancel: () => this.setState({ __cf: null }) },
+      tst: { open: !!this.state.__tst, label: this.state.__tst ? this.state.__tst.label : '', undo: () => this.undoDelete(), close: () => this.setState({ __tst: null }) },
+      cur: cur, set: setters, duration: duration,
+      sessTabs: s.sessions.map((x, i) => ({ label: (i + 1) + ' · ' + fmtD(x.date), cls: i === s.active ? 'on' : '', pick: () => this.setState({ active: i }) })),
+      addSession: () => this.setState({ active: s.sessions.length, sessions: s.sessions.concat([{ opS: '', opE: '', date: '2026-10-07', start: '', end: '', tank: cur.tank, outlet: cur.outlet, dis: '', intv: '', inTime: '', inO2: '', inCo2: '', outTime: '', outO2: '', outCo2: '', flow: '', turb: '' }]) }),
+      canDelSession: s.sessions.length > 1,
+      delSession: () => this.askDelete('this session', () => this.setState({ active: 0, sessions: s.sessions.filter((x, j) => j !== s.active) })),
+      outO2cls: n(cur.outO2) !== null && n(cur.outO2) >= 50 ? 'bad' : '',
+      outTurbcls: n(cur.turb) !== null && n(cur.turb) > 15 ? 'bad' : '',
+      showNagardo: !!(this.props.recipeHasNagardo ?? false), showPga: !!(this.props.recipeHasPga ?? false),
+      hasCalc: !!((this.props.recipeHasNagardo ?? false) || (this.props.recipeHasPga ?? false) || (this.props.recipeDilution ?? false)),
+      outStand: cur.outlet === 'stand' ? 'on' : '', outBottom: cur.outlet === 'bottom' ? 'on' : '',
+      pickStand: () => this.setCur({ outlet: 'stand' }), pickBottom: () => this.setCur({ outlet: 'bottom' }),
+      goCls: s.go === 'go' ? 'go' : '', nogoCls: s.go === 'nogo' ? 'nogo' : '',
+      pickGo: () => this.setState({ go: 'go' }), pickNogo: () => this.setState({ go: 'nogo' }),
+      emptyYes: s.empty === 'yes' ? 'on' : '', emptyNo: s.empty === 'no' ? 'on' : '',
+      pickEmptyYes: () => this.setState({ empty: 'yes' }), pickEmptyNo: () => this.setState({ empty: 'no' }),
+      chkAdds: s.chkAdds,
+      toggleAdds: () => this.setState({ chkAdds: !s.chkAdds }),
+      comments: s.comments.map((c, i) => Object.assign({}, c, { set: (e) => this.set('comments', i, { text: e.target.value }), del: () => this.askDelete('this comment', () => this.drop('comments', i) )})),
+      addComment: () => this.setState({ comments: s.comments.concat([{ time: '', text: '', op: 'JL' }]) }),
+      hbts: hbts,
+      addHbt: () => this.setState({ hbts: s.hbts.concat([{ tank: '', pkgs: [], avgO2: '', avgPu: '', avgTurb: '', avgFlow: '', rows: [{ sess: String(s.active), hl: '', o2: '', co2: '', pkg: '', comment: '' }] }]) }),
+      sessOpts: s.sessions.map((x, i) => ({ v: String(i), l: sessLbl(i) })),
+      ends: ends,
+      totalEnd: total.toFixed(1),
+      loss: (80 - splitHl(true) - total).toFixed(1), splitPre: splitHl(true).toFixed(1),
+      splits: splitRows, addSplit: () => this.setState({ splits: st.splits.concat([{ date: '2026-10-07', vol: '', from: 'GLT 7', dest: 'blend', batch: '', comment: '' }]) }),
+
+      showDilution: !!(this.props.recipeDilution ?? false)
+    };
+  }
+}
+</script>
+</body>
+</html>

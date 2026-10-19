@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Filling report</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;background:#f6f4ee}
+a{color:#33473a}a:hover{color:#1c2b26}
+.card{background:#fff;border:1px solid #e2ddd0;border-radius:10px;box-shadow:0 1px 2px rgba(28,43,38,.05)}
+.lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:#6b6355}
+.num{font-variant-numeric:tabular-nums}
+.pill{display:inline-block;border-radius:12px;padding:3px 10px;font-size:12px;font-weight:700;background:#e1ead9;color:#33473a}
+.fld{display:flex;flex-direction:column;gap:4px;min-width:0}
+.fld input,.fld select,.fld textarea{border:1px solid #e2ddd0;border-radius:6px;padding:7px 9px;font:inherit;font-size:14px;background:#fffbe6;box-sizing:border-box;width:100%;min-height:38px}
+.fld input:focus,.fld select:focus,.fld textarea:focus{outline:none;border-color:#4c6b4f;background:#fff}
+.lg{border-collapse:separate;border-spacing:0;font-size:13px;width:100%}
+.lg th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:#6b6355;font-weight:700;padding:8px 6px;border-bottom:2px solid #33473a;white-space:nowrap}
+.lg th.r{text-align:right}
+.lg td{padding:3px 6px;border-bottom:1px solid #ece8dc;height:34px}
+.lg td.c{color:#6b6355;text-align:right;font-variant-numeric:tabular-nums}
+.lg td.n{color:#1c2b26;text-align:right;font-variant-numeric:tabular-nums;font-weight:700}
+.lg td.h{font-size:13px;color:#1c2b26}
+.lg tr.tot td{border-top:2px solid #d8d2c4;border-bottom:0;font-weight:700}
+.lg input,.lg select{width:100%;box-sizing:border-box;border:1px solid transparent;border-radius:5px;background:#fffbe6;font:inherit;padding:5px 6px;text-align:right;font-variant-numeric:tabular-nums}
+.lg select{text-align:left;cursor:pointer;background:#fff;border:1px dashed #c9c1ae;color:#6b6355}
+.lg input:hover{border-color:#e6dcb8}
+.lg input:focus,.lg select:focus{outline:none;border-color:#4c6b4f;background:#fff}
+.lg input.l{text-align:left}
+.btn{background:#b4772c;color:#fff;border:0;border-radius:20px;padding:8px 16px;font:inherit;font-size:13px;font-weight:700;letter-spacing:.03em;cursor:pointer;display:inline-flex;align-items:center;gap:8px;min-height:36px;box-sizing:border-box}
+.btn:hover{background:#96601f}
+.ghost{background:#f6f4ee;color:#33473a;border:1px solid #e2ddd0;border-radius:20px;padding:7px 14px;font:inherit;font-size:13px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px;min-height:36px;box-sizing:border-box}
+.ghost:hover{border-color:#33473a;color:#1c2b26}
+.blk{border:1px solid #e2ddd0;border-radius:10px;padding:12px 14px;background:#fcfbf8;display:flex;flex-direction:column;gap:12px}
+.tile{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:8px;background:#f5f5f3;min-width:0}
+.tile b{font-size:22px;font-variant-numeric:tabular-nums}
+.tile span.s{font-size:12px;color:#6b6355}
+.loss{display:inline-block;min-width:44px;text-align:center;border-radius:10px;padding:2px 8px;font-size:12px;font-weight:700}
+.del{border:0;background:transparent;color:#a89f8e;width:30px;height:30px;border-radius:15px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0;flex-shrink:0}
+.del:hover{background:#f8dcd3;color:#8f2909}
+</style>
+</helmet>
+<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, Helvetica, sans-serif; color: #1c2b26; background: #f6f4ee; min-height: 100%;">
+
+  <div style="display: flex; align-items: center; gap: 24px; padding: 10px 20px; background: #E0001D; color: #fff; flex-wrap: wrap;">
+    <div style="display: flex; align-items: center; gap: 8px; font-weight: 700;">
+      <div style="width: 32px; height: 32px; border-radius: 50%; background: #fff; color: #E0001D; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 15px;">J</div>
+      Jopen
+    </div>
+    <div style="display: flex; gap: 18px; flex: 1; flex-wrap: wrap; font-size: 15px; color: #fce3e5;">
+      <span>Recipes</span><span>Ingredients</span><span style="color: #fff; border-bottom: 2px solid #fff;">Batches</span><span>Planning</span><span>Inventory</span><span>Statistics</span>
+    </div>
+    <div style="font-size: 14px; border: 1px solid rgba(255,255,255,.5); border-radius: 4px; padding: 6px 12px;">Jaap · Admin</div>
+  </div>
+
+  <div style="max-width: 1400px; margin: 0 auto; padding: 20px 24px 60px; box-sizing: border-box; display: flex; flex-direction: column; gap: 16px;">
+
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+      <div style="display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;">
+        <h1 style="margin: 0; font-size: 28px;">26-0398</h1>
+        <span style="font-size: 28px; font-weight: 700; color: #33473a;">Mooie Nel <span style="font-weight: 400; color: #8a8273;">v12.0</span></span>
+        <span class="pill" style="background: #33473a; color: #fff;">Filling report</span>
+      </div>
+      <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
+        <span style="font-size: 12px; color: #4c6b4f;">All changes saved</span>
+        <button class="btn" type="button" onClick="{{openSum}}">Summary</button>
+        <button class="ghost" type="button">Export batch report (.xlsx)</button>
+      </div>
+    </div>
+
+    <div style="display: flex; gap: 2px; background: #ece8dc; border-radius: 22px; padding: 3px; align-self: flex-start; flex-wrap: wrap;">
+      <a href="Overview.dc.html" style="padding: 8px 16px; text-decoration: none; color: #6b6355; font-size: 13px; border-radius: 20px;">Overview</a>
+      <a href="Brewing.dc.html" style="padding: 8px 16px; text-decoration: none; color: #6b6355; font-size: 13px; border-radius: 20px;">Brewing</a>
+      <a href="Main.dc.html" style="padding: 8px 16px; text-decoration: none; color: #6b6355; font-size: 13px; border-radius: 20px;">Fermentation log</a>
+      <a href="Processing.dc.html" style="padding: 8px 16px; text-decoration: none; color: #6b6355; font-size: 13px; border-radius: 20px;">Processing</a>
+      <a href="Filling.dc.html" style="padding: 8px 16px; text-decoration: none; color: #6b6355; font-size: 13px; border-radius: 20px;">Filling</a>
+      <a href="#" style="padding: 8px 16px; text-decoration: none; color: #fff; background: #33473a; font-size: 13px; font-weight: 700; border-radius: 20px;">Filling report</a>
+    </div>
+
+    <div class="card" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 10px;">
+      <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap;">
+        <div class="lbl">Volume balance</div>
+        <div style="font-size: 12px; color: #6b6355;">Every litre from GLT to package · splits from Fermentation log, Processing and this report</div>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 12px 28px; align-items: start;">
+        <table class="lg">
+          <tbody>
+            <sc-for list="{{bal}}" as="r" hint-placeholder-count="7">
+              <tr style="{{r.rowStyle}}">
+                <td style="{{r.lblStyle}}">{{r.label}}</td>
+                <td class="n" style="width: 90px; {{r.valStyle}}">{{r.hl}}</td>
+                <td style="font-size: 12px; color: #6b6355;">{{r.note}}</td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+        <div style="display: flex; gap: 22px; align-items: center; flex-wrap: wrap;">
+          <svg viewBox="0 0 200 200" style="width: 200px; height: 200px; flex-shrink: 0;" role="img" aria-label="Where the GLT volume went: packaged per type, splits, cellar loss and filling remainder">
+            <sc-for list="{{pie}}" as="p" hint-placeholder-count="5"><path d="{{p.d}}" fill="{{p.fill}}" stroke="#ffffff" stroke-width="1.5"></path></sc-for>
+          </svg>
+          <div style="display: flex; flex-direction: column; gap: 6px; min-width: 240px; flex: 1;">
+            <sc-for list="{{pieLegend}}" as="l" hint-placeholder-count="6">
+              <div style="display: flex; align-items: center; gap: 8px; font-size: 13px;">
+                <span style="width: 12px; height: 12px; border-radius: 3px; background: {{l.color}}; border: {{l.border}}; box-sizing: border-box; flex-shrink: 0;"></span>
+                <span style="flex: 1;">{{l.label}}</span>
+                <b class="num">{{l.hl}} hl</b>
+                <span class="num" style="width: 56px; text-align: right; color: #6b6355; font-size: 12px;">{{l.pct}}</span>
+              </div>
+            </sc-for>
+            <div style="font-size: 12px; color: #6b6355; border-top: 1px solid #ece8dc; padding-top: 6px;">Share of {{t.glt}} l brewed into the GLT</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <sc-for list="{{sessions}}" as="s" hint-placeholder-count="2">
+      <div class="card" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 12px;">
+        <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap;">
+          <div style="display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap;">
+            <span style="font-weight: 700; font-size: 15px;">{{s.title}}</span>
+            <span style="font-size: 13px; color: #6b6355;">{{s.sub}}</span>
+          </div>
+          <div style="font-size: 13px;">Filled <b class="num">{{s.filled}} l</b> of <span class="num">{{s.hbtL}} l</span> · <span class="loss" style="{{s.diffStyle}}">{{s.diff}} l</span></div>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(520px, 1fr)); gap: 14px; align-items: start;">
+          <div class="blk">
+            <div class="lbl" style="color: #33473a;">Book in (+) · produced</div>
+            <table class="lg">
+              <thead><tr><th>Article</th><th style="width: 120px;">EAN</th><th class="r" style="width: 90px;">Count</th><th class="r" style="width: 80px;">Litres</th><th style="width: 34px;"></th></tr></thead>
+              <tbody>
+                <sc-for list="{{s.arts}}" as="a" hint-placeholder-count="2">
+                  <tr>
+                    <td class="h">{{a.name}}</td>
+                    <td style="font-size: 12px; color: #8a8273;">[EAN]</td>
+                    <td><input value="{{a.count}}" onChange="{{a.set}}" aria-label="Count"></td>
+                    <td class="c">{{a.litres}}</td>
+                    <td><button class="del" type="button" onClick="{{a.del}}" aria-label="Delete article"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2.5 4h9M5.5 4V2.5h3V4M3.5 4l.6 8h5.8l.6-8"></path></svg></button></td>
+                  </tr>
+                </sc-for>
+                <tr class="tot"><td colspan="3">Total</td><td class="n">{{s.filled}}</td><td></td></tr>
+              </tbody>
+            </table>
+            <div style="max-width: 260px;">
+              <select class="ghost" onChange="{{s.addArt}}" value="" aria-label="Add article" style="width: 100%;">
+                <option value="">+ Article</option>
+                <sc-for list="{{s.artOptions}}" as="o" hint-placeholder-count="3">
+                  <option value="{{o.code}}">{{o.name}}</option>
+                </sc-for>
+              </select>
+            </div>
+          </div>
+          <div class="blk">
+            <div class="lbl" style="color: #33473a;">Book out (−) · materials used</div>
+            <table class="lg">
+              <thead><tr><th>Material</th><th class="r" style="width: 90px;">Used</th><th class="r" style="width: 90px;">Expected</th><th style="width: 70px; text-align: center;">Loss</th><th style="width: 34px;"></th></tr></thead>
+              <tbody>
+                <sc-for list="{{s.mats}}" as="m" hint-placeholder-count="4">
+                  <tr>
+                    <td class="h">{{m.name}}</td>
+                    <td><input value="{{m.used}}" onChange="{{m.set}}" aria-label="Used"></td>
+                    <td class="c">{{m.expected}}</td>
+                    <td style="text-align: center;"><span class="loss" style="{{m.lossStyle}}">{{m.loss}}</span></td>
+                    <td><button class="del" type="button" onClick="{{m.del}}" aria-label="Delete material"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2.5 4h9M5.5 4V2.5h3V4M3.5 4l.6 8h5.8l.6-8"></path></svg></button></td>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+            <div style="font-size: 12px; color: #6b6355;">Expected = count × material per article (bill of materials). Loss above 0 = material lost; below 0 = check the count.</div>
+          </div>
+        </div>
+      </div>
+    </sc-for>
+
+    <div style="display: flex; flex-direction: column; gap: 16px;">
+      <div class="card" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap;">
+          <div class="lbl">Splits / transfers out</div>
+          <div style="font-size: 12px; color: #6b6355;">Same record on Processing and Filling report · fill in once</div>
+        </div>
+        <div style="overflow-x: auto;">
+          <table class="lg" style="min-width: 760px;">
+            <thead><tr><th style="width: 130px;">Date</th><th class="r" style="width: 80px;">Volume (hl)</th><th style="width: 120px;">From</th><th style="width: 160px;">Destination</th><th style="width: 110px;">Batch</th><th>Comment</th><th style="width: 34px;"></th></tr></thead>
+            <tbody>
+              <sc-for list="{{splits}}" as="x" hint-placeholder-count="1">
+                <tr>
+                  <td><input class="l" type="date" value="{{x.date}}" onChange="{{x.setDate}}" aria-label="Date"></td>
+                  <td><input value="{{x.vol}}" onChange="{{x.setVol}}" aria-label="Volume"></td>
+                  <td><select value="{{x.from}}" onChange="{{x.setFrom}}" aria-label="From"><option value="GLT 7">GLT 7</option><option value="LT">LT</option><option value="HBT 12">HBT 12</option><option value="HBT 14">HBT 14</option></select></td>
+                  <td><select value="{{x.dest}}" onChange="{{x.setDest}}" aria-label="Destination"><option value="blend">To batch</option><option value="discard">Discard</option></select></td>
+                  <td><sc-if value="{{x.hasBatch}}" hint-placeholder-val="{{true}}"><input class="l" value="{{x.batch}}" onChange="{{x.setBatch}}" placeholder="26-…" aria-label="Batch"></sc-if><sc-if value="{{x.noBatch}}" hint-placeholder-val="{{false}}"><span style="font-size: 12px; color: #a89f8e;">—</span></sc-if></td>
+                  <td><input class="l" value="{{x.comment}}" onChange="{{x.setComment}}" aria-label="Comment"></td>
+                  <td><button class="del" type="button" onClick="{{x.del}}" aria-label="Delete split"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2.5 4h9M5.5 4V2.5h3V4M3.5 4l.6 8h5.8l.6-8"></path></svg></button></td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+        </div>
+        <div style="display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; align-items: center;">
+          <a class="ghost" href="SplitBatch.dc.html">+ Split / transfer</a>
+          <span style="font-size: 12px; color: #6b6355;">Opens the transfer popup · the receiving batch gets an incoming line automatically</span>
+        </div>
+      </div>
+      <div class="card" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 10px;">
+        <div class="lbl">Comments filling</div>
+        <div class="fld"><textarea rows="3" aria-label="Comments filling" style="resize: vertical;">Can line stopped 20 min at 08:40 (labeller).</textarea></div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px;">
+          <div class="fld"><label class="lbl" for="fb">Filled in by</label><input id="fb" value="SV"></div>
+          <div class="fld"><label class="lbl" for="mb">Entered in Mdrank by</label><input id="mb" value=""></div>
+          <div class="fld"><label class="lbl" for="md">Entered in Mdrank on</label><input id="md" type="date" value=""></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap;">
+        <div class="lbl">Close filling report</div>
+        <span style="font-size: 12px; color: #6b6355;">{{closeNote}}</span>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px;">
+        <div class="blk" style="flex-direction: row; align-items: center; justify-content: space-between; gap: 12px; {{c1Style}}">
+          <div style="display: flex; flex-direction: column; gap: 2px;">
+            <span class="lbl">1 · Completed</span>
+            <span style="font-size: 14px; font-weight: 700;">{{c1Text}}</span>
+          </div>
+          <button class="{{c1Btn}}" type="button" onClick="{{toggleDone}}">{{c1Label}}</button>
+        </div>
+        <div class="blk" style="flex-direction: row; align-items: center; justify-content: space-between; gap: 12px; {{c2Style}}">
+          <div style="display: flex; flex-direction: column; gap: 2px;">
+            <span class="lbl">2 · Signed</span>
+            <span style="font-size: 14px; font-weight: 700;">{{c2Text}}</span>
+          </div>
+          <sc-if value="{{canSign}}" hint-placeholder-val="{{false}}"><button class="{{c2Btn}}" type="button" onClick="{{toggleSign}}">{{c2Label}}</button></sc-if>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <sc-if value="{{sumOpen}}" hint-placeholder-val="{{false}}">
+    <div style="position: fixed; inset: 0; background: rgba(28,43,38,.45); z-index: 50; overflow: auto; padding: 40px 24px; box-sizing: border-box;">
+      <div role="dialog" aria-label="Filling summary" style="max-width: 980px; margin: 0 auto; background: #fff; border-radius: 10px; box-shadow: 0 16px 48px rgba(0,0,0,.25); display: flex; flex-direction: column;">
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 18px 22px 12px; border-bottom: 1px solid #ece8dc; gap: 12px;">
+          <div>
+            <div style="font-size: 12px; color: #6b6355;">Batch 26-0398 · Mooie Nel v12.0 · {{sessCount}} filling sessions</div>
+            <div style="font-size: 20px; font-weight: 700;">Filling summary</div>
+          </div>
+          <button class="ghost" type="button" onClick="{{closeSum}}" aria-label="Close summary">Close</button>
+        </div>
+        <div style="padding: 16px 22px; display: flex; flex-direction: column; gap: 18px;">
+          <div>
+            <div class="lbl" style="margin-bottom: 4px;">Produced per SKU · book in (+)</div>
+            <table class="lg">
+              <thead><tr><th>SKU</th><th>Package</th><th class="r">Count</th><th class="r">Litres</th></tr></thead>
+              <tbody>
+                <sc-for list="{{sumArts}}" as="a" hint-placeholder-count="4">
+                  <tr><td class="h">{{a.name}}</td><td style="font-size: 12.5px; color: #6b6355;">{{a.pkg}}</td><td class="n">{{a.count}}</td><td class="n">{{a.litres}}</td></tr>
+                </sc-for>
+                <sc-for list="{{sumBlends}}" as="b" hint-placeholder-count="0">
+                  <tr><td class="h">{{b.name}}</td><td style="font-size: 12.5px; color: #6b6355;">Split · {{b.from}}</td><td class="c">—</td><td class="n">{{b.litres}}</td></tr>
+                </sc-for>
+                <tr class="tot"><td colspan="3">Total packaged + split · of {{t.glt}} l in GLT</td><td class="n">{{t.out}}</td></tr>
+                <tr><td colspan="3" style="color: #6b6355;">Cellar loss</td><td class="c">{{t.procLoss}}</td></tr>
+                <tr><td colspan="3" style="color: #6b6355;">Filling remainder / loss</td><td class="c">{{t.loss}} · {{t.lossPct}} %</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div>
+            <div class="lbl" style="margin-bottom: 4px;">Materials used · book out (−)</div>
+            <table class="lg">
+              <thead><tr><th>Material</th><th class="r">Used</th><th class="r">Expected</th><th style="width: 80px; text-align: center;">Loss</th></tr></thead>
+              <tbody>
+                <sc-for list="{{sumMats}}" as="m" hint-placeholder-count="8">
+                  <tr><td class="h">{{m.name}}</td><td class="n">{{m.used}}</td><td class="c">{{m.expected}}</td><td style="text-align: center;"><span class="loss" style="{{m.lossStyle}}">{{m.loss}}</span></td></tr>
+                </sc-for>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div style="border-top: 1px solid #ece8dc; padding: 14px 22px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+          <span style="font-size: 12px; color: #6b6355;">Totals over all filling sessions of this batch</span>
+          <div style="display: flex; gap: 10px;">
+            <button class="ghost" type="button">Copy for Mdrank</button>
+            <button class="ghost" type="button">Print / PDF</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{cf.open}}" hint-placeholder-val="{{false}}">
+    <div style="position: fixed; inset: 0; background: rgba(28,43,38,.35); z-index: 60; display: flex; align-items: center; justify-content: center; padding: 16px;">
+      <div role="alertdialog" aria-label="Confirm delete" style="background: #fff; border-radius: 10px; padding: 18px 20px; width: 100%; max-width: 380px; box-shadow: 0 16px 48px rgba(0,0,0,.25); display: flex; flex-direction: column; gap: 10px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, Helvetica, sans-serif; color: #1c2b26;">
+        <div style="font-weight: 700; font-size: 16px;">Delete {{cf.label}}?</div>
+        <div style="font-size: 13px; color: #6b6355;">You can undo this right after deleting. The deletion is recorded in the audit trail.</div>
+        <div style="display: flex; justify-content: flex-end; gap: 10px; padding-top: 4px;">
+          <button type="button" onClick="{{cf.cancel}}" style="background: #f6f4ee; color: #33473a; border: 1px solid #e2ddd0; border-radius: 20px; padding: 8px 16px; font: inherit; font-size: 13px; cursor: pointer; min-height: 36px;">Cancel</button>
+          <button type="button" onClick="{{cf.ok}}" style="background: #a3492f; color: #fff; border: 0; border-radius: 20px; padding: 8px 16px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; min-height: 36px;">Delete</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+  <sc-if value="{{tst.open}}" hint-placeholder-val="{{false}}">
+    <div role="status" style="position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #1c2b26; color: #fff; border-radius: 22px; padding: 6px 8px 6px 18px; display: flex; gap: 12px; align-items: center; z-index: 61; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, Helvetica, sans-serif; font-size: 13px; box-shadow: 0 8px 24px rgba(0,0,0,.2);">
+      <span>{{tst.label}} deleted</span>
+      <button type="button" onClick="{{tst.undo}}" style="background: #b4772c; color: #fff; border: 0; border-radius: 16px; padding: 6px 14px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; min-height: 32px;">Undo</button>
+      <button type="button" onClick="{{tst.close}}" aria-label="Dismiss" style="background: transparent; color: #cfd8cc; border: 0; width: 32px; height: 32px; border-radius: 16px; cursor: pointer; font-size: 16px;">×</button>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":2200}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.mat = {
+      bottle33: 'Bottle 33cl', bottle75: 'Bottle 75cl', label33main: 'Sticker label 33cl · main', label33neck: 'Sticker label 33cl · neck',
+      label75main: 'Sticker label 75cl · main', label75neck: 'Sticker label 75cl · neck', crown: 'Crown cork', cork: 'Cork', muselet: 'Muselet',
+      box24print: 'Outer box 24x33cl · printed', box24blank: 'Outer box 24x33cl · blank', box12print: 'Outer box 12x33cl · printed', box12blank: 'Outer box 12x33cl · blank',
+      box6print: 'Outer box 6x75cl · printed', box6blank: 'Outer box 6x75cl · blank',
+      can33: 'Can 33cl', can44: 'Can 44cl', lid: 'Can lid', label33can: 'Sticker label 33cl can', label44can: 'Sticker label 44cl can',
+      box12can: 'Outer box 12x33cl can · blank', box24can: 'Outer box 24x33cl can · blank', box12x44: 'Outer box 12x44cl can · blank', box24x44: 'Outer box 24x44cl can · blank',
+      global20: 'Global Keg 20L', keg20: 'Jopen keg 20L', keg30: 'Jopen keg 30L', keg50: 'Jopen keg 50L', kegcap: 'Keg cap',
+      kkcap: 'KeyKeg cap', kk20: 'KeyKeg 20L · empty', kk30: 'KeyKeg 30L · empty'
+    };
+    this.art = {
+      can12x33: { pkg: 'can', name: 'Box 12x33cl can', l: 3.96, bom: { can33: 12, lid: 12, label33can: 12, box12can: 1 } },
+      can24x33: { pkg: 'can', name: 'Box 24x33cl can', l: 7.92, bom: { can33: 24, lid: 24, label33can: 24, box24can: 1 } },
+      can12x44: { pkg: 'can', name: 'Box 12x44cl can', l: 5.28, bom: { can44: 12, lid: 12, label44can: 12, box12x44: 1 } },
+      can24x44: { pkg: 'can', name: 'Box 24x44cl can', l: 10.56, bom: { can44: 24, lid: 24, label44can: 24, box24x44: 1 } },
+      b24x33: { pkg: 'bottle', name: 'Box 24x33cl', l: 7.92, bom: { bottle33: 24, label33main: 24, label33neck: 24, crown: 24, box24print: 1 } },
+      b24x33bl: { pkg: 'bottle', name: 'Box 24x33cl · blank', l: 7.92, bom: { bottle33: 24, crown: 24, box24blank: 1 } },
+      b12x33: { pkg: 'bottle', name: 'Box 12x33cl', l: 3.96, bom: { bottle33: 12, label33main: 12, label33neck: 12, crown: 12, box12print: 1 } },
+      b12x33bl: { pkg: 'bottle', name: 'Box 12x33cl · blank', l: 3.96, bom: { bottle33: 12, crown: 12, box12blank: 1 } },
+      b6x75: { pkg: 'bottle', name: 'Box 6x75cl', l: 4.5, bom: { bottle75: 6, label75main: 6, label75neck: 6, cork: 6, muselet: 6, box6print: 1 } },
+      b6x75bl: { pkg: 'bottle', name: 'Box 6x75cl · blank', l: 4.5, bom: { bottle75: 6, cork: 6, muselet: 6, box6blank: 1 } },
+      crate12x75: { pkg: 'bottle', name: 'Crate 12x75cl · blank', l: 9, bom: { bottle75: 12, cork: 12, muselet: 12 } },
+      kk20: { pkg: 'keg', name: '20L KeyKeg', l: 20, bom: { kk20: 1, kkcap: 1 } },
+      kk30: { pkg: 'keg', name: '30L KeyKeg', l: 30, bom: { kk30: 1, kkcap: 1 } },
+      keg20: { pkg: 'keg', name: '20L Jopen/KU keg', l: 20, bom: { keg20: 1, kegcap: 1 } },
+      keg30: { pkg: 'keg', name: '30L Jopen keg', l: 30, bom: { keg30: 1, kegcap: 1 } },
+      keg50: { pkg: 'keg', name: '50L Jopen keg', l: 50, bom: { keg50: 1, kegcap: 1 } },
+      global20: { pkg: 'keg', name: '20L Global Keg', l: 20, bom: { global20: 1, kegcap: 1 } },
+      gbr20: { pkg: 'keg', name: '20L Gbr. Door Vrouwen keg', l: 20, bom: { kegcap: 1 } }
+    };
+    this.state = {
+      sumOpen: false, done: false, signed: false,
+      splits: [{ date: '2026-10-06', vol: '3.0', from: 'GLT 7', dest: 'blend', batch: '26-0420', comment: 'Base for blend 26-0420' }],
+      sessions: [
+        { title: 'Session 1', sub: '07-10-2026 · HBT 12 · Can', pkg: 'can', hbtL: 4050,
+          arts: [{ code: 'can12x33', count: '800' }, { code: 'can24x33', count: '100' }],
+          used: { can33: '12055', lid: '12040', label33can: '12070', box12can: '803', box24can: '100' } },
+        { title: 'Session 2', sub: '07-10-2026 · HBT 14 · Bottle', pkg: 'bottle', hbtL: 2000,
+          arts: [{ code: 'b24x33', count: '180' }, { code: 'b24x33bl', count: '60' }],
+          used: { bottle33: '5790', label33main: '4335', label33neck: '4335', crown: '5800', box24print: '181', box24blank: '60' } },
+        { title: 'Session 3', sub: '08-10-2026 · HBT 14 · Keg', pkg: 'keg', hbtL: 1500,
+          arts: [{ code: 'kk20', count: '30' }, { code: 'keg30', count: '29' }],
+          used: { kk20: '31', kkcap: '31', keg30: '29', kegcap: '30' } }
+      ],
+      blends: []
+    };
+  }
+  setS(i, p) { this.setState({ sessions: this.state.sessions.map((s, j) => (j === i ? Object.assign({}, s, p) : s)) }); }
+  askDelete(label, fn) { this.setState({ __cf: { label: label, fn: fn } }); }
+  doDelete() {
+    const cf = this.state.__cf; if (!cf) return;
+    const snap = Object.assign({}, this.state); delete snap.__cf; delete snap.__tst;
+    this.setState({ __cf: null });
+    cf.fn();
+    const base = cf.label.replace(/^this /, '');
+    this.setState({ __tst: { label: base.charAt(0).toUpperCase() + base.slice(1), snap: snap } });
+    clearTimeout(this.__t); this.__t = setTimeout(() => this.setState({ __tst: null }), 10000);
+  }
+  undoDelete() { const t = this.state.__tst; if (!t) return; clearTimeout(this.__t); this.setState(Object.assign({}, t.snap, { __tst: null, __cf: null })); }
+  renderVals() {
+    const st = this.state;
+    const n = (v) => { const x = parseFloat(String(v === undefined ? '' : v).replace(',', '.')); return isNaN(x) ? 0 : x; };
+    const fmt = (x) => Math.round(x).toLocaleString('en-GB');
+    const byPkg = { bottle: 0, can: 0, keg: 0 };
+    const sessions = st.sessions.map((s, i) => {
+      let filled = 0;
+      const expected = {};
+      const arts = s.arts.map((a, k) => {
+        const def = this.art[a.code], c = n(a.count), l = c * def.l;
+        filled += l;
+        Object.keys(def.bom).forEach((m) => { expected[m] = (expected[m] || 0) + c * def.bom[m]; });
+        return {
+          name: def.name, count: a.count, litres: fmt(l),
+          del: () => this.askDelete('this article', () => this.setS(i, { arts: s.arts.filter((x, j) => j !== k) })),
+          set: (e) => this.setS(i, { arts: s.arts.map((x, j) => (j === k ? { code: x.code, count: e.target.value } : x)) })
+        };
+      });
+      byPkg[s.pkg] += filled;
+      const keys = Object.keys(expected).concat(Object.keys(s.used).filter((m) => !(m in expected)));
+      const mats = keys.map((m) => {
+        const used = s.used[m] === undefined ? '' : s.used[m];
+        const ex = expected[m] || 0, loss = used === '' ? null : n(used) - ex;
+        return {
+          name: this.mat[m], used: used, expected: fmt(ex),
+          del: () => this.askDelete('this material', () => { const u = Object.assign({}, s.used); delete u[m]; this.setS(i, { used: u }); }),
+          loss: loss === null ? '—' : (loss > 0 ? '+' + fmt(loss) : fmt(loss)),
+          lossStyle: loss === null ? 'color:#a89f8e;' : (loss === 0 ? 'background:#e1ead9;color:#33473a;' : (loss > 0 ? 'background:#fdf1d8;color:#7a4f17;' : 'background:#f8dcd3;color:#8f2909;')),
+          set: (e) => { const u = Object.assign({}, s.used); u[m] = e.target.value; this.setS(i, { used: u }); }
+        };
+      });
+      const diff = filled - s.hbtL;
+      const used = s.arts.map((a) => a.code);
+      return {
+        title: s.title, sub: s.sub + ' · ' + fmt(s.hbtL) + ' l', hbtL: fmt(s.hbtL), filled: fmt(filled),
+        diff: (diff > 0 ? '+' : '') + fmt(diff),
+        diffStyle: Math.abs(diff) / s.hbtL <= 0.03 ? 'background:#e1ead9;color:#33473a;' : 'background:#fdf1d8;color:#7a4f17;',
+        arts: arts, mats: mats,
+        artOptions: Object.keys(this.art).filter((c) => this.art[c].pkg === s.pkg && used.indexOf(c) < 0).map((c) => ({ code: c, name: this.art[c].name })),
+        addArt: (e) => { const v = e.target.value; if (v) this.setS(i, { arts: s.arts.concat([{ code: v, count: '' }]) }); e.target.value = ''; }
+      };
+    });
+    const splitRows = st.splits.map((x, i) => {
+      const up = (k) => (e) => this.setState({ splits: st.splits.map((y, j) => { if (j !== i) return y; const c = Object.assign({}, y); c[k] = e.target.value; return c; }) });
+      return Object.assign({}, x, {
+        hasBatch: x.dest !== 'discard', noBatch: x.dest === 'discard',
+        setDate: up('date'), setVol: up('vol'), setFrom: up('from'), setDest: up('dest'), setBatch: up('batch'), setComment: up('comment'),
+        del: () => this.askDelete('this split', () => this.setState({ splits: st.splits.filter((y, j) => j !== i) }))
+      });
+    });
+    const splitHl = (pre) => st.splits.reduce((t, x) => t + ((pre ? x.from.indexOf('HBT') < 0 : x.from.indexOf('HBT') === 0) ? (parseFloat(String(x.vol).replace(',', '.')) || 0) : 0), 0);
+    const blendL = 0;
+    const aggA = {}, aggM = {};
+    st.sessions.forEach((ss) => {
+      ss.arts.forEach((a) => { const d = this.art[a.code]; if (!aggA[a.code]) aggA[a.code] = { name: d.name, pkg: { can: 'Can', bottle: 'Bottle', keg: 'Keg' }[d.pkg], c: 0, l: 0 }; aggA[a.code].c += n(a.count); aggA[a.code].l += n(a.count) * d.l;
+        Object.keys(d.bom).forEach((m) => { if (!aggM[m]) aggM[m] = { u: 0, e: 0 }; aggM[m].e += n(a.count) * d.bom[m]; }); });
+      Object.keys(ss.used).forEach((m) => { if (!aggM[m]) aggM[m] = { u: 0, e: 0 }; aggM[m].u += n(ss.used[m]); });
+    });
+    const sumArts = Object.keys(aggA).map((k) => ({ name: aggA[k].name, pkg: aggA[k].pkg, count: fmt(aggA[k].c), litres: fmt(aggA[k].l) }));
+    const sumMats = Object.keys(aggM).map((m) => { const x = aggM[m], loss = x.u - x.e; return {
+      name: this.mat[m], used: fmt(x.u), expected: fmt(x.e), loss: loss > 0 ? '+' + fmt(loss) : fmt(loss),
+      lossStyle: loss === 0 ? 'background:#e1ead9;color:#33473a;' : (loss > 0 ? 'background:#fdf1d8;color:#7a4f17;' : 'background:#f8dcd3;color:#8f2909;') }; });
+    const destName = { blend: 'To batch', barrel: 'To batch', discard: 'Discard' };
+    const sumBlends = st.splits.filter((x) => n(x.vol) > 0).map((x) => ({ name: destName[x.dest] + (x.dest !== 'discard' ? ' ' + (x.batch || '…') : ''), from: x.from, litres: fmt(n(x.vol) * 100) }));
+    const glt = 8000, proc = 7550;
+    const splitPre = splitHl(true) * 100, splitPost = splitHl(false) * 100;
+    const procLoss = glt - splitPre - proc;
+    const avail = proc - splitPost;
+    const filled = byPkg.bottle + byPkg.can + byPkg.keg;
+    const loss = avail - filled;
+    const pct = (x) => Math.max(0, x / glt * 100).toFixed(1) + '%';
+    const hl = (l) => (l / 100).toFixed(1);
+    const sub = 'background:#f6f4ee;', subL = 'font-weight:700;', minus = 'padding-left:22px;color:#33473a;';
+    const parts = [
+      ['Bottle', byPkg.bottle, '#1c2b26'], ['Can', byPkg.can, '#4c6b4f'], ['Keg', byPkg.keg, '#b5c7a8'],
+      ['Splits', splitPre + splitPost, '#b4772c'], ['Cellar loss', Math.max(0, procLoss), '#d9a07a'], ['Filling remainder / loss', Math.max(0, loss), '#ece8dc']
+    ];
+    const ptot = parts.reduce((s, p) => s + p[1], 0) || 1;
+    const R = 92, C = 100;
+    let a0 = -Math.PI / 2;
+    const pie = parts.filter((p) => p[1] > 0).map((p) => {
+      const a1 = a0 + p[1] / ptot * 2 * Math.PI;
+      let d;
+      if (a1 - a0 >= 2 * Math.PI - 1e-6) d = 'M' + (C - R) + ',' + C + ' a' + R + ',' + R + ' 0 1,0 ' + (2 * R) + ',0 a' + R + ',' + R + ' 0 1,0 ' + (-2 * R) + ',0';
+      else d = 'M' + C + ',' + C + ' L' + (C + R * Math.cos(a0)).toFixed(2) + ',' + (C + R * Math.sin(a0)).toFixed(2) + ' A' + R + ',' + R + ' 0 ' + (a1 - a0 > Math.PI ? 1 : 0) + ' 1 ' + (C + R * Math.cos(a1)).toFixed(2) + ',' + (C + R * Math.sin(a1)).toFixed(2) + ' Z';
+      a0 = a1;
+      return { d: d, fill: p[2] };
+    });
+    const pieLegend = parts.map((p) => ({ label: p[0], color: p[2], border: p[2] === '#ece8dc' ? '1px solid #c9c1ae' : '0', hl: (p[1] / 100).toFixed(1), pct: (p[1] / glt * 100).toFixed(1) + ' %' }));
+    const bal = [
+      { label: 'Brewed into GLT 7', hl: hl(glt), note: 'from Brewing', rowStyle: sub, lblStyle: subL, valStyle: '' },
+      { label: '− Splits from GLT / LT', hl: splitPre ? '−' + hl(splitPre) : '0.0', note: st.splits.filter((x) => x.from.indexOf('HBT') < 0).map((x) => destName[x.dest] + (x.batch ? ' ' + x.batch : '')).join(', ') || '—', rowStyle: '', lblStyle: minus, valStyle: 'font-weight:400;' },
+      { label: '− Cellar loss', hl: procLoss >= 0 ? '−' + hl(procLoss) : '+' + hl(-procLoss), note: procLoss >= 0 ? (procLoss / glt * 100).toFixed(1) + ' % of GLT volume' : 'More out than in — check splits and HBT volumes', rowStyle: procLoss >= 0 ? '' : 'background:#f8dcd3;', lblStyle: minus, valStyle: 'font-weight:400;' },
+      { label: '= In HBT after processing', hl: hl(proc), note: 'end values HBT · Processing', rowStyle: sub, lblStyle: subL, valStyle: '' },
+      { label: '− Splits from HBT', hl: splitPost ? '−' + hl(splitPost) : '0.0', note: st.splits.filter((x) => x.from.indexOf('HBT') === 0).map((x) => destName[x.dest] + (x.batch ? ' ' + x.batch : '')).join(', ') || '—', rowStyle: '', lblStyle: minus, valStyle: 'font-weight:400;' },
+      { label: '− Packaged', hl: '−' + hl(filled), note: 'bottle ' + hl(byPkg.bottle) + ' · can ' + hl(byPkg.can) + ' · keg ' + hl(byPkg.keg), rowStyle: '', lblStyle: minus, valStyle: 'font-weight:400;' },
+      { label: '= Filling remainder / loss', hl: hl(loss), note: (loss / avail * 100).toFixed(1) + ' % of available for filling', rowStyle: loss / avail <= 0.03 ? 'background:#eef0e6;' : 'background:#fdf1d8;', lblStyle: subL, valStyle: '' }
+    ];
+    return {
+      cf: { open: !!this.state.__cf, label: this.state.__cf ? this.state.__cf.label : '', ok: () => this.doDelete(), cancel: () => this.setState({ __cf: null }) },
+      tst: { open: !!this.state.__tst, label: this.state.__tst ? this.state.__tst.label : '', undo: () => this.undoDelete(), close: () => this.setState({ __tst: null }) },
+      sessions: sessions, bal: bal, pie: pie, pieLegend: pieLegend,
+      c1Text: st.done ? 'SV · 13-10 15:10' : 'Not yet', c1Style: st.done ? 'background:#eef4ea;border-color:#b9cdae;' : '',
+      c1Btn: st.done ? 'ghost' : 'btn', c1Label: st.done ? 'Reopen' : 'Mark as completed',
+      toggleDone: () => this.setState(st.done ? { done: false, signed: false } : { done: true }),
+      canSign: !!st.done,
+      c2Text: st.signed ? 'JL · 13-10 16:40' : (st.done ? 'Awaiting signature' : 'After completion'),
+      c2Style: st.signed ? 'background:#eef4ea;border-color:#b9cdae;' : (st.done ? 'background:#fdf6e6;' : ''),
+      c2Btn: st.signed ? 'ghost' : 'btn', c2Label: st.signed ? 'Withdraw' : 'Sign',
+      toggleSign: () => this.setState({ signed: !st.signed }),
+      closeNote: st.signed ? 'Closed · batch leaves Active batches' : 'Batch stays under Filled in Active batches until signed',
+      splits: splitRows, addSplit: () => this.setState({ splits: st.splits.concat([{ date: '2026-10-07', vol: '', from: 'GLT 7', dest: 'blend', batch: '', comment: '' }]) }),
+
+      sumOpen: st.sumOpen, openSum: () => this.setState({ sumOpen: true }), closeSum: () => this.setState({ sumOpen: false }),
+      sumArts: sumArts, sumMats: sumMats, sumBlends: sumBlends, sessCount: String(st.sessions.length),
+      addBlend: () => this.setState({ blends: st.blends.concat([{ purpose: 'For batch', batch: '', litres: '' }]) }),
+      addBarrel: () => this.setState({ blends: st.blends.concat([{ purpose: 'For barrel aging batch', batch: '', litres: '' }]) }),
+      blends: st.blends.map((b, i) => Object.assign({}, b, {
+        setBatch: (e) => this.setState({ blends: st.blends.map((x, j) => (j === i ? Object.assign({}, x, { batch: e.target.value }) : x)) }),
+        setLitres: (e) => this.setState({ blends: st.blends.map((x, j) => (j === i ? Object.assign({}, x, { litres: e.target.value }) : x)) }),
+        del: () => this.askDelete('this row', () => this.setState({ blends: st.blends.filter((x, j) => j !== i) }))
+      })),
+      t: {
+        glt: fmt(glt), proc: fmt(avail), filled: fmt(filled), out: fmt(filled + splitPre + splitPost), procLoss: fmt(procLoss),
+        loss: fmt(loss), lossPct: (loss / avail * 100).toFixed(1),
+        wBottle: pct(byPkg.bottle), wCan: pct(byPkg.can), wKeg: pct(byPkg.keg), wSplit: pct(splitPre + splitPost), wProcLoss: pct(procLoss)
+      }
+    };
+  }
+}
+</script>
+</body>
+</html>

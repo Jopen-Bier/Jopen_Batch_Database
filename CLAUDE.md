@@ -3,6 +3,8 @@
 Read `ARCHITECTURE.md` before adding a page, table or app. These are the
 rules that must not be skipped.
 
+Working on the digital batch report? Start at `docs/batch-report/README.md`.
+
 ## Before changing anything
 - Check the **live** database (`information_schema.columns`, `pg_policies`,
   `pg_constraint` incl. column defaults) before any schema or data change.

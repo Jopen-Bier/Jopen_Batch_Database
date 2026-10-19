@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Active batches</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;background:#f6f4ee}
+a{color:#33473a}a:hover{color:#1c2b26}
+.lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:#6b6355}
+.seg{display:inline-flex;background:#ece8dc;border-radius:20px;padding:3px;gap:2px;flex-wrap:wrap}
+.seg button{border:0;background:transparent;border-radius:17px;padding:7px 14px;font:inherit;font-size:13px;cursor:pointer;color:#6b6355;min-height:34px}
+.seg button.on{background:#33473a;color:#fff;font-weight:700}
+.att{border:1px solid #e2ddd0;background:#fff;color:#8f2909;border-radius:20px;padding:7px 14px;font:inherit;font-size:13px;cursor:pointer;min-height:40px;display:inline-flex;gap:6px;align-items:center}
+.att.on{background:#a3492f;border-color:#a3492f;color:#fff;font-weight:700}
+.search{border:1px solid #e2ddd0;border-radius:20px;padding:8px 14px;font:inherit;font-size:13px;background:#fff;min-height:40px;box-sizing:border-box;width:220px}
+.search:focus{outline:none;border-color:#4c6b4f}
+.sum{display:flex;gap:6px;flex-wrap:wrap}
+.sum span{font-size:12.5px;background:#fff;border:1px solid #e2ddd0;border-radius:14px;padding:4px 10px;color:#33473a}
+.sum b{font-variant-numeric:tabular-nums;margin-left:4px}
+.sec{background:#fff;border:1px solid #e2ddd0;border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:10px;box-shadow:0 1px 2px rgba(28,43,38,.05)}
+.sechd{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.sechd h2{margin:0;font-size:17px}
+.cnt{font-size:12px;font-weight:700;background:#33473a;color:#fff;border-radius:10px;padding:1px 8px}
+.acnt{font-size:12px;font-weight:700;background:#f8dcd3;color:#8f2909;border-radius:10px;padding:1px 8px}
+.rule{font-size:12px;color:#6b6355;margin-left:auto}
+.grp{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:#33473a;text-transform:uppercase;letter-spacing:.07em}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:8px}
+.tl{display:flex;flex-direction:column;gap:3px;background:#f6f4ee;border:1px solid #e2ddd0;border-radius:8px;padding:7px 9px 8px;text-decoration:none;color:#1c2b26;min-width:0;position:relative}
+.tl:hover{border-color:#33473a;color:#1c2b26;background:#fff}
+.tl.ok{background:#e6efe0;border-color:#b9cdae}
+.tl.warn{background:#fdecdf;border-color:#d99a85}
+.t1{display:flex;align-items:center;gap:6px;min-width:0}
+.tk{font-size:12px;font-weight:700;background:#1c2b26;color:#fff;border-radius:5px;padding:1px 6px;white-space:nowrap}
+.no{font-size:12px;font-weight:700;color:#6b6355;font-variant-numeric:tabular-nums}
+.jk{font-size:10px;font-weight:700;color:#244766;background:#dde7f0;border-radius:6px;padding:0 5px;margin-left:auto}
+.bang{position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:10px;background:#a3492f;color:#fff;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.nm{font-size:13.5px;font-weight:700;color:#33473a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.inf{font-size:11.5px;color:#6b6355;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.inf.red{color:#8f2909;font-weight:700}
+.inf.grn{color:#33473a;font-weight:700}
+.bar{height:4px;border-radius:2px;background:#e2ddd0;overflow:hidden;display:flex;margin-top:2px}
+.bar div{background:#4c6b4f}
+</style>
+</helmet>
+<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, Helvetica, sans-serif; color: #1c2b26; background: #f6f4ee; min-height: 100%;">
+
+  <div style="display: flex; align-items: center; gap: 24px; padding: 10px 20px; background: #E0001D; color: #fff; flex-wrap: wrap;">
+    <div style="display: flex; align-items: center; gap: 8px; font-weight: 700;">
+      <div style="width: 32px; height: 32px; border-radius: 50%; background: #fff; color: #E0001D; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 15px;">J</div>
+      Jopen
+    </div>
+    <div style="display: flex; gap: 18px; flex: 1; flex-wrap: wrap; font-size: 15px; color: #fce3e5;">
+      <span>Recipes</span><span>Ingredients</span><span style="color: #fff; border-bottom: 2px solid #fff;">Batches</span><span>Planning</span><span>Inventory</span><span>Statistics</span>
+    </div>
+    <div style="font-size: 14px; border: 1px solid rgba(255,255,255,.5); border-radius: 4px; padding: 6px 12px;">Jaap · Admin</div>
+  </div>
+
+  <div style="max-width: 1400px; margin: 0 auto; padding: 20px 24px 60px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px;">
+
+    <div style="display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap;">
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <div style="font-size: 12px; color: #6b6355;">Home › Batch reports</div>
+        <div style="display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;">
+          <h1 style="margin: 0; font-size: 28px;">Active batches</h1>
+          <span style="font-size: 14px; color: #6b6355;">{{total}} in progress</span>
+        </div>
+        <div class="sum">
+          <sc-for list="{{summary}}" as="s" hint-placeholder-count="6"><span>{{s.label}}<b>{{s.n}}</b></span></sc-for>
+        </div>
+      </div>
+      <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+        <input class="search" type="search" value="{{q}}" onChange="{{setQ}}" placeholder="Search beer, batch or tank" aria-label="Search">
+        <button class="{{attCls}}" type="button" onClick="{{toggleAtt}}"><span style="font-weight: 800;">!</span> Needs attention · {{attTotal}}</button>
+        <div class="seg">
+          <button class="{{fAll}}" type="button" onClick="{{pickAll}}">All</button>
+          <button class="{{fWp}}" type="button" onClick="{{pickWp}}">WP</button>
+          <button class="{{fJk}}" type="button" onClick="{{pickJk}}">JK</button>
+        </div>
+      </div>
+    </div>
+
+    <sc-for list="{{sections}}" as="sec" hint-placeholder-count="5">
+      <div class="sec">
+        <div class="sechd">
+          <h2>{{sec.title}}</h2>
+          <span class="cnt">{{sec.n}}</span>
+          <sc-if value="{{sec.hasAtt}}" hint-placeholder-val="{{false}}"><span class="acnt">! {{sec.att}}</span></sc-if>
+          <span class="rule">{{sec.rule}}</span>
+        </div>
+        <sc-for list="{{sec.groups}}" as="g" hint-placeholder-count="1">
+          <sc-if value="{{g.hasLabel}}" hint-placeholder-val="{{false}}">
+            <div class="grp">
+              <sc-if value="{{g.ferm}}" hint-placeholder-val="{{false}}"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5.5 1.5h3M6 1.5v7.2a2.2 2.2 0 1 0 2 0V1.5"></path></svg></sc-if>
+              <sc-if value="{{g.lager}}" hint-placeholder-val="{{false}}"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M7 1.5v11M2.2 4.2l9.6 5.6M2.2 9.8l9.6-5.6"></path></svg></sc-if>
+              {{g.label}} · {{g.n}}
+            </div>
+          </sc-if>
+          <div class="grid">
+            <sc-for list="{{g.tiles}}" as="c" hint-placeholder-count="8">
+              <a class="{{c.cls}}" href="{{c.href}}" title="{{c.title}}">
+                <sc-if value="{{c.attn}}" hint-placeholder-val="{{false}}"><span class="bang" aria-label="Needs attention">!</span></sc-if>
+                <div class="t1"><span class="tk">{{c.tank}}</span><span class="no">{{c.no}}</span><sc-if value="{{c.isJk}}" hint-placeholder-val="{{false}}"><span class="jk">JK</span></sc-if></div>
+                <div class="nm">{{c.beer}}</div>
+                <div class="{{c.l1Cls}}">{{c.l1}}</div>
+                <div class="{{c.l2Cls}}">{{c.l2}}</div>
+                <sc-if value="{{c.hasBar}}" hint-placeholder-val="{{false}}"><div class="bar"><div style="width: {{c.bar}};"></div></div></sc-if>
+                <sc-if value="{{c.attn}}" hint-placeholder-val="{{false}}"><div class="inf red">{{c.issue}}</div></sc-if>
+              </a>
+            </sc-for>
+          </div>
+          <sc-if value="{{g.empty}}" hint-placeholder-val="{{false}}"><div style="font-size: 12.5px; color: #a89f8e;">Nothing here with the current filter.</div></sc-if>
+        </sc-for>
+      </div>
+    </sc-for>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1750}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { f: 'all', att: false, q: '' };
+    const B = (o) => Object.assign({ bw: 'WP' }, o);
+    this.batches = [
+      B({ st: 'raw', no: '26-0340', tank: '—', beer: 'Braubevial special', picked: true, pick: '13-10' }),
+      B({ st: 'raw', no: '26-0341', tank: '—', beer: 'Gerstebier', picked: false, pick: '15-10' }),
+      B({ st: 'raw', no: '26-0342', tank: '—', beer: 'Koyt', picked: false, pick: '14-10', bw: 'JK', late: 'Brew tomorrow · not picked' }),
+      B({ st: 'brew', no: '26-0335', tank: '36', beer: 'Bokbier', done: 2, of: 3 }),
+      B({ st: 'brew', no: '26-0336', tank: '37', beer: 'Esma Stout v6.0', done: 1, of: 2 }),
+      B({ st: 'brew', no: '26-0334', tank: '38', beer: 'Winterbier', done: 3, of: 4 }),
+      B({ st: 'brew', no: '26-0333', tank: '33', beer: 'NONnetje', done: 2, of: 3 }),
+      B({ st: 'ferm', no: '26-0324', tank: '21', beer: 'Gin Wit', day: 2.1, t: [0, 4], next: 'Dry warm at 5.0 °P' }),
+      B({ st: 'ferm', no: '26-0316', tank: '23', beer: 'Refterbier', day: 6.3, t: [1, 4], next: 'Cooling to 0 °C' }),
+      B({ st: 'ferm', no: '26-0325', tank: '24', beer: 'Ongelovige Thomas', day: 3.0, t: [0, 3], next: 'Cooling to 16 °C' }),
+      B({ st: 'ferm', no: '26-0326', tank: '25', beer: 'Koyt 30 v4', day: 4.2, t: [1, 5], next: 'Cooling to 16 °C' }),
+      B({ st: 'ferm', no: '26-0328', tank: '26', beer: 'Papagaai', day: 1.4, t: [0, 4], next: 'Dry warm at 4.5 °P' }),
+      B({ st: 'ferm', no: '26-0327', tank: '28', beer: 'Blonde', day: 2.8, t: [0, 3], next: 'Cooling to 0 °C' }),
+      B({ st: 'ferm', no: '26-0318', tank: '35', beer: 'Bokbier', day: 5.6, t: [1, 3], next: 'Cooling to 2 °C' }),
+      B({ st: 'ferm', no: '26-0332', tank: '41', beer: 'Mooie Nel', day: 1.1, t: [0, 6], next: 'Dry warm at 5.0 °P' }),
+      B({ st: 'ferm', no: '26-0329', tank: '44', beer: 'Aperolling', day: 2.5, t: [0, 4], next: 'Addition · Aperol aroma' }),
+      B({ st: 'ferm', no: '26-0337', tank: '13', beer: 'Ongelovige Thomas', day: 7.9, t: [0, 3], next: 'Cooling to 16 °C', late: 'Cooling overdue 1 day' }),
+      B({ st: 'ferm', no: '26-0317', tank: '22', beer: 'Stout Of The Year', day: 9.2, t: [1, 3], next: 'Cooling to 0 °C', late: 'Cooling overdue 2 days' }),
+      B({ st: 'lager', no: '26-0301', tank: '14', beer: 'Kolkende Kerst', day: 21, t: [5, 5], next: 'Ready for processing' }),
+      B({ st: 'lager', no: '25-0401', tank: '15', beer: 'Imperial Stout BA', day: 64, t: [4, 4], next: 'Ready for processing' }),
+      B({ st: 'lager', no: '26-0289', tank: '31', beer: 'Blurred Lines', day: 18, t: [5, 6], next: 'Addition · Bevasil day 18' }),
+      B({ st: 'lager', no: '26-0309', tank: '32', beer: 'Mooie Nel', day: 14, t: [5, 6], next: 'Sample to lab' }),
+      B({ st: 'lager', no: '26-0323', tank: '34', beer: 'Nonnetje', day: 11, t: [3, 5], next: 'Sample to lab', late: 'Lab sample overdue' }),
+      B({ st: 'lager', no: '26-0298', tank: '45', beer: 'Meesterstuk', day: 19, t: [4, 5], next: 'Addition', late: 'Addition overdue 3 days' }),
+      B({ st: 'lager', no: '26-0243', tank: '51', beer: 'Adriaan', day: 24, t: [4, 4], next: 'Ready for processing' }),
+      B({ st: 'lager', no: '26-0338', tank: '52', beer: 'NONnetje', day: 12, t: [3, 4], next: 'Sample to lab' }),
+      B({ st: 'lager', no: '26-0261', tank: '53', beer: 'Moonwalker', day: 20, t: [4, 4], next: 'Ready for processing' }),
+      B({ st: 'lager', no: '26-0310', tank: '54', beer: 'Kerstmus 2026', day: 16, t: [4, 5], next: 'Addition · day 17' }),
+      B({ st: 'lager', no: '26-0300', tank: '55', beer: 'Heavy Crown', day: 22, t: [3, 4], next: 'Sample to lab', late: 'Lab result missing' }),
+      B({ st: 'lager', no: '26-0285', tank: '56', beer: 'Braubevial', day: 25, t: [4, 5], next: 'Cooling to 0 °C', late: 'Lagering over spec' }),
+      B({ st: 'lager', no: '26-0262', tank: '57', beer: "I'm a barley girl", day: 23, t: [4, 4], next: 'Ready for processing' }),
+      B({ st: 'lager', no: '26-0312', tank: '58', beer: 'Jopen Blond', day: 13, t: [3, 4], next: 'Sample to lab' }),
+      B({ st: 'lager', no: '26-0319', tank: '61', beer: 'Witte Kerst', day: 12, t: [3, 4], next: 'Addition · day 14' }),
+      B({ st: 'lager', no: '26-0292', tank: '62', beer: 'Mooie Nel', day: 15, t: [6, 6], next: 'Ready for processing' }),
+      B({ st: 'lager', no: '26-0311', tank: '63', beer: 'Mooie Nel', day: 14, t: [5, 6], next: 'Sample to lab' }),
+      B({ st: 'lager', no: '26-0297', tank: '64', beer: 'Nonnetje', day: 17, t: [4, 4], next: 'Ready for processing' }),
+      B({ st: 'hbt', no: '26-0280', tank: 'HBT 3', beer: 'Extra Stout', bw: 'JK', pk: 'Keg', rel: [0, 1], late: 'Release pending 2 days' }),
+      B({ st: 'hbt', no: '26-0284', tank: 'HBT 7', beer: 'Ongelovige Thomas', pk: 'Bottle', rel: [1, 1] }),
+      B({ st: 'hbt', no: '26-0287', tank: 'HBT 9 · 10', beer: 'Jopen Blond', pk: 'Can · Keg', rel: [1, 2] }),
+      B({ st: 'fill', no: '26-0278', tank: 'HBT 12 · 14', beer: 'Mooie Nel', pk: 'Can · Bottle · Keg', fin: [1, 2] }),
+      B({ st: 'filled', no: '26-0271', tank: '—', beer: 'Hoppenbier', hl: '76.8', rep: 'sign' }),
+      B({ st: 'filled', no: '26-0275', tank: '—', beer: 'Malle Babbe', bw: 'JK', hl: '19.2', rep: 'open' })
+    ];
+    this.secs = [
+      { key: 'raw', title: 'Raw material preparation', rule: 'Batch report with brews · no brew date yet', href: 'Overview.dc.html' },
+      { key: 'brew', title: 'Brewing', rule: 'Brew 1 has a date · until the last brew is done', href: 'Brewing.dc.html' },
+      { key: 'cellar', title: 'Cellar', rule: 'Last brew done · until Processing has a date', href: 'Main.dc.html', groups: [['ferm', 'Fermentation'], ['lager', 'Lagering']] },
+      { key: 'hbt', title: 'HBT', rule: 'Processing has a date · until the first filling input', href: 'Processing.dc.html' },
+      { key: 'fill', title: 'Filling', rule: 'First filling input · until every HBT is finished', href: 'Filling.dc.html' },
+      { key: 'filled', title: 'Filled', rule: 'All HBTs finished · until the filling report is closed', href: 'FillingReport.dc.html' }
+    ];
+  }
+  tile(b, href) {
+    let l1 = '', l2 = '', cls = 'tl', l1Cls = 'inf', l2Cls = 'inf', bar = null;
+    if (b.st === 'raw') { l1 = 'Order picking ' + b.pick; l2 = b.picked ? '✓ Picked' : 'Not picked yet'; if (b.picked) { cls += ' ok'; l2Cls += ' grn'; } }
+    if (b.st === 'brew') { l1 = 'Brew ' + b.done + ' / ' + b.of; l2 = 'Next: brew ' + (b.done + 1); bar = b.done / b.of; }
+    if (b.st === 'ferm' || b.st === 'lager') {
+      const done = b.t[0] === b.t[1];
+      l1 = 'Day ' + b.day + ' · tasks ' + b.t[0] + '/' + b.t[1];
+      l2 = done ? '✓ ' + b.next : 'Next: ' + b.next;
+      if (done) l2Cls += ' grn';
+      bar = b.t[1] ? b.t[0] / b.t[1] : 0;
+    }
+    if (b.st === 'hbt') { l1 = b.pk; l2 = b.rel[0] === b.rel[1] ? '✓ Released' : b.rel[0] + '/' + b.rel[1] + ' released'; if (b.rel[0] === b.rel[1]) { cls += ' ok'; l2Cls += ' grn'; } }
+    if (b.st === 'fill') { l1 = b.pk; l2 = b.fin[0] + '/' + b.fin[1] + ' HBT finished'; bar = b.fin[0] / b.fin[1]; }
+    if (b.st === 'filled') { l1 = b.hl + ' hl packaged'; l2 = b.rep === 'sign' ? 'Awaiting signature' : 'Report open'; }
+    if (b.late) cls = 'tl warn';
+    return { tank: b.tank, no: b.no, beer: b.beer, l1: l1, l2: l2, l1Cls: l1Cls, l2Cls: l2Cls, cls: cls, href: href,
+      title: b.no + ' · ' + b.beer + (b.late ? ' · ' + b.late : ''),
+      attn: !!b.late, issue: b.late || '', isJk: b.bw === 'JK', hasBar: bar !== null, bar: bar !== null ? Math.round(bar * 100) + '%' : '0%' };
+  }
+  renderVals() {
+    const s = this.state;
+    const q = s.q.trim().toLowerCase();
+    const keep = (b) => (s.f === 'all' || (s.f === 'wp' ? b.bw === 'WP' : b.bw === 'JK'))
+      && (!s.att || !!b.late)
+      && (!q || (b.beer + ' ' + b.no + ' ' + b.tank).toLowerCase().indexOf(q) >= 0);
+    const vis = this.batches.filter(keep);
+    const tnum = (b) => { const m = String(b.tank).match(/\d+/); return m ? parseInt(m[0], 10) : 9999; };
+    const sortAtt = (a, b) => (tnum(a) - tnum(b)) || a.no.localeCompare(b.no);
+    const sections = this.secs.map((sec) => {
+      const keys = sec.groups ? sec.groups.map((g) => g[0]) : [sec.key];
+      const inSec = vis.filter((b) => keys.indexOf(b.st) >= 0);
+      const groups = (sec.groups || [[sec.key, '']]).map((g) => {
+        const tiles = inSec.filter((b) => b.st === g[0]).sort(sortAtt).map((b) => this.tile(b, sec.href));
+        return { label: g[1], hasLabel: !!g[1], ferm: g[0] === 'ferm', lager: g[0] === 'lager', n: String(tiles.length), tiles: tiles, empty: tiles.length === 0 };
+      });
+      const att = inSec.filter((b) => b.late).length;
+      return { title: sec.title, rule: sec.rule, n: String(inSec.length), att: String(att), hasAtt: att > 0, groups: groups };
+    });
+    const allKeep = this.batches.filter((b) => s.f === 'all' || (s.f === 'wp' ? b.bw === 'WP' : b.bw === 'JK'));
+    const cnt = (keys) => String(allKeep.filter((b) => keys.indexOf(b.st) >= 0).length);
+    return {
+      sections: sections, total: String(allKeep.length),
+      summary: [
+        { label: 'Raw mat.', n: cnt(['raw']) }, { label: 'Brewing', n: cnt(['brew']) },
+        { label: 'Fermentation', n: cnt(['ferm']) }, { label: 'Lagering', n: cnt(['lager']) },
+        { label: 'HBT', n: cnt(['hbt']) }, { label: 'Filling', n: cnt(['fill']) }, { label: 'Filled', n: cnt(['filled']) }
+      ],
+      attTotal: String(allKeep.filter((b) => b.late).length),
+      attCls: s.att ? 'att on' : 'att', toggleAtt: () => this.setState({ att: !this.state.att }),
+      q: s.q, setQ: (e) => this.setState({ q: e.target.value }),
+      fAll: s.f === 'all' ? 'on' : '', fWp: s.f === 'wp' ? 'on' : '', fJk: s.f === 'jk' ? 'on' : '',
+      pickAll: () => this.setState({ f: 'all' }), pickWp: () => this.setState({ f: 'wp' }), pickJk: () => this.setState({ f: 'jk' })
+    };
+  }
+}
+</script>
+</body>
+</html>

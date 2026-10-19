@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>All batches</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;background:#f6f4ee}
+a{color:#33473a}a:hover{color:#1c2b26}
+.card{background:#fff;border:1px solid #e2ddd0;border-radius:10px;box-shadow:0 1px 2px rgba(28,43,38,.05)}
+.seg{display:inline-flex;background:#ece8dc;border-radius:20px;padding:3px;gap:2px;flex-wrap:wrap}
+.seg button{border:0;background:transparent;border-radius:17px;padding:7px 14px;font:inherit;font-size:13px;cursor:pointer;color:#6b6355;min-height:34px}
+.seg button.on{background:#33473a;color:#fff;font-weight:700}
+.search{border:1px solid #e2ddd0;border-radius:20px;padding:8px 14px;font:inherit;font-size:13px;background:#fff;min-height:40px;box-sizing:border-box;width:240px}
+.search:focus,.sel:focus{outline:none;border-color:#4c6b4f}
+.sel{border:1px solid #e2ddd0;border-radius:20px;padding:8px 12px;font:inherit;font-size:13px;background:#fff;min-height:40px;cursor:pointer}
+.lg{border-collapse:separate;border-spacing:0;font-size:13.5px;width:100%}
+.lg th{text-align:left;padding:0;border-bottom:2px solid #33473a;white-space:nowrap}
+.lg th button{border:0;background:transparent;font:inherit;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:#6b6355;font-weight:700;padding:10px 8px;cursor:pointer;display:inline-flex;gap:4px;align-items:center}
+.lg th button:hover{color:#1c2b26}
+.lg th button.on{color:#1c2b26}
+.lg td{padding:6px 8px;border-bottom:1px solid #ece8dc;height:36px}
+.lg tr:hover td{background:#faf9f5}
+.lg td.d{font-variant-numeric:tabular-nums;color:#33473a;white-space:nowrap}
+.lg td.m{color:#a89f8e}
+.st{display:inline-flex;align-items:center;gap:5px;border-radius:12px;padding:3px 10px;font-size:12px;font-weight:700;white-space:nowrap}
+.bw{font-size:10px;font-weight:700;color:#244766;background:#dde7f0;border-radius:6px;padding:0 5px;margin-left:6px}
+.pg{border:1px solid #e2ddd0;background:#fff;border-radius:16px;padding:6px 12px;font:inherit;font-size:13px;cursor:pointer;min-height:34px;color:#33473a}
+.pg:disabled{color:#c9c1ae;cursor:default}
+.ghost{background:#f6f4ee;color:#33473a;border:1px solid #e2ddd0;border-radius:20px;padding:7px 14px;font:inherit;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;min-height:40px;box-sizing:border-box}
+</style>
+</helmet>
+<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, Helvetica, sans-serif; color: #1c2b26; background: #f6f4ee; min-height: 100%;">
+
+  <div style="display: flex; align-items: center; gap: 24px; padding: 10px 20px; background: #E0001D; color: #fff; flex-wrap: wrap;">
+    <div style="display: flex; align-items: center; gap: 8px; font-weight: 700;">
+      <div style="width: 32px; height: 32px; border-radius: 50%; background: #fff; color: #E0001D; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 15px;">J</div>
+      Jopen
+    </div>
+    <div style="display: flex; gap: 18px; flex: 1; flex-wrap: wrap; font-size: 15px; color: #fce3e5;">
+      <span>Recipes</span><span>Ingredients</span><span style="color: #fff; border-bottom: 2px solid #fff;">Batches</span><span>Planning</span><span>Inventory</span><span>Statistics</span>
+    </div>
+    <div style="font-size: 14px; border: 1px solid rgba(255,255,255,.5); border-radius: 4px; padding: 6px 12px;">Jaap · Admin</div>
+  </div>
+
+  <div style="max-width: 1400px; margin: 0 auto; padding: 20px 24px 60px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px;">
+
+    <div style="display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap;">
+      <div style="display: flex; flex-direction: column; gap: 2px;">
+        <div style="font-size: 12px; color: #6b6355;">Home › Batch reports</div>
+        <div style="display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;">
+          <h1 style="margin: 0; font-size: 28px;">All batches</h1>
+          <span style="font-size: 14px; color: #6b6355;">{{countText}}</span>
+        </div>
+      </div>
+      <button class="ghost" type="button">Export (.xlsx)</button>
+    </div>
+
+    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+      <input class="search" type="search" value="{{q}}" onChange="{{setQ}}" placeholder="Search batch or beer" aria-label="Search">
+      <div class="seg">
+        <button class="{{sAct}}" type="button" onClick="{{pickAct}}">Active</button>
+        <button class="{{sClo}}" type="button" onClick="{{pickClo}}">Closed</button>
+        <button class="{{sAll}}" type="button" onClick="{{pickAll}}">All</button>
+      </div>
+      <select class="sel" value="{{stage}}" onChange="{{setStage}}" aria-label="Status">
+        <option value="">Every status</option>
+        <sc-for list="{{stageOpts}}" as="o" hint-placeholder-count="8"><option value="{{o.v}}">{{o.l}}</option></sc-for>
+      </select>
+      <select class="sel" value="{{year}}" onChange="{{setYear}}" aria-label="Year">
+        <option value="2026">2026</option><option value="2025">2025</option><option value="">All years</option>
+      </select>
+      <div class="seg">
+        <button class="{{fAll}}" type="button" onClick="{{bwAll}}">WP + JK</button>
+        <button class="{{fWp}}" type="button" onClick="{{bwWp}}">WP</button>
+        <button class="{{fJk}}" type="button" onClick="{{bwJk}}">JK</button>
+      </div>
+    </div>
+
+    <div class="card" style="padding: 4px 12px 10px;">
+      <div style="overflow-x: auto;">
+        <table class="lg" style="min-width: 860px;">
+          <thead>
+            <tr>
+              <sc-for list="{{cols}}" as="h" hint-placeholder-count="6">
+                <th style="{{h.w}}"><button class="{{h.cls}}" type="button" onClick="{{h.sort}}">{{h.label}}<span aria-hidden="true">{{h.arrow}}</span></button></th>
+              </sc-for>
+            </tr>
+          </thead>
+          <tbody>
+            <sc-for list="{{rows}}" as="r" hint-placeholder-count="15">
+              <tr>
+                <td style="font-weight: 700; font-variant-numeric: tabular-nums;"><a href="Overview.dc.html">{{r.no}}</a></td>
+                <td style="font-weight: 700; color: #33473a;">{{r.beer}}<sc-if value="{{r.isJk}}" hint-placeholder-val="{{false}}"><span class="bw">JK</span></sc-if></td>
+                <td class="d">{{r.ver}}</td>
+                <td><span class="st" style="{{r.stStyle}}">{{r.stLabel}}</span></td>
+                <td class="d">{{r.startTxt}}</td>
+                <td class="{{r.endCls}}">{{r.endTxt}}</td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </div>
+      <sc-if value="{{empty}}" hint-placeholder-val="{{false}}"><div style="padding: 16px 8px; font-size: 13px; color: #6b6355;">No batches match these filters.</div></sc-if>
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; padding-top: 10px; flex-wrap: wrap;">
+        <span style="font-size: 12.5px; color: #6b6355;">{{pageText}}</span>
+        <div style="display: flex; gap: 6px;">
+          <button class="pg" type="button" onClick="{{prev}}" disabled="{{noPrev}}">‹ Previous</button>
+          <button class="pg" type="button" onClick="{{next}}" disabled="{{noNext}}">Next ›</button>
+        </div>
+      </div>
+    </div>
+    <div style="font-size: 12px; color: #6b6355;">Start = date of brew 1 · End = filling report closed · status follows the same stage rules as Active batches</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1100}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { q: '', scope: 'all', stage: '', year: '2026', bw: 'all', sort: 'no', dir: -1, page: 0 };
+    this.STAGES = [
+      ['raw', 'Raw material prep.', 'background:#f1eee5;color:#6b6355;'],
+      ['brew', 'Brewing', 'background:#fdf1d8;color:#7a4f17;'],
+      ['ferm', 'Fermentation', 'background:#fbe3c8;color:#7a4011;'],
+      ['lager', 'Lagering', 'background:#dde7f0;color:#244766;'],
+      ['hbt', 'HBT', 'background:#e3def0;color:#3f2f6b;'],
+      ['fill', 'Filling', 'background:#d6ebe6;color:#1f5448;'],
+      ['filled', 'Filled', 'background:#e1ead9;color:#33473a;'],
+      ['closed', 'Closed', 'background:#33473a;color:#fff;']
+    ];
+    const R = (no, beer, ver, st, start, end, bw) => ({ no: no, beer: beer, ver: ver, st: st, start: start, end: end || '', bw: bw || 'WP' });
+    this.rows = [
+      R('26-0342', 'Koyt', 'v4.0', 'raw', '', '', 'JK'), R('26-0341', 'Gerstebier', 'v3.1', 'raw', ''), R('26-0340', 'Braubevial special', 'v1.0', 'raw', ''),
+      R('26-0336', 'Esma Stout', 'v6.0', 'brew', '2026-10-13'), R('26-0335', 'Bokbier', 'v34.0', 'brew', '2026-10-12'), R('26-0334', 'Winterbier', 'v8.2', 'brew', '2026-10-12'),
+      R('26-0333', 'NONnetje', 'v5.0', 'brew', '2026-10-11'), R('26-0332', 'Mooie Nel', 'v12.0', 'ferm', '2026-10-12'), R('26-0329', 'Aperolling', 'v2.0', 'ferm', '2026-10-11'),
+      R('26-0328', 'Papagaai', 'v3.0', 'ferm', '2026-10-12'), R('26-0327', 'Blonde', 'v7.1', 'ferm', '2026-10-11'), R('26-0326', 'Koyt 30', 'v4.0', 'ferm', '2026-10-09'),
+      R('26-0325', 'Ongelovige Thomas', 'v9.0', 'ferm', '2026-10-10'), R('26-0324', 'Gin Wit', 'v1.2', 'ferm', '2026-10-11'), R('26-0323', 'Nonnetje', 'v5.0', 'lager', '2026-10-02'),
+      R('26-0319', 'Witte Kerst', 'v2.0', 'lager', '2026-10-01'), R('26-0318', 'Bokbier', 'v34.0', 'ferm', '2026-10-08'), R('26-0317', 'Stout Of The Year', 'v1.0', 'ferm', '2026-10-04'),
+      R('26-0316', 'Refterbier', 'v6.0', 'ferm', '2026-10-07'), R('26-0312', 'Jopen Blond', 'v3.0', 'lager', '2026-09-30'), R('26-0311', 'Mooie Nel', 'v12.0', 'lager', '2026-09-29'),
+      R('26-0310', 'Kerstmus 2026', 'v1.0', 'lager', '2026-09-27'), R('26-0309', 'Mooie Nel', 'v11.1', 'lager', '2026-09-29'), R('26-0301', 'Kolkende Kerst', 'v2.3', 'lager', '2026-09-22'),
+      R('26-0300', 'Heavy Crown', 'v1.1', 'lager', '2026-09-21'), R('26-0298', 'Meesterstuk', 'v4.0', 'lager', '2026-09-24'), R('26-0297', 'Nonnetje', 'v5.0', 'lager', '2026-09-26'),
+      R('26-0292', 'Mooie Nel', 'v11.1', 'lager', '2026-09-28'), R('26-0289', 'Blurred Lines', 'v2.0', 'lager', '2026-09-25'), R('26-0287', 'Jopen Blond', 'v3.0', 'hbt', '2026-09-17'),
+      R('26-0285', 'Braubevial', 'v1.0', 'lager', '2026-09-18'), R('26-0284', 'Ongelovige Thomas', 'v9.0', 'hbt', '2026-09-16'), R('26-0280', 'Extra Stout', 'v3.0', 'hbt', '2026-09-12', '', 'JK'),
+      R('26-0278', 'Mooie Nel', 'v11.1', 'fill', '2026-09-14'), R('26-0275', 'Malle Babbe', 'v5.0', 'filled', '2026-09-08', '', 'JK'), R('26-0271', 'Hoppenbier', 'v21.0', 'filled', '2026-09-05'),
+      R('26-0262', "I'm a barley girl", 'v1.0', 'lager', '2026-09-23'), R('26-0261', 'Moonwalker', 'v2.0', 'lager', '2026-09-20'), R('26-0243', 'Adriaan', 'v6.0', 'lager', '2026-09-19'),
+      R('26-0240', 'Hoppenbier', 'v21.0', 'closed', '2026-08-28', '2026-09-24'), R('26-0236', 'Jacobus RPA', 'v7.0', 'closed', '2026-08-26', '2026-09-22'),
+      R('26-0231', 'Mooie Nel', 'v11.1', 'closed', '2026-08-24', '2026-09-18'), R('26-0228', 'Koyt', 'v4.0', 'closed', '2026-08-20', '2026-09-25', 'JK'),
+      R('26-0222', 'Gerstebier', 'v3.1', 'closed', '2026-08-18', '2026-09-12'), R('26-0219', 'Lente Bier', 'v4.0', 'closed', '2026-08-14', '2026-09-10'),
+      R('26-0215', 'Ongelovige Thomas', 'v8.2', 'closed', '2026-08-12', '2026-09-15'), R('26-0210', 'Extra Stout', 'v3.0', 'closed', '2026-08-07', '2026-09-05', 'JK'),
+      R('25-0401', 'Imperial Stout BA', 'v1.0', 'lager', '2025-11-20'), R('25-0398', 'Kerstmus 2025', 'v1.0', 'closed', '2025-11-18', '2025-12-12')
+    ];
+  }
+  renderVals() {
+    const s = this.state;
+    const PER = 15;
+    const stg = {}; this.STAGES.forEach((x, i) => { stg[x[0]] = { label: x[1], style: x[2], ord: i }; });
+    const fmt = (d) => { if (!d) return ''; const p = d.split('-'); return p[2] + '-' + p[1] + '-' + p[0]; };
+    const q = s.q.trim().toLowerCase();
+    let list = this.rows.filter((r) =>
+      (s.scope === 'all' || (s.scope === 'active' ? r.st !== 'closed' : r.st === 'closed')) &&
+      (!s.stage || r.st === s.stage) &&
+      (!s.year || r.no.indexOf(s.year.slice(2) + '-') === 0) &&
+      (s.bw === 'all' || r.bw === s.bw.toUpperCase()) &&
+      (!q || (r.no + ' ' + r.beer).toLowerCase().indexOf(q) >= 0));
+    const key = { no: (r) => r.no, beer: (r) => r.beer.toLowerCase(), ver: (r) => parseFloat(r.ver.slice(1)) || 0, st: (r) => stg[r.st].ord, start: (r) => r.start || '9999', end: (r) => r.end || '9999' }[s.sort];
+    list = list.slice().sort((a, b) => { const x = key(a), y = key(b); return (x < y ? -1 : x > y ? 1 : 0) * s.dir || b.no.localeCompare(a.no); });
+    const pages = Math.max(1, Math.ceil(list.length / PER));
+    const page = Math.min(s.page, pages - 1);
+    const rows = list.slice(page * PER, page * PER + PER).map((r) => ({
+      no: r.no, beer: r.beer, ver: r.ver, isJk: r.bw === 'JK',
+      stLabel: stg[r.st].label, stStyle: stg[r.st].style,
+      startTxt: r.start ? fmt(r.start) : 'Not brewed yet', endTxt: r.end ? fmt(r.end) : '—', endCls: r.end ? 'd' : 'm'
+    }));
+    const colDef = [['no', 'Batch', 'width:110px;'], ['beer', 'Name', ''], ['ver', 'Version', 'width:90px;'], ['st', 'Status', 'width:170px;'], ['start', 'Start date', 'width:130px;'], ['end', 'End date', 'width:130px;']];
+    const cols = colDef.map((c) => ({
+      label: c[1], w: c[2], cls: s.sort === c[0] ? 'on' : '', arrow: s.sort === c[0] ? (s.dir > 0 ? ' ▲' : ' ▼') : '',
+      sort: () => this.setState({ sort: c[0], dir: s.sort === c[0] ? -s.dir : (c[0] === 'beer' || c[0] === 'st' ? 1 : -1), page: 0 })
+    }));
+    const set = (p) => () => this.setState(Object.assign({ page: 0 }, p));
+    return {
+      cols: cols, rows: rows, empty: rows.length === 0,
+      countText: list.length + ' batches',
+      pageText: list.length ? 'Showing ' + (page * PER + 1) + '–' + Math.min(list.length, page * PER + PER) + ' of ' + list.length : '',
+      prev: () => this.setState({ page: Math.max(0, page - 1) }), next: () => this.setState({ page: Math.min(pages - 1, page + 1) }),
+      noPrev: page === 0, noNext: page >= pages - 1,
+      q: s.q, setQ: (e) => this.setState({ q: e.target.value, page: 0 }),
+      stage: s.stage, setStage: (e) => this.setState({ stage: e.target.value, page: 0 }),
+      year: s.year, setYear: (e) => this.setState({ year: e.target.value, page: 0 }),
+      stageOpts: this.STAGES.map((x) => ({ v: x[0], l: x[1] })),
+      sAct: s.scope === 'active' ? 'on' : '', sClo: s.scope === 'closed' ? 'on' : '', sAll: s.scope === 'all' ? 'on' : '',
+      pickAct: set({ scope: 'active' }), pickClo: set({ scope: 'closed' }), pickAll: set({ scope: 'all' }),
+      fAll: s.bw === 'all' ? 'on' : '', fWp: s.bw === 'wp' ? 'on' : '', fJk: s.bw === 'jk' ? 'on' : '',
+      bwAll: set({ bw: 'all' }), bwWp: set({ bw: 'wp' }), bwJk: set({ bw: 'jk' })
+    };
+  }
+}
+</script>
+</body>
+</html>
