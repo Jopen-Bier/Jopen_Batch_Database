@@ -210,7 +210,7 @@ Agreed table and column names per table: `supabase/rename-map.json`.
 |---|---|---|
 | `index.html` | — (tiles per module) | |
 | `login.html`, `accept-invite.html` | — | auth only |
-| `recept-invoer.html` | recipes | recipes, recipe_* (brewing_specs, fermentation, water, ingredients, costs, process_steps, specs, packaging, comments, revisions), ingredients, units, water_settings |
+| `recept-invoer.html` | recipes | recipes, recipe_* (brewing_specs, fermentation, water, ingredients, costs, process_steps, specs, packaging, comments, revisions), ingredients, units, water_settings. Ingredient lines are saved with `save_recipe_ingredients()` (one transaction; existing lines keep their id) |
 | `receptoverzicht.html` | recipes | recipes, recipe_*, product_sheet_status (view), batches |
 | `ingredienten.html` | ingredients | ingredients, ingredient_categories, ingredient_documents, ingredient_revisions, ingredient_declarations, ingredient_usage_counts (view), document_types, recipe_ingredients, units |
 | `productsheet.html`, `productsheet-invoer.html` | product_sheets | product_sheets, product_sheet_revisions, product_sheet_status (view), recipes |
