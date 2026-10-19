@@ -45,8 +45,8 @@ creation**, **Active batches** (count active, count "!"), **All batches**
   progress bar where relevant; an issue adds a red "!" badge and a red third
   line with the reason. Tile links to the matching tab.
   - Raw: "Order picking dd-mm" / "✓ Picked" (tile green) or "Not picked yet".
-    Until phase 2 (order picking checkbox): "Order picking dd-mm" or "No order
-    picking date" / "<n> brews". No tank chip while a batch has no tank.
+    "No order picking date" when the date is empty. No tank chip while a
+    batch has no tank.
   - Brewing: "Brew 2 / 3" / "Next: brew 3".
   - Cellar: "Day 4.2 · tasks 1/5" / "Next: <step>" (green "✓ …" when all done).
   - HBT: formats / "✓ Released" (tile green) or "1/2 released".
@@ -72,7 +72,10 @@ their own screen). Filters: search, status, year (default all years), WP/JK.
     "+ Yeast", "+ Cellar addition". Delete = soft (`is_removed`).
   - Amber input when ≠ recipe; tooltip "Recipe: <value unit>". Label "Added"
     on new rows.
-  - Lot column: lots from `stock_movements` on this batch (read-only).
+  - Lot column: lots from `stock_movements` on this batch (read-only; the
+    mockup's pencil to change a lot is not built — stock booking is parked).
+  - Added row: "+ …" opens an ingredient search (filtered on the card's
+    category); the row is saved as soon as an ingredient is picked.
 - **"Changes vs recipe · this batch"**: list built from the cards: Change
   (Changed / Added / Removed), ingredient + category, Recipe, Batch, Δ batch,
   Inventory effect, Reason (required, amber when empty). Pill: "Order picking

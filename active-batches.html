@@ -68,7 +68,7 @@
       if (!stages.data.length) return [];
       const ids = stages.data.map((s) => s.batch_id);
       const batches = await fetchAllRows(supabaseClient.from('batches')
-        .select('id, batch_number, name, brew_count, order_picking_date, recipes(name, version_major, version_minor, location)')
+        .select('id, batch_number, name, brew_count, order_picking_date, order_picking_completed_at, recipes(name, version_major, version_minor, location)')
         .in('id', ids)
         .order('id'));
       if (batches.error) throw batches.error;
@@ -81,8 +81,8 @@
       const issue = row.attention[0] || '';
       const cls = 'br-tile' + (issue ? ' warn' : lines.isOk ? ' ok' : '');
       const title = `${row.batchNumber} · ${row.name}${issue ? ' · ' + issue : ''}`;
-      // Tiles become links to the batch tabs once those pages exist (phase 2+).
-      return `<div class="${cls}" title="${escapeHtml(title)}">
+      // Every stage links to the Overview until its own tab exists.
+      return `<a class="${cls}" href="batch-overview.html?id=${row.id}" title="${escapeHtml(title)}">
         ${issue ? '<span class="br-bang" aria-label="Needs attention">!</span>' : ''}
         <div class="br-tile-top">
           ${row.tankCode ? `<span class="br-tank">${escapeHtml(row.tankCode)}</span>` : ''}
@@ -93,7 +93,7 @@
         <div class="br-tile-line">${escapeHtml(lines.line1)}</div>
         <div class="br-tile-line${lines.isOk ? ' ok' : ''}">${escapeHtml(lines.line2)}</div>
         ${issue ? `<div class="br-tile-line alert">${escapeHtml(issue)}</div>` : ''}
-      </div>`;
+      </a>`;
     }
 
     function render() {

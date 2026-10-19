@@ -134,7 +134,7 @@
       document.getElementById('ab-body').innerHTML = pageRows.map((r) => {
         const st = stageInfo(r.stage);
         return `<tr>
-          <td class="batch">${escapeHtml(r.batchNumber)}</td>
+          <td class="batch"><a href="batch-overview.html?id=${r.id}">${escapeHtml(r.batchNumber)}</a></td>
           <td class="beer">${escapeHtml(r.name)}${r.location === 'jk' ? '<span class="br-jk">JK</span>' : ''}</td>
           <td class="num">${escapeHtml(r.version)}</td>
           <td><span class="br-pill" style="background:${st.pill[0]}; color:${st.pill[1]};">${escapeHtml(st.label)}</span></td>

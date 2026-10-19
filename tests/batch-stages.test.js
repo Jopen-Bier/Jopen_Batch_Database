@@ -28,6 +28,7 @@ assert.strictEqual(s.dayMonth('2026-10-14'), '14-10');
 // toBatchRow: name falls back to the recipe, stage defaults to raw
 const row = (o) => s.toBatchRow(
   { id: o.id, batch_number: o.no, name: o.name, brew_count: o.brews ?? 1, order_picking_date: o.pick || null,
+    order_picking_completed_at: o.picked ? '2026-10-19T08:00:00Z' : null,
     recipes: { name: 'Recipe ' + o.id, version_major: o.maj ?? 1, version_minor: o.min ?? 0, location: o.loc === undefined ? 'wp' : o.loc } },
   o.stage ? { stage: o.stage, start_date: o.start || null, end_date: null } : null);
 const r1 = row({ id: 1, no: '26346' });
@@ -89,9 +90,19 @@ assert.strictEqual(ga.sections[0].attentionCount, 1);
 assert.strictEqual(ga.attentionTotal, 1);
 
 // Tile lines (raw)
-assert.deepStrictEqual(s.tileLines(row({ id: 9, no: '26400', stage: 'raw', brews: 3, pick: '2026-10-14' })),
-  { line1: 'Order picking 14-10', line2: '3 brews', isOk: false });
-assert.strictEqual(s.tileLines(row({ id: 9, no: '26400', stage: 'raw', brews: 1 })).line1, 'No order picking date');
-assert.strictEqual(s.tileLines(row({ id: 9, no: '26400', stage: 'raw', brews: 1 })).line2, '1 brew');
+assert.deepStrictEqual(s.tileLines(row({ id: 9, no: '26400', stage: 'raw', pick: '2026-10-14' })),
+  { line1: 'Order picking 14-10', line2: 'Not picked yet', isOk: false });
+assert.strictEqual(s.tileLines(row({ id: 9, no: '26400', stage: 'raw' })).line1, 'No order picking date');
+assert.deepStrictEqual(s.tileLines(row({ id: 9, no: '26400', stage: 'raw', picked: true })),
+  { line1: 'No order picking date', line2: '✓ Picked', isOk: true });
+
+// Progress strip
+const states = (stage) => s.progressSteps(stage).map((x) => x.state).join(' ');
+assert.strictEqual(states('raw'), 'todo todo todo todo todo');
+assert.strictEqual(states('brewing'), 'now todo todo todo todo');
+assert.strictEqual(states('lagering'), 'done now todo todo todo');
+assert.strictEqual(states('hbt'), 'done done now todo todo');
+assert.strictEqual(states('filled'), 'done done done done now');
+assert.strictEqual(states('closed'), 'done done done done done');
 
 console.log('batch-stages: all tests passed');

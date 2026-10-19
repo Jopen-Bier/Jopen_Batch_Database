@@ -45,6 +45,8 @@ waterzouten.js             water-salts calculation (shared module, has a test)
 brew-calculations.js       hop utilization, EBU, malt color (shared module, has a test)
 recipe-values.js           recipe value lists (codes -> labels, colours, report text; has a test)
 batch-stages.js            batch stages + list logic of the batch-report pages (has a test)
+batch-ingredients.js       ingredient snapshot per batch: batch amounts, deviations (has a test)
+batch-report-shell.js      shared frame of the batch tabs: header, tabs, confirm dialog, undo toast
 batch-report.css           shared styles of the batch-report screens (load after jopen-shared.css)
 voorraad-forecast.js       consumption calculation (shared module)
 productsheet-*.js          product-sheet generation (browser)
@@ -219,6 +221,7 @@ Agreed table and column names per table: `supabase/rename-map.json`.
 | `batchcreation.html` | batches | batches, recipes, recipe_fermentation (+ batch report via `batchrapport-vullen.js`) |
 | `all-batches.html` | batches | batches, recipes, batch_stages (view) |
 | `active-batches.html` | batches | batches, recipes, batch_stages (view) |
+| `batch-overview.html` | batches | batches, batch_ingredients, `snapshot_batch_ingredients()`, recipes + recipe_specs/_fermentation/_brewing_specs/_packaging/_water/_revisions, ingredients, stock_movements, lots |
 | `voorraad-overzicht/inboeken/uitboeken.html` | inventory | lots, stock_movements, ingredients, batches, users |
 | `statistics.html` | statistics | ingredients, ingredient_documents, document_types |
 | `settings.html` | settings | units, ingredient_categories, document_types, ingredient_declarations, water_settings (+ _history) |

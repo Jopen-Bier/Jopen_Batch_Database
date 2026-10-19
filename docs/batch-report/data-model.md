@@ -111,8 +111,9 @@ is replaced (`create or replace view` cannot change a column type).
 |---|---|---|
 | id | bigint identity PK | |
 | batch_id | bigint not null → batches | cascade |
-| recipe_ingredient_id | bigint → recipe_ingredients | on delete set null; **null = added in this batch** |
-| ingredient_id | bigint not null → ingredients | |
+| recipe_ingredient_id | bigint → recipe_ingredients | on delete set null; trace only (see below) |
+| ingredient_id | bigint → ingredients | empty only for recipe lines without ingredient (copied with their note) |
+| is_added | boolean not null default false | **true = added in this batch**; then ingredient_id is required (check) |
 | addition_type | text not null | same values as `recipe_ingredients.addition_type` (+ `base_beer` in phase 8) |
 | timing | text | copied |
 | unit | text | copied |
@@ -125,6 +126,14 @@ is replaced (`create or replace view` cannot change a column type).
 | all_in_first_brew | boolean | copied |
 | is_removed | boolean not null default false | soft delete: removal stays visible as a deviation |
 | deviation_reason | text | required in the UI as soon as the row deviates |
+| note | text | copied from the recipe line |
+
+Built (phase 2), different from the first design: `recept-invoer.html`
+deletes and re-inserts every recipe line on each save, so
+`recipe_ingredient_id` is set null after the next recipe save. "Added" is
+therefore its own column (`is_added`), and the batch keeps its own frozen
+recipe values. 51 recipe lines (19-10) have no ingredient (blend notes and
+similar); they are copied with their `note`, hence `ingredient_id` nullable.
 
 Function `snapshot_batch_ingredients(p_batch_id bigint)` — inserts from
 `recipe_ingredients` of the batch's recipe **only if the batch has no rows
@@ -133,8 +142,9 @@ page on first open. Migration backfills all batches with status `planned`.
 
 Lots (read-only on the Overview): `stock_movements` where `batch_id` = batch
 and `movement_type = 'consumption'`, joined to `lots` (lot code) and matched
-to the batch ingredient by `recipe_ingredient_id`, else by
-`lots.ingredient_id`. Open: add `stock_movements.batch_ingredient_id` for
+to the batch ingredient by ingredient **group** (`ingredients.ingredient_group_id`,
+so another version of the same ingredient still matches). No stock movement
+uses `recipe_ingredient_id` (19-10). Open: add `stock_movements.batch_ingredient_id` for
 exact matching of added rows (open-questions).
 
 ---

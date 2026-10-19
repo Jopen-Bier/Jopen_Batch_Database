@@ -46,6 +46,36 @@ const BEER_STATUS_COLORS = {
 const BEER_RISK_REPORT_TEXT = { standard: 'Standaard', dangerous: 'Gevaarlijk', contains_sugar: 'Suikerhoudend', sensitive: 'Gevoelig' };
 const BEER_STATUS_REPORT_TEXT = { standard: 'Standaard', npi: 'NPI', to_improve: 'Te verbeteren' };
 
+// recipe_ingredients.timing of a dry hop: 'warm' or 'cold_<°C>' (e.g. 'cold_16',
+// 'cold_2.5'); legacy '16c' / '0c' and plain 'cold' still occur. The same
+// parsing exists as ontleedDryHopTijdstip() in recept-invoer.html,
+// receptoverzicht.html and both batch report generators.
+function parseDryHopTiming(timing) {
+  if (timing === 'warm') return { kind: 'warm', tempC: null };
+  if (timing === 'cold') return { kind: 'cold', tempC: null };
+  const m = /^cold_(-?\d+(?:\.\d+)?)$/.exec(String(timing || ''));
+  if (m) return { kind: 'cold', tempC: Number(m[1]) };
+  if (timing === '16c') return { kind: 'cold', tempC: 16 };
+  if (timing === '0c') return { kind: 'cold', tempC: 0 };
+  return { kind: '', tempC: null };
+}
+
+/** 'Warm', '@16 °C', 'Cold'; unknown text is shown as-is, empty as '—'. */
+function dryHopTimingLabel(timing) {
+  const t = parseDryHopTiming(timing);
+  if (t.kind === 'warm') return 'Warm';
+  if (t.kind === 'cold') return t.tempC === null ? 'Cold' : `@${t.tempC} °C`;
+  return timing ? String(timing) : '—';
+}
+
+/** Sort value: warm first, then cold from warm to cold, unknown last. */
+function dryHopSortValue(timing) {
+  const t = parseDryHopTiming(timing);
+  if (t.kind === 'warm') return -1000;
+  if (t.kind === 'cold') return t.tempC === null ? 500 : -t.tempC;
+  return 1000;
+}
+
 /** Label for a code from one of the lists above; unknown codes are shown as-is, empty as '—'. */
 function valueLabel(labels, code) {
   if (code === null || code === undefined || code === '') return '—';
@@ -66,5 +96,6 @@ if (typeof module !== 'undefined' && module.exports) {
     BEER_RISK_LABELS, BEER_STATUS_LABELS, BEER_RISK_COLORS, BEER_STATUS_COLORS,
     BEER_RISK_REPORT_TEXT, BEER_STATUS_REPORT_TEXT,
     valueLabel, locationLabel, valueOptionsHtml,
+    parseDryHopTiming, dryHopTimingLabel, dryHopSortValue,
   };
 }

@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jopen Brouwerij — Batch overview</title>
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="stylesheet" href="jopen-shared.css" />
+  <link rel="stylesheet" href="batch-report.css" />
+</head>
+<body class="br-page">
+
+  <div id="jopen-nav"></div>
+
+  <main class="br-main">
+    <div id="ov-header" style="display:flex; flex-direction:column; gap:14px;"></div>
+    <div class="br-message" id="ov-message">Loading batch…</div>
+    <div id="ov-content" style="display:none; flex-direction:column; gap:16px;">
+      <div class="br-card br-strip" id="ov-strip"></div>
+      <div class="br-row2">
+        <div style="flex:1 1 340px; min-width:0; display:flex; flex-direction:column; gap:16px;">
+          <div class="br-card br-cardpad" id="ov-batch-card"></div>
+          <div class="br-card br-cardpad" id="ov-revision"></div>
+        </div>
+        <div class="br-card br-cardpad" style="flex:3 1 600px; min-width:0;" id="ov-specs"></div>
+      </div>
+      <div class="br-head" style="align-items:center; margin-bottom:-4px;">
+        <div style="font-size:18px; font-weight:700;">Ingredients</div>
+        <span class="br-note" id="ov-ing-note"></span>
+      </div>
+      <div id="ov-ingredients" style="display:flex; flex-direction:column; gap:16px;"></div>
+      <div class="br-card br-cardpad" id="ov-changes"></div>
+      <div class="br-card br-cardpad" id="ov-water"></div>
+    </div>
+  </main>
+
+  <datalist id="ov-ingredient-list"></datalist>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="jopen-utils.js"></script>
+  <script src="nav.js"></script>
+  <script src="recipe-values.js"></script>
+  <script src="brew-calculations.js"></script>
+  <script src="batch-stages.js"></script>
+  <script src="batch-ingredients.js"></script>
+  <script src="batch-report-shell.js"></script>
+  <script>
+    // ingredient_categories ids → the cards whose search lists them
+    const CATEGORY_FOR_TYPE = { malt: 2, boil_hop: 1, dry_hop: 1, yeast: 3, brewhouse_addition: 4, cellar_addition: 4 };
+    // defaults for a row added in the batch
+    const NEW_ROW_DEFAULTS = {
+      malt: { unit: 'kg', timing: null },
+      boil_hop: { unit: 'g', timing: '0' },
+      dry_hop: { unit: 'g', timing: 'warm' },
+      brewhouse_addition: { unit: 'g/hl', timing: null },
+      yeast: { unit: 'g/hl', timing: null },
+      cellar_addition: { unit: 'ml/hl', timing: null },
+    };
+    const RATE_UNITS = ['g/hl', 'ml/hl', 'kg/hl', 'l/hl', 'g/l', 'ml/l', 'mg/l', 'g', 'kg', 'ml', 'l'];
+    const BREWERY_NAMES = { wp: 'Waarderpolder (WP)', jk: 'Jopenkerk (JK)' };
+    const TRASH_ICON = '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2.5 4h9M5.5 4V2.5h3V4M3.5 4l.6 8h5.8l.6-8"></path></svg>';
+
+    const page = {
+      user: null, canEdit: false, ctx: null, save: null,
+      rows: [], names: {}, groupOf: {}, lotsByGroup: {}, searchList: [],
+      specs: {}, ferm: {}, brewing: {}, packaging: {}, water: null, revision: null,
+      draft: null,   // { type } while a new row waits for its ingredient
+    };
+
+    const num = (v) => toNumber(v);
+    const fmt = (v, digits) => (v === null || v === undefined || v === '' ? '—'
+      : Number(v).toLocaleString('en-GB', { maximumFractionDigits: digits ?? 2 }));
+    const amountCtx = () => ({ brewCount: page.ctx.batch.brew_count, brewVolumeHl: page.ctx.recipe.brew_volume_hl });
+    const orderPicked = () => !!page.ctx.batch.order_picking_completed_at;
+    const visibleRows = (types) => page.rows.filter((r) => types.includes(r.addition_type) && !r.is_removed);
+    const ingredientName = (r) => page.names[r.ingredient_id] || r.note || '(no ingredient)';
+    const lotText = (r) => page.lotsByGroup[page.groupOf[r.ingredient_id]] || '—';
+
+    function showMessage(text, isError) {
+      const el = document.getElementById('ov-message');
+      el.textContent = text;
+      el.className = 'br-message' + (isError ? ' error' : '');
+      el.style.display = text ? '' : 'none';
+    }
+
+    // ------------------------------------------------------------ loading
+    async function loadAll(batchId) {
+      page.ctx = await loadBatchContext(batchId);
+      const recipeId = page.ctx.batch.recipe_id;
+
+      // Older batches get their snapshot on first open (idempotent).
+      const snap = await supabaseClient.rpc('snapshot_batch_ingredients', { p_batch_id: batchId });
+      if (snap.error) console.error('Snapshot could not be created:', snap.error);
+
+      const one = (table) => supabaseClient.from(table).select('*').eq('recipe_id', recipeId).maybeSingle();
+      const [rows, specs, ferm, brewing, packaging, water, revision, movements, search] = await Promise.all([
+        supabaseClient.from('batch_ingredients').select('*').eq('batch_id', batchId)
+          .order('addition_type').order('sort_order', { nullsFirst: false }).order('id'),
+        one('recipe_specs'), one('recipe_fermentation'), one('recipe_brewing_specs'), one('recipe_packaging'), one('recipe_water'),
+        supabaseClient.from('recipe_revisions').select('date, changed_by_name, change_description, version_major, version_minor')
+          .eq('recipe_id', recipeId).order('version_major', { ascending: false }).order('version_minor', { ascending: false })
+          .order('id', { ascending: false }).limit(1),
+        supabaseClient.from('stock_movements').select('lots(lot_code, ingredients(ingredient_group_id))')
+          .eq('batch_id', batchId).eq('movement_type', 'consumption').order('id'),
+        fetchAllRows(supabaseClient.from('ingredients').select('id, name, category_id, ingredient_group_id')
+          .eq('version_status', 'current').neq('status', 'inactive').order('name').order('id')),
+      ]);
+      if (rows.error) throw rows.error;
+      page.rows = rows.data;
+      page.specs = specs.data || {};
+      page.ferm = ferm.data || {};
+      page.brewing = brewing.data || {};
+      page.packaging = packaging.data || {};
+      page.water = water.data;
+      page.revision = (revision.data || [])[0] || null;
+      page.searchList = search.data || [];
+
+      // Names (snapshot rows may point at older ingredient versions) and lots per ingredient group.
+      const ids = [...new Set(page.rows.map((r) => r.ingredient_id).filter(Boolean))];
+      const named = ids.length
+        ? await supabaseClient.from('ingredients').select('id, name, ingredient_group_id').in('id', ids)
+        : { data: [] };
+      (named.data || []).concat(page.searchList).forEach((i) => { page.names[i.id] = i.name; page.groupOf[i.id] = i.ingredient_group_id; });
+      const lots = {};
+      (movements.data || []).forEach((m) => {
+        const code = m.lots && m.lots.lot_code;
+        const group = m.lots && m.lots.ingredients && m.lots.ingredients.ingredient_group_id;
+        if (!code || !group) return;
+        lots[group] = lots[group] || [];
+        if (!lots[group].includes(code)) lots[group].push(code);
+      });
+      Object.keys(lots).forEach((g) => { page.lotsByGroup[g] = lots[g].join(' + '); });
+    }
+
+    // ------------------------------------------------------------ saving
+    async function saveRow(id, patch) {
+      const row = page.rows.find((r) => r.id === id);
+      const before = { ...row };
+      Object.assign(row, patch);
+      renderSoon();
+      page.save.saving();
+      const { error } = await supabaseClient.from('batch_ingredients')
+        .update({ ...patch, updated_by: page.user.id }).eq('id', id).select('id').single();
+      if (error) {
+        Object.assign(row, before);
+        renderSoon();
+        page.save.failed(error.message);
+        return false;
+      }
+      page.save.saved();
+      return true;
+    }
+
+    async function saveBatch(patch) {
+      const before = { ...page.ctx.batch };
+      Object.assign(page.ctx.batch, patch);
+      renderSoon();
+      page.save.saving();
+      const { error } = await supabaseClient.from('batches').update(patch).eq('id', page.ctx.batch.id).select('id').single();
+      if (error) {
+        Object.assign(page.ctx.batch, before);
+        renderSoon();
+        page.save.failed(error.message);
+        return;
+      }
+      page.save.saved();
+    }
+
+    async function addRow(type, ingredient) {
+      const sortOrder = Math.max(0, ...page.rows.filter((r) => r.addition_type === type).map((r) => r.sort_order || 0)) + 1;
+      const defaults = NEW_ROW_DEFAULTS[type];
+      page.save.saving();
+      const { data, error } = await supabaseClient.from('batch_ingredients').insert({
+        batch_id: page.ctx.batch.id, is_added: true, addition_type: type, ingredient_id: ingredient.id,
+        unit: defaults.unit, timing: defaults.timing, sort_order: sortOrder, updated_by: page.user.id,
+      }).select('*').single();
+      if (error) { page.draft.adding = false; page.save.failed(error.message); return; }
+      page.names[ingredient.id] = ingredient.name;
+      page.groupOf[ingredient.id] = ingredient.ingredient_group_id;
+      page.rows.push(data);
+      page.draft = null;
+      page.save.saved();
+      renderSoon(`[data-id="${data.id}"][data-field="quantity"]`);
+    }
+
+    async function removeRow(id) {
+      const row = page.rows.find((r) => r.id === id);
+      const name = ingredientName(row);
+      const ok = await confirmDialog({
+        title: `Remove ${name}?`,
+        text: 'The recipe stays unchanged. The removal shows under "Changes vs recipe" and is recorded in the audit trail. You can undo right after.',
+        okLabel: 'Remove',
+      });
+      if (!ok) return;
+      if (await saveRow(id, { is_removed: true })) showUndoToast(name, () => saveRow(id, { is_removed: false }));
+    }
+
+    // ------------------------------------------------------------ rendering
+    let renderTimer = null;
+    let focusAfterRender = null;
+    // Render after the current event, keeping focus on the field the user
+    // moved to (a change event fires before focus leaves the input).
+    function renderSoon(focusSelector) {
+      if (focusSelector) focusAfterRender = focusSelector;
+      clearTimeout(renderTimer);
+      renderTimer = setTimeout(() => {
+        const key = focusAfterRender || focusKey(document.activeElement);
+        focusAfterRender = null;
+        renderAll();
+        const target = key && document.querySelector(key);
+        if (target) target.focus();
+      }, 0);
+    }
+
+    // Selector that finds the same control again after a re-render.
+    function focusKey(el) {
+      if (!el || !el.dataset) return null;
+      if (el.id && el.id.startsWith('ov-')) return '#' + el.id;
+      if (el.dataset.field) return `[data-id="${el.dataset.id}"][data-field="${el.dataset.field}"]`;
+      if (el.dataset.remove) return `[data-remove="${el.dataset.remove}"]`;
+      if (el.dataset.add) return `[data-add="${el.dataset.add}"]`;
+      return null;
+    }
+
+    function renderAll() {
+      renderStrip();
+      renderBatchCard();
+      renderSpecs();
+      renderIngredients();
+      renderChanges();
+    }
+
+    function renderStrip() {
+      const text = { done: 'Done', now: 'In progress', todo: 'Not started' };
+      document.getElementById('ov-strip').innerHTML = progressSteps(page.ctx.stage).map((s) => `
+        <div class="br-strip-step"><div class="bar ${s.state}"></div><b>${escapeHtml(s.label)}</b><span>${text[s.state]}</span></div>`).join('');
+    }
+
+    function renderBatchCard() {
+      const { batch, recipe } = page.ctx;
+      const risk = page.ferm.beer_risk, status = page.ferm.beer_status;
+      const pill = (labels, colors, code) => {
+        const c = colors[code] || ['#e1ead9', '#33473a'];
+        return `<span class="br-pill" style="background:${c[0]}; color:${c[1]};">${escapeHtml(valueLabel(labels, code))}</span>`;
+      };
+      const brews = num(batch.brew_count);
+      const hl = num(recipe.brew_volume_hl);
+      const dis = page.canEdit ? '' : ' disabled';
+      document.getElementById('ov-batch-card').innerHTML = `
+        <div class="br-label">Batch</div>
+        <div class="br-kr"><span class="k">Recipe</span><span class="c"><a href="receptoverzicht.html?id=${recipe.id}">${escapeHtml(recipe.name || '')} ${escapeHtml(versionText(recipe.version_major, recipe.version_minor))}</a></span></div>
+        <div class="br-kr"><span class="k">Beer style</span><span class="c">${escapeHtml(recipe.beer_style || '—')}</span></div>
+        <div class="br-kr"><span class="k">Brewery</span><span class="c">${escapeHtml(BREWERY_NAMES[recipe.location] || '—')}</span></div>
+        <div class="br-kr"><span class="k">Number of brews</span><span class="c">${brews === null ? '—' : fmt(brews)}${hl ? ` × ${fmt(hl)} hl` : ''}</span></div>
+        <div class="br-kr"><span class="k">Beer risk · beer status</span><span>${pill(BEER_RISK_LABELS, BEER_RISK_COLORS, risk)} ${pill(BEER_STATUS_LABELS, BEER_STATUS_COLORS, status)}</span></div>
+        <div class="br-field"><label class="br-label" for="ov-pick-date">Date order picking</label>
+          <input id="ov-pick-date" type="date" value="${escapeHtml(batch.order_picking_date || '')}"${dis}></div>
+        <label class="br-check"><input type="checkbox" id="ov-picked"${orderPicked() ? ' checked' : ''}${dis}> Order picking complete</label>`;
+      const r = page.revision;
+      document.getElementById('ov-revision').innerHTML = `
+        <div class="br-label">Recipe revisions</div>
+        ${r ? `<div style="display:flex; gap:10px; align-items:baseline; font-size:13px;">
+                 <span class="br-pill" style="background:#e1ead9; color:#33473a;">${escapeHtml(versionText(r.version_major, r.version_minor))}</span>
+                 <span class="br-note">${escapeHtml(formatDate(r.date))} · ${escapeHtml(r.changed_by_name || '')}</span></div>
+               <div style="font-size:13px; color:var(--br-hop-dark);">${escapeHtml(r.change_description || '')}</div>`
+            : '<div class="br-note">No revisions recorded.</div>'}
+        <a href="receptoverzicht.html?id=${recipe.id}" style="font-size:12px;">Full history in recipe</a>`;
+    }
+
+    function calculatedColour() {
+      const malts = visibleRows(['malt']).map((r) => ({ kg: num(r.quantity), ebc: num(r.color_ebc) }));
+      return maltColorEbc(malts, num(page.ctx.recipe.brew_volume_hl));
+    }
+
+    // '0.2' → '±0.2'; text such as '≤', '<' or 'calc.' as it is.
+    const tolText = (tol) => (tol === null || tol === undefined || tol === '' ? ''
+      : num(tol) !== null ? '±' + String(tol).trim() : String(tol));
+
+    function renderSpecs() {
+      const s = page.specs, f = page.ferm, p = page.packaging;
+      const kv = (label, value, unit, tol, calc) => `
+        <div class="br-kv"><span class="k">${escapeHtml(label)}</span><span class="v${calc ? ' calc' : ''}">${escapeHtml(value === null || value === undefined || value === '' ? '—' : String(value))}</span>
+          <span class="u">${escapeHtml(unit || '')}</span><span class="t">${escapeHtml(tolText(tol))}</span></div>`;
+      const colour = calculatedColour();
+      const co2BottleCan = p.co2_bottle_can_spec ?? s.co2_bottle ?? s.co2_can;
+      document.getElementById('ov-specs').innerHTML = `
+        <div class="br-label">Specifications · from recipe</div>
+        <div class="br-specs">
+          <div>
+            <div class="br-kv hd"><span class="k">End product</span><span class="v">Spec</span><span class="u">Unit</span><span class="t">Tol.</span></div>
+            ${kv('Original extract', s.original_extract, '°P', s.original_extract_tol)}
+            ${kv('Final extract', s.final_extract, '°P', s.final_extract_tol)}
+            ${kv('Alcohol', s.alcohol, '% v/v', s.alcohol_tol)}
+            ${kv('Bitterness', s.bitterness, 'EBU', s.bitterness_tol)}
+            ${kv('Colour', s.color, 'EBC', s.color_tol)}
+            ${kv('Calculated colour', colour === null ? null : colour.toFixed(1), 'EBC', 'calc.', true)}
+            ${kv('pH', s.ph, '', s.ph_tol)}
+            ${kv('ADF', s.adf_pct, '%', s.adf_pct_tol)}
+            ${kv('Turbidity (lab)', s.turbidity_lab, 'EBC', s.turbidity_lab_tol)}
+            ${kv('CO2 bottle · can', co2BottleCan, 'g/l', p.co2_bottle_can_tolerance ?? s.co2_bottle_tol)}
+            ${kv('CO2 keg', p.co2_keg_spec ?? s.co2_keg, 'g/l', p.co2_keg_tolerance ?? s.co2_keg_tol)}
+            ${kv('Headspace O2', s.headspace_o2, 'ppb', s.headspace_o2_tol)}
+            ${kv('Dissolved O2', s.dissolved_o2, 'ppb', s.dissolved_o2_tol)}
+          </div>
+          <div>
+            <div class="br-kv hd"><span class="k">Process parameters</span><span class="v">Spec</span><span class="u">Unit</span><span class="t">Tol.</span></div>
+            ${kv('Pitching temperature', f.pitching_temp, '°C', f.pitching_temp_tol)}
+            ${kv('Main fermentation', f.main_ferm_temp, '°C', f.main_ferm_temp_tol)}
+            ${kv('T release', f.release_temp, '°C', f.release_temp_tol)}
+            ${kv('Temp. warm dry hop', f.dry_hop_warm_temp, '°C', f.dry_hop_warm_temp_tol)}
+            ${kv('Extract warm dry hop 1', f.dry_hop_warm_extract_1, '°P', f.dry_hop_warm_extract_1_tol)}
+            ${f.dry_hop_warm_extract_2 != null ? kv('Extract warm dry hop 2', f.dry_hop_warm_extract_2, '°P', f.dry_hop_warm_extract_2_tol) : ''}
+            ${f.dry_hop_warm_extract_3 != null ? kv('Extract warm dry hop 3', f.dry_hop_warm_extract_3, '°P', f.dry_hop_warm_extract_3_tol) : ''}
+            ${kv('Fermentation time', f.fermentation_time, 'days', f.fermentation_time_tol)}
+            ${kv('Lagering time', f.lagering_time, 'days', f.lagering_time_tol)}
+            ${kv('Lagering temperature', f.lagering_temp, '°C', f.lagering_temp_tol)}
+            ${kv('Pasteurisation', f.pasteurization, 'PU', f.pasteurization_tol)}
+            ${kv('Turbidity after centrifuge', f.turbidity_after_separation, 'EBC', f.turbidity_after_separation_tol)}
+            ${kv('Bitterness brewhouse', f.bitterness_brewhouse, 'EBU', f.bitterness_brewhouse_tol)}
+          </div>
+        </div>`;
+      const w = page.water || {};
+      const cells = [['Ca', w.ca], ['Mg', w.mg], ['Na', w.na], ['Cl', w.cl], ['SO4', w.so4], ['Ratio Cl:SO4', w.ratio_cl_so4], ['Alkalinity', w.alkalinity]];
+      const filled = cells.some((c) => c[1] !== null && c[1] !== undefined);
+      document.getElementById('ov-water').innerHTML = `
+        <div class="br-label">Target water profile · ppm</div>
+        <div class="br-water">${cells.map((c) => `<div><span class="br-label">${c[0]}</span><b>${escapeHtml(fmt(c[1]))}</b></div>`).join('')}</div>
+        ${filled ? '' : '<div class="br-note">Not filled in for this recipe.</div>'}`;
+    }
+
+    // One editable number cell. Amber when it differs from the recipe value.
+    function numberInput(r, field, value, differs, label) {
+      const title = field === 'quantity'
+        ? (r.is_added ? 'Not in recipe' : `Recipe: ${fmt(r.recipe_quantity)} ${r.unit || ''}`.trim())
+        : (r.is_added ? '' : `Recipe: ${fmt(field === 'alpha_pct' ? r.recipe_alpha_pct : r.recipe_color_ebc)}`);
+      return `<input class="br-in${differs ? ' dev' : ''}" inputmode="decimal" data-id="${r.id}" data-field="${field}"
+        value="${escapeHtml(value === null || value === undefined ? '' : String(value))}" title="${escapeHtml(title)}"
+        aria-label="${escapeHtml(label)}"${page.canEdit ? '' : ' disabled'}>`;
+    }
+    function textInput(r, field, value, label, placeholder) {
+      return `<input class="br-in l" data-id="${r.id}" data-field="${field}" value="${escapeHtml(value || '')}"
+        placeholder="${escapeHtml(placeholder || '')}" aria-label="${escapeHtml(label)}"${page.canEdit ? '' : ' disabled'}>`;
+    }
+    function unitSelect(r) {
+      const units = RATE_UNITS.includes(r.unit) || !r.unit ? RATE_UNITS : [r.unit, ...RATE_UNITS];
+      return `<select class="br-in" data-id="${r.id}" data-field="unit" aria-label="Unit"${page.canEdit ? '' : ' disabled'}>
+        ${units.map((u) => `<option value="${escapeHtml(u)}"${u === r.unit ? ' selected' : ''}>${escapeHtml(u)}</option>`).join('')}</select>`;
+    }
+    function dryHopTimingSelect(r) {
+      const options = ['warm', 'cold_16', 'cold_8', 'cold_2', 'cold_0'];
+      if (r.timing && !options.includes(r.timing)) options.unshift(r.timing);
+      return `<select class="br-in" data-id="${r.id}" data-field="timing" aria-label="Timing">
+        ${options.map((o) => `<option value="${escapeHtml(o)}"${o === r.timing ? ' selected' : ''}>${escapeHtml(dryHopTimingLabel(o))}</option>`).join('')}</select>`;
+    }
+    const quantityDiffers = (r) => r.is_added || deviationKind(r) === 'Changed';
+    const nameCell = (r) => `${escapeHtml(ingredientName(r))}${r.is_added ? '<span class="br-added">Added</span>' : ''}`;
+    const deleteCell = (r) => (page.canEdit
+      ? `<button class="br-del" type="button" data-remove="${r.id}" aria-label="Remove ${escapeHtml(ingredientName(r))}">${TRASH_ICON}</button>` : '');
+
+    function draftRow(types, colspan) {
+      if (!page.draft || !types.includes(page.draft.type)) return '';
+      return `<tr><td colspan="${colspan}">
+        <input class="br-in l" id="ov-draft-input" list="ov-ingredient-list" placeholder="Search ingredient… (Esc to cancel)" aria-label="Ingredient">
+      </td></tr>`;
+    }
+
+    function cardHtml(title, tableHtml, buttons, extra) {
+      const btns = page.canEdit ? buttons.map((b) => `<button class="br-ghost" type="button" data-add="${b.type}">${escapeHtml(b.label)}</button>`).join('') : '';
+      return `<div class="br-card br-cardpad">
+        <div class="br-head" style="align-items:baseline;"><div class="br-label">${escapeHtml(title)}</div>${extra || ''}</div>
+        <div class="br-table-wrap">${tableHtml}</div>
+        ${btns ? `<div class="br-buttons">${btns}</div>` : ''}
+      </div>`;
+    }
+
+    function maltCard() {
+      const ctx = amountCtx();
+      const rows = visibleRows(['malt']);
+      const totalKg = rows.reduce((s, r) => s + (num(r.quantity) || 0), 0);
+      const body = rows.map((r) => {
+        const kg = num(r.quantity);
+        const batch = batchAmount('malt', r.unit, r.quantity, ctx);
+        return `<tr>
+          <td>${nameCell(r)}</td>
+          <td style="width:110px;">${numberInput(r, 'quantity', r.quantity, quantityDiffers(r), 'Amount')}</td>
+          <td class="n" style="width:100px;">${batch ? fmt(batch.q, 1) : '—'}</td>
+          <td style="width:80px;">${numberInput(r, 'color_ebc', r.color_ebc, colorDiffers(r), 'EBC')}</td>
+          <td class="c" style="width:70px;">${totalKg && kg !== null ? (kg / totalKg * 100).toFixed(1) + '%' : '—'}</td>
+          <td class="small" style="width:220px;">${escapeHtml(lotText(r))}</td>
+          <td style="width:34px;">${deleteCell(r)}</td></tr>`;
+      }).join('');
+      const colour = calculatedColour();
+      const table = `<table class="br-ing" style="min-width:860px;">
+        <thead><tr><th>Ingredient</th><th class="r">Amount (kg/brew)</th><th class="r">Batch (kg)</th><th class="r">EBC</th><th class="r">%</th><th>Lot number</th><th></th></tr></thead>
+        <tbody>${body}${draftRow(['malt'], 7)}
+          <tr class="tot"><td>Total</td><td class="n">${fmt(totalKg, 1)}</td><td class="n">${fmt(totalKg * (num(ctx.brewCount) || 0), 1)}</td><td></td><td class="c">${totalKg ? '100%' : ''}</td><td colspan="2"></td></tr>
+        </tbody></table>`;
+      const colourText = `<span class="br-note">Calculated colour <b style="font-size:15px; color:var(--br-hop-dark);">${colour === null ? '—' : colour.toFixed(2) + ' EBC'}</b> · same formula as the recipe</span>`;
+      return cardHtml('Malt & Grains', table, [{ type: 'malt', label: '+ Malt' }], colourText);
+    }
+
+    function hopsCard() {
+      const ctx = amountCtx();
+      const og = num(page.specs.original_extract);
+      const boilVolume = num(page.brewing.boil_volume);
+      const rows = visibleRows(['boil_hop', 'dry_hop']).sort((a, b) =>
+        (a.addition_type === b.addition_type ? 0 : a.addition_type === 'boil_hop' ? -1 : 1) ||
+        (a.addition_type === 'boil_hop' ? (boilTimeMin(b.timing) ?? -1) - (boilTimeMin(a.timing) ?? -1)
+                                         : dryHopSortValue(a.timing) - dryHopSortValue(b.timing)) ||
+        (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.id - b.id);
+      let total = 0, prevGroup = null;
+      const body = rows.map((r) => {
+        const isBoil = r.addition_type === 'boil_hop';
+        const minutes = isBoil ? boilTimeMin(r.timing) : null;
+        const util = minutes !== null && og !== null ? hopUtilizationPct(minutes, og) : null;
+        const ebu = minutes !== null && og !== null ? hopEbu(num(r.quantity), num(r.alpha_pct), minutes, og, boilVolume) : null;
+        if (ebu !== null) total += ebu;
+        const batch = batchAmount(r.addition_type, r.unit, r.quantity, ctx);
+        const group = r.addition_type + '|' + (r.timing || '');
+        const first = group !== prevGroup; prevGroup = group;
+        const timing = r.is_added && page.canEdit
+          ? (isBoil ? textInput(r, 'timing', r.timing, 'Boil time (min)', 'min') : dryHopTimingSelect(r))
+          : `<b style="color:var(--br-hop-dark); white-space:nowrap;">${escapeHtml(isBoil ? (minutes !== null ? minutes + ' min' : r.timing || '—') : dryHopTimingLabel(r.timing))}</b>`;
+        return `<tr class="${[first ? 'first' : '', isBoil ? '' : 'dry'].join(' ')}">
+          <td class="small" style="white-space:nowrap;">${isBoil ? 'Hop (boil)' : 'Dry hop'}</td>
+          <td>${nameCell(r)}</td>
+          <td style="width:80px;">${isBoil ? numberInput(r, 'alpha_pct', r.alpha_pct, alphaDiffers(r), 'Alpha %') : ''}</td>
+          <td style="width:96px;">${numberInput(r, 'quantity', r.quantity, quantityDiffers(r), 'Amount')}</td>
+          <td class="n" style="width:90px;">${batch ? fmt(batch.q, 0) : '—'}</td>
+          <td style="width:110px;">${timing}</td>
+          <td class="cv" style="width:92px;">${util !== null ? util.toFixed(1) + '%' : '—'}</td>
+          <td class="cv" style="width:60px; font-weight:700;">${ebu !== null ? ebu.toFixed(1) : '—'}</td>
+          <td class="small" style="width:46px;">${isBoil ? (r.hop_dosing_tank ? 'Yes' : 'No') : '—'}</td>
+          <td class="small" style="width:200px;">${escapeHtml(lotText(r))}</td>
+          <td style="width:34px;">${deleteCell(r)}</td></tr>`;
+      }).join('');
+      const spec = num(page.specs.bitterness);
+      const tol = num(String(page.specs.bitterness_tol ?? '').replace(/[^\d.,-]/g, ''));
+      const inSpec = spec === null ? null : Math.abs(total - spec) <= (tol ?? 0);
+      const table = `<table class="br-ing" style="min-width:1080px;">
+        <thead><tr><th>Role</th><th>Ingredient</th><th class="r">Alpha %</th><th class="r">Amount (g)</th><th class="r">Batch (g)</th><th>Timing</th><th class="r">Rendement %</th><th class="r">EBU</th><th>HDT</th><th>Lot number</th><th></th></tr></thead>
+        <tbody>${body}${draftRow(['boil_hop', 'dry_hop'], 11)}
+          <tr class="tot first"><td colspan="7">Calculated total EBU <span class="br-note" style="font-weight:400;">${spec === null ? '' : `· spec ${fmt(spec)}${tol !== null ? ' ±' + fmt(tol) : ''}`}</span></td>
+            <td class="cv ${inSpec === null ? '' : inSpec ? 'ok' : 'bad'}">${rows.some((r) => r.addition_type === 'boil_hop') ? total.toFixed(1) : '—'}</td><td colspan="3"></td></tr>
+        </tbody></table>`;
+      const note = `<span class="br-note">EBU from original extract ${og === null ? '—' : fmt(og, 1) + ' °P'} and boil volume ${boilVolume === null ? '—' : fmt(boilVolume, 1) + ' hl'} · boil amounts per brew, dry hop per batch</span>`;
+      return cardHtml('Hops and Herbs', table, [{ type: 'boil_hop', label: '+ Boil hop' }, { type: 'dry_hop', label: '+ Dry hop' }], note);
+    }
+
+    function hopTotalsCard() {
+      const totals = hopTotals(page.rows, amountCtx(), page.names);
+      if (!totals.length) return '';
+      const max = Math.max(...totals.map((t) => t.boilG + t.dryG), 1);
+      const grand = totals.reduce((s, t) => s + t.boilG + t.dryG, 0);
+      const kg = (g) => (g / 1000).toFixed(1) + ' kg';
+      return `<div class="br-card br-cardpad">
+        <div class="br-label">Hops total weights · batch</div>
+        <div class="br-hopgrid">${totals.map((t) => `<div>
+          <div style="display:flex; justify-content:space-between; gap:8px; font-size:13.5px;"><span>${escapeHtml(t.name)}</span><b>${kg(t.boilG + t.dryG)}</b></div>
+          <div class="br-hopbar"><div class="boil" style="width:${(t.boilG / max * 100).toFixed(1)}%;"></div><div class="dry" style="width:${(t.dryG / max * 100).toFixed(1)}%;"></div></div>
+          <div class="br-note" style="font-size:11.5px;">${[t.boilG ? 'boil ' + kg(t.boilG) : '', t.dryG ? 'dry hop ' + kg(t.dryG) : ''].filter(Boolean).join(' · ')}</div></div>`).join('')}</div>
+        <div class="br-note" style="display:flex; gap:18px; flex-wrap:wrap;"><span><span class="br-hopbar" style="display:inline-block; width:10px; height:10px;"><span class="boil" style="display:block; height:100%;"></span></span> Boil / whirlpool</span>
+          <span><span class="br-hopbar" style="display:inline-block; width:10px; height:10px;"><span class="dry" style="display:block; height:100%;"></span></span> Dry hop</span>
+          <b style="margin-left:auto; color:var(--br-ink);">Total ${kg(grand)}</b></div>
+      </div>`;
+    }
+
+    // Additions Brewing / Yeasts / Additions Cellar: same columns, different amount column.
+    function additionCard(type, title, buttonLabel, amountHeader, perBrew) {
+      const ctx = amountCtx();
+      const rows = visibleRows([type]);
+      const body = rows.map((r) => {
+        const amount = perBrew ? brewAmount(type, r.unit, r.quantity, ctx) : batchAmount(type, r.unit, r.quantity, ctx);
+        return `<tr>
+          <td>${nameCell(r)}</td>
+          <td style="width:90px;">${numberInput(r, 'quantity', r.quantity, quantityDiffers(r), 'Amount')}</td>
+          <td class="small" style="width:90px;">${r.is_added ? unitSelect(r) : escapeHtml(r.unit || '—')}</td>
+          <td class="n" style="width:140px;">${escapeHtml(formatAmount(amount))}</td>
+          ${perBrew ? `<td class="small" style="width:90px;">${r.all_in_first_brew ? 'Yes' : 'No'}</td>` : ''}
+          <td style="width:160px;">${r.is_added ? textInput(r, 'timing', r.timing, 'Timing', 'e.g. Boil') : escapeHtml(r.timing || '—')}</td>
+          <td class="small" style="width:200px;">${escapeHtml(lotText(r))}</td>
+          <td style="width:34px;">${deleteCell(r)}</td></tr>`;
+      }).join('');
+      const cols = perBrew ? 8 : 7;
+      const table = `<table class="br-ing" style="min-width:${perBrew ? 960 : 820}px;">
+        <thead><tr><th>Ingredient</th><th class="r">Amount</th><th>Unit</th><th class="r">${escapeHtml(amountHeader)}</th>${perBrew ? '<th>All in brew 1?</th>' : ''}<th>Timing</th><th>Lot number</th><th></th></tr></thead>
+        <tbody>${body}${draftRow([type], cols)}${rows.length || page.draft ? '' : `<tr><td colspan="${cols}" class="small">None in the recipe.</td></tr>`}</tbody></table>`;
+      return cardHtml(title, table, [{ type, label: buttonLabel }]);
+    }
+
+    function renderIngredients() {
+      document.getElementById('ov-ing-note').textContent = page.canEdit
+        ? 'Everything can be changed for this batch · the recipe stays as it is · amber = differs from recipe · every change is logged'
+        : 'Read only · you have view rights on batch reports';
+      document.getElementById('ov-ingredients').innerHTML = [
+        maltCard(), hopsCard(), hopTotalsCard(),
+        additionCard('brewhouse_addition', 'Additions Brewing', '+ Addition', 'Weigh for this brew', true),
+        additionCard('yeast', 'Yeasts', '+ Yeast', 'Batch', false),
+        additionCard('cellar_addition', 'Additions Cellar', '+ Cellar addition', 'Weigh for batch', false),
+      ].join('');
+      const draft = document.getElementById('ov-draft-input');
+      if (draft) {
+        const category = CATEGORY_FOR_TYPE[page.draft.type];
+        document.getElementById('ov-ingredient-list').innerHTML = page.searchList
+          .filter((i) => !category || !i.category_id || i.category_id === category)
+          .map((i) => `<option value="${escapeHtml(i.name)}"></option>`).join('');
+        draft.focus();
+      }
+    }
+
+    function renderChanges() {
+      const list = deviationList(page.rows, amountCtx(), {
+        orderPickingComplete: orderPicked(),
+        names: page.names,
+        lots: Object.fromEntries(page.rows.map((r) => [r.ingredient_id, page.lotsByGroup[page.groupOf[r.ingredient_id]]])),
+      });
+      const picked = orderPicked();
+      const missing = list.filter((d) => d.needsReason).length;
+      document.getElementById('ov-changes').innerHTML = `
+        <div class="br-head" style="align-items:baseline;">
+          <div style="display:flex; gap:10px; align-items:baseline; flex-wrap:wrap;">
+            <div class="br-label">Changes vs recipe · this batch</div>
+            <span class="br-note">${list.length} ${list.length === 1 ? 'change' : 'changes'}${missing ? ` · <b style="color:#7a4f17;">${missing} without reason</b>` : ''} · built from the tables above</span>
+          </div>
+          <span class="br-pill" style="${picked ? 'background:#fdf1d8; color:#7a4f17;' : 'background:#f1eee5; color:#6b6355;'}">${picked ? 'Order picking complete · awaiting accounting sign-off' : 'Not picked yet'}</span>
+        </div>
+        <div class="br-note-box">${picked
+          ? 'Stock was already booked out at order picking. Each change becomes a correction on the lot (extra issue or return) and goes to accounting for sign-off, like other stock movements. Booking it is done in Book out material for now.'
+          : 'Nothing booked out yet. Changes only update the picking list; stock moves at order picking.'}</div>
+        ${list.length ? `<div class="br-table-wrap"><table class="br-ing" style="min-width:1040px;">
+          <thead><tr><th>Change</th><th>Ingredient</th><th class="r">Recipe</th><th class="r">Batch</th><th class="r">Δ batch</th><th>Inventory effect</th><th>Reason</th></tr></thead>
+          <tbody>${list.map((d) => `<tr>
+            <td style="width:92px;"><span class="br-chg ${d.kind.toLowerCase()}">${d.kind}</span></td>
+            <td><b>${escapeHtml(d.name)}</b> <span class="br-note">· ${escapeHtml(d.category)}</span></td>
+            <td class="c" style="width:110px;">${escapeHtml(formatAmount(d.recipe))}</td>
+            <td class="n" style="width:110px;">${escapeHtml(formatAmount(d.batch))}</td>
+            <td class="n br-delta ${d.delta && d.delta.q > 0 ? 'up' : 'down'}" style="width:100px;">${escapeHtml(formatAmount(d.delta, { signed: true }))}</td>
+            <td style="width:220px; font-size:12.5px;">${escapeHtml(d.effect)}</td>
+            <td style="width:280px;"><input class="br-in l${d.needsReason ? ' dev' : ''}" data-id="${d.id}" data-field="deviation_reason"
+              value="${escapeHtml(d.reason)}" placeholder="Reason (required)" aria-label="Reason for change"${page.canEdit ? '' : ' disabled'}></td>
+          </tr>`).join('')}</tbody></table></div>`
+          : '<div class="br-note" style="padding:6px 0;">No changes from the recipe.</div>'}`;
+    }
+
+    // ------------------------------------------------------------ events
+    function pickDraftIngredient(input) {
+      if (!page.draft || page.draft.adding) return;
+      const category = CATEGORY_FOR_TYPE[page.draft.type];
+      const matches = page.searchList.filter((i) => i.name === input.value);
+      const ingredient = matches.find((i) => i.category_id === category) || matches[0];
+      if (!ingredient) return;
+      page.draft.adding = true;
+      addRow(page.draft.type, ingredient);
+    }
+
+    function bindEvents() {
+      const main = document.querySelector('main');
+      main.addEventListener('change', (e) => {
+        const el = e.target;
+        if (el.id === 'ov-pick-date') return saveBatch({ order_picking_date: el.value || null });
+        if (el.id === 'ov-picked') {
+          return saveBatch(el.checked
+            ? { order_picking_completed_at: new Date().toISOString(), order_picking_completed_by: page.user.id }
+            : { order_picking_completed_at: null, order_picking_completed_by: null });
+        }
+        if (el.id === 'ov-draft-input') return pickDraftIngredient(el);
+        const id = Number(el.dataset.id), field = el.dataset.field;
+        if (!id || !field) return;
+        if (['quantity', 'alpha_pct', 'color_ebc'].includes(field)) {
+          const value = el.value.trim() === '' ? null : num(el.value);
+          if (el.value.trim() !== '' && value === null) { el.classList.add('bad'); el.title = 'Not a number'; return; }
+          el.classList.remove('bad');
+          saveRow(id, { [field]: value });
+        } else if (field === 'deviation_reason' || field === 'timing') {
+          saveRow(id, { [field]: el.value.trim() || null });
+        } else if (field === 'unit') {
+          saveRow(id, { unit: el.value });
+        }
+      });
+      // Picking from the ingredient list fires "input" right away; typing does not add.
+      main.addEventListener('input', (e) => {
+        if (e.target.id === 'ov-draft-input' && (!e.inputType || e.inputType === 'insertReplacementText')) pickDraftIngredient(e.target);
+      });
+      main.addEventListener('click', (e) => {
+        const add = e.target.closest('button[data-add]');
+        if (add) { page.draft = { type: add.dataset.add }; renderSoon('#ov-draft-input'); return; }
+        const remove = e.target.closest('button[data-remove]');
+        if (remove) removeRow(Number(remove.dataset.remove));
+      });
+      main.addEventListener('keydown', (e) => {
+        if (e.target.id === 'ov-draft-input' && e.key === 'Escape') { page.draft = null; renderSoon(); }
+        if (e.key === 'Enter' && e.target.matches('input.br-in')) e.target.blur();
+      });
+    }
+
+    async function initOverviewPage() {
+      page.user = await getCurrentUser();
+      if (!page.user) return; // nav.js redirects to login
+      if (!(await magBekijkenModule('batches'))) {
+        showMessage('You do not have access to batch reports. Ask an admin for view rights on "Batches & batch reports".');
+        return;
+      }
+      const batchId = batchIdFromUrl();
+      if (!batchId) { showMessage('No batch chosen. Open a batch from All batches or Active batches.', true); return; }
+      page.canEdit = await magBewerkenModule('batches');
+      try {
+        await loadAll(batchId);
+      } catch (err) {
+        showMessage('Could not load the batch: ' + (err.message || err), true);
+        return;
+      }
+      document.title = `Jopen Brouwerij — ${page.ctx.batch.batch_number} Overview`;
+      page.save = renderBatchHeader(document.getElementById('ov-header'), page.ctx, 'overview');
+      showMessage('');
+      document.getElementById('ov-content').style.display = 'flex';
+      bindEvents();
+      renderAll();
+    }
+
+    document.addEventListener('DOMContentLoaded', initOverviewPage);
+  </script>
+</body>
+</html>

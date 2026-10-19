@@ -39,11 +39,17 @@ Lagering as two rows of one "Cellar" block.
   `recipe_ingredient_id` is null (added), or `is_removed`.
   Alpha/EBC differences are highlighted (amber) but are not stock
   deviations.
-- Δ batch total per row, per unit:
+- Δ batch total per row, per unit (`batch-ingredients.js`, `amountBasis`):
   - malt: (quantity − recipe_quantity) × brew_count (kg/brew)
   - boil hops: × brew_count (g/brew); dry hops: batch total (g)
-  - additions/yeast in `g/hl` or `ml/hl`: × total volume hl
+  - per hl (`g/hl`, `ml/hl`, `kg/hl`, `l/hl`, …): × total volume hl
     (brew volume × brew count)
+  - per litre (`g/l`, `ml/l`, `mg/l`, `ppm` = mg/l): × total volume hl × 100
+  - per brew (`g/brew`): × brew_count
+  - other absolute units (`g`, `kg`, `l`, `hl`) on additions and yeast:
+    batch total; no unit: no batch amount
+- A row added in the batch shows under "Changes vs recipe" once it has an
+  amount. Added and then removed = no change.
 - Inventory effect text: order picking not complete → "Picking list updated";
   complete → positive Δ "Extra issue · <lot>", negative "Return to same lot ·
   <lot>". (Booking these movements is parked.)
