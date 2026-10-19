@@ -47,8 +47,8 @@ Seed (from Jaap, 15-10):
 - WP: LT11–12 10, LT13–14 20, LT15–16 30; GLT21–22 60, LT23–24 60,
   GLT25–28 60; GLT31–35 120; GLT41–45 120; LT51–58 180; GLT61–64 320;
   HBT11–12 30, HBT13 20, HBT14–15 60, HBT16–18 120. (52 tanks.)
-- Assumptions to confirm in the PR: all HBTs at WP; a CKT serves fermentation
-  and lagering.
+- Confirmed 19-10: all HBTs at WP; a CKT is a combi tank (fermentation and
+  lagering).
 
 RLS: select for every logged-in user; insert/update/delete via `settings`.
 No access for `anon`.

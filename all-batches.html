@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jopen Brouwerij — All batches</title>
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="stylesheet" href="jopen-shared.css" />
+  <link rel="stylesheet" href="batch-report.css" />
+</head>
+<body class="br-page">
+
+  <div id="jopen-nav"></div>
+
+  <main class="br-main">
+    <div class="br-head">
+      <div>
+        <div class="br-crumb"><a href="index.html">Home</a> › Batch reports</div>
+        <div class="br-title">
+          <h1>All batches</h1>
+          <span id="ab-count"></span>
+        </div>
+      </div>
+      <button class="br-ghost" type="button" id="ab-export" disabled>Export (.xlsx)</button>
+    </div>
+
+    <div id="ab-content" style="display:none; flex-direction:column; gap:14px;">
+      <div class="br-toolbar">
+        <input class="br-search" type="search" id="ab-search" placeholder="Search batch or beer" aria-label="Search batch or beer">
+        <select class="br-select" id="ab-stage" aria-label="Status"></select>
+        <select class="br-select" id="ab-year" aria-label="Year"></select>
+        <div class="br-seg" id="ab-location" role="group" aria-label="Brewhouse">
+          <button type="button" class="on" data-location="">WP + JK</button>
+          <button type="button" data-location="wp">WP</button>
+          <button type="button" data-location="jk">JK</button>
+        </div>
+      </div>
+
+      <div class="br-card" style="padding: 4px 12px 10px;">
+        <div class="br-table-wrap">
+          <table class="br-table">
+            <thead><tr id="ab-head"></tr></thead>
+            <tbody id="ab-body"></tbody>
+          </table>
+        </div>
+        <div class="br-message" id="ab-empty" style="display:none;">No batches match these filters.</div>
+        <div class="br-table-foot">
+          <span id="ab-page-text"></span>
+          <div style="display:flex; gap:6px;">
+            <button class="br-pager" type="button" id="ab-prev">‹ Previous</button>
+            <button class="br-pager" type="button" id="ab-next">Next ›</button>
+          </div>
+        </div>
+      </div>
+      <div class="br-note">Start = start of brew 1 · End = filling report closed · status follows the same stage rules as Active batches</div>
+    </div>
+
+    <div class="br-message" id="ab-message">Loading batches…</div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+  <script src="config.js"></script>
+  <script src="jopen-utils.js"></script>
+  <script src="nav.js"></script>
+  <script src="recipe-values.js"></script>
+  <script src="batch-stages.js"></script>
+  <script>
+    const PAGE_SIZE = 15;
+    const COLUMNS = [
+      { key: 'batchNumber', label: 'Batch', width: '110px', firstDir: -1 },
+      { key: 'name', label: 'Name', width: '', firstDir: 1 },
+      { key: 'version', label: 'Version', width: '90px', firstDir: -1 },
+      { key: 'stage', label: 'Status', width: '190px', firstDir: 1 },
+      { key: 'startDate', label: 'Start date', width: '130px', firstDir: -1 },
+      { key: 'endDate', label: 'End date', width: '130px', firstDir: -1 },
+    ];
+
+    let allRows = [];
+    const view = { q: '', stage: '', year: '', location: '', sort: 'batchNumber', dir: -1, page: 0 };
+
+    function showMessage(text, isError) {
+      const el = document.getElementById('ab-message');
+      el.textContent = text;
+      el.className = 'br-message' + (isError ? ' error' : '');
+      el.style.display = text ? '' : 'none';
+    }
+
+    async function loadBatches() {
+      const [batches, stages] = await Promise.all([
+        fetchAllRows(supabaseClient.from('batches')
+          .select('id, batch_number, name, brew_count, order_picking_date, recipes(name, version_major, version_minor, location)')
+          .order('id')),
+        fetchAllRows(supabaseClient.from('batch_stages')
+          .select('batch_id, stage, start_date, end_date')
+          .order('batch_id')),
+      ]);
+      if (batches.error || stages.error) throw (batches.error || stages.error);
+      const stageById = new Map(stages.data.map((s) => [s.batch_id, s]));
+      return batches.data.map((b) => toBatchRow(b, stageById.get(b.id)));
+    }
+
+    function currentList() {
+      const filtered = filterBatches(allRows, { q: view.q, stage: view.stage, year: view.year ? Number(view.year) : null, location: view.location });
+      return sortBatches(filtered, view.sort, view.dir);
+    }
+
+    function startText(row) {
+      if (row.startDate) return formatDate(row.startDate);
+      return row.stage === 'raw' ? 'Not brewed yet' : '—';
+    }
+
+    function renderHead() {
+      document.getElementById('ab-head').innerHTML = COLUMNS.map((c) => {
+        const on = view.sort === c.key;
+        const arrow = on ? (view.dir > 0 ? ' ▲' : ' ▼') : '';
+        return `<th${c.width ? ` style="width:${c.width};"` : ''}><button type="button" class="${on ? 'on' : ''}" data-sort="${c.key}">${c.label}<span aria-hidden="true">${arrow}</span></button></th>`;
+      }).join('');
+    }
+
+    function render() {
+      const list = currentList();
+      const pages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+      view.page = Math.min(view.page, pages - 1);
+      const pageRows = list.slice(view.page * PAGE_SIZE, (view.page + 1) * PAGE_SIZE);
+
+      renderHead();
+      document.getElementById('ab-body').innerHTML = pageRows.map((r) => {
+        const st = stageInfo(r.stage);
+        return `<tr>
+          <td class="batch">${escapeHtml(r.batchNumber)}</td>
+          <td class="beer">${escapeHtml(r.name)}${r.location === 'jk' ? '<span class="br-jk">JK</span>' : ''}</td>
+          <td class="num">${escapeHtml(r.version)}</td>
+          <td><span class="br-pill" style="background:${st.pill[0]}; color:${st.pill[1]};">${escapeHtml(st.label)}</span></td>
+          <td class="${r.startDate ? 'num' : 'muted'}">${escapeHtml(startText(r))}</td>
+          <td class="${r.endDate ? 'num' : 'muted'}">${escapeHtml(r.endDate ? formatDate(r.endDate) : '—')}</td>
+        </tr>`;
+      }).join('');
+
+      document.getElementById('ab-count').textContent = `${list.length} ${list.length === 1 ? 'batch' : 'batches'}`;
+      document.getElementById('ab-empty').style.display = list.length ? 'none' : '';
+      document.getElementById('ab-page-text').textContent = list.length
+        ? `Showing ${view.page * PAGE_SIZE + 1}–${Math.min(list.length, (view.page + 1) * PAGE_SIZE)} of ${list.length}`
+        : '';
+      document.getElementById('ab-prev').disabled = view.page === 0;
+      document.getElementById('ab-next').disabled = view.page >= pages - 1;
+      document.getElementById('ab-export').disabled = list.length === 0;
+    }
+
+    function fillFilterOptions() {
+      document.getElementById('ab-stage').innerHTML = '<option value="">Every status</option>' +
+        BATCH_STAGES.map((s) => `<option value="${s.code}">${escapeHtml(s.label)}</option>`).join('');
+      const years = [...new Set(allRows.map((r) => batchYear(r.batchNumber)).filter(Boolean))].sort((a, b) => b - a);
+      document.getElementById('ab-year').innerHTML = '<option value="">All years</option>' +
+        years.map((y) => `<option value="${y}">${y}</option>`).join('');
+    }
+
+    async function exportToExcel() {
+      const list = currentList();
+      const workbook = new ExcelJS.Workbook();
+      const sheet = workbook.addWorksheet('All batches');
+      const toDate = (iso) => (iso ? new Date(iso + 'T00:00:00') : null);
+      sheet.addTable({
+        name: 'AllBatches',
+        ref: 'A1',
+        headerRow: true,
+        style: { theme: 'TableStyleLight15', showRowStripes: true },
+        columns: [{ name: 'Batch' }, { name: 'Name' }, { name: 'Brewhouse' }, { name: 'Version' },
+                  { name: 'Status' }, { name: 'Start date' }, { name: 'End date' }],
+        rows: list.map((r) => [r.batchNumber, r.name, locationLabel(r.location), r.version,
+                               stageInfo(r.stage).label, toDate(r.startDate), toDate(r.endDate)]),
+      });
+      [10, 40, 12, 10, 26, 13, 13].forEach((w, i) => { sheet.getColumn(i + 1).width = w; });
+      sheet.getColumn(6).numFmt = 'dd-mm-yyyy';
+      sheet.getColumn(7).numFmt = 'dd-mm-yyyy';
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `All batches ${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(link.href);
+    }
+
+    function bindControls() {
+      document.getElementById('ab-search').addEventListener('input', (e) => { view.q = e.target.value; view.page = 0; render(); });
+      document.getElementById('ab-stage').addEventListener('change', (e) => { view.stage = e.target.value; view.page = 0; render(); });
+      document.getElementById('ab-year').addEventListener('change', (e) => { view.year = e.target.value; view.page = 0; render(); });
+      document.getElementById('ab-location').addEventListener('click', (e) => {
+        const btn = e.target.closest('button[data-location]');
+        if (!btn) return;
+        view.location = btn.dataset.location;
+        view.page = 0;
+        document.querySelectorAll('#ab-location button').forEach((b) => b.classList.toggle('on', b === btn));
+        render();
+      });
+      document.getElementById('ab-head').addEventListener('click', (e) => {
+        const btn = e.target.closest('button[data-sort]');
+        if (!btn) return;
+        const col = COLUMNS.find((c) => c.key === btn.dataset.sort);
+        view.dir = view.sort === col.key ? -view.dir : col.firstDir;
+        view.sort = col.key;
+        view.page = 0;
+        render();
+      });
+      document.getElementById('ab-prev').addEventListener('click', () => { view.page -= 1; render(); });
+      document.getElementById('ab-next').addEventListener('click', () => { view.page += 1; render(); });
+      document.getElementById('ab-export').addEventListener('click', exportToExcel);
+    }
+
+    async function initAllBatchesPage() {
+      const user = await getCurrentUser();
+      if (!user) return; // nav.js redirects to login
+      if (!(await magBekijkenModule('batches'))) {
+        showMessage('You do not have access to batch reports. Ask an admin for view rights on "Batches & batch reports".');
+        return;
+      }
+      try {
+        allRows = await loadBatches();
+      } catch (err) {
+        showMessage('Could not load batches: ' + (err.message || err), true);
+        return;
+      }
+      showMessage('');
+      document.getElementById('ab-content').style.display = 'flex';
+      fillFilterOptions();
+      bindControls();
+      render();
+    }
+
+    document.addEventListener('DOMContentLoaded', initAllBatchesPage);
+  </script>
+</body>
+</html>

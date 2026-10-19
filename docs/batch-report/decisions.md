@@ -18,6 +18,8 @@ Agreed with Jaap. Date = when decided. Do not change without asking.
 | 15-10 | **Initials** (paraaf) and operator come **from the login**: rows store `created_by` (uuid → `users`). Initials = first letter of first name + first letter of the last word of the name, stored in `users.initials` (filled by trigger, overridable). Every person who fills in data gets their own account (Jaap arranges this). |
 | 15-10 | **Ingredient snapshot at batch creation**: recipe ingredients are copied to `batch_ingredients` when the batch is inserted (DB trigger, so `batchcreation.html` needs no change). Existing batches get their snapshot on first open (idempotent function). |
 | 15-10 | Tank master list (`tanks`) with type, number, location, volume (list from Jaap, see `data-model.md`). |
+| 19-10 | All HBTs are at WP; a CKT is a combi tank (fermentation and lagering). |
+| 19-10 | Beer risk / beer status lists = the values in the existing recipes (already in `recipe-values.js`). |
 | 19-10 | **Batch-level fields are columns on `batches`** (Time 0, GLT/LT, order picking complete, tasting, …) — no separate 1:1 table. |
 | 19-10 | **One permission module for the whole batch report: `batches`** (renamed "Batches & batch reports"). All new batch tables use `can_view/can_edit/can_delete('batches')`. |
 | 19-10 | **Stage of a batch is derived** in view `batch_stages`, never stored. `batches.status` stays `planned`/`completed`. |
@@ -69,6 +71,7 @@ Agreed with Jaap. Date = when decided. Do not change without asking.
 | 13-10 | Active batches: full-width blocks per stage (Raw material prep., Brewing, Cellar [Fermentation + Lagering], HBT, Filling, Filled), compact tiles sorted by **tank number**. Each tile always shows two status lines; an issue adds a red "!" badge plus a third line explaining it. |
 | 13-10 | Stage rules: see business-rules.md. |
 | 14-10 | All batches: table with batch number, name, version, status (stage), start date, end date. |
+| 19-10 | All batches always shows all batches (no Active/Closed toggle); active batches are on Active batches. |
 
 ## Parked (do not build yet)
 - Closing the filling report (Completed / Signed) and the "Entered in Mdrank"

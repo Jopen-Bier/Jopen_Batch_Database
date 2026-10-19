@@ -6,7 +6,7 @@ without the open part and note it in the PR.
 | # | Question | Needed in phase |
 |---|---|---|
 | 1 | **Needs attention (!)**: which situations make a tile show "!"? (Mockup examples: overdue cellar step, lab result missing, lagering over spec, release pending > n days, brew tomorrow and not picked.) | 1 (can ship without "!") |
-| 2 | All batches default filter: **All** or **Active**? | 1 |
+| 2 | ~~All batches default filter: **All** or **Active**?~~ **Answered 19-10:** always all batches, no Active/Closed toggle; active ones are on Active batches. | 1 |
 | 3 | Fermentation → Lagering: when the cellar plan step "Cooling to [lagering temp]" is done (or LT set)? | 4 (view in 1 can treat cellar as one stage) |
 | 4 | Sample to lab: after the **last** cooling step only (assumed), or also after cooling to 16 °C? | 4 |
 | 5 | Cellar additions: `recipe_ingredients.timing` is free text (lagering, verwerking, HBT, centrifuge, …). Which lines become cellar plan steps, which are shown on Processing? Proposal: timing mentioning processing/verwerking/centrifuge/fuge/HBT → Processing; the rest → cellar plan on `cellar_addition_day`. | 4 |
@@ -19,5 +19,5 @@ without the open part and note it in the PR.
 | 12 | Four-eyes check for Nagardo? | 4 |
 | 13 | Definition of a SKU in the Summary (article, or beer + package) and layout per Mdrank. | 7 |
 | 14 | Translations awaiting Jaap: Discharges / Interval · Standpipe / Bottom valve · JK labels · Filling labels · Split / transfer, Transfer moment, To batch, Incoming beer, One line per source beer. | per phase |
-| 15 | Beer status / beer risk dropdown list (left open in the architecture work, step 3): what exactly is needed? | 0 |
-| 16 | Tanks: all HBTs at WP? CKT used for both fermentation and lagering? | 0 |
+| 15 | ~~Beer status / beer risk dropdown list: what exactly is needed?~~ **Answered 19-10:** the values in the existing recipes; these are already the lists in `recipe-values.js`, the check constraints and the recipe editor dropdowns. Nothing to build. | 0 |
+| 16 | ~~Tanks: all HBTs at WP? CKT used for both fermentation and lagering?~~ **Answered 19-10:** yes, all HBTs are at WP; a CKT is a combi tank. | 0 |

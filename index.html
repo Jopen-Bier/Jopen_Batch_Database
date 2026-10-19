@@ -21,20 +21,25 @@
     <h1>Jopen — Database</h1>
     <p class="jopen-subtitel">Choose a module to continue.</p>
 
-    <div class="jopen-groep">
-      <h2 class="jopen-groep-titel">Batches</h2>
+    <!-- Only visible with view rights on module 'batches' (role matrix). -->
+    <div class="jopen-groep" id="group-batch-reports" style="display:none;">
+      <h2 class="jopen-groep-titel">Batch reports</h2>
       <div class="jopen-tegels">
         <a class="jopen-tegel" href="batchcreation.html">
-          <div class="jopen-tegel-titel">Batch Creation</div>
+          <div class="jopen-tegel-titel">Batch creation</div>
           <p class="jopen-tegel-omschrijving">Pick a recipe and assign a batch number.</p>
           <span class="jopen-tegel-status actief">Active</span>
         </a>
-
-        <div class="jopen-tegel" style="opacity: 0.6; cursor: default;">
-          <div class="jopen-tegel-titel">Batch reports</div>
-          <p class="jopen-tegel-omschrijving">Brewing, yeast tracking, processing, packaging, packaging report.</p>
-          <span class="jopen-tegel-status">Phase Orange — not yet built</span>
-        </div>
+        <a class="jopen-tegel" href="active-batches.html">
+          <div class="jopen-tegel-titel">Active batches</div>
+          <p class="jopen-tegel-omschrijving">Every batch in progress, by stage.</p>
+          <span class="jopen-tegel-status actief" id="tile-active-count">Active</span>
+        </a>
+        <a class="jopen-tegel" href="all-batches.html">
+          <div class="jopen-tegel-titel">All batches</div>
+          <p class="jopen-tegel-omschrijving">Table of all batch reports · search and filter.</p>
+          <span class="jopen-tegel-status actief" id="tile-total-count">Active</span>
+        </a>
       </div>
     </div>
 
@@ -116,10 +121,26 @@
   <script src="jopen-utils.js"></script>
   <script src="nav.js"></script>
   <script>
+    // Counts on the Batch reports tiles. "!" only shows once attention rules
+    // exist (docs/batch-report/open-questions.md #1).
+    async function showBatchCounts() {
+      const count = (query) => query.then((r) => (r.error ? null : r.count));
+      const [total, active] = await Promise.all([
+        count(supabaseClient.from('batch_stages').select('batch_id', { count: 'exact', head: true })),
+        count(supabaseClient.from('batch_stages').select('batch_id', { count: 'exact', head: true }).neq('stage', 'closed')),
+      ]);
+      if (active !== null) document.getElementById('tile-active-count').textContent = `${active} active`;
+      if (total !== null) document.getElementById('tile-total-count').textContent = `${total} in total`;
+    }
+
     document.addEventListener('DOMContentLoaded', async () => {
       const gebruiker = await getCurrentUser();
       if (gebruiker && await magBekijkenModule('statistics')) {
         document.getElementById('groep-statistics').style.display = '';
+      }
+      if (gebruiker && await magBekijkenModule('batches')) {
+        document.getElementById('group-batch-reports').style.display = '';
+        showBatchCounts();
       }
     });
   </script>
