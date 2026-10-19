@@ -325,6 +325,7 @@
   .re-wz-voet .melding.fout { color: #a33f2c; }
 
   .re-melding { margin-top: 14px; font-size: 13px; font-family: var(--mono); }
+  .re-savebar .re-melding { margin: 0; max-width: 60%; font-weight: bold; }
   .re-melding.fout { color: #a33f2c; }
   .re-melding.ok { color: var(--hop-dark); }
 
@@ -636,13 +637,14 @@
         <div id="re-revisies-container"><div class="re-leeg">Revision history will appear here once the recipe has been saved.</div></div>
       </div>
 
-      <div id="re-melding" class="re-melding"></div>
     </form>
   </div>
 </main>
 
 <div class="re-savebar" id="re-savebar" style="display:none;">
   <span class="re-savebar-info" id="re-savebar-info"></span>
+  <!-- Save messages and errors live here, in the bar that is always visible. -->
+  <div id="re-melding" class="re-melding" role="status" aria-live="polite"></div>
   <button type="button" class="re-btn opslaan" id="re-savebar-btn">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
     <span id="re-savebar-btn-label">Save</span>
@@ -2451,6 +2453,9 @@ async function laadBestaandRecept(id) {
   if (recipe.error || !recipe.data) {
     document.getElementById('re-melding').textContent = 'Could not load recipe: ' + (recipe.error?.message || 'not found');
     document.getElementById('re-melding').className = 're-melding fout';
+    // show the message in the bar, without a Save button for a recipe that did not load
+    document.getElementById('re-savebar-btn').style.display = 'none';
+    document.getElementById('re-savebar').style.display = 'flex';
     return;
   }
 

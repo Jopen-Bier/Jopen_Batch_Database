@@ -373,7 +373,7 @@
       for (let van = 0; ; van += PAGINA) {
         const { data, error } = await supabaseClient
           .from('batches')
-          .select('id, batchnummer:batch_number, naam:name, aantal_brouwsels:brew_count, aangemaakt_op:created_at, users(name), recipes(locatie:location, bierstijl:beer_style)')
+          .select('id, batchnummer:batch_number, naam:name, aantal_brouwsels:brew_count, aangemaakt_op:created_at, users!batches_created_by_fkey(name), recipes(locatie:location, bierstijl:beer_style)')
           // aangemaakt_op alone isn't a reliable sort key: rows inserted in the same
           // statement (e.g. a bulk historical import) all share one timestamp, so ties
           // need a tiebreaker. id (insertion order) does that cheaply.
