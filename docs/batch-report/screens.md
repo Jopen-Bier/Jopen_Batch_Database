@@ -183,8 +183,8 @@ window).
   for confirmation; red cells: O2 ≥ 50 ppb, CO2 outside spec, turbidity above
   the recipe's turbidity after separation, PU outside pasteurisation ± tol;
   cellar loss below 0 shows "More out than in — check splits and HBT
-  volumes". Labels still awaiting Jaap (open question #14): Discharges /
-  Interval, Standpipe / Bottom valve (used as in the mockup).
+  volumes". Labels (open question #14): Discharges /
+  Interval, Standpipe / Bottom valve: OK as is (Jaap, 20-10).
 - Active batches, HBT tiles: tank chip = the HBTs, "Bottle + Keg" /
   "✓ Released" (tile green) or "1/2 released"; "No HBT yet" without HBT.
 
