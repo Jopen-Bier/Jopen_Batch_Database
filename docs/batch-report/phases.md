@@ -159,9 +159,14 @@ and Filled batches open on it.
 ## Phase 8 — Splits
 Split / transfer popup on all three tabs, new batch from split (next number,
 0 brews), base beer lines, dosing on total volume. Needs open-questions 9.
-Consider storing the split batch's volume and deriving the dosing from it,
-instead of a fractional `brew_count` (3.33 = 130 hl ÷ 40 hl), which is used
-as a dosing factor today (Jaap, 19-10).
+Batch volume = brews × brew volume + volume added from splits (Jaap,
+20-10); a batch made only from a split has 0 brews and only the added
+volume. The recipe additions are dosed per hl on that volume, which
+replaces the fractional `brew_count` workaround (3.33 = 130 hl ÷ 40 hl).
+Base beer lines reference the source beer by recipe group (open-questions
+9). Still open: do existing batches with a fractional brew count keep
+dosing on it? Jaap is still working out the best splitting flow before
+phase 8 starts.
 
 ## Import 2026 batches (after phase 8)
 Agreed 19-10: once all phases are built, the 2026 batches are filled from
