@@ -453,6 +453,10 @@ Built 20-10 (migration `20261020150212_batch_report_filling_report`):
 - Seed: the 18 articles, 32 materials and 58 BOM lines of the mockup
   (Jaap checks / completes them in Settings › Packaging articles /
   materials).
+- Cleanup after the rooktest (Jaap, 20-10, migration
+  `20261020143543_packaging_cleanup`): neck labels (33cl, 75cl) are no
+  longer used and the Global Keg is not filled — removed, leaving 17
+  articles, 29 materials, 53 BOM lines.
 - No new `batch_stages` columns: the balance is computed in the page.
 
 Parked columns on `batches` (do not create until Jaap decides):
