@@ -235,14 +235,31 @@ function openSplitDialog(c, onDone) {
       <div class="br-note" style="margin-top:6px;">Amounts follow the total volume: every incoming transfer recalculates the dosing.</div>`;
   }
 
-  function render() {
-    const vol = parseNumberInput(st.volume);
+  // Parts that follow what is typed; updated without redrawing the fields
+  // (a redraw puts the cursor back at the start).
+  function afterHtml() {
     const start = c.tankStartHl && st.fromTankId ? c.tankStartHl(Number(st.fromTankId)) : null;
-    const after = start === null || start === undefined ? null : tankAfterTransfer(start, c.transfers, Number(st.fromTankId), vol);
+    if (start === null || start === undefined) return '';
+    const after = tankAfterTransfer(start, c.transfers, Number(st.fromTankId), parseNumberInput(st.volume));
+    return `<div class="sp-after${after < 0 ? ' bad' : ''}"><span>${escapeHtml(tankCode(st.fromTankId))} after transfer</span><b>${fmt1(after)} hl</b></div>`;
+  }
+
+  function logText() {
     const t = st.target;
     const recipe = st.recipes.find((r) => String(r.id) === st.recipeId);
-    const logText = transferLogText({ volumeHl: vol, tankCode: tankCode(st.fromTankId), destination: st.destination,
+    return transferLogText({ volumeHl: parseNumberInput(st.volume), tankCode: tankCode(st.fromTankId), destination: st.destination,
       batchNumber: t ? t.number : (st.destination === 'batch' ? st.batchNumber.trim() : ''), recipeName: recipe && recipe.name, reason: st.reason, comment: st.comment });
+  }
+
+  function updateLive() {
+    const set = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
+    set('sp-after-wrap', afterHtml());
+    set('sp-log', escapeHtml(logText()));
+    set('sp-preview', previewHtml());
+  }
+
+  function render() {
+    const t = st.target;
     const seg = (v, label) => `<button type="button" data-sp-dest="${v}" class="${st.destination === v ? 'on' : ''}">${label}</button>`;
     const saveLabel = st.destination === 'new' ? `Create ${t ? t.number : 'batch'} & save transfer` : st.destination === 'batch' ? 'Save transfer' : 'Save discard';
     overlay.innerHTML = `<div class="br-dialog sp-dialog" role="dialog" aria-modal="true" aria-labelledby="sp-title">
@@ -268,16 +285,16 @@ function openSplitDialog(c, onDone) {
             <input class="br-input" id="sp-batch" value="${escapeHtml(st.batchNumber)}" placeholder="${escapeHtml(yy)}…"></div>`
             : `<div class="br-field"><label class="br-label" for="sp-reason">Reason</label><input class="br-input" id="sp-reason" value="${escapeHtml(st.reason)}" placeholder="e.g. off-flavour, tank bottom"></div>`}
           <div class="br-field"><label class="br-label" for="sp-comment">Comment</label><input class="br-input" id="sp-comment" value="${escapeHtml(st.comment)}"></div>
-          ${after !== null ? `<div class="sp-after${after < 0 ? ' bad' : ''}"><span>${escapeHtml(tankCode(st.fromTankId))} after transfer</span><b>${fmt1(after)} hl</b></div>` : ''}
+          <div id="sp-after-wrap">${afterHtml()}</div>
           <div class="br-note">Saving adds a log entry with tag <b>Transfer</b> on this batch:</div>
-          <div class="sp-log">${escapeHtml(logText)}</div>
+          <div class="sp-log" id="sp-log">${escapeHtml(logText())}</div>
           <div class="br-dialog-buttons">
             <span class="br-note error" role="alert" style="margin-right:auto;">${escapeHtml(st.problem)}</span>
             <button type="button" class="br-ghost" id="sp-cancel">Cancel</button>
             <button type="button" class="br-primary" id="sp-save"${st.saving ? ' disabled' : ''}>${escapeHtml(saveLabel)}</button>
           </div>
         </div>
-        <div class="sp-preview">${previewHtml()}</div>
+        <div class="sp-preview" id="sp-preview">${previewHtml()}</div>
       </div></div>`;
   }
 
@@ -326,10 +343,7 @@ function openSplitDialog(c, onDone) {
     const map = { 'sp-volume': 'volume', 'sp-comment': 'comment', 'sp-reason': 'reason', 'sp-batch': 'batchNumber', 'sp-at': 'at' };
     if (map[e.target.id]) {
       st[map[e.target.id]] = e.target.value;
-      const ss = e.target.selectionStart;
-      refresh(e.target.id);
-      const again = document.getElementById(e.target.id);
-      if (again && ss !== null && again.setSelectionRange && again.type !== 'datetime-local') try { again.setSelectionRange(ss, ss); } catch (err) { /* not a text input */ }
+      updateLive();
     }
   });
   overlay.addEventListener('change', (e) => {
