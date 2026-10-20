@@ -11,6 +11,11 @@
 -- * The batch snapshot keeps snapshot_batch_ingredients() and adds
 --   snapshot_batch_cellar_steps(); the insert trigger calls both (no rename,
 --   the pages already call the first one).
+-- * cellar_plan_parts (Settings › Cellar plan): the order of the plan and
+--   the timing values of cellar additions (Jaap, 20-10), instead of a fixed
+--   order in the generator.
+-- * Recipe data from the review sheets (section 12): standard timing values,
+--   dry hop timings, lagering temperatures.
 -- * batches.time_zero empty = the end of the last brew (batch_stages.time_zero
 --   gives the value in use), so the default is not stored twice.
 
@@ -61,6 +66,49 @@ values ('24h_purge', '24h purge', false, 10),
        ('sample_lab', 'Sample to lab', true, 140),
        ('blending', 'Blending', false, 150),
        ('other', 'Other', false, 160)
+on conflict (code) do nothing;
+
+-- 2b. Cellar plan parts (Settings › Cellar plan) -----------------------------
+
+-- The order of the cellar plan and the timing values of cellar additions.
+-- Fixed parts (dry warm, cold dry hop, cooling to lagering temperature,
+-- sample to lab, dry hop at lagering temperature) are generated from the
+-- recipe; each addition_timing row is a value of
+-- recipe_ingredients.timing for cellar additions. Parts with shows_on
+-- 'processing' are not in the cellar plan (Processing tab, phase 5). The
+-- generator follows sort_order (drag and drop in Settings).
+create table if not exists public.cellar_plan_parts (
+  id              bigint generated always as identity primary key,
+  code            text not null unique check (code ~ '^[a-z0-9_]+$'),
+  kind            text not null check (kind in ('dry_warm', 'cold_dry_hop', 'cooling_lagering', 'sample_lab',
+                                                'dry_hop_at_lagering', 'addition_timing')),
+  label           text not null,
+  shows_on        text not null default 'cellar_plan' check (shows_on in ('cellar_plan', 'processing')),
+  on_addition_day boolean not null default false,
+  sort_order      integer not null default 0,
+  is_active       boolean not null default true,
+  created_at      timestamptz not null default now(),
+  created_by      uuid default auth.uid() references public.users(id),
+  updated_at      timestamptz not null default now(),
+  updated_by      uuid references public.users(id),
+  constraint cellar_plan_parts_fixed_check check (kind = 'addition_timing' or (code = kind and shows_on = 'cellar_plan' and is_active))
+);
+
+insert into public.cellar_plan_parts (code, kind, label, shows_on, on_addition_day, sort_order)
+values ('dry_warm', 'dry_warm', 'Dry warm', 'cellar_plan', false, 10),
+       ('with_warm_dry_hop', 'addition_timing', 'With warm dry hop', 'cellar_plan', false, 20),
+       ('fermentation', 'addition_timing', 'During fermentation (see note)', 'cellar_plan', false, 30),
+       ('cold_dry_hop', 'cold_dry_hop', 'Cold dry hop above lagering temperature (cooling + dry hop)', 'cellar_plan', false, 40),
+       ('after_cold_dry_hop', 'addition_timing', 'After cold dry hop', 'cellar_plan', false, 50),
+       ('cooling_lagering', 'cooling_lagering', 'Cooling to lagering temperature (lagering starts)', 'cellar_plan', false, 60),
+       ('sample_lab', 'sample_lab', 'Sample to lab', 'cellar_plan', false, 70),
+       ('dry_hop_at_lagering', 'dry_hop_at_lagering', 'Dry hop at lagering temperature', 'cellar_plan', false, 80),
+       ('lagering', 'addition_timing', 'Lagering', 'cellar_plan', true, 90),
+       ('after_dealcoholisation', 'addition_timing', 'After de-alcoholisation', 'cellar_plan', false, 100),
+       ('processing', 'addition_timing', 'Processing', 'processing', false, 110),
+       ('centrifuge_inlet', 'addition_timing', 'Inlet centrifuge', 'processing', false, 120),
+       ('centrifuge_outlet', 'addition_timing', 'After centrifuge', 'processing', false, 130),
+       ('hbt', 'addition_timing', 'HBT', 'processing', false, 140)
 on conflict (code) do nothing;
 
 -- 3. Cellar plan per recipe ---------------------------------------------------
@@ -235,6 +283,22 @@ create policy cellar_action_tags_update on public.cellar_action_tags for update 
 create policy cellar_action_tags_delete on public.cellar_action_tags for delete to authenticated using (can_delete('settings'));
 revoke all on public.cellar_action_tags from anon;
 
+-- Cellar plan parts: everyone logged in reads (recipe editor dropdown),
+-- Settings writes; only timing values can be deleted.
+drop trigger if exists trg_cellar_plan_parts_updated_at on public.cellar_plan_parts;
+create trigger trg_cellar_plan_parts_updated_at before update on public.cellar_plan_parts
+  for each row execute function public.set_updated_at();
+alter table public.cellar_plan_parts enable row level security;
+drop policy if exists cellar_plan_parts_select on public.cellar_plan_parts;
+drop policy if exists cellar_plan_parts_insert on public.cellar_plan_parts;
+drop policy if exists cellar_plan_parts_update on public.cellar_plan_parts;
+drop policy if exists cellar_plan_parts_delete on public.cellar_plan_parts;
+create policy cellar_plan_parts_select on public.cellar_plan_parts for select to authenticated using (true);
+create policy cellar_plan_parts_insert on public.cellar_plan_parts for insert to authenticated with check (can_edit('settings') and kind = 'addition_timing');
+create policy cellar_plan_parts_update on public.cellar_plan_parts for update to authenticated using (can_edit('settings')) with check (can_edit('settings'));
+create policy cellar_plan_parts_delete on public.cellar_plan_parts for delete to authenticated using (can_delete('settings') and kind = 'addition_timing');
+revoke all on public.cellar_plan_parts from anon;
+
 -- 8. Helpers for the generator ------------------------------------------------
 
 -- '±0.5', '0,5', '-' -> 0.5, 0.5, null (as toleranceValue() in batch-brews.js).
@@ -247,43 +311,18 @@ as $$
   select abs(nullif(replace(substring(coalesce(p_text, '') from '-?[0-9]+(?:[.,][0-9]+)?'), ',', '.'), '')::numeric)
 $$;
 
--- Where a cellar addition is dosed, from its free-text timing (decision #5:
--- by keywords). The standard values are the codes themselves. Returns one of
--- lagering, after_cold_dry_hop, fermentation, after_dealcoholisation (cellar
--- plan), processing, centrifuge_inlet, centrifuge_outlet, hbt (Processing
--- tab), or null when the text says nothing known. Order matters: a text that
--- names both lagering and processing goes to Processing.
-create or replace function public.cellar_addition_timing(p_timing text)
-returns text
-language sql
-immutable
-set search_path = public
-as $$
-  select case
-    when t = '' then null
-    when t in ('lagering', 'after_cold_dry_hop', 'fermentation', 'after_dealcoholisation',
-               'processing', 'centrifuge_inlet', 'centrifuge_outlet', 'hbt') then t
-    when t ~ 'hbt' then 'hbt'
-    when t ~ '(after|exit).*(centrifug|fuge)|(centrifug|fuge).*(exit|outlet)' then 'centrifuge_outlet'
-    when t ~ 'de-?alc' then 'after_dealcoholisation'
-    when t ~ 'before centrifug|inlet|centrifugering' or t = 'fuge' then 'centrifuge_inlet'
-    when t ~ 'process|verwerking|dosing keg|in line|\mfuge\M' then 'processing'
-    when t ~ 'koude dry ?hop|cold dry ?hop' then 'after_cold_dry_hop'
-    when t ~ 'lager|lageing|matur|matruation|corpedo' then 'lagering'
-    when t ~ 'warm|plato|ferment|gist|yeast|[0-9] ?p\M' then 'fermentation'
-    else null
-  end
-  from (select lower(btrim(coalesce(p_timing, ''))) as t) x
-$$;
-
 -- 9. Cellar plan generation (business-rules.md, "Cellar plan generation") ----
 
 -- Builds the generated steps of one recipe from its dry hops, cellar
--- additions, fermentation and lagering data. A step changed by hand
--- (is_generated = false) keeps its text and trigger; only its linked lines
--- are refreshed. Generated steps the recipe no longer asks for are removed;
--- steps added by hand stay. Returns the number of steps of the recipe.
-create or replace function public.generate_recipe_cellar_steps(p_recipe_id bigint)
+-- additions, fermentation and lagering data, in the order of
+-- cellar_plan_parts. A step changed by hand (is_generated = false) keeps its
+-- text and trigger; only its linked lines are refreshed. Generated steps the
+-- recipe no longer asks for are removed; steps added by hand stay.
+-- New generated steps go after the step generated before them; existing
+-- steps keep their place, unless p_reset_order: then every step is put in
+-- the order of cellar_plan_parts (a step added by hand stays right after the
+-- generated step it followed). Returns the number of steps of the recipe.
+create or replace function public.generate_recipe_cellar_steps(p_recipe_id bigint, p_reset_order boolean default false)
 returns integer
 language plpgsql
 security invoker
@@ -295,11 +334,13 @@ declare
   v_spec      recipe_specs%rowtype;
   v_lag_temp  numeric;
   v_lag_label text;
+  v_part      record;
   v_cold      record;
   v_line      record;
   v_n         integer := 0;
   v_count     integer;
-  v_after_cold boolean := false;
+  v_cooled    boolean := false;   -- a cooling step is already planned
+  v_cold_hop  boolean := false;   -- a cold dry hop comes before the lagering cooling
 begin
   -- auth.uid() is empty only for the migration owner (backfill below).
   if auth.uid() is not null and not can_edit('recipes') then
@@ -322,133 +363,138 @@ begin
     recipe_ingredient_ids bigint[], starts_lagering boolean
   ) on commit drop;
 
-  -- 1. Dry warm
-  if exists (select 1 from recipe_ingredients where recipe_id = p_recipe_id and addition_type = 'dry_hop'
-             and lower(btrim(timing)) like 'warm%') then
-    v_n := v_n + 1;
-    insert into _gen_steps
-    select v_n, 'dry_warm', 'dry_warm', 'Dry warm',
-           nullif(concat_ws(' · ',
-             case when v_ferm.dry_hop_warm_temp is not null then 'at ' || v_ferm.dry_hop_warm_temp::float8 || ' °C' end,
-             nullif(btrim(v_ps.dry_hop_method_warm), ''), nullif(btrim(v_ps.dry_hop_comment_warm), '')), ''),
-           case when v_ferm.dry_hop_warm_extract_1 is not null then 'extract'
-                when v_ps.dry_hop_1_day is not null then 'day' else 'after_previous' end,
-           v_ferm.dry_hop_warm_extract_1,
-           case when v_ferm.dry_hop_warm_extract_1 is not null then tolerance_value(v_ferm.dry_hop_warm_extract_1_tol) end,
-           v_ps.dry_hop_1_day,
-           array(select id from recipe_ingredients where recipe_id = p_recipe_id and addition_type = 'dry_hop'
-                 and lower(btrim(timing)) like 'warm%' order by sort_order, id),
-           false;
-  end if;
+  for v_part in select * from cellar_plan_parts where shows_on = 'cellar_plan' order by sort_order, id loop
 
-  -- Additions during fermentation come before the cooling.
+    if v_part.kind = 'dry_warm' then
+      if exists (select 1 from recipe_ingredients where recipe_id = p_recipe_id and addition_type = 'dry_hop'
+                 and lower(btrim(timing)) like 'warm%') then
+        v_n := v_n + 1;
+        insert into _gen_steps
+        select v_n, 'dry_warm', 'dry_warm', 'Dry warm',
+               nullif(concat_ws(' · ',
+                 case when v_ferm.dry_hop_warm_temp is not null then 'at ' || v_ferm.dry_hop_warm_temp::float8 || ' °C' end,
+                 nullif(btrim(v_ps.dry_hop_method_warm), ''), nullif(btrim(v_ps.dry_hop_comment_warm), '')), ''),
+               case when v_ferm.dry_hop_warm_extract_1 is not null then 'extract'
+                    when v_ps.dry_hop_1_day is not null then 'day' else 'after_previous' end,
+               v_ferm.dry_hop_warm_extract_1,
+               case when v_ferm.dry_hop_warm_extract_1 is not null then tolerance_value(v_ferm.dry_hop_warm_extract_1_tol) end,
+               v_ps.dry_hop_1_day,
+               array(select id from recipe_ingredients where recipe_id = p_recipe_id and addition_type = 'dry_hop'
+                     and lower(btrim(timing)) like 'warm%' order by sort_order, id),
+               false;
+      end if;
+
+    elsif v_part.kind = 'cold_dry_hop' then
+      -- Per cold dry hop temperature above the lagering temperature (warmest
+      -- first): cool, then dry hop.
+      for v_cold in
+        select (substring(lower(btrim(timing)) from '^cold_(-?[0-9]+(?:\.[0-9]+)?)$'))::numeric as temp,
+               array_agg(id order by sort_order, id) as ids
+        from recipe_ingredients
+        where recipe_id = p_recipe_id and addition_type = 'dry_hop' and lower(btrim(timing)) ~ '^cold_-?[0-9]'
+        group by 1
+        having v_lag_temp is null or (substring(lower(btrim(timing)) from '^cold_(-?[0-9]+(?:\.[0-9]+)?)$'))::numeric > v_lag_temp
+        order by 1 desc
+      loop
+        v_n := v_n + 1;
+        insert into _gen_steps values (v_n, 'cooling_dry_hop:' || v_cold.temp::float8, 'cooling',
+          'Cooling to ' || v_cold.temp::float8 || ' °C', null,
+          case when v_cooled or v_spec.final_extract is null then 'after_previous' else 'extract' end,
+          case when v_cooled then null else v_spec.final_extract end,
+          case when v_cooled then null else tolerance_value(v_spec.final_extract_tol) end,
+          null, '{}', false);
+        v_n := v_n + 1;
+        insert into _gen_steps values (v_n, 'dry_hop:' || v_cold.temp::float8, 'dryhopping',
+          'Dryhopping @' || v_cold.temp::float8 || ' °C',
+          nullif(concat_ws(' · ', nullif(btrim(v_ps.dry_hop_method_16c), ''), nullif(btrim(v_ps.dry_hop_comment_16c), '')), ''),
+          'after_previous', null, null, null, v_cold.ids, false);
+        v_cooled := true;
+        v_cold_hop := true;
+      end loop;
+      -- Dry hops without a timing: shown here so they are not forgotten.
+      if exists (select 1 from recipe_ingredients where recipe_id = p_recipe_id and addition_type = 'dry_hop'
+                 and nullif(btrim(timing), '') is null) then
+        v_n := v_n + 1;
+        insert into _gen_steps
+        select v_n, 'dry_hop:unset', 'dryhopping', 'Dryhopping', 'Timing not set in the recipe',
+               'after_previous', null, null, null,
+               array(select id from recipe_ingredients where recipe_id = p_recipe_id and addition_type = 'dry_hop'
+                     and nullif(btrim(timing), '') is null order by sort_order, id),
+               false;
+        v_cold_hop := true;
+      end if;
+
+    elsif v_part.kind = 'cooling_lagering' then
+      v_n := v_n + 1;
+      insert into _gen_steps values (v_n, 'cooling_lagering', 'cooling', 'Cooling to ' || v_lag_label,
+        nullif(concat_ws(' · ', 'Lagering temperature from recipe',
+          case when v_ferm.lagering_time is not null then v_ferm.lagering_time::float8 || ' days' end,
+          case when v_cold_hop then 'cool < 24 h after the dry hop' end), ''),
+        case when v_cooled or v_spec.final_extract is null then 'after_previous' else 'extract' end,
+        case when v_cooled then null else v_spec.final_extract end,
+        case when v_cooled then null else tolerance_value(v_spec.final_extract_tol) end,
+        null, '{}', true);
+      v_cooled := true;
+
+    elsif v_part.kind = 'sample_lab' then
+      v_n := v_n + 1;
+      insert into _gen_steps values (v_n, 'sample_lab', 'sample_lab', 'Sample to lab', 'Always after cooling',
+        'after_previous', null, null, null, '{}', false);
+
+    elsif v_part.kind = 'dry_hop_at_lagering' then
+      -- Cold dry hop at or below the lagering temperature (e.g. cold_2 with
+      -- lagering at 2 °C).
+      for v_cold in
+        select (substring(lower(btrim(timing)) from '^cold_(-?[0-9]+(?:\.[0-9]+)?)$'))::numeric as temp,
+               array_agg(id order by sort_order, id) as ids
+        from recipe_ingredients
+        where recipe_id = p_recipe_id and addition_type = 'dry_hop' and lower(btrim(timing)) ~ '^cold_-?[0-9]'
+        group by 1
+        having v_lag_temp is not null and (substring(lower(btrim(timing)) from '^cold_(-?[0-9]+(?:\.[0-9]+)?)$'))::numeric <= v_lag_temp
+        order by 1 desc
+      loop
+        v_n := v_n + 1;
+        insert into _gen_steps values (v_n, 'dry_hop:' || v_cold.temp::float8, 'dryhopping',
+          'Dryhopping @' || v_cold.temp::float8 || ' °C',
+          nullif(concat_ws(' · ', nullif(btrim(v_ps.dry_hop_method_16c), ''), nullif(btrim(v_ps.dry_hop_comment_16c), '')), ''),
+          'after_previous', null, null, null, v_cold.ids, false);
+      end loop;
+
+    else
+      -- A timing value of cellar additions: one step per line with it.
+      for v_line in
+        select ri.id, coalesce(i.name, nullif(btrim(ri.note), ''), 'cellar addition') as name, ri.note
+        from recipe_ingredients ri left join ingredients i on i.id = ri.ingredient_id
+        where ri.recipe_id = p_recipe_id and ri.addition_type = 'cellar_addition'
+          and lower(btrim(ri.timing)) = v_part.code
+        order by ri.sort_order, ri.id
+      loop
+        v_n := v_n + 1;
+        insert into _gen_steps values (v_n, 'addition:' || v_line.id, 'addition', 'Addition · ' || v_line.name,
+          nullif(concat_ws(' · ', case when not v_part.on_addition_day then lower(left(v_part.label, 1)) || substr(v_part.label, 2) end,
+                                  nullif(btrim(v_line.note), '')), ''),
+          case when v_part.on_addition_day and v_ps.cellar_addition_day is not null then 'day' else 'after_previous' end,
+          null, null,
+          case when v_part.on_addition_day then v_ps.cellar_addition_day end,
+          array[v_line.id], false);
+      end loop;
+    end if;
+  end loop;
+
+  -- Cellar additions with a timing that is not a value in Settings (or none):
+  -- at the end, to check in the recipe.
   for v_line in
     select ri.id, coalesce(i.name, nullif(btrim(ri.note), ''), 'cellar addition') as name, ri.note
     from recipe_ingredients ri left join ingredients i on i.id = ri.ingredient_id
     where ri.recipe_id = p_recipe_id and ri.addition_type = 'cellar_addition'
-      and cellar_addition_timing(ri.timing) = 'fermentation'
+      and not exists (select 1 from cellar_plan_parts p where p.kind = 'addition_timing' and p.code = lower(btrim(ri.timing)))
     order by ri.sort_order, ri.id
   loop
     v_n := v_n + 1;
     insert into _gen_steps values (v_n, 'addition:' || v_line.id, 'addition', 'Addition · ' || v_line.name,
-      nullif(btrim(v_line.note), ''), 'after_previous', null, null, null, array[v_line.id], false);
-  end loop;
-
-  -- 2-3. Cold dry hop above the lagering temperature: cool, then dry hop.
-  for v_cold in
-    select (substring(lower(btrim(timing)) from '^cold_(-?[0-9]+(?:\.[0-9]+)?)$'))::numeric as temp,
-           array_agg(id order by sort_order, id) as ids
-    from recipe_ingredients
-    where recipe_id = p_recipe_id and addition_type = 'dry_hop' and lower(btrim(timing)) ~ '^cold_-?[0-9]'
-    group by 1
-    having v_lag_temp is null or (substring(lower(btrim(timing)) from '^cold_(-?[0-9]+(?:\.[0-9]+)?)$'))::numeric > v_lag_temp
-    order by 1 desc
-  loop
-    v_n := v_n + 1;
-    insert into _gen_steps values (v_n, 'cooling_dry_hop:' || v_cold.temp::float8, 'cooling',
-      'Cooling to ' || v_cold.temp::float8 || ' °C', null,
-      case when v_after_cold or v_spec.final_extract is null then 'after_previous' else 'extract' end,
-      case when v_after_cold then null else v_spec.final_extract end,
-      case when v_after_cold then null else tolerance_value(v_spec.final_extract_tol) end,
-      null, '{}', false);
-    v_n := v_n + 1;
-    insert into _gen_steps values (v_n, 'dry_hop:' || v_cold.temp::float8, 'dryhopping',
-      'Dryhopping @' || v_cold.temp::float8 || ' °C',
-      nullif(concat_ws(' · ', nullif(btrim(v_ps.dry_hop_method_16c), ''), nullif(btrim(v_ps.dry_hop_comment_16c), '')), ''),
-      'after_previous', null, null, null, v_cold.ids, false);
-    v_after_cold := true;
-  end loop;
-
-  -- Dry hops without a timing: shown so they are not forgotten.
-  if exists (select 1 from recipe_ingredients where recipe_id = p_recipe_id and addition_type = 'dry_hop'
-             and nullif(btrim(timing), '') is null) then
-    v_n := v_n + 1;
-    insert into _gen_steps
-    select v_n, 'dry_hop:unset', 'dryhopping', 'Dryhopping', 'Timing not set in the recipe',
-           'after_previous', null, null, null,
-           array(select id from recipe_ingredients where recipe_id = p_recipe_id and addition_type = 'dry_hop'
-                 and nullif(btrim(timing), '') is null order by sort_order, id),
-           false;
-    v_after_cold := true;
-  end if;
-
-  -- 4. Cooling to the lagering temperature: always; lagering starts here.
-  v_n := v_n + 1;
-  insert into _gen_steps values (v_n, 'cooling_lagering', 'cooling', 'Cooling to ' || v_lag_label,
-    nullif(concat_ws(' · ', 'Lagering temperature from recipe',
-      case when v_ferm.lagering_time is not null then v_ferm.lagering_time::float8 || ' days' end,
-      case when v_after_cold then 'cool < 24 h after the dry hop' end), ''),
-    case when v_after_cold or v_spec.final_extract is null then 'after_previous' else 'extract' end,
-    case when v_after_cold then null else v_spec.final_extract end,
-    case when v_after_cold then null else tolerance_value(v_spec.final_extract_tol) end,
-    null, '{}', true);
-
-  -- 5. Sample to lab: after the last cooling (decision #4).
-  v_n := v_n + 1;
-  insert into _gen_steps values (v_n, 'sample_lab', 'sample_lab', 'Sample to lab', 'Always after cooling',
-    'after_previous', null, null, null, '{}', false);
-
-  -- Cold dry hop at or below the lagering temperature (e.g. cold_2 with
-  -- lagering at 2 °C): after the sample, which follows the last cooling (Jaap).
-  for v_cold in
-    select (substring(lower(btrim(timing)) from '^cold_(-?[0-9]+(?:\.[0-9]+)?)$'))::numeric as temp,
-           array_agg(id order by sort_order, id) as ids
-    from recipe_ingredients
-    where recipe_id = p_recipe_id and addition_type = 'dry_hop' and lower(btrim(timing)) ~ '^cold_-?[0-9]'
-    group by 1
-    having v_lag_temp is not null and (substring(lower(btrim(timing)) from '^cold_(-?[0-9]+(?:\.[0-9]+)?)$'))::numeric <= v_lag_temp
-    order by 1 desc
-  loop
-    v_n := v_n + 1;
-    insert into _gen_steps values (v_n, 'dry_hop:' || v_cold.temp::float8, 'dryhopping',
-      'Dryhopping @' || v_cold.temp::float8 || ' °C',
-      nullif(concat_ws(' · ', nullif(btrim(v_ps.dry_hop_method_16c), ''), nullif(btrim(v_ps.dry_hop_comment_16c), '')), ''),
-      'after_previous', null, null, null, v_cold.ids, false);
-  end loop;
-
-  -- 6. Cellar additions: after the cold dry hop, on the addition day, after
-  --    de-alcoholisation; a timing that says nothing known also lands here.
-  for v_line in
-    select ri.id, coalesce(i.name, nullif(btrim(ri.note), ''), 'cellar addition') as name, ri.note,
-           coalesce(cellar_addition_timing(ri.timing), 'unknown') as place
-    from recipe_ingredients ri left join ingredients i on i.id = ri.ingredient_id
-    where ri.recipe_id = p_recipe_id and ri.addition_type = 'cellar_addition'
-      and coalesce(cellar_addition_timing(ri.timing), 'unknown') in ('after_cold_dry_hop', 'lagering', 'unknown', 'after_dealcoholisation')
-    order by case coalesce(cellar_addition_timing(ri.timing), 'unknown')
-               when 'after_cold_dry_hop' then 1 when 'lagering' then 2 when 'unknown' then 3 else 4 end,
-             ri.sort_order, ri.id
-  loop
-    v_n := v_n + 1;
-    insert into _gen_steps values (v_n, 'addition:' || v_line.id, 'addition', 'Addition · ' || v_line.name,
-      nullif(concat_ws(' · ',
-        case v_line.place when 'after_cold_dry_hop' then 'after the cold dry hop'
-                          when 'after_dealcoholisation' then 'after de-alcoholisation'
-                          when 'unknown' then 'timing to check in the recipe' end,
-        nullif(btrim(v_line.note), '')), ''),
-      case when v_line.place in ('lagering', 'unknown') and v_ps.cellar_addition_day is not null then 'day' else 'after_previous' end,
-      null, null,
-      case when v_line.place in ('lagering', 'unknown') then v_ps.cellar_addition_day end,
-      array[v_line.id], false);
+      nullif(concat_ws(' · ', 'timing to check in the recipe', nullif(btrim(v_line.note), '')), ''),
+      case when v_ps.cellar_addition_day is not null then 'day' else 'after_previous' end,
+      null, null, v_ps.cellar_addition_day, array[v_line.id], false);
   end loop;
 
   -- Apply: generated rows take the new content (their place in the plan is
@@ -489,11 +535,25 @@ begin
   where not exists (select 1 from recipe_cellar_steps s where s.recipe_id = p_recipe_id and s.generated_key = g.generated_key)
   order by g.n;
 
-  -- Renumber 10, 20, 30 … in the resulting order.
+  -- Renumber 10, 20, 30 … in the resulting order. With p_reset_order a step
+  -- with a generated key takes its place in the generated order; any other
+  -- step stays right after the keyed step it followed.
   update recipe_cellar_steps s
   set sort_order = o.rn * 10
-  from (select id, row_number() over (order by sort_order, id) as rn
-        from recipe_cellar_steps where recipe_id = p_recipe_id) o
+  from (
+    select x.id, row_number() over (
+             order by case when p_reset_order then coalesce(x.n, x.anchor_n) else 0 end,
+                      case when p_reset_order and x.n is null then 1 else 0 end, x.sort_order, x.id) as rn
+    from (
+      select s2.id, s2.sort_order, g.n,
+             coalesce((select max(g3.n) from recipe_cellar_steps s3 join _gen_steps g3 on g3.generated_key = s3.generated_key
+                       where s3.recipe_id = p_recipe_id
+                         and (s3.sort_order < s2.sort_order or (s3.sort_order = s2.sort_order and s3.id < s2.id))), 0) as anchor_n
+      from recipe_cellar_steps s2
+      left join _gen_steps g on g.generated_key = s2.generated_key
+      where s2.recipe_id = p_recipe_id
+    ) x
+  ) o
   where s.id = o.id and s.sort_order <> o.rn * 10;
 
   drop table _gen_steps;   -- the next call may run as another role
@@ -502,8 +562,37 @@ begin
 end;
 $$;
 
-revoke execute on function public.generate_recipe_cellar_steps(bigint) from public, anon;
-grant execute on function public.generate_recipe_cellar_steps(bigint) to authenticated;
+revoke execute on function public.generate_recipe_cellar_steps(bigint, boolean) from public, anon;
+grant execute on function public.generate_recipe_cellar_steps(bigint, boolean) to authenticated;
+
+-- Settings › Cellar plan "Apply to the recipes": every recipe that gets a
+-- plan (active, or used by a planned batch) is regenerated in the order of
+-- cellar_plan_parts. Batches keep the plan they have.
+create or replace function public.apply_cellar_plan_order()
+returns integer
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  r record;
+  v_n integer := 0;
+begin
+  if not (can_edit('settings') and can_edit('recipes')) then
+    raise exception 'needs edit rights on settings and recipes' using errcode = '42501';
+  end if;
+  for r in select id from recipes
+           where status = 'active' or id in (select recipe_id from batches where status = 'planned')
+           order by id loop
+    perform generate_recipe_cellar_steps(r.id, true);
+    v_n := v_n + 1;
+  end loop;
+  return v_n;
+end;
+$$;
+
+revoke execute on function public.apply_cellar_plan_order() from public, anon;
+grant execute on function public.apply_cellar_plan_order() to authenticated;
 
 -- The recipe editor saves the plan as it shows it, then regenerates. Steps
 -- of this recipe are updated (they keep their id), new ones inserted
@@ -693,7 +782,127 @@ left join plan p on p.batch_id = b.id;
 revoke all on public.batch_stages from anon;
 grant select on public.batch_stages to authenticated;
 
--- 12. Backfill ----------------------------------------------------------------
+-- 12. Recipe data from the review sheets (Jaap, 19/20-10) -------------------
+
+-- Only recipes that get a cellar plan: active ones and the recipes of
+-- planned batches. Archived recipes keep their texts as history. Every
+-- change is guarded by the value it had, so data edited since the review is
+-- left alone. Planned batches get the same change in their ingredient copy.
+create temporary table _scope on commit drop as
+select id as recipe_id from public.recipes
+where status = 'active' or id in (select recipe_id from public.batches where status = 'planned');
+
+-- a. Cellar addition timings -> standard values; extra text moves to the note.
+create temporary table _timing_map (old_timing text primary key, new_timing text not null, note_text text) on commit drop;
+insert into _timing_map (old_timing, new_timing, note_text) values
+  ('lagering', 'lagering', null),
+  ('Lagering', 'lagering', null),
+  ('lageing', 'lagering', null),
+  ('Start lagering', 'lagering', 'at start of lagering'),
+  ('matruation (0C)', 'lagering', 'maturation at 0 °C'),
+  ('lagering (to hit pH 4,2 +/- 0,1', 'lagering', 'to hit pH 4,2 ± 0,1'),
+  ('LAGERING (to hit pH 4,2 +/- 0,1)', 'lagering', 'to hit pH 4,2 ± 0,1'),
+  ('lagering (test first)', 'lagering', 'test first'),
+  ('Lagering (measure clarity first)', 'lagering', 'measure clarity first'),
+  ('lagering (dislove in 5-10 L of hot water)', 'lagering', 'dissolve in 5–10 l of hot water'),
+  ('Lagering ( 2 days before Cnetrifuge)', 'lagering', '2 days before centrifuge'),
+  ('Lagering with Corpedo', 'lagering', 'with Corpedo'),
+  ('Corpedo', 'lagering', 'with Corpedo'),
+  ('na koude dryhop', 'after_cold_dry_hop', null),
+  ('na koude dryhop (check if base beer has it already)', 'after_cold_dry_hop', 'check if base beer has it already'),
+  ('Warm', 'fermentation', 'warm'),
+  ('4 Plato before FG', 'fermentation', '4 °P before FG'),
+  ('5 Plato before FG', 'fermentation', '5 °P before FG'),
+  ('At 12.5P', 'fermentation', 'at 12.5 °P'),
+  ('bij de gist', 'fermentation', 'with the yeast'),
+  ('lagering after de-alc', 'after_dealcoholisation', null),
+  ('after dealcolisation', 'after_dealcoholisation', null),
+  ('after de-alc', 'after_dealcoholisation', null),
+  ('verwerking', 'processing', null),
+  ('Verwerking', 'processing', null),
+  ('processing', 'processing', null),
+  ('verwerking - in mg/l @ can/bottle/keg (batches with low IBU)', 'processing', 'in mg/l at can/bottle/keg (batches with low IBU)'),
+  ('lagering/ processing', 'processing', 'lagering or processing'),
+  ('Lagering/ processing', 'processing', 'lagering or processing'),
+  ('lagering/processing', 'processing', 'lagering or processing'),
+  ('lagering/ processing with dosing keg', 'processing', 'lagering, or processing with dosing keg'),
+  ('lagering or in line with dosing keg', 'processing', 'lagering, or in line with dosing keg'),
+  ('lagering or dosing in line with dosing keg', 'processing', 'lagering, or in line with dosing keg'),
+  ('fuge or cellar', 'processing', 'centrifuge or cellar'),
+  ('inlet centrifuge', 'centrifuge_inlet', null),
+  ('centrifugering', 'centrifuge_inlet', null),
+  ('fuge', 'centrifuge_inlet', null),
+  ('Lagering/ processing with dosing keg before centrifuge', 'centrifuge_inlet', 'lagering, or with dosing keg before centrifuge'),
+  ('after centrifuge', 'centrifuge_outlet', null),
+  ('centrifuge exit', 'centrifuge_outlet', null),
+  ('HBT', 'hbt', null),
+  ('hbt', 'hbt', null),
+  ('HBT (only if needed, ask LT)', 'hbt', 'only if needed, ask LT');
+
+-- b. Lines from the review (by line id; the old value is checked).
+create temporary table _line_fix (line_id bigint primary key, addition_type text not null, old_timing text,
+                                  new_timing text not null, note_text text) on commit drop;
+insert into _line_fix (line_id, addition_type, old_timing, new_timing, note_text) values
+  (15208, 'cellar_addition', null, 'with_warm_dry_hop', null),   -- Guave got the love: fruit puree
+  (6441,  'cellar_addition', null, 'processing', null),          -- Porno Blond: Tetrahop 9%
+  (16788, 'cellar_addition', 'milled!', 'lagering', 'milled!'),  -- Stout Of This World: coffee beans
+  (16789, 'cellar_addition', null, 'lagering', null),            -- Stout Of This World: maple syrup
+  (16790, 'cellar_addition', null, 'lagering', null),            -- Stout Of This World: Super F
+  (17049, 'dry_hop', null, 'cold_16', null), (17050, 'dry_hop', null, 'cold_16', null),
+  (17051, 'dry_hop', null, 'cold_16', null),                     -- Aperolling in the DIPA
+  (10758, 'dry_hop', null, 'warm', null), (10759, 'dry_hop', null, 'warm', null),
+  (10760, 'dry_hop', null, 'warm', null),                        -- Blurred Lines NEWTEST
+  (15195, 'dry_hop', null, 'warm', null),                        -- Guave got the love: fruit puree
+  (8725, 'dry_hop', null, 'cold_12', null), (8726, 'dry_hop', null, 'cold_12', null),
+  (8727, 'dry_hop', null, 'cold_12', null), (8728, 'dry_hop', null, 'cold_12', null),   -- Hazy NONnetje
+  (17095, 'dry_hop', null, 'cold_12', null), (17096, 'dry_hop', null, 'cold_12', null),
+  (17097, 'dry_hop', null, 'cold_12', null),                     -- Heavy Cross 29
+  (17595, 'dry_hop', null, 'cold_2', null), (17596, 'dry_hop', null, 'cold_2', null);   -- Nonnetje IPA
+
+create temporary table _line_change on commit drop as
+select ri.id, ri.timing as old_timing, ri.note as old_note, m.new_timing,
+       nullif(concat_ws(' · ', nullif(btrim(ri.note), ''), m.note_text), '') as new_note
+from public.recipe_ingredients ri
+join _scope sc on sc.recipe_id = ri.recipe_id
+join _timing_map m on m.old_timing = ri.timing
+where ri.addition_type = 'cellar_addition' and (m.new_timing <> ri.timing or m.note_text is not null)
+union all
+select ri.id, ri.timing, ri.note, f.new_timing,
+       nullif(concat_ws(' · ', nullif(btrim(ri.note), ''), f.note_text), '')
+from public.recipe_ingredients ri
+join _line_fix f on f.line_id = ri.id and f.addition_type = ri.addition_type
+where ri.timing is not distinct from f.old_timing;
+
+update public.batch_ingredients bi
+set timing = c.new_timing, note = c.new_note
+from _line_change c, public.batches b
+where bi.recipe_ingredient_id = c.id and b.id = bi.batch_id and b.status = 'planned'
+  and bi.timing is not distinct from c.old_timing and bi.note is not distinct from c.old_note;
+
+update public.recipe_ingredients ri
+set timing = c.new_timing, note = c.new_note
+from _line_change c
+where ri.id = c.id;
+
+-- c. Braubeviale Barth Haas: the 6 empty dry hop lines go ("no dry hop").
+delete from public.batch_ingredients bi
+using public.batches b
+where b.id = bi.batch_id and b.status = 'planned'
+  and bi.recipe_ingredient_id in (15941, 15942, 15943, 15944, 15945, 15946)
+  and bi.ingredient_id is null and bi.quantity is null;
+delete from public.recipe_ingredients
+where id in (15941, 15942, 15943, 15944, 15945, 15946) and recipe_id = 618
+  and addition_type = 'dry_hop' and ingredient_id is null and quantity is null;
+
+-- d. Lagering temperature where it was empty.
+update public.recipe_fermentation f
+set lagering_temp = v.temp
+from (values (681, 0), (680, 0), (679, 0), (623, 0), (622, 0), (205, 0), (616, 0), (236, 0), (261, 0),
+             (266, 0), (317, 0), (336, 0), (578, 0), (582, 0), (667, 0), (625, 2), (624, 2), (382, 2)) v(recipe_id, temp)
+where f.recipe_id = v.recipe_id and f.lagering_temp is null;
+
+
+-- 13. Backfill ----------------------------------------------------------------
 
 -- Cellar plan for every active recipe and every recipe of a planned batch.
 do $$

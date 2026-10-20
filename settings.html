@@ -146,6 +146,27 @@
           <p id="documenttype-melding" class="jopen-form-melding"></p>
         </div>
 
+        <!-- Section: Cellar plan -->
+        <div class="settings-sectie" id="sectie-cellar-plan" data-titel="Cellar plan">
+          <h2>Cellar plan</h2>
+          <p class="uitleg">The order of the cellar plan that is generated for each recipe, and the timing values of cellar additions (the Timing dropdown of Additions Cellar in the recipe). Drag rows by the handle to change the order. Fixed parts come from the recipe data; a timing value puts one step per cellar addition with that timing at its place. "Processing" values are not in the plan: they show on the Processing tab. A new order applies to a recipe when it is saved, or to all recipes at once with the button below; batches keep the plan they got when they were created.</p>
+
+          <div id="cellar-plan-list"><p class="jopen-subtitel">Loading…</p></div>
+
+          <table class="cat-tabel">
+            <tbody>
+              <tr class="cat-nieuw-rij">
+                <td><input type="text" id="cellar-timing-new-label" placeholder="New timing value, e.g. 'After fining'…" /></td>
+                <td><select id="cellar-timing-new-shows-on"><option value="cellar_plan">Cellar plan</option><option value="processing">Processing</option></select></td>
+                <td class="cat-check"><label style="font-size:0.85em; color:#555;"><input type="checkbox" id="cellar-timing-new-day" /> On addition day</label></td>
+                <td><button id="cellar-timing-add-btn">Add</button></td>
+              </tr>
+            </tbody>
+          </table>
+          <p><button id="cellar-plan-apply-btn">Apply order to the recipes</button></p>
+          <p id="cellar-plan-message" class="jopen-form-melding"></p>
+        </div>
+
         <!-- Section: Cellar action tags -->
         <div class="settings-sectie" id="sectie-action-tags" data-titel="Cellar action tags">
           <h2>Cellar action tags</h2>
@@ -204,6 +225,7 @@
       { id: 'documenttypen', titel: 'Document types', laadFn: laadDocumenttypenSectie },
       { id: 'declaraties', titel: 'Ingredient declarations', laadFn: laadDeclaratiesSectie },
       { id: 'water', titel: 'Water', laadFn: laadWaterSectie },
+      { id: 'cellar-plan', titel: 'Cellar plan', laadFn: loadCellarPlanSection },
       { id: 'action-tags', titel: 'Cellar action tags', laadFn: loadActionTagsSection },
     ];
 
@@ -639,6 +661,166 @@
       document.getElementById('documenttype-nieuw-label').value = '';
       melding.textContent = 'Document type added.'; melding.className = 'jopen-form-melding ok';
       laadDocumenttypenSectie();
+    });
+
+    // ----------------------------------------------------------------
+    // Section: Cellar plan (cellar_plan_parts, batch report phase 4)
+    // ----------------------------------------------------------------
+    let allCellarPlanParts = [];
+
+    function showCellarPlanMessage(text, kind) {
+      const el = document.getElementById('cellar-plan-message');
+      el.textContent = text;
+      el.className = 'jopen-form-melding' + (kind ? ' ' + kind : '');
+    }
+
+    async function loadCellarPlanSection() {
+      const container = document.getElementById('cellar-plan-list');
+      const { data, error } = await supabaseClient.from('cellar_plan_parts')
+        .select('id, code, kind, label, shows_on, on_addition_day, sort_order, is_active').order('sort_order').order('id');
+      if (error) {
+        container.innerHTML = `<p class="jopen-form-melding fout">Could not load the cellar plan: ${escapeHtml(error.message)}</p>`;
+        return;
+      }
+      // Timing values used on recipe lines cannot be deleted.
+      const uses = await Promise.all((data || []).map((p) => (p.kind !== 'addition_timing'
+        ? Promise.resolve({ count: 0 })
+        : supabaseClient.from('recipe_ingredients').select('id', { count: 'exact', head: true })
+          .eq('addition_type', 'cellar_addition').eq('timing', p.code))));
+      allCellarPlanParts = (data || []).map((p, i) => ({ ...p, used: uses[i].count || 0 }));
+      renderCellarPlanParts();
+    }
+
+    function renderCellarPlanParts() {
+      const container = document.getElementById('cellar-plan-list');
+      const rows = allCellarPlanParts.map((p) => {
+        const timing = p.kind === 'addition_timing';
+        const inPlan = p.shows_on === 'cellar_plan';
+        return `
+        <tr data-id="${p.id}"${inPlan && p.is_active ? '' : ' style="color:#999;"'}>
+          <td class="eenheid-drag-handle" draggable="true" title="Drag to reorder">
+            <svg width="12" height="18" viewBox="0 0 12 18" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="3" cy="3" r="1.6"/><circle cx="9" cy="3" r="1.6"/>
+              <circle cx="3" cy="9" r="1.6"/><circle cx="9" cy="9" r="1.6"/>
+              <circle cx="3" cy="15" r="1.6"/><circle cx="9" cy="15" r="1.6"/>
+            </svg>
+          </td>
+          <td><input type="text" class="cellar-part-label" value="${escapeHtml(p.label)}" aria-label="Label" /></td>
+          <td style="font-size:0.85em; color:#555;">${timing ? 'Timing value' : 'Fixed · from recipe data'}</td>
+          <td>${timing
+            ? `<select class="cellar-part-shows-on" aria-label="Shows on"><option value="cellar_plan"${inPlan ? ' selected' : ''}>Cellar plan</option><option value="processing"${inPlan ? '' : ' selected'}>Processing</option></select>`
+            : 'Cellar plan'}</td>
+          <td class="cat-check">${timing ? `<input type="checkbox" class="cellar-part-day"${p.on_addition_day ? ' checked' : ''} aria-label="On addition day" />` : ''}</td>
+          <td class="cat-check">${timing ? `<input type="checkbox" class="cellar-part-active"${p.is_active ? ' checked' : ''} aria-label="Active" />` : ''}</td>
+          <td style="font-size:0.85em; color:#555;">${timing ? `${p.used} recipe lines` : ''}</td>
+          <td style="display:flex; gap:6px;">
+            <button class="cellar-part-save-btn">Save</button>
+            ${timing && !p.used ? '<button class="rij-verwijder-btn cellar-part-delete-btn">Delete</button>' : ''}
+          </td>
+        </tr>`;
+      }).join('');
+      container.innerHTML = `
+        <table class="cat-tabel">
+          <thead><tr><th></th><th>Part / timing value</th><th>Kind</th><th>Shows on</th><th class="cat-check">On addition day</th><th class="cat-check">Active</th><th>Used</th><th></th></tr></thead>
+          <tbody id="cellar-plan-tbody">${rows}</tbody>
+        </table>`;
+      container.querySelectorAll('tr[data-id]').forEach((tr) => {
+        tr.querySelector('.cellar-part-save-btn').addEventListener('click', () => saveCellarPlanPart(tr));
+        tr.querySelector('.cellar-part-delete-btn')?.addEventListener('click', () => deleteCellarPlanPart(tr));
+      });
+      makeCellarPlanSortable();
+    }
+
+    function makeCellarPlanSortable() {
+      const tbody = document.getElementById('cellar-plan-tbody');
+      if (!tbody) return;
+      let dragRow = null;
+      tbody.addEventListener('dragstart', (e) => {
+        const handle = e.target.closest('.eenheid-drag-handle');
+        if (!handle) { e.preventDefault(); return; }
+        dragRow = handle.closest('tr');
+        dragRow.classList.add('eenheid-slepend');
+        e.dataTransfer.effectAllowed = 'move';
+        try { e.dataTransfer.setData('text/plain', dragRow.dataset.id); } catch (err) { /* Firefox needs setData */ }
+      });
+      tbody.addEventListener('dragover', (e) => {
+        if (!dragRow) return;
+        e.preventDefault();
+        const overRow = e.target.closest('tr');
+        if (!overRow || overRow === dragRow || !tbody.contains(overRow)) return;
+        const rect = overRow.getBoundingClientRect();
+        tbody.insertBefore(dragRow, (e.clientY - rect.top) / rect.height > 0.5 ? overRow.nextSibling : overRow);
+      });
+      tbody.addEventListener('drop', (e) => { e.preventDefault(); });
+      tbody.addEventListener('dragend', async () => {
+        if (dragRow) dragRow.classList.remove('eenheid-slepend');
+        dragRow = null;
+        await saveCellarPlanOrder(tbody);
+      });
+    }
+
+    async function saveCellarPlanOrder(tbody) {
+      const order = Array.from(tbody.children).map((tr, i) => ({ id: Number(tr.dataset.id), sort_order: (i + 1) * 10 }));
+      if (order.every((o, i) => allCellarPlanParts[i] && allCellarPlanParts[i].id === o.id)) return;
+      showCellarPlanMessage('Saving order…');
+      const results = await Promise.all(order.map(({ id, sort_order }) =>
+        supabaseClient.from('cellar_plan_parts').update({ sort_order }).eq('id', id)));
+      const failed = results.find((r) => r.error);
+      showCellarPlanMessage(failed ? 'Could not save order: ' + failed.error.message
+        : 'Order saved. It applies to a recipe when it is saved, or use "Apply order to the recipes".', failed ? 'fout' : 'ok');
+      loadCellarPlanSection();
+    }
+
+    async function saveCellarPlanPart(tr) {
+      const part = allCellarPlanParts.find((p) => String(p.id) === tr.dataset.id);
+      const label = tr.querySelector('.cellar-part-label').value.trim();
+      if (!label) { showCellarPlanMessage('Label cannot be empty.', 'fout'); return; }
+      const patch = { label };
+      if (part.kind === 'addition_timing') {
+        patch.shows_on = tr.querySelector('.cellar-part-shows-on').value;
+        patch.on_addition_day = tr.querySelector('.cellar-part-day').checked;
+        patch.is_active = tr.querySelector('.cellar-part-active').checked;
+      }
+      const { error } = await supabaseClient.from('cellar_plan_parts').update(patch).eq('id', part.id);
+      if (error) { showCellarPlanMessage('Save failed: ' + error.message, 'fout'); return; }
+      showCellarPlanMessage('Saved.', 'ok');
+      loadCellarPlanSection();
+    }
+
+    async function deleteCellarPlanPart(tr) {
+      if (!confirm('Delete this timing value?')) return;
+      const { error } = await supabaseClient.from('cellar_plan_parts').delete().eq('id', tr.dataset.id);
+      if (error) { showCellarPlanMessage('Delete failed: ' + error.message, 'fout'); return; }
+      showCellarPlanMessage('Deleted.', 'ok');
+      loadCellarPlanSection();
+    }
+
+    document.getElementById('cellar-timing-add-btn').addEventListener('click', async () => {
+      const label = document.getElementById('cellar-timing-new-label').value.trim();
+      const code = actionTagCode(label);
+      if (!code) { showCellarPlanMessage('Enter a label for the new timing value.', 'fout'); return; }
+      const { error } = await supabaseClient.from('cellar_plan_parts').insert({
+        code, kind: 'addition_timing', label,
+        shows_on: document.getElementById('cellar-timing-new-shows-on').value,
+        on_addition_day: document.getElementById('cellar-timing-new-day').checked,
+        sort_order: Math.max(0, ...allCellarPlanParts.map((p) => p.sort_order || 0)) + 10,
+      });
+      if (error) {
+        showCellarPlanMessage(error.code === '23505' ? 'A value with that name already exists.' : 'Add failed: ' + error.message, 'fout');
+        return;
+      }
+      document.getElementById('cellar-timing-new-label').value = '';
+      document.getElementById('cellar-timing-new-day').checked = false;
+      showCellarPlanMessage('Timing value added at the end: drag it to its place.', 'ok');
+      loadCellarPlanSection();
+    });
+
+    document.getElementById('cellar-plan-apply-btn').addEventListener('click', async () => {
+      if (!confirm('Put the cellar plan of every active recipe (and every recipe of a planned batch) in this order? Steps changed by hand keep their text. Batches keep their plan.')) return;
+      showCellarPlanMessage('Applying…');
+      const { data, error } = await supabaseClient.rpc('apply_cellar_plan_order');
+      if (error) { showCellarPlanMessage('Could not apply: ' + error.message, 'fout'); return; }
+      showCellarPlanMessage(`Applied to ${data} recipes.`, 'ok');
     });
 
     // ----------------------------------------------------------------

@@ -17,6 +17,31 @@ const CELLAR_TRIGGER_TYPES = [
 
 const cellarPlan = { steps: [], tags: [], loaded: false, nextTempId: -1 };
 
+// Timing values of cellar additions (Settings › Cellar plan).
+let cellarTimings = [];
+
+async function loadCellarTimings() {
+  const { data, error } = await supabaseClient.from('cellar_plan_parts')
+    .select('code, label, shows_on, is_active, sort_order').eq('kind', 'addition_timing').order('sort_order').order('id');
+  cellarTimings = error ? [] : data;
+}
+
+/**
+ * Timing dropdown of an Additions Cellar row (class re-ing-tijdstip, read by
+ * the editor as any timing field). A value that is not in the list (an old
+ * text) stays selectable until it is changed.
+ */
+function cellarTimingSelectHtml(value) {
+  const v = value ?? '';
+  const known = cellarTimings.some((t) => t.code === v);
+  const option = (t) => `<option value="${escapeHtml(t.code)}"${t.code === v ? ' selected' : ''}>${escapeHtml(t.label)}${t.shows_on === 'processing' ? ' (processing)' : ''}</option>`;
+  return `<select class="re-ing-tijdstip">
+    <option value="">—</option>
+    ${v && !known ? `<option value="${escapeHtml(v)}" selected>${escapeHtml(v)} (old text)</option>` : ''}
+    ${cellarTimings.filter((t) => t.is_active || t.code === v).map(option).join('')}
+  </select>`;
+}
+
 /** Loads the action tags and, for an existing recipe, its plan. */
 async function loadCellarPlan(recipeId) {
   const [tags, steps] = await Promise.all([
@@ -158,5 +183,5 @@ function cellarPlanProblem() {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { CELLAR_TRIGGER_TYPES, cellarPlan, readCellarPlan, cellarPlanProblem };
+  module.exports = { CELLAR_TRIGGER_TYPES, cellarPlan, readCellarPlan, cellarPlanProblem, cellarTimingSelectHtml };
 }

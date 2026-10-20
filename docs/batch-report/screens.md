@@ -136,13 +136,21 @@ Section "Cellar action tags" on `settings.html` (`#action-tags`), module
 drag handle · Label · Code · Milestone · Active · Used (in logs · in plans) ·
 Save / Delete. A used tag has no Delete: make it inactive.
 
+## Settings · cellar plan
+Section "Cellar plan" on `settings.html` (`#cellar-plan`), module `settings`.
+One table of `cellar_plan_parts` in plan order: drag handle · label · kind
+(fixed / timing value) · shows on (Cellar plan / Processing) · on addition
+day · active · used (recipe lines) · Save / Delete (only unused timing
+values). Add a timing value; button "Apply order to the recipes" (confirm).
+
 ## Recipe editor · cellar plan
 Block "Cellar plan" on `recept-invoer.html` after Process steps
 (`recipe-cellar-plan.js`). Per step: ▲▼ · Step · What · Tag · When (at
 extract / at temperature / on day / after previous) · value · ± · day ·
 lagering starts. Status per step: "from recipe data", "edited" or "added by
 hand"; generated steps have no delete ("auto": change the recipe data
-instead). Saved with the recipe; the generator then refreshes the generated
+instead). The Timing of a cellar addition is a dropdown of the timing values
+(an old free text stays selectable, marked "(old text)"). Saved with the recipe; the generator then refreshes the generated
 steps. An "On day" step without a day blocks the save (message in the save
 window).
 

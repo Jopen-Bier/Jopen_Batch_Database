@@ -1237,7 +1237,9 @@ function voegIngredientRegelToe(tbodyId, rollenLijst, regel = {}) {
         <input type="number" class="re-ing-tijdstip-dryhop-temp" min="0" max="16" step="0.5" placeholder="°C"
                value="${dryHopTemp ?? ''}" style="width:56px; flex:none; ${dryHopCategorie === 'cold' ? '' : 'display:none;'}" />
       </div>
-    </td>` : `<td><input type="text" class="re-ing-tijdstip" value="${regel.tijdstip ?? ''}" /></td>`;
+    </td>` : rollenLijst.includes('cellar_addition')
+      ? `<td>${cellarTimingSelectHtml(regel.tijdstip)}</td>`
+      : `<td><input type="text" class="re-ing-tijdstip" value="${regel.tijdstip ?? ''}" /></td>`;
 
   tr.innerHTML = `
     <td class="re-ing-drag-handle" draggable="true" title="Drag to reorder">
@@ -2204,6 +2206,7 @@ async function initReceptInvoer() {
 
   const id = urlParam('id');
   bindCellarPlanEvents();
+  await loadCellarTimings();   // the Timing dropdown of Additions Cellar needs them
   loadCellarPlan(id || null);
   if (id) {
     await laadBestaandRecept(id);

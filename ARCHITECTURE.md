@@ -229,7 +229,7 @@ Agreed table and column names per table: `supabase/rename-map.json`.
 | `batch-overview.html` | batches | batches, batch_ingredients, `snapshot_batch_ingredients()`, recipes + recipe_specs/_fermentation/_brewing_specs/_packaging/_water/_revisions, ingredients, stock_movements, lots |
 | `voorraad-overzicht/inboeken/uitboeken.html` | inventory | lots, stock_movements, ingredients, batches, users |
 | `statistics.html` | statistics | ingredients, ingredient_documents, document_types |
-| `settings.html` | settings | units, ingredient_categories, document_types, ingredient_declarations, water_settings (+ _history), cellar_action_tags |
+| `settings.html` | settings | units, ingredient_categories, document_types, ingredient_declarations, water_settings (+ _history), cellar_action_tags, cellar_plan_parts (`apply_cellar_plan_order()`), recipe_ingredients (count) |
 | `gebruikers.html` | admin only (`user_management`) | users, roles, `admin_get_last_logins()` |
 | `rollen.html` | admin only (`role_management`) | roles, role_permissions, permission_modules |
 | `status.html` | admin only | counts on batches, recipes, ingredients, users |

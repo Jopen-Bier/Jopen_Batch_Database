@@ -234,6 +234,16 @@ Dryhopping*, Tasting, Cooling*, Addition*, Pump start, Pump stop, Transfer,
 Transport, Processing, Sample to lab*, Blending, Other (* = milestone; see
 mockup `Settings.dc.html`). RLS: select all logged-in; write via `settings`.
 
+### `cellar_plan_parts` (new) — Settings › Cellar plan
+`id`, `code text unique`, `kind` check in (`dry_warm`, `cold_dry_hop`,
+`cooling_lagering`, `sample_lab`, `dry_hop_at_lagering`, `addition_timing`),
+`label`, `shows_on` check in (`cellar_plan`, `processing`),
+`on_addition_day boolean`, `sort_order`, `is_active`. Fixed parts have
+`code = kind`; `addition_timing` rows are the timing values of cellar
+additions (`recipe_ingredients.timing` holds the code). Order = order of the
+generated plan (business-rules). RLS: select all logged-in; write via
+`settings`; only timing values can be inserted / deleted.
+
 ### `recipe_cellar_steps` (new)
 | Column | Type | Notes |
 |---|---|---|
@@ -252,10 +262,11 @@ mockup `Settings.dc.html`). RLS: select all logged-in; write via `settings`.
 | is_generated | boolean not null default true | false once edited by hand (regeneration leaves it alone) |
 | generated_key | text | which generated step this is (unique per recipe); null for steps added by hand |
 
-Function `generate_recipe_cellar_steps(p_recipe_id)` implements the rules in
-business-rules.md; `save_recipe_cellar_steps(p_recipe_id, p_steps jsonb)`
+Function `generate_recipe_cellar_steps(p_recipe_id, p_reset_order default false)`
+implements the rules in business-rules.md; `apply_cellar_plan_order()`
+regenerates all recipes with a plan in the Settings order; `save_recipe_cellar_steps(p_recipe_id, p_steps jsonb)`
 saves the editor's plan (as `save_recipe_ingredients`) and then regenerates.
-Helpers `tolerance_value(text)` and `cellar_addition_timing(text)`. Backfill
+Helper `tolerance_value(text)`. Backfill
 for active recipes and the recipes of planned batches. RLS via `recipes`.
 
 ### `batch_cellar_steps` (new) — snapshot per batch
