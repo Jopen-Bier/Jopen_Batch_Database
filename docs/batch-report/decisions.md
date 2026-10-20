@@ -60,6 +60,7 @@ Agreed with Jaap. Date = when decided. Do not change without asking.
 |---|---|
 | 20-10 | Minimum maturation is ticked automatically: days since lagering started ≥ the recipe lagering time. Labels Discharges / Interval (min) and Standpipe / Bottom valve stay as in the mockup. |
 | 20-10 | Filling: day number = day of the year (001 … 365/366). Specs without a recipe value use the house limits (TPO 100, HSO 50, DO 50, keg O2 50 ppb) until the specs come from the spec bible (next step); CO2 has no Cpk without a recipe spec. |
+| 20-10 | Packaging: no neck labels anymore; the Global Keg is not in the list (Jaap, rooktest phase 7). |
 | 20-10 | Filling page: a good basis, to be fine-tuned with the filling department; fill tube detection checks only for bottles (not keg / can) — later (Jaap). |
 | 20-10 | Filling report: articles, materials and the bill of materials are master data in Settings, seeded with the mockup list; the session volume (Filling tab) is what was taken from the HBT, the booked articles give the packaged litres. SKU in the Summary = packaging article until open-questions #13 is answered. |
 | 13-10 | Processing session = start measurements only (centrifuge in/out, start flow, start turbidity). Lagering block removed. Pasteurised-with / avg temp out / avg turbidity removed from the session. |
