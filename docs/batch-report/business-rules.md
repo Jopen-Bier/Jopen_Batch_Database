@@ -12,7 +12,7 @@ Evaluated top-down, first match wins:
 |---|---|
 | `closed` | `batches.status = 'completed'` (later: filling report signed sets this) |
 | `filled` | the batch has ≥1 `batch_hbts` and every one has a filling session with `is_hbt_finished` |
-| `filling` | the batch has ≥1 `filling_sessions` row |
+| `filling` | a `filling_sessions` row has `filling_date` (as HBT starts with the processing date) |
 | `hbt` | a `processing_sessions` row has `processing_date` (also without brews, e.g. a split batch) |
 | `lagering` | the `batch_cellar_steps` step with `starts_lagering` is done (decision #3: the cooling, not setting an LT) |
 | `fermentation` | number of brews with `brewing_ended_at` ≥ `batches.brew_count` rounded up (brew counts such as 3.33 occur); never for 0 brews |
@@ -200,6 +200,18 @@ Steps are editable and reorderable in the recipe editor; edited steps get
 - Quality / Cpk over all filling measurements of the batch; limits from
   `recipe_packaging` (TPO, HSO, DO, CO2 bottle/can, keg CO2/O2). Cpk ≥ 1.33
   green, ≥ 1 amber, < 1 red. (Formula in mockup `Filling.dc.html`.)
+  Built in `filling.js`: a maximum (TPO, HSO, DO, keg O2) is "< limit"; when
+  the recipe has no value the house limit is used (TPO 100, HSO 50, DO 50,
+  keg O2 50 ppb, marked "house limit"); CO2 = spec ± tolerance, no Cpk
+  without a recipe spec. Cpk = min(hi − mean, mean − lo) / 3σ (sample σ),
+  estimated share in spec from the normal distribution; at least 2 values.
+- Out-of-spec measurement cells are red with the same limits.
+- **Day number** = day of the year, three digits: 1 January = 001 …
+  31 December = 365 / 366 (Jaap, 20-10); shown for today and per filling
+  session date.
+- A new filling session takes today, the first HBT that is not finished, and
+  its package when the HBT has one format. "Filled by" = who added the
+  session (`created_by`). "HBT finished?" needs an HBT.
 - HBT finished: an HBT is finished when any of its filling sessions has
   `is_hbt_finished`.
 

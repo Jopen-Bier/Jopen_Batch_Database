@@ -62,7 +62,7 @@
 
     async function loadActiveBatches() {
       const stages = await fetchAllRows(supabaseClient.from('batch_stages')
-        .select('batch_id, stage, start_date, end_date, brews_planned, brews_started, brews_ended, last_brew_ended_at, time_zero, cellar_steps_total, cellar_steps_done, next_cellar_step, hbts_total, hbts_released, hbt_codes, hbt_formats')
+        .select('batch_id, stage, start_date, end_date, brews_planned, brews_started, brews_ended, last_brew_ended_at, time_zero, cellar_steps_total, cellar_steps_done, next_cellar_step, hbts_total, hbts_released, hbt_codes, hbt_formats, hbts_finished, filled_volume_hl')
         .neq('stage', 'closed')
         .order('batch_id'));
       if (stages.error) throw stages.error;

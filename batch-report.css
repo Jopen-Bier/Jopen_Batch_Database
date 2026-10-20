@@ -323,6 +323,19 @@ select.br-in { text-align: left; cursor: pointer; }
 .pr-totals .pr-bad b { color: var(--br-alert); }
 .pr-warning { font-size: 12.5px; font-weight: 700; color: var(--br-alert-text); background: var(--br-alert-tint); border-radius: 6px; padding: 4px 8px; }
 
+/* Filling (batch-filling.html) */
+.fi-status { font-size: 12px; font-weight: 700; border-radius: 12px; padding: 2px 9px; white-space: nowrap; background: #f1eee5; color: var(--br-muted); }
+.fi-status.filling { background: var(--br-jk-bg); color: var(--br-jk-text); }
+.fi-status.finished { background: var(--br-hop); color: #fff; }
+.fi-title { font-size: 15px; }
+.fi-session.finished { border-color: var(--br-ok-line); background: #fbfcf8; }
+.fi-checks { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); column-gap: 18px; }
+.fi-finished { background: #eef0e6; border-radius: 6px; padding: 6px 8px; border-bottom: 0; }
+.br-ing td.fi-cpk { font-weight: 700; }
+.br-ing td.fi-cpk.ok { color: var(--br-hop-dark); }
+.br-ing td.fi-cpk.warn { color: #96601f; }
+.br-ing td.fi-cpk.bad, .br-ing td.fi-low { color: var(--br-alert-text); font-weight: 700; }
+
 @media (max-width: 600px) {
   .br-beer { font-size: 22px; }
   .br-main { padding: 16px 16px 48px; }

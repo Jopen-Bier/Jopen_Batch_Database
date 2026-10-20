@@ -144,6 +144,7 @@ moved to `batch-report-cards.js` (shared by Fermentation log and Processing).
 Migration: `filling_sessions`, `filling_measurements`. Page
 `batch-filling.html`: sessions, checks, HBT finished, measurements, Cpk
 (module + test). `batch_stages`: filling/filled.
+Built 20-10: `filling.js` (+ test); Filling / Filled tiles.
 
 ## Phase 7 — Filling report
 Migration: `packaging_articles`, `packaging_materials`,
