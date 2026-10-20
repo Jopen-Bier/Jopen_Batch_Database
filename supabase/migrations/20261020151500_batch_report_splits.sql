@@ -10,7 +10,7 @@
 --   source_recipe_group_id (recipes.recipe_group_id: the beer over all its
 --   versions, Jaap 20-10), quantity = share in %, unit '%', no ingredient.
 --   No foreign key: recipe_group_id is shared by the versions, not unique.
--- * Batch volume for dosing = brews × brew volume + volume of the incoming
+-- * Batch volume for dosing = brews x brew volume + volume of the incoming
 --   transfers (Jaap, 20-10); batch_stages.incoming_volume_hl gives the
 --   incoming part. Batches with a fractional brew count keep dosing on it.
 -- * A batch without started brews that receives beer counts as brewed: it
@@ -21,12 +21,8 @@
 
 begin;
 
--- The texts below contain · and ×: stop when the script was not read as UTF-8.
-do $$ begin
-  if length('·×') <> 2 or '·' <> chr(183) then
-    raise exception 'This script was not read as UTF-8; nothing was changed';
-  end if;
-end $$;
+-- Plain ASCII on purpose (the SQL Editor changed a non-ASCII character in
+-- the dry run): the middle dot of the texts is chr(183).
 
 -- 1. Base beer lines ----------------------------------------------------------
 
@@ -194,6 +190,7 @@ declare
   v_entry      bigint;
   v_tank       text;
   v_text       text;
+  v_dot        text := ' ' || chr(183) || ' ';   -- space, middle dot, space
 begin
   if auth.uid() is not null and not can_edit('batches') then
     raise exception 'no edit rights on batches' using errcode = '42501';
@@ -236,14 +233,14 @@ begin
   returning id into v_transfer;
 
   select code into v_tank from tanks where id = p_from_tank_id;
-  v_text := 'Transfer · ' || trim(to_char(p_volume_hl, 'FM999990.0')) || ' hl'
+  v_text := 'Transfer' || v_dot || trim(to_char(p_volume_hl, 'FM999990.0')) || ' hl'
             || coalesce(' from ' || v_tank, '')
             || case p_destination
                  when 'new' then ' to new batch ' || v_number || ' (' || v_recipe.name || ')'
                  when 'batch' then ' to batch ' || v_number
-                 else ' discarded' || coalesce(' · ' || nullif(btrim(p_reason), ''), '')
+                 else ' discarded' || coalesce(v_dot || nullif(btrim(p_reason), ''), '')
                end
-            || coalesce(' · ' || nullif(btrim(p_comment), ''), '');
+            || coalesce(v_dot || nullif(btrim(p_comment), ''), '');
   insert into fermentation_log_entries (batch_id, measured_at, comment, updated_by)
   values (p_batch_id, p_transferred_at, v_text, auth.uid())
   returning id into v_entry;
@@ -378,7 +375,7 @@ left join lateral (
 left join lateral (
   select count(*) as hbts_total,
          count(bh.released_at) as hbts_released,
-         string_agg(t.code, ' · ' order by bh.sort_order, t.number) as hbt_codes,
+         string_agg(t.code, ' ' || chr(183) || ' ' order by bh.sort_order, t.number) as hbt_codes,
          array(select distinct f from public.batch_hbts x, unnest(x.intended_formats) f where x.batch_id = b.id order by f) as hbt_formats
   from public.batch_hbts bh
   join public.tanks t on t.id = bh.tank_id
