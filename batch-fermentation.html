@@ -83,7 +83,7 @@
       const [steps, entries, entryTags, tags, transfers, brews, tanks, users, ferm, specs, ingredients] = await Promise.all([
         supabaseClient.from('batch_cellar_steps').select('*').eq('batch_id', batchId).order('sort_order').order('id'),
         supabaseClient.from('fermentation_log_entries').select('*').eq('batch_id', batchId).order('measured_at').order('id'),
-        supabaseClient.from('fermentation_log_entry_tags').select('id, entry_id, tag_id, batch_id, created_by').eq('batch_id', batchId).order('id'),
+        supabaseClient.from('fermentation_log_entry_tags').select('id, entry_id, tag_id, batch_id, batch_cellar_step_id, created_by').eq('batch_id', batchId).order('id'),
         supabaseClient.from('cellar_action_tags').select('*').order('sort_order').order('id'),
         supabaseClient.from('batch_transfers').select('*, to_batch:batches!batch_transfers_to_batch_id_fkey(batch_number)').eq('batch_id', batchId).order('transferred_at').order('id'),
         supabaseClient.from('batch_brews').select('*').eq('batch_id', batchId).order('brew_number'),
@@ -166,11 +166,50 @@
 
     // A tag can be on an entry more than once (e.g. two additions the same
     // day): each one ticks off the next plan step with that tag.
-    async function addTag(entryId, tagId) {
-      const added = await insertRow('fermentation_log_entry_tags', { entry_id: entryId, tag_id: tagId, batch_id: page.ctx.batch.id },
-        page.entryTags, { stampUpdatedBy: false, select: 'id, entry_id, tag_id, batch_id, created_by' });
+    // stepId: the plan step this tag ticks off (null = the next open step with that tag).
+    async function addTag(entryId, tagId, stepId = null) {
+      const added = await insertRow('fermentation_log_entry_tags', { entry_id: entryId, tag_id: tagId, batch_id: page.ctx.batch.id, batch_cellar_step_id: stepId },
+        page.entryTags, { stampUpdatedBy: false, select: 'id, entry_id, tag_id, batch_id, batch_cellar_step_id, created_by' });
       renderSoon();
       return added;
+    }
+
+    // Tags whose steps can be done in any order, so the log asks which one.
+    // Other tags (cooling, dry hop, …) follow the plan order.
+    const CHOOSE_STEP_TAGS = ['addition'];
+
+    /**
+     * An Addition with two or more open Addition steps asks which one this
+     * is; otherwise the tag ticks off the next open step, as before.
+     */
+    async function addTagWithChoice(entryId, tagId) {
+      const open = CHOOSE_STEP_TAGS.includes(tagById(tagId).code) ? openStepsForTag(page.steps, page.entries, page.entryTags, tagId) : [];
+      if (open.length < 2) return addTag(entryId, tagId);
+      const choice = await chooseStepDialog(tagById(tagId).label, open);
+      if (choice === undefined) return renderSoon();   // cancelled
+      return addTag(entryId, tagId, choice);
+    }
+
+    // Resolves the chosen step id, null for "next open step", undefined when cancelled.
+    function chooseStepDialog(tagLabel, steps) {
+      return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = 'br-dialog-overlay';
+        overlay.innerHTML = `<div class="br-dialog" role="dialog" aria-modal="true" aria-labelledby="fl-step-title">
+          <div class="br-dialog-title" id="fl-step-title">Which step is this ${escapeHtml(tagLabel.toLowerCase())}?</div>
+          <div class="fl-step-choice">${steps.map((st) => `<button type="button" class="br-ghost" data-step-choice="${st.id}">${escapeHtml(st.title)}</button>`).join('')}</div>
+          <div class="br-dialog-buttons"><button type="button" class="br-ghost" data-step-choice="cancel">Cancel</button></div></div>`;
+        const close = (value) => { overlay.remove(); document.removeEventListener('keydown', onKey); resolve(value); };
+        const onKey = (e) => { if (e.key === 'Escape') close(undefined); };
+        overlay.addEventListener('click', (e) => {
+          const b = e.target.closest('button[data-step-choice]');
+          if (b) close(b.dataset.stepChoice === 'cancel' ? undefined : Number(b.dataset.stepChoice));
+          else if (e.target === overlay) close(undefined);
+        });
+        document.addEventListener('keydown', onKey);
+        document.body.appendChild(overlay);
+        overlay.querySelector('[data-step-choice]').focus();
+      });
     }
 
     async function removeTag(entryTag) {
@@ -184,14 +223,14 @@
       page.entryTags = page.entryTags.filter((t) => t.id !== entryTag.id);
       page.save.saved();
       renderSoon();
-      showUndoToast(`Tag “${label}”`, () => addTag(entryId, tagId));
+      showUndoToast(`Tag “${label}”`, () => addTag(entryId, tagId, entryTag.batch_cellar_step_id || null));
     }
 
     // Deleting an entry also deletes its tags; Undo puts both back.
     async function deleteEntry(entry) {
       const ok = await confirmDialog({ title: 'Delete this measurement?', text: 'You can undo this right after deleting. The deletion is recorded in the audit trail.' });
       if (!ok) return;
-      const tags = page.entryTags.filter((t) => t.entry_id === entry.id).map((t) => t.tag_id);
+      const tags = page.entryTags.filter((t) => t.entry_id === entry.id);
       page.save.saving();
       const { error } = await supabaseClient.from('fermentation_log_entries').delete().eq('id', entry.id).select('id').single();
       if (error) { page.save.failed(error.message); return; }
@@ -204,7 +243,7 @@
         const restored = await insertRow('fermentation_log_entries', values, page.entries);
         if (!restored) return;
         sortEntries();
-        for (const tagId of tags) await addTag(restored.id, tagId);
+        for (const t of tags) await addTag(restored.id, t.tag_id, t.batch_cellar_step_id || null);
         renderSoon();
       });
     }
@@ -373,6 +412,13 @@
       const input = (e, field, label, extra = '') => `<input class="br-in${extra}" data-entry="${e.id}" data-field="${field}" aria-label="${label}"
         value="${escapeHtml(e[field] === null || e[field] === undefined ? '' : String(e[field]))}"${field === 'comment' ? '' : ' inputmode="decimal"'}${dis()}>`;
       const dmyOf = (iso) => iso.split('-').reverse().join('-');
+      // a chip of a tag that ticks off an Addition step names what was added
+      const { stepOfTag } = planProgress(page.steps, page.entries, page.entryTags);
+      const chipLabel = (t) => {
+        const step = stepOfTag.get(t.id);
+        const label = tagById(t.tag_id).label;
+        return step && step.title.startsWith(label + ' · ') ? step.title : label;
+      };
       const body = expanded.map((l) => {
         if (l.kind === 'gap') {
           return `<tr class="fl-gap"><td class="n">${l.days === null ? '' : dayText(l.days)}</td><td colspan="6" class="n">—</td>
@@ -380,7 +426,7 @@
             <td colspan="${l.count ? 4 : 5}">${page.canEdit ? `<button class="fl-fillbtn" type="button" data-gap-date="${l.date}">+ measurement ${l.count ? 'on ' + dmyOf(l.date).slice(0, 5) : 'this day'}</button>` : ''}</td></tr>`;
         }
         const e = l.entry;
-        const chips = page.entryTags.filter((t) => t.entry_id === e.id).map((t) => `<span class="br-chip">${escapeHtml(tagById(t.tag_id).label)}${page.canEdit
+        const chips = page.entryTags.filter((t) => t.entry_id === e.id).map((t) => `<span class="br-chip"${stepOfTag.get(t.id) ? ` title="Ticks off: ${escapeHtml(stepOfTag.get(t.id).title)}"` : ''}>${escapeHtml(chipLabel(t))}${page.canEdit
           ? `<button type="button" data-remove-tag="${t.id}" aria-label="Remove tag ${escapeHtml(tagById(t.tag_id).label)}">×</button>` : ''}</span>`).join('');
         return `<tr>
           <td class="n"><b>${dayText(l.days)}</b></td>
@@ -475,7 +521,7 @@
         if (el.id === 'fl-t0') return setTimeZero(el.value ? new Date(el.value).toISOString() : null);
         if (transfersCard.handleChange(el)) return;
         if (el.dataset.addTag) {
-          if (el.value) addTag(Number(el.dataset.addTag), Number(el.value));
+          if (el.value) addTagWithChoice(Number(el.dataset.addTag), Number(el.value));
           return;
         }
         if (el.dataset.entry) {
@@ -515,7 +561,7 @@
               const now = new Date(); now.setSeconds(0, 0);
               const entry = await addEntry({ measured_at: now.toISOString(), comment: text }, 'comment');
               const tag = page.tags.find((t) => t.code === 'addition');
-              if (entry && tag) await addTag(entry.id, tag.id);
+              if (entry && tag) await addTagWithChoice(entry.id, tag.id);
             } : null,
           });
         }

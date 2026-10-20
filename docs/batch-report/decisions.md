@@ -42,6 +42,7 @@ Agreed with Jaap. Date = when decided. Do not change without asking.
 | 08-10 | Calculators (Nagardo, PGA/alginate, dealcoholisation/Nano Flavor) only show when the recipe has that ingredient/process. |
 | 13-10 | Removing a tag from a log row asks for confirmation. |
 | 20-10 | A tag can be put on one log entry more than once (several additions the same day). |
+| 20-10 | With several open Addition steps, adding the Addition tag asks which step it is (Jaap). |
 | 19-10 | Lagering starts when the cellar plan step "Cooling to [lagering temp]" is done; setting an LT does not count. |
 | 19-10 | Sample to lab comes after the **last** cooling. |
 | 19-10 | Cellar additions go to the cellar plan or to Processing **by keywords** in their timing; the timing texts are streamlined to standard values (business-rules.md). |

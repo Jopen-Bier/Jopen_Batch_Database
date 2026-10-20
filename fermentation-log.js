@@ -73,33 +73,53 @@ function logLines(entries, timeZero) {
 }
 
 /**
- * Cellar plan progress. The n-th log entry (by measured_at) with tag T ticks
- * off the n-th plan step (by sort_order) with tag T. Returns the steps with
- * { step, doneBy: entry | null, isNext } and the done / total counts.
- * entryTags: [{ entry_id, tag_id }].
+ * Cellar plan progress. A tag that names a step (batch_cellar_step_id) ticks
+ * off that step; the n-th other tag with tag T (by measured_at) ticks off the
+ * n-th step with tag T that no tag names. Returns the steps with
+ * { step, doneBy: entry | null, isNext }, the done / total counts and
+ * stepOfTag: Map(tag row id -> the step it ticks off).
+ * entryTags: [{ id, entry_id, tag_id, batch_cellar_step_id }].
  */
 function planProgress(steps, entries, entryTags) {
   const byId = new Map(entries.map((e) => [e.id, e]));
-  const occurrences = new Map();   // tag_id -> entries, oldest first
-  entryTags.forEach((t) => {
-    const e = byId.get(t.entry_id);
-    if (!e) return;
-    if (!occurrences.has(t.tag_id)) occurrences.set(t.tag_id, []);
-    occurrences.get(t.tag_id).push(e);
+  const at = (t) => new Date(byId.get(t.entry_id).measured_at).getTime();
+  const tags = entryTags.filter((t) => byId.has(t.entry_id))
+    .sort((a, b) => at(a) - at(b) || a.entry_id - b.entry_id || (a.id || 0) - (b.id || 0));
+  const ordered = steps.slice().sort((a, b) => a.sort_order - b.sort_order || a.id - b.id);
+  const stepIds = new Set(ordered.map((s) => s.id));
+  const doneBy = new Map(), stepOfTag = new Map();
+  tags.filter((t) => t.batch_cellar_step_id && stepIds.has(t.batch_cellar_step_id)).forEach((t) => {
+    if (!doneBy.has(t.batch_cellar_step_id)) doneBy.set(t.batch_cellar_step_id, byId.get(t.entry_id));
+    stepOfTag.set(t.id, ordered.find((s) => s.id === t.batch_cellar_step_id));
   });
-  occurrences.forEach((list, k) => occurrences.set(k, sortLogEntries(list)));
+  const named = new Set(doneBy.keys());
+  const free = new Map();   // tag_id -> tag rows without a (known) step, oldest first
+  tags.filter((t) => !(t.batch_cellar_step_id && stepIds.has(t.batch_cellar_step_id))).forEach((t) => {
+    if (!free.has(t.tag_id)) free.set(t.tag_id, []);
+    free.get(t.tag_id).push(t);
+  });
   const used = new Map();
+  ordered.filter((s) => !named.has(s.id)).forEach((s) => {
+    const n = used.get(s.tag_id) || 0;
+    used.set(s.tag_id, n + 1);
+    const t = (free.get(s.tag_id) || [])[n];
+    if (t) { doneBy.set(s.id, byId.get(t.entry_id)); stepOfTag.set(t.id, s); }
+  });
   let nextMarked = false, done = 0;
-  const rows = steps.slice().sort((a, b) => a.sort_order - b.sort_order || a.id - b.id).map((step) => {
-    const n = used.get(step.tag_id) || 0;
-    used.set(step.tag_id, n + 1);
-    const doneBy = (occurrences.get(step.tag_id) || [])[n] || null;
-    if (doneBy) { done += 1; return { step, doneBy, isNext: false }; }
+  const rows = ordered.map((step) => {
+    const by = doneBy.get(step.id) || null;
+    if (by) { done += 1; return { step, doneBy: by, isNext: false }; }
     const isNext = !nextMarked;
     nextMarked = true;
     return { step, doneBy: null, isNext };
   });
-  return { rows, done, total: steps.length };
+  return { rows, done, total: steps.length, stepOfTag };
+}
+
+/** Steps with this tag that no tag ticks off yet (to choose from when tagging). */
+function openStepsForTag(steps, entries, entryTags, tagId) {
+  const { rows } = planProgress(steps, entries, entryTags);
+  return rows.filter((r) => !r.doneBy && r.step.tag_id === tagId).map((r) => r.step);
 }
 
 /** ADF % and theoretical ABV from the first and last extract in the log. */
@@ -147,7 +167,7 @@ function alginateDose(volumeL, rateLPerHl) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    effectiveTimeZero, daysSince, localDate, logLines, planProgress, attenuation, stepWhen,
+    effectiveTimeZero, daysSince, localDate, logLines, planProgress, openStepsForTag, attenuation, stepWhen,
     nagardoDose, alginateDose,
   };
 }
