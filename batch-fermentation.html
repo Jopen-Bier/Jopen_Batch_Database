@@ -43,6 +43,7 @@
   <script src="batch-brews.js"></script>
   <script src="fermentation-log.js"></script>
   <script src="batch-report-shell.js"></script>
+  <script src="batch-report-cards.js"></script>
   <script>
     const TRASH_ICON = '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2.5 4h9M5.5 4V2.5h3V4M3.5 4l.6 8h5.8l.6-8"></path></svg>';
 
@@ -50,7 +51,7 @@
       user: null, canEdit: false, canDelete: false, ctx: null, save: null,
       steps: [], entries: [], entryTags: [], tags: [], transfers: [], brews: [], tanks: [],
       users: [], initialsOf: () => '', ferm: {}, specs: {}, ingredients: [], names: {},
-      transferDraft: null, calc: null,
+
     };
     const fmt = (v, digits) => (v === null || v === undefined || v === '' ? '—'
       : Number(v).toLocaleString('en-GB', { maximumFractionDigits: digits ?? 2 }));
@@ -117,15 +118,8 @@
     const saveEntry = (row, patch) => saveRowPatch({ table: 'fermentation_log_entries', row, patch, saveStatus: page.save, renderSoon, userId: page.user.id });
     const sortEntries = () => page.entries.sort((a, b) => new Date(a.measured_at) - new Date(b.measured_at) || a.id - b.id);
 
-    async function insertRow(table, values, list, { stampUpdatedBy = true, select = '*' } = {}) {
-      page.save.saving();
-      const payload = stampUpdatedBy ? { ...values, updated_by: page.user.id } : values;
-      const { data, error } = await supabaseClient.from(table).insert(payload).select(select).single();
-      if (error) { page.save.failed(error.message); return null; }
-      list.push(data);
-      page.save.saved();
-      return data;
-    }
+    const insertRow = (table, values, list, opts = {}) =>
+      insertBatchRow({ table, values, list, saveStatus: page.save, userId: page.user.id, ...opts });
 
     async function addEntry(values, focusField = 'extract') {
       const entry = await insertRow('fermentation_log_entries', { batch_id: page.ctx.batch.id, ...values }, page.entries);
@@ -213,49 +207,6 @@
       });
     }
 
-    async function deleteTransfer(t) {
-      const ok = await confirmDialog({ title: 'Delete this transfer?', text: 'You can undo this right after deleting. The deletion is recorded in the audit trail.' });
-      if (!ok) return;
-      page.save.saving();
-      const { error } = await supabaseClient.from('batch_transfers').delete().eq('id', t.id).select('id').single();
-      if (error) { page.save.failed(error.message); return; }
-      page.transfers.splice(page.transfers.indexOf(t), 1);
-      page.save.saved();
-      renderSoon();
-      showUndoToast('Transfer', async () => {
-        const { id, created_at, updated_at, updated_by, to_batch, ...values } = t;
-        await insertRow('batch_transfers', values, page.transfers, { select: '*, to_batch:batches!batch_transfers_to_batch_id_fkey(batch_number)' });
-        renderSoon();
-      });
-    }
-
-    async function saveTransferDraft() {
-      const d = page.transferDraft;
-      const volume = parseNumberInput(d.volume);
-      if (!d.at) return transferProblem('Fill in the date and time of the transfer.');
-      if (!volume || volume <= 0) return transferProblem('Fill in the volume in hl (more than 0).');
-      let toBatchId = null;
-      if (d.destination === 'batch') {
-        const number = String(d.batchNumber || '').trim();
-        if (!number) return transferProblem('Fill in the batch number that receives the beer.');
-        const { data, error } = await supabaseClient.from('batches').select('id').eq('batch_number', number).maybeSingle();
-        if (error) return transferProblem(error.message);
-        if (!data) return transferProblem(`Batch ${number} does not exist.`);
-        if (data.id === page.ctx.batch.id) return transferProblem('A batch cannot transfer to itself.');
-        toBatchId = data.id;
-      } else if (!String(d.reason || '').trim()) {
-        return transferProblem('Give the reason for discarding.');
-      }
-      const saved = await insertRow('batch_transfers', {
-        batch_id: page.ctx.batch.id, transferred_at: new Date(d.at).toISOString(), volume_hl: volume,
-        from_tank_id: d.fromTankId ? Number(d.fromTankId) : null, destination: d.destination, to_batch_id: toBatchId,
-        reason: String(d.reason || '').trim() || null, comment: String(d.comment || '').trim() || null,
-      }, page.transfers, { select: '*, to_batch:batches!batch_transfers_to_batch_id_fkey(batch_number)' });
-      if (saved) { page.transferDraft = null; page.transfers.sort((a, b) => new Date(a.transferred_at) - new Date(b.transferred_at) || a.id - b.id); }
-      renderSoon();
-    }
-    function transferProblem(text) { page.transferDraft.problem = text; renderSoon(); }
-
     // ------------------------------------------------------------ rendering
     function renderAll() {
       renderBatchCard();
@@ -264,7 +215,6 @@
       renderLog();
       renderTransfers();
       renderChart();
-      renderCalculator();
     }
 
     const kv = (label, value, unit, tol) => `<div class="br-kv"><span class="k">${escapeHtml(label)}</span>
@@ -361,18 +311,9 @@
         });
     }
 
-    function calculatorsAvailable() {
-      const names = page.ingredients.map((r) => (page.names[r.ingredient_id] || r.note || '').toLowerCase());
-      return {
-        nagardo: names.some((n) => n.includes('nagardo')),
-        alginate: page.ingredients.some((r) => r.addition_type === 'cellar_addition'
-          && /pga|alginat/.test((page.names[r.ingredient_id] || r.note || '').toLowerCase())),
-      };
-    }
-
     function renderPlan() {
       const progress = planProgress(page.steps, page.entries, page.entryTags);
-      const calc = calculatorsAvailable();
+      const calc = cellarCalculatorsFor(page.ingredients, page.names);
       const rows = progress.rows.map(({ step, doneBy, isNext }, i) => {
         const prev = i ? progress.rows[i - 1].step : null;
         const what = [step.description, ...linkedLines(step)].filter(Boolean).map(escapeHtml).join(' · ');
@@ -466,39 +407,11 @@
         <div class="br-note">Days count from Time 0. The first measurement is at Time 0, with the GLT total from Brewing (Plato and pH); it moves when Time 0 changes. A tag on a measurement ticks off the next plan step with that tag.</div>`;
     }
 
-    function renderTransfers() {
-      const tanks = batchTanks();
-      const tankCode = (id) => (page.tanks.find((t) => t.id === id) || {}).code || '—';
-      const rows = page.transfers.map((t) => `<tr>
-        <td>${dmy(t.transferred_at)} ${hm(t.transferred_at)}</td><td class="n">${fmt(t.volume_hl, 1)}</td><td>${escapeHtml(tankCode(t.from_tank_id))}</td>
-        <td>${t.destination === 'discard' ? 'Discard' : 'To batch'}</td>
-        <td>${t.to_batch ? `<a href="batch-overview.html?id=${t.to_batch_id}">${escapeHtml(t.to_batch.batch_number)}</a>` : '—'}</td>
-        <td class="small">${escapeHtml([t.reason, t.comment].filter(Boolean).join(' · ') || '—')}</td>
-        <td>${page.canDelete ? `<button class="br-del" type="button" data-delete-transfer="${t.id}" aria-label="Delete transfer">${TRASH_ICON}</button>` : ''}</td></tr>`).join('');
-      const d = page.transferDraft;
-      const draft = d ? `<tr class="fl-draft">
-        <td><input class="br-in l" type="datetime-local" data-draft="at" value="${escapeHtml(d.at || '')}" aria-label="Date and time"></td>
-        <td><input class="br-in" inputmode="decimal" data-draft="volume" value="${escapeHtml(d.volume || '')}" aria-label="Volume (hl)" placeholder="hl"></td>
-        <td><select class="br-in" data-draft="fromTankId" aria-label="From"><option value="">—</option>${tanks.map((t) => `<option value="${t.id}"${String(t.id) === String(d.fromTankId) ? ' selected' : ''}>${escapeHtml(t.code)}</option>`).join('')}</select></td>
-        <td><select class="br-in" data-draft="destination" aria-label="Destination"><option value="batch"${d.destination === 'batch' ? ' selected' : ''}>To batch</option><option value="discard"${d.destination === 'discard' ? ' selected' : ''}>Discard</option></select></td>
-        <td>${d.destination === 'batch' ? `<input class="br-in l" data-draft="batchNumber" value="${escapeHtml(d.batchNumber || '')}" placeholder="26…" aria-label="Receiving batch">` : '—'}</td>
-        <td><div style="display:flex; gap:6px;">${d.destination === 'discard' ? `<input class="br-in l" data-draft="reason" value="${escapeHtml(d.reason || '')}" placeholder="Reason (required)" aria-label="Reason">` : ''}
-          <input class="br-in l" data-draft="comment" value="${escapeHtml(d.comment || '')}" placeholder="Comment" aria-label="Comment"></div></td>
-        <td></td></tr>` : '';
-      document.getElementById('fl-transfers').innerHTML = `
-        <div class="br-head" style="align-items:baseline;">
-          <div class="br-label">Splits / transfers out</div>
-          <span class="br-note">Same record on Fermentation log, Processing and Filling report · fill in once</span>
-        </div>
-        ${page.transfers.length || d ? `<div class="br-table-wrap"><table class="br-ing" style="min-width:820px;">
-          <thead><tr><th style="width:170px;">Date</th><th class="r" style="width:90px;">Volume (hl)</th><th style="width:110px;">From</th>
-            <th style="width:130px;">Destination</th><th style="width:120px;">Batch</th><th>Reason · comment</th><th style="width:34px;"></th></tr></thead>
-          <tbody>${rows}${draft}</tbody></table></div>` : '<div class="br-note">No splits or transfers.</div>'}
-        ${d ? `<div class="br-buttons"><button class="br-primary" type="button" id="fl-transfer-save">Save transfer</button>
-            <button class="br-ghost" type="button" id="fl-transfer-cancel">Cancel</button>
-            <span class="br-note error" role="alert">${escapeHtml(d.problem || '')}</span></div>`
-          : page.canEdit ? '<div><button class="br-ghost" type="button" id="fl-transfer-add">+ Split / transfer</button></div>' : ''}`;
-    }
+    const transfersCard = createTransfersCard(document.getElementById('fl-transfers'), () => ({
+      batchId: page.ctx.batch.id, transfers: page.transfers, tanks: page.tanks, fromTanks: batchTanks(),
+      canEdit: page.canEdit, canDelete: page.canDelete, userId: page.user.id, saveStatus: page.save,
+    }), renderSoon);
+    const renderTransfers = () => transfersCard.render();
 
     function renderChart() {
       const t0 = timeZero();
@@ -551,57 +464,6 @@
       return hl ? Math.round(hl * 100) : '';
     }
 
-    function calcResult(c) {
-      if (c.kind === 'nagardo') {
-        const r = nagardoDose(c.volume, c.rate);
-        return r && { lines: [['Nagardo', `${r.weightG.toFixed(1)} g`], ['Water (1 % solution)', `${r.waterL.toFixed(1)} l`]],
-          log: `Nagardo ${r.weightG.toFixed(1)} g in ${r.waterL.toFixed(1)} l water (${c.rate} ppm on ${c.volume} l)` };
-      }
-      const r = alginateDose(c.volume, c.rate);
-      return r && { lines: [['Volume before centrifuge', `${r.preL.toFixed(1)} l`], ['Alginate', `${r.alginateG.toFixed(1)} g`], ['Hot water', `${r.waterL.toFixed(1)} l`]],
-        log: `PGA/alginate ${r.alginateG.toFixed(1)} g in ${r.waterL.toFixed(1)} l hot water (${c.rate} l/hl on ${c.volume} l)` };
-    }
-
-    function renderCalculator() {
-      document.getElementById('fl-calc')?.remove();
-      const c = page.calc;
-      if (!c) return;
-      const r = calcResult(c);
-      const overlay = document.createElement('div');
-      overlay.className = 'br-dialog-overlay';
-      overlay.id = 'fl-calc';
-      overlay.innerHTML = `<div class="br-dialog" role="dialog" aria-modal="true" aria-labelledby="fl-calc-title">
-        <div class="br-dialog-title" id="fl-calc-title">${c.kind === 'nagardo' ? 'Nagardo' : 'PGA / alginate'}</div>
-        <div class="br-field"><label class="br-label" for="fl-calc-volume">Beer volume (l)</label><input class="br-input" id="fl-calc-volume" inputmode="decimal" value="${escapeHtml(String(c.volume))}"></div>
-        <div class="br-field"><label class="br-label" for="fl-calc-rate">${c.kind === 'nagardo' ? 'Dose (ppm)' : 'Rate (l/hl)'}</label><input class="br-input" id="fl-calc-rate" inputmode="decimal" value="${escapeHtml(String(c.rate))}"></div>
-        <div class="fl-calc-out">${r ? r.lines.map(([k, v]) => `<div><span>${escapeHtml(k)}</span><b>${escapeHtml(v)}</b></div>`).join('') : '<span class="br-note">Fill in both values.</span>'}</div>
-        <div class="br-dialog-buttons">
-          <button type="button" class="br-ghost" id="fl-calc-close">Close</button>
-          ${page.canEdit ? `<button type="button" class="br-primary" id="fl-calc-log"${r ? '' : ' disabled'}>Save to log</button>` : ''}
-        </div></div>`;
-      document.body.appendChild(overlay);
-      overlay.addEventListener('click', (e) => { if (e.target === overlay) { page.calc = null; renderCalculator(); } });
-      overlay.addEventListener('input', (e) => {
-        if (e.target.id === 'fl-calc-volume') c.volume = e.target.value;
-        if (e.target.id === 'fl-calc-rate') c.rate = e.target.value;
-        const out = calcResult(c);
-        overlay.querySelector('.fl-calc-out').innerHTML = out ? out.lines.map(([k, v]) => `<div><span>${escapeHtml(k)}</span><b>${escapeHtml(v)}</b></div>`).join('') : '<span class="br-note">Fill in both values.</span>';
-        const btn = overlay.querySelector('#fl-calc-log');
-        if (btn) btn.disabled = !out;
-      });
-      overlay.querySelector('#fl-calc-close').addEventListener('click', () => { page.calc = null; renderCalculator(); });
-      overlay.querySelector('#fl-calc-log')?.addEventListener('click', async () => {
-        const out = calcResult(c);
-        if (!out) return;
-        page.calc = null;
-        renderCalculator();
-        const now = new Date(); now.setSeconds(0, 0);
-        const entry = await addEntry({ measured_at: now.toISOString(), comment: out.log }, 'comment');
-        const tag = page.tags.find((t) => t.code === 'addition');
-        if (entry && tag) await addTag(entry.id, tag.id);
-      });
-    }
-
     // ------------------------------------------------------------ events
     function bindEvents() {
       const main = document.querySelector('main');
@@ -610,11 +472,7 @@
         if (el.id === 'fl-glt') return saveBatch({ glt_tank_id: el.value ? Number(el.value) : null });
         if (el.id === 'fl-lt') return saveBatch({ lt_tank_id: el.value ? Number(el.value) : null });
         if (el.id === 'fl-t0') return setTimeZero(el.value ? new Date(el.value).toISOString() : null);
-        if (el.dataset.draft) {
-          page.transferDraft[el.dataset.draft] = el.value;
-          if (el.dataset.draft === 'destination') renderSoon();
-          return;
-        }
+        if (transfersCard.handleChange(el)) return;
         if (el.dataset.addTag) {
           if (el.value) addTag(Number(el.dataset.addTag), Number(el.value));
           return;
@@ -648,27 +506,21 @@
         if (rm) { const [entryId, tagId] = rm.dataset.removeTag.split(':').map(Number); return removeTag(entryId, tagId); }
         const del = e.target.closest('button[data-delete-entry]');
         if (del) return deleteEntry(page.entries.find((x) => x.id === Number(del.dataset.deleteEntry)));
-        const delT = e.target.closest('button[data-delete-transfer]');
-        if (delT) return deleteTransfer(page.transfers.find((x) => x.id === Number(delT.dataset.deleteTransfer)));
-        if (e.target.closest('#fl-transfer-add')) {
-          const tanks = batchTanks();
-          page.transferDraft = { at: toDateTimeLocal(new Date()), volume: '', fromTankId: tanks.length ? tanks[tanks.length - 1].id : '', destination: 'batch', batchNumber: '', reason: '', comment: '' };
-          return renderSoon('[data-draft="volume"]');
-        }
-        if (e.target.closest('#fl-transfer-cancel')) { page.transferDraft = null; return renderSoon(); }
-        if (e.target.closest('#fl-transfer-save')) return saveTransferDraft();
+        if (transfersCard.handleClick(e.target)) return;
         const calc = e.target.closest('button[data-calc]');
         if (calc) {
-          page.calc = { kind: calc.dataset.calc, volume: batchVolumeL(), rate: '' };
-          renderCalculator();
-          document.getElementById('fl-calc-rate').focus();
+          openCellarCalculator({
+            kind: calc.dataset.calc, volumeL: batchVolumeL(), onSave: page.canEdit ? async (text) => {
+              const now = new Date(); now.setSeconds(0, 0);
+              const entry = await addEntry({ measured_at: now.toISOString(), comment: text }, 'comment');
+              const tag = page.tags.find((t) => t.code === 'addition');
+              if (entry && tag) await addTag(entry.id, tag.id);
+            } : null,
+          });
         }
       });
       main.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && e.target.matches('input.br-in')) e.target.blur();
-      });
-      document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && page.calc) { page.calc = null; renderCalculator(); }
       });
     }
 

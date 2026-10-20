@@ -176,6 +176,17 @@ window).
   operator inputs Avg. in-line O2, Avg. PU, Avg. turbidity, Avg. flow; total
   end volume, **Cellar loss**, GLT empty?
 - Splits / transfers out (same record).
+- Built (phase 5): operators are users (dropdown, default the person who adds
+  the session); "Processed from (G)LT" is a tank dropdown; "+ Add HBT" picks
+  a free HBT and adds its first reading; a new reading takes the active
+  session and the CO2 target of the reading before it; releasing again asks
+  for confirmation; red cells: O2 ≥ 50 ppb, CO2 outside spec, turbidity above
+  the recipe's turbidity after separation, PU outside pasteurisation ± tol;
+  cellar loss below 0 shows "More out than in — check splits and HBT
+  volumes". Labels still awaiting Jaap (open question #14): Discharges /
+  Interval, Standpipe / Bottom valve (used as in the mockup).
+- Active batches, HBT tiles: tank chip = the HBTs, "Bottle + Keg" /
+  "✓ Released" (tile green) or "1/2 released"; "No HBT yet" without HBT.
 
 ## Filling (`mockup/Filling.dc.html`)
 - Batch card: HBTs with status Not started / Filling / ✓ Finished and the

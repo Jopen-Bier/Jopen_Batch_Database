@@ -130,6 +130,18 @@ assert.strictEqual(s.batchHref('fermentation', 7), 'batch-fermentation.html?id=7
 assert.strictEqual(s.batchHref('lagering', 7), 'batch-fermentation.html?id=7');
 assert.strictEqual(s.batchHref('brewing', 7), 'batch-brewing.html?id=7');
 assert.strictEqual(s.batchHref('raw', 7), 'batch-overview.html?id=7');
-assert.strictEqual(s.batchHref('hbt', 7), 'batch-overview.html?id=7');   // Processing tab not built yet
+assert.strictEqual(s.batchHref('hbt', 7), 'batch-processing.html?id=7');
+assert.strictEqual(s.batchHref('filling', 7), 'batch-overview.html?id=7');   // Filling tab not built yet
+
+// HBT tiles: formats, release, HBT as tank chip
+assert.strictEqual(s.formatsText(['keg', 'bottle']), 'Bottle + Keg');
+assert.strictEqual(s.formatsText([]), '—');
+const hbtRow = (extra) => s.toBatchRow({ id: 30, batch_number: '26430', glt_tank: { code: 'GLT7' }, recipes: { location: 'wp' } },
+  Object.assign({ stage: 'hbt', hbts_total: 2, hbts_released: 1, hbt_codes: 'HBT12 · HBT14', hbt_formats: ['bottle', 'can', 'keg'] }, extra));
+assert.strictEqual(hbtRow().tankCode, 'HBT12 · HBT14');
+assert.deepStrictEqual(s.tileLines(hbtRow()), { line1: 'Bottle + Can + Keg', line2: '1/2 released', isOk: false, progress: null });
+assert.deepStrictEqual(s.tileLines(hbtRow({ hbts_released: 2 })), { line1: 'Bottle + Can + Keg', line2: '✓ Released', isOk: true, progress: null });
+assert.strictEqual(s.tileLines(hbtRow({ hbts_total: 0, hbts_released: 0, hbt_codes: null })).line1, 'No HBT yet');
+assert.strictEqual(hbtRow({ hbt_codes: null }).tankCode, 'GLT7');
 
 console.log('batch-stages: all tests passed');

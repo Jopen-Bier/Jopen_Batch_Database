@@ -90,8 +90,14 @@ function toBatchRow(batch, stageRow) {
     cellarStepsTotal: (stageRow && stageRow.cellar_steps_total) || 0,
     cellarStepsDone: (stageRow && stageRow.cellar_steps_done) || 0,
     nextCellarStep: (stageRow && stageRow.next_cellar_step) || null,
+    hbtsTotal: (stageRow && stageRow.hbts_total) || 0,
+    hbtsReleased: (stageRow && stageRow.hbts_released) || 0,
+    hbtCodes: (stageRow && stageRow.hbt_codes) || null,
+    hbtFormats: (stageRow && stageRow.hbt_formats) || [],
     // the tank the beer is in: the lager tank once it is pushed over, else the fermentation tank
-    tankCode: (batch.lt_tank && batch.lt_tank.code) || (batch.glt_tank && batch.glt_tank.code) || null,
+    // (from HBT on: the bright beer tanks)
+    tankCode: (['hbt', 'filling', 'filled'].includes(stageRow && stageRow.stage) && stageRow.hbt_codes)
+      || (batch.lt_tank && batch.lt_tank.code) || (batch.glt_tank && batch.glt_tank.code) || null,
     attention: [],    // "!" reasons; rules still to be agreed (open-questions #1)
   };
 }
@@ -217,6 +223,16 @@ function tileLines(row, now = new Date()) {
       progress: total ? Math.min(1, done / total) : null,
     };
   }
+  if (row.stage === 'hbt') {
+    const total = row.hbtsTotal || 0, released = row.hbtsReleased || 0;
+    const allReleased = total > 0 && released >= total;
+    return {
+      line1: total ? formatsText(row.hbtFormats) : 'No HBT yet',
+      line2: allReleased ? '✓ Released' : `${released}/${total} released`,
+      isOk: allReleased,
+      progress: null,
+    };
+  }
   return { line1: stageInfo(row.stage).label, line2: '', isOk: false, progress: null };
 }
 
@@ -225,7 +241,7 @@ const BATCH_TABS = [
   { key: 'overview', label: 'Overview', page: 'batch-overview.html' },
   { key: 'brewing', label: 'Brewing', page: 'batch-brewing.html' },
   { key: 'fermentation', label: 'Fermentation log', page: 'batch-fermentation.html' },
-  { key: 'processing', label: 'Processing', page: null, phase: 5 },
+  { key: 'processing', label: 'Processing', page: 'batch-processing.html' },
   { key: 'filling', label: 'Filling', page: null, phase: 6 },
   { key: 'filling-report', label: 'Filling report', page: null, phase: 7 },
 ];
@@ -238,7 +254,20 @@ function batchTabHref(tabKey, batchId) {
 
 // The tab a batch opens on from a list: the tab of its current stage once
 // that tab exists, else the Overview.
-const STAGE_TABS = { brewing: 'brewing', fermentation: 'fermentation', lagering: 'fermentation' };
+const STAGE_TABS = { brewing: 'brewing', fermentation: 'fermentation', lagering: 'fermentation', hbt: 'processing' };
+
+// Package formats of an HBT (batch_hbts.intended_formats), in this order.
+const PACKAGE_FORMATS = [
+  { code: 'bottle', label: 'Bottle' },
+  { code: 'can', label: 'Can' },
+  { code: 'keg', label: 'Keg' },
+];
+
+/** 'Bottle + Keg' from ['keg', 'bottle']. */
+function formatsText(formats) {
+  const set = new Set(formats || []);
+  return PACKAGE_FORMATS.filter((f) => set.has(f.code)).map((f) => f.label).join(' + ') || '—';
+}
 function batchHref(stage, batchId) {
   return batchTabHref(STAGE_TABS[stage], batchId) || batchTabHref('overview', batchId);
 }
@@ -265,7 +294,7 @@ function progressSteps(stage) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    BATCH_TABS, batchTabHref, batchHref,
+    BATCH_TABS, batchTabHref, batchHref, PACKAGE_FORMATS, formatsText,
     BATCH_STAGES, ACTIVE_SECTIONS,
     stageInfo, stageOrder, batchYear, tankNumber, versionText, toBatchRow,
     filterBatches, sortBatches, compareByTank, groupActiveBatches, dayMonth, tileLines,

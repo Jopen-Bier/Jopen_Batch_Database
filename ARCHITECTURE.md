@@ -49,6 +49,8 @@ batch-ingredients.js       ingredient snapshot per batch: batch amounts, deviati
 batch-brews.js             brew log rows and calculations (evaporation, GLT volume/extract; has a test)
 fermentation-log.js        fermentation log: days, gap days, cellar plan progress, ADF/ABV, calculators (has a test)
 recipe-cellar-plan.js      cellar plan block of the recipe editor (recipe_cellar_steps)
+processing.js              Processing tab: duration, HBT end value, CO2/O2/PU status, maturation, cellar loss (has a test)
+batch-report-cards.js      shared batch-tab cards: splits / transfers, cellar calculators, insertBatchRow
 batch-report-shell.js      shared frame of the batch tabs: header, tabs, autosave, confirm dialog, undo toast
 batch-report.css           shared styles of the batch-report screens (load after jopen-shared.css)
 voorraad-forecast.js       consumption calculation (shared module)
@@ -224,6 +226,7 @@ Agreed table and column names per table: `supabase/rename-map.json`.
 | `batchcreation.html` | batches | batches, recipes, recipe_fermentation (+ batch report via `batchrapport-vullen.js`) |
 | `all-batches.html` | batches | batches, recipes, batch_stages (view) |
 | `active-batches.html` | batches | batches, recipes, tanks, batch_stages (view) |
+| `batch-processing.html` | batches | batches, processing_sessions, processing_comments, batch_hbts, hbt_readings, batch_transfers, batch_brews, batch_ingredients, tanks, users, cellar_plan_parts, recipe_fermentation/_packaging/_process_steps |
 | `batch-fermentation.html` | batches | batches, batch_cellar_steps (`snapshot_batch_cellar_steps()`), fermentation_log_entries, fermentation_log_entry_tags, cellar_action_tags, batch_transfers, batch_brews, batch_ingredients, tanks, users, recipe_specs/_fermentation |
 | `batch-brewing.html` | batches | batches, batch_brews, batch_brew_comments, batch_ingredients, tanks, users, recipe_brewing_specs/_specs/_fermentation/_comments |
 | `batch-overview.html` | batches | batches, batch_ingredients, `snapshot_batch_ingredients()`, recipes + recipe_specs/_fermentation/_brewing_specs/_packaging/_water/_revisions, ingredients, stock_movements, lots |
