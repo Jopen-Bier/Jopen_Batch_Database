@@ -149,7 +149,8 @@ Steps are editable and reorderable in the recipe editor; edited steps get
 
 ## Cellar plan progress (batch)
 - Count tag occurrences in `fermentation_log_entry_tags`, ordered by
-  `measured_at`. The n-th occurrence of tag T ticks off the n-th
+  `measured_at` (a tag twice on one entry counts twice, e.g. two additions
+  done the same day). The n-th occurrence of tag T ticks off the n-th
   `batch_cellar_steps` row (by `sort_order`) with tag T.
 - Done step: green, ✓, date/time/initials of that log entry.
 - First open step: orange, "next".

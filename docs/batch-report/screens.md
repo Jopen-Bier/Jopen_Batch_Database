@@ -183,7 +183,9 @@ window).
   for confirmation; red cells: O2 ≥ 50 ppb, CO2 outside spec, turbidity above
   the recipe's turbidity after separation, PU outside pasteurisation ± tol;
   cellar loss below 0 shows "More out than in — check splits and HBT
-  volumes". Labels (open question #14): Discharges /
+  volumes"; O2 ≥ 50 ppb is red at centrifuge in and out; "From recipe" is a
+  bullet list (processing comment, then one line per Processing addition).
+  Labels (open question #14): Discharges /
   Interval, Standpipe / Bottom valve: OK as is (Jaap, 20-10).
 - Active batches, HBT tiles: tank chip = the HBTs, "Bottle + Keg" /
   "✓ Released" (tile green) or "1/2 released"; "No HBT yet" without HBT.
