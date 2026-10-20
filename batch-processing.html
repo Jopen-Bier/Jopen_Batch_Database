@@ -318,7 +318,7 @@
           <thead><tr><th style="width:140px;">Measurement</th><th style="width:100px;">Time</th><th class="r">O2 (ppb)</th><th class="r">CO2 (g/l)</th>
             <th class="r">Start flow (hl/h)</th><th class="r">Start turbidity (EBC)</th></tr></thead>
           <tbody>
-            <tr><td><b>Centrifuge in</b></td>${timeCell('centrifuge_in_time')}${cell('centrifuge_in_o2_ppb')}${cell('centrifuge_in_co2_gl')}<td class="cv">—</td><td class="cv">—</td></tr>
+            <tr><td><b>Centrifuge in</b></td>${timeCell('centrifuge_in_time')}${cell('centrifuge_in_o2_ppb', o2High(s.centrifuge_in_o2_ppb) ? ' bad' : '')}${cell('centrifuge_in_co2_gl')}<td class="cv">—</td><td class="cv">—</td></tr>
             <tr><td><b>Centrifuge out</b></td>${timeCell('centrifuge_out_time')}${cell('centrifuge_out_o2_ppb', o2High(s.centrifuge_out_o2_ppb) ? ' bad' : '')}${cell('centrifuge_out_co2_gl')}
               ${cell('start_flow_hl_h')}${cell('start_turbidity_ebc', turbidityHigh(s.start_turbidity_ebc, page.ferm.turbidity_after_separation) ? ' bad' : '')}</tr>
           </tbody></table></div>`;
@@ -346,7 +346,7 @@
         <td class="small" style="text-align:center;">${escapeHtml(page.initialsOf(page.user.id))}</td><td></td></tr>` : '';
       document.getElementById('pr-comments').innerHTML = `
         <div class="br-label">Comments processing</div>
-        ${recipeNotes.length ? `<div class="pr-recipe-note"><b>From recipe:</b> ${recipeNotes.map(escapeHtml).join(' · ')}</div>` : ''}
+        ${recipeNotes.length ? `<div class="pr-recipe-note"><b>From recipe</b><ul>${recipeNotes.map((n) => `<li>${escapeHtml(n)}</li>`).join('')}</ul></div>` : ''}
         <table class="br-ing"><thead><tr><th>Time</th><th>Comment</th><th>Op.</th><th></th></tr></thead>
           <tbody>${page.comments.map(row).join('')}${draft}${page.comments.length || page.commentDraft ? '' : '<tr><td colspan="4" class="small">No comments yet.</td></tr>'}</tbody></table>
         ${page.canEdit ? '<div><button class="br-ghost" type="button" id="pr-add-comment">+ Comment</button></div>' : ''}`;

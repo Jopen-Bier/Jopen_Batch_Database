@@ -299,6 +299,9 @@ select.br-in { text-align: left; cursor: pointer; }
 .pr-auto.bad { color: var(--br-alert-text); background: var(--br-alert-tint); }
 .pr-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; padding: 8px 0; align-items: end; }
 .pr-field { padding-top: 0; min-width: 0; }
+.pr-field > .br-seg { align-self: flex-start; }
+.pr-recipe-note ul { margin: 4px 0 0; padding-left: 18px; }
+.pr-recipe-note li { margin: 2px 0; }
 .pr-recipe-note { font-size: 13px; background: #fdf1d8; color: #6a4511; border-radius: 8px; padding: 9px 12px; margin: 6px 0 8px; }
 .pr-hbt { border: 1px solid var(--br-line); border-radius: 10px; padding: 12px 14px; margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
 .pr-hbt-head { display: flex; gap: 14px 18px; flex-wrap: wrap; align-items: flex-end; }

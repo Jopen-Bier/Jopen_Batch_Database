@@ -83,7 +83,7 @@
       const [steps, entries, entryTags, tags, transfers, brews, tanks, users, ferm, specs, ingredients] = await Promise.all([
         supabaseClient.from('batch_cellar_steps').select('*').eq('batch_id', batchId).order('sort_order').order('id'),
         supabaseClient.from('fermentation_log_entries').select('*').eq('batch_id', batchId).order('measured_at').order('id'),
-        supabaseClient.from('fermentation_log_entry_tags').select('entry_id, tag_id, batch_id, created_by').eq('batch_id', batchId),
+        supabaseClient.from('fermentation_log_entry_tags').select('id, entry_id, tag_id, batch_id, created_by').eq('batch_id', batchId).order('id'),
         supabaseClient.from('cellar_action_tags').select('*').order('sort_order').order('id'),
         supabaseClient.from('batch_transfers').select('*, to_batch:batches!batch_transfers_to_batch_id_fkey(batch_number)').eq('batch_id', batchId).order('transferred_at').order('id'),
         supabaseClient.from('batch_brews').select('*').eq('batch_id', batchId).order('brew_number'),
@@ -164,22 +164,24 @@
       }
     }
 
+    // A tag can be on an entry more than once (e.g. two additions the same
+    // day): each one ticks off the next plan step with that tag.
     async function addTag(entryId, tagId) {
-      if (page.entryTags.some((t) => t.entry_id === entryId && t.tag_id === tagId)) return renderSoon();
       const added = await insertRow('fermentation_log_entry_tags', { entry_id: entryId, tag_id: tagId, batch_id: page.ctx.batch.id },
-        page.entryTags, { stampUpdatedBy: false, select: 'entry_id, tag_id, batch_id, created_by' });
+        page.entryTags, { stampUpdatedBy: false, select: 'id, entry_id, tag_id, batch_id, created_by' });
       renderSoon();
       return added;
     }
 
-    async function removeTag(entryId, tagId) {
+    async function removeTag(entryTag) {
+      const { entry_id: entryId, tag_id: tagId } = entryTag;
       const label = tagById(tagId).label;
       const ok = await confirmDialog({ title: `Remove tag “${label}”?`, text: 'You can undo this right after removing. The removal is recorded in the audit trail.', okLabel: 'Remove' });
       if (!ok) return;
       page.save.saving();
-      const { error } = await supabaseClient.from('fermentation_log_entry_tags').delete().eq('entry_id', entryId).eq('tag_id', tagId).select('entry_id').single();
+      const { error } = await supabaseClient.from('fermentation_log_entry_tags').delete().eq('id', entryTag.id).select('id').single();
       if (error) { page.save.failed(error.message); return; }
-      page.entryTags = page.entryTags.filter((t) => !(t.entry_id === entryId && t.tag_id === tagId));
+      page.entryTags = page.entryTags.filter((t) => t.id !== entryTag.id);
       page.save.saved();
       renderSoon();
       showUndoToast(`Tag “${label}”`, () => addTag(entryId, tagId));
@@ -348,9 +350,8 @@
     }
 
     function tagSelect(entryId) {
-      const used = new Set(page.entryTags.filter((t) => t.entry_id === entryId).map((t) => t.tag_id));
       return `<select class="fl-tagsel" data-add-tag="${entryId}" aria-label="Add action tag"${dis()}>
-        <option value="">+ tag</option>${page.tags.filter((t) => t.is_active && !used.has(t.id)).map((t) => `<option value="${t.id}">${escapeHtml(t.label)}</option>`).join('')}</select>`;
+        <option value="">+ tag</option>${page.tags.filter((t) => t.is_active).map((t) => `<option value="${t.id}">${escapeHtml(t.label)}</option>`).join('')}</select>`;
     }
 
     function gltTotal() {
@@ -380,7 +381,7 @@
         }
         const e = l.entry;
         const chips = page.entryTags.filter((t) => t.entry_id === e.id).map((t) => `<span class="br-chip">${escapeHtml(tagById(t.tag_id).label)}${page.canEdit
-          ? `<button type="button" data-remove-tag="${e.id}:${t.tag_id}" aria-label="Remove tag ${escapeHtml(tagById(t.tag_id).label)}">×</button>` : ''}</span>`).join('');
+          ? `<button type="button" data-remove-tag="${t.id}" aria-label="Remove tag ${escapeHtml(tagById(t.tag_id).label)}">×</button>` : ''}</span>`).join('');
         return `<tr>
           <td class="n"><b>${dayText(l.days)}</b></td>
           <td>${input(e, 'extract', 'Plato')}</td><td>${input(e, 'temp_high', 'Temperature high')}</td><td>${input(e, 'temp_low', 'Temperature low')}</td><td>${input(e, 'ph', 'pH')}</td>
@@ -503,7 +504,7 @@
         const gap = e.target.closest('button[data-gap-date]');
         if (gap) return addEntry({ measured_at: new Date(`${gap.dataset.gapDate}T08:00`).toISOString() });
         const rm = e.target.closest('button[data-remove-tag]');
-        if (rm) { const [entryId, tagId] = rm.dataset.removeTag.split(':').map(Number); return removeTag(entryId, tagId); }
+        if (rm) return removeTag(page.entryTags.find((t) => t.id === Number(rm.dataset.removeTag)));
         const del = e.target.closest('button[data-delete-entry]');
         if (del) return deleteEntry(page.entries.find((x) => x.id === Number(del.dataset.deleteEntry)));
         if (transfersCard.handleClick(e.target)) return;

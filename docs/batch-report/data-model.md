@@ -294,9 +294,11 @@ batches, and on opening the tab). Done-status is **derived** (business-rules);
 Day (since Time 0), °P decrease and hours are calculated.
 
 ### `fermentation_log_entry_tags` (new)
-`entry_id → fermentation_log_entries` (cascade), `tag_id → cellar_action_tags`,
-PK (entry_id, tag_id), `batch_id` (for RLS/audit; foreign key
-(entry_id, batch_id) so it is always the batch of the entry).
+`id` PK, `entry_id → fermentation_log_entries` (cascade), `tag_id →
+cellar_action_tags`, `batch_id` (for RLS/audit; foreign key (entry_id,
+batch_id) so it is always the batch of the entry). The same tag can be on one
+entry more than once (several additions the same day; migration
+`log_entry_tags_repeat`, 20-10; first version had PK (entry_id, tag_id)).
 
 ### `batch_transfers` (new — created here, full flow in phase 8)
 | Column | Type | Notes |
