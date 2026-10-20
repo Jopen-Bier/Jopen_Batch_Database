@@ -52,6 +52,7 @@ recipe-cellar-plan.js      cellar plan block of the recipe editor (recipe_cellar
 processing.js              Processing tab: duration, HBT end value, CO2/O2/PU status, maturation, cellar loss (has a test)
 batch-report-cards.js      shared batch-tab cards: splits / transfers, cellar calculators, insertBatchRow
 filling.js                 Filling tab: spec limits, Cpk / process capability, HBT filling status, day number (has a test)
+filling-report.js          Filling report tab: book in / out per session (BOM expected, loss), volume balance, pie chart (has a test)
 batch-report-shell.js      shared frame of the batch tabs: header, tabs, autosave, confirm dialog, undo toast
 batch-report.css           shared styles of the batch-report screens (load after jopen-shared.css)
 voorraad-forecast.js       consumption calculation (shared module)
@@ -227,6 +228,7 @@ Agreed table and column names per table: `supabase/rename-map.json`.
 | `batchcreation.html` | batches | batches, recipes, recipe_fermentation (+ batch report via `batchrapport-vullen.js`) |
 | `all-batches.html` | batches | batches, recipes, batch_stages (view) |
 | `active-batches.html` | batches | batches, recipes, tanks, batch_stages (view) |
+| `batch-filling-report.html` | batches | batches, filling_sessions, filling_session_articles, filling_session_materials, packaging_articles/_materials/_article_materials, batch_hbts, hbt_readings, batch_transfers, batch_brews, tanks |
 | `batch-filling.html` | batches | batches, filling_sessions, filling_measurements, batch_hbts, hbt_readings, tanks, users, recipe_packaging/_fermentation |
 | `batch-processing.html` | batches | batches, processing_sessions, processing_comments, batch_hbts, hbt_readings, batch_transfers, batch_brews, batch_ingredients, tanks, users, cellar_plan_parts, recipe_fermentation/_packaging/_process_steps |
 | `batch-fermentation.html` | batches | batches, batch_cellar_steps (`snapshot_batch_cellar_steps()`), fermentation_log_entries, fermentation_log_entry_tags, cellar_action_tags, batch_transfers, batch_brews, batch_ingredients, tanks, users, recipe_specs/_fermentation |
@@ -234,7 +236,7 @@ Agreed table and column names per table: `supabase/rename-map.json`.
 | `batch-overview.html` | batches | batches, batch_ingredients, `snapshot_batch_ingredients()`, recipes + recipe_specs/_fermentation/_brewing_specs/_packaging/_water/_revisions, ingredients, stock_movements, lots |
 | `voorraad-overzicht/inboeken/uitboeken.html` | inventory | lots, stock_movements, ingredients, batches, users |
 | `statistics.html` | statistics | ingredients, ingredient_documents, document_types |
-| `settings.html` | settings | units, ingredient_categories, document_types, ingredient_declarations, water_settings (+ _history), cellar_action_tags, cellar_plan_parts (`apply_cellar_plan_order()`), recipe_ingredients (count) |
+| `settings.html` | settings | units, ingredient_categories, document_types, ingredient_declarations, water_settings (+ _history), cellar_action_tags, cellar_plan_parts (`apply_cellar_plan_order()`), recipe_ingredients (count), packaging_articles/_materials/_article_materials (+ filling_session_articles/_materials, count) |
 | `gebruikers.html` | admin only (`user_management`) | users, roles, `admin_get_last_logins()` |
 | `rollen.html` | admin only (`role_management`) | roles, role_permissions, permission_modules |
 | `status.html` | admin only | counts on batches, recipes, ingredients, users |

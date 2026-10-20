@@ -132,7 +132,7 @@ assert.strictEqual(s.batchHref('brewing', 7), 'batch-brewing.html?id=7');
 assert.strictEqual(s.batchHref('raw', 7), 'batch-overview.html?id=7');
 assert.strictEqual(s.batchHref('hbt', 7), 'batch-processing.html?id=7');
 assert.strictEqual(s.batchHref('filling', 7), 'batch-filling.html?id=7');
-assert.strictEqual(s.batchHref('filled', 7), 'batch-filling.html?id=7');
+assert.strictEqual(s.batchHref('filled', 7), 'batch-filling-report.html?id=7');
 assert.strictEqual(s.batchHref('closed', 7), 'batch-overview.html?id=7');
 
 // HBT tiles: formats, release, HBT as tank chip

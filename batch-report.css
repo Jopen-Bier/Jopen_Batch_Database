@@ -336,6 +336,34 @@ select.br-in { text-align: left; cursor: pointer; }
 .br-ing td.fi-cpk.warn { color: #96601f; }
 .br-ing td.fi-cpk.bad, .br-ing td.fi-low { color: var(--br-alert-text); font-weight: 700; }
 
+/* Filling report (batch-filling-report.html) */
+.fr-balance { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr)); gap: 12px 28px; align-items: start; }
+.br-ing tr.fr-sub td { background: #f6f4ee; font-weight: 700; }
+.br-ing tr.fr-ok td { background: #eef0e6; }
+.br-ing tr.fr-warn td { background: #fdf1d8; }
+.br-ing tr.fr-bad td { background: var(--br-alert-tint); }
+.br-ing td.fr-minus { padding-left: 22px; color: var(--br-hop-dark); }
+.fr-pie { display: flex; gap: 22px; align-items: center; flex-wrap: wrap; }
+.fr-pie svg { width: 200px; height: 200px; flex-shrink: 0; }
+.fr-legend { display: flex; flex-direction: column; gap: 6px; min-width: 240px; flex: 1; }
+.fr-legend > div { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.fr-legend .sw { width: 12px; height: 12px; border-radius: 3px; box-sizing: border-box; flex-shrink: 0; }
+.fr-legend .lb { flex: 1; }
+.fr-legend .pc { width: 56px; text-align: right; color: var(--br-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.fr-books { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(480px, 100%), 1fr)); gap: 14px; align-items: start; }
+.fr-book { border: 1px solid var(--br-line-soft); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.fr-loss { display: inline-block; min-width: 44px; text-align: center; border-radius: 10px; padding: 2px 8px; font-size: 12px; font-weight: 700; color: #a89f8e; }
+.fr-loss.ok { background: #e1ead9; color: #33473a; }
+.fr-loss.lost { background: #fdf1d8; color: #7a4f17; }
+.fr-loss.short { background: #f8dcd3; color: #8f2909; }
+.fr-summary { max-width: 980px; max-height: calc(100vh - 32px); overflow: auto; gap: 16px; }
+@media print {
+  body:has(#fr-summary) > *:not(#fr-summary) { display: none !important; }
+  #fr-summary { position: static; background: none; padding: 0; }
+  #fr-summary .fr-summary { max-height: none; box-shadow: none; }
+  #fr-summary button { display: none; }
+}
+
 @media (max-width: 600px) {
   .br-beer { font-size: 22px; }
   .br-main { padding: 16px 16px 48px; }

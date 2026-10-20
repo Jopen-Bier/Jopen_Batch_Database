@@ -439,6 +439,22 @@ Per filling session:
 - `filling_session_materials`: `id`, `batch_id`, `filling_session_id`,
   `material_id`, `quantity` (used, booked out).
 
+Built 20-10 (migration `20261020150212_batch_report_filling_report`):
+- Master data also has `sort_order` and the created_/updated_ columns;
+  `code` is snake_case and unique; `packaging_materials.unit` default `pcs`;
+  `packaging_articles.package_format` bottle / can / keg,
+  `liters_per_unit > 0`. BOM: own `id`, unique (article_id, material_id),
+  `quantity > 0`; deleting an article removes its BOM, a material in a BOM
+  or booked cannot be deleted (no cascade).
+- Session articles / materials: unique per (session, article / material),
+  `quantity >= 0` and may be empty while being entered; foreign key
+  (filling_session_id, batch_id) → filling_sessions (cascade); the article /
+  material itself cannot be deleted while booked.
+- Seed: the 18 articles, 32 materials and 58 BOM lines of the mockup
+  (Jaap checks / completes them in Settings › Packaging articles /
+  materials).
+- No new `batch_stages` columns: the balance is computed in the page.
+
 Parked columns on `batches` (do not create until Jaap decides):
 `filling_comment`, `mdrank_entered_by`, `mdrank_entered_at`,
 `filling_report_completed_by/_at`, `filling_report_signed_by/_at`.
