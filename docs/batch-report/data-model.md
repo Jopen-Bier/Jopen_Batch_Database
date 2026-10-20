@@ -238,7 +238,9 @@ mockup `Settings.dc.html`). RLS: select all logged-in; write via `settings`.
 `id`, `code text unique`, `kind` check in (`dry_warm`, `cold_dry_hop`,
 `cooling_lagering`, `sample_lab`, `dry_hop_at_lagering`, `addition_timing`),
 `label`, `shows_on` check in (`cellar_plan`, `processing`),
-`on_addition_day boolean`, `sort_order`, `is_active`. Fixed parts have
+`on_addition_day boolean`, `sort_order`, `is_active`, `tag_id not null →
+cellar_action_tags` (the tag of the part's step; migration
+`cellar_plan_part_tags`). Fixed parts have
 `code = kind`; `addition_timing` rows are the timing values of cellar
 additions (`recipe_ingredients.timing` holds the code). Order = order of the
 generated plan (business-rules). RLS: select all logged-in; write via

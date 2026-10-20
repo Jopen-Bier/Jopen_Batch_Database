@@ -83,8 +83,7 @@
       const cls = 'br-tile' + (issue ? ' warn' : lines.isOk ? ' ok' : '');
       const title = `${row.batchNumber} · ${row.name}${issue ? ' · ' + issue : ''}`;
       // Each stage links to its own tab once that tab exists, else to the Overview.
-      const tab = { brewing: 'brewing', fermentation: 'fermentation', lagering: 'fermentation' }[row.stage];
-      const href = (tab && batchTabHref(tab, row.id)) || `batch-overview.html?id=${row.id}`;
+      const href = batchHref(row.stage, row.id);
       return `<a class="${cls}" href="${href}" title="${escapeHtml(title)}">
         ${issue ? '<span class="br-bang" aria-label="Needs attention">!</span>' : ''}
         <div class="br-tile-top">

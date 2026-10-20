@@ -121,8 +121,9 @@ their own screen). Filters: search, status, year (default all years), WP/JK.
 - Fermentation curve: Plato and temperatures vs days since Time 0, spec lines
   (final extract, warm dry hop extract).
 - Built (phase 4): Time 0 shows "End of the last brew" or "Set by hand · use
-  end of last brew"; the GLT total from Brewing is offered as the first
-  measurement when the log is empty; a run of more than 3 days without a
+  end of last brew"; the first measurement is always the Time 0 row with the
+  GLT total from Brewing (added automatically, moves with Time 0, no delete);
+  beer risk / status as coloured badges (recipe-values.js); a run of more than 3 days without a
   measurement is one dashed row; transfers use an inline form (date, hl, from
   GLT/LT, To batch by batch number or Discard with a required reason) and are
   deleted / re-added rather than edited; the plan on the batch is read-only
@@ -140,11 +141,14 @@ Save / Delete. A used tag has no Delete: make it inactive.
 Section "Cellar plan" on `settings.html` (`#cellar-plan`), module `settings`.
 One table of `cellar_plan_parts` in plan order: drag handle · label · kind
 (fixed / timing value) · shows on (Cellar plan / Processing) · on addition
-day · active · used (recipe lines) · Save / Delete (only unused timing
+day · tag · active · used (recipe lines) · Save / Delete (only unused timing
 values). Add a timing value; button "Apply order to the recipes" (confirm).
 
 ## Recipe editor · cellar plan
-Block "Cellar plan" on `recept-invoer.html` after Process steps
+Block "Cellar plan" on `recept-invoer.html` right after Additions Cellar (the
+Process steps block is gone; its values stay in the database). The recipe
+overview (`receptoverzicht.html`) shows the plan read-only in the same place.
+Block
 (`recipe-cellar-plan.js`). Per step: ▲▼ · Step · What · Tag · When (at
 extract / at temperature / on day / after previous) · value · ± · day ·
 lagering starts. Status per step: "from recipe data", "edited" or "added by

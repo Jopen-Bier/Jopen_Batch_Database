@@ -82,6 +82,11 @@ EBU total compared with `recipe_specs.bitterness` ± `bitterness_tol`.
   `batches.time_zero` means the default; `batch_stages.time_zero` gives the
   value in use.
 - Day of an entry = (measured_at − time_zero) in days, 1 decimal.
+- **The first measurement is always at Time 0** (Jaap, 20-10): added when the
+  Fermentation log opens for an editor and the log has nothing at or before
+  Time 0, with the GLT total of the brews (volume-weighted extract °P, average
+  pH; comment "Time 0 · GLT total … hl"). It moves along when Time 0 changes
+  and cannot be deleted.
 - Recipe days (`recipe_process_steps.dry_hop_1_day`, `cellar_addition_day`)
   count from Time 0.
 
@@ -90,6 +95,12 @@ Function `generate_recipe_cellar_steps(recipe_id, reset_order)`, run on every
 recipe save (after the plan the editor shows is saved by
 `save_recipe_cellar_steps`). The **order comes from Settings › Cellar plan**
 (`cellar_plan_parts`, drag and drop). Default order:
+
+Each part has a **tag** (Settings, column Tag): the action tag that ticks
+its step off. Defaults: Dry warm → Dry warm; Cold dry hop → "Cooling 16C"
+for the cooling (the dry hop step stays Dryhopping); Cooling to lagering
+temperature → Cooling; Sample to lab → Sample to lab; Dry hop at lagering
+temperature → Dryhopping; timing values → Addition.
 
 | # | Part | Generates |
 |---|---|---|
@@ -127,7 +138,9 @@ A new recipe version gets the plan of the previous version, then the
 generator links it to the new lines. **Apply order to the recipes**
 (Settings, `apply_cellar_plan_order()`) regenerates every recipe with a plan
 with `reset_order`: all steps in the Settings order, a step added by hand
-right after the generated step it followed. Batches keep their snapshot.
+right after the generated step it followed. Planned batches without
+fermentation log entries then get the new plan; batches with entries keep
+their snapshot.
 
 `recipe_process_steps` checkboxes are **not** used to decide (unreliable:
 e.g. Mooie Nel has dry_hop_warm and bevasil false while the recipe uses them).

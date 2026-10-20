@@ -220,6 +220,29 @@ function tileLines(row, now = new Date()) {
   return { line1: stageInfo(row.stage).label, line2: '', isOk: false, progress: null };
 }
 
+// Tabs in order; page = null until the phase that builds it.
+const BATCH_TABS = [
+  { key: 'overview', label: 'Overview', page: 'batch-overview.html' },
+  { key: 'brewing', label: 'Brewing', page: 'batch-brewing.html' },
+  { key: 'fermentation', label: 'Fermentation log', page: 'batch-fermentation.html' },
+  { key: 'processing', label: 'Processing', page: null, phase: 5 },
+  { key: 'filling', label: 'Filling', page: null, phase: 6 },
+  { key: 'filling-report', label: 'Filling report', page: null, phase: 7 },
+];
+
+/** Link to a batch tab, e.g. batchTabHref('overview', 12). */
+function batchTabHref(tabKey, batchId) {
+  const tab = BATCH_TABS.find((t) => t.key === tabKey);
+  return tab && tab.page ? `${tab.page}?id=${batchId}` : null;
+}
+
+// The tab a batch opens on from a list: the tab of its current stage once
+// that tab exists, else the Overview.
+const STAGE_TABS = { brewing: 'brewing', fermentation: 'fermentation', lagering: 'fermentation' };
+function batchHref(stage, batchId) {
+  return batchTabHref(STAGE_TABS[stage], batchId) || batchTabHref('overview', batchId);
+}
+
 // Progress strip on the batch tabs: one step per process tab.
 const PROGRESS_STEPS = [
   { key: 'brewing', label: 'Brewing', stages: ['brewing'] },
@@ -242,6 +265,7 @@ function progressSteps(stage) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
+    BATCH_TABS, batchTabHref, batchHref,
     BATCH_STAGES, ACTIVE_SECTIONS,
     stageInfo, stageOrder, batchYear, tankNumber, versionText, toBatchRow,
     filterBatches, sortBatches, compareByTank, groupActiveBatches, dayMonth, tileLines,

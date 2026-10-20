@@ -2,30 +2,14 @@
 // batch-report-shell.js — shared frame of the batch tabs (batch-overview.html
 // and the tabs of later phases): load the batch, header with stage pill and
 // save status, tab bar, confirm dialog and the "deleted · Undo" toast.
-// Needs: config.js, jopen-utils.js, nav.js, batch-stages.js; styles in
+// Needs: config.js, jopen-utils.js, nav.js, batch-stages.js (tabs); styles in
 // batch-report.css. Spec: docs/batch-report/screens.md, "Shared behaviour".
 // ============================================================================
-
-// Tabs in order; page = null until the phase that builds it.
-const BATCH_TABS = [
-  { key: 'overview', label: 'Overview', page: 'batch-overview.html' },
-  { key: 'brewing', label: 'Brewing', page: 'batch-brewing.html' },
-  { key: 'fermentation', label: 'Fermentation log', page: 'batch-fermentation.html' },
-  { key: 'processing', label: 'Processing', page: null, phase: 5 },
-  { key: 'filling', label: 'Filling', page: null, phase: 6 },
-  { key: 'filling-report', label: 'Filling report', page: null, phase: 7 },
-];
 
 /** Id of the batch in the page URL (?id=…), or null. */
 function batchIdFromUrl() {
   const id = Number(new URLSearchParams(window.location.search).get('id'));
   return Number.isInteger(id) && id > 0 ? id : null;
-}
-
-/** Link to a batch tab, e.g. batchTabHref('overview', 12). */
-function batchTabHref(tabKey, batchId) {
-  const tab = BATCH_TABS.find((t) => t.key === tabKey);
-  return tab && tab.page ? `${tab.page}?id=${batchId}` : null;
 }
 
 /**
@@ -228,5 +212,5 @@ async function loadUserInitials() {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { BATCH_TABS, batchIdFromUrl, batchTabHref, parseNumberInput };
+  module.exports = { batchIdFromUrl, parseNumberInput };
 }

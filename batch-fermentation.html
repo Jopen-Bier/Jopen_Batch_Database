@@ -37,6 +37,7 @@
   <script src="config.js"></script>
   <script src="jopen-utils.js"></script>
   <script src="nav.js"></script>
+  <script src="recipe-values.js"></script>
   <script src="batch-stages.js"></script>
   <script src="batch-ingredients.js"></script>
   <script src="batch-brews.js"></script>
@@ -132,6 +133,41 @@
       sortEntries();
       renderSoon(`[data-entry="${entry.id}"][data-field="${focusField}"]`);
       return entry;
+    }
+
+    // The Time 0 measurement: the entry at exactly Time 0.
+    const sameMoment = (a, b) => !!a && !!b && new Date(a).getTime() === new Date(b).getTime();
+    const isT0 = (entry) => sameMoment(entry.measured_at, timeZero());
+
+    /**
+     * Every log starts with a measurement at Time 0, with the GLT total of the
+     * brews (extract and pH). Added when the page opens for an editor and the
+     * log has nothing at or before Time 0.
+     */
+    async function ensureTimeZeroEntry() {
+      const t0 = timeZero();
+      if (!page.canEdit || !t0 || page.entries.some((e) => new Date(e.measured_at) <= new Date(t0))) return;
+      const glt = gltTotal();
+      await insertRow('fermentation_log_entries', {
+        batch_id: page.ctx.batch.id, measured_at: new Date(t0).toISOString(),
+        extract: glt ? Math.round(glt.extract * 100) / 100 : null,
+        ph: glt && glt.ph !== null ? Math.round(glt.ph * 100) / 100 : null,
+        comment: glt ? `Time 0 · GLT total ${glt.volumeHl.toFixed(1)} hl` : 'Time 0',
+      }, page.entries);
+      sortEntries();
+    }
+
+    // Time 0 changes: the Time 0 measurement moves along.
+    async function setTimeZero(value) {
+      const before = timeZero();
+      const entry = page.entries.find((e) => sameMoment(e.measured_at, before));
+      const ok = await saveBatch({ time_zero: value });
+      const after = timeZero();
+      if (ok && entry && after && !sameMoment(before, after)) {
+        await saveEntry(entry, { measured_at: new Date(after).toISOString() });
+        sortEntries();
+        renderSoon();
+      }
     }
 
     async function addTag(entryId, tagId) {
@@ -247,6 +283,12 @@
         .map((t) => `<option value="${t.id}"${t.id === selected ? ' selected' : ''}>${escapeHtml(t.code)} · ${fmt(t.volume_hl)} hl</option>`).join('');
     }
 
+    // Badge as on the recipe pages (recipe-values.js: label and colours).
+    function valuePill(labels, colors, code) {
+      const [bg, fg] = colors[code] || ['#ece8dc', '#33473a'];
+      return `<span class="br-pill" style="background:${bg}; color:${fg};">${escapeHtml(valueLabel(labels, code))}</span>`;
+    }
+
     function renderBatchCard() {
       const b = page.ctx.batch, jk = page.ctx.recipe.location === 'jk';
       const t0 = timeZero(), now = new Date();
@@ -263,8 +305,8 @@
             ${t0 ? `<div class="br-note">Day ${escapeHtml(fmt(Math.max(0, daysSince(now, t0)), 1))}</div>` : ''}</div>
         </div>
         <div style="display:flex; gap:16px; flex-wrap:wrap; padding-top:8px;">
-          <div><div class="br-label">Beer risk</div><span class="br-pill">${escapeHtml(page.ferm.beer_risk || '—')}</span></div>
-          <div><div class="br-label">Beer status</div><span class="br-pill">${escapeHtml(page.ferm.beer_status || '—')}</span></div>
+          <div><div class="br-label">Beer risk</div>${valuePill(BEER_RISK_LABELS, BEER_RISK_COLORS, page.ferm.beer_risk)}</div>
+          <div><div class="br-label">Beer status</div>${valuePill(BEER_STATUS_LABELS, BEER_STATUS_COLORS, page.ferm.beer_status)}</div>
         </div>
         <div class="br-field" style="padding-top:8px;"><label class="br-label" for="fl-t0">Time 0 · last brew in tank</label>
           <input id="fl-t0" type="datetime-local" class="br-input" style="width:auto;" value="${escapeHtml(toDateTimeLocal(t0))}"${dis()}>
@@ -402,23 +444,18 @@
           <td class="n"><b>${dayText(l.days)}</b></td>
           <td>${input(e, 'extract', 'Plato')}</td><td>${input(e, 'temp_high', 'Temperature high')}</td><td>${input(e, 'temp_low', 'Temperature low')}</td><td>${input(e, 'ph', 'pH')}</td>
           <td class="cv">${l.decrease === null ? '' : fmt(l.decrease, 1)}</td><td class="cv">${l.hours === null ? '' : l.hours}</td>
-          <td><input class="br-in l" type="date" data-entry="${e.id}" data-field="date" value="${escapeHtml(localDate(e.measured_at))}" aria-label="Date"${dis()}></td>
-          <td><input class="br-in l" type="time" data-entry="${e.id}" data-field="time" value="${escapeHtml(hm(e.measured_at))}" aria-label="Time"${dis()}></td>
+          <td><input class="br-in l" type="date" data-entry="${e.id}" data-field="date" value="${escapeHtml(localDate(e.measured_at))}" aria-label="Date"${isT0(e) ? ' disabled title="Moves with Time 0"' : dis()}></td>
+          <td><input class="br-in l" type="time" data-entry="${e.id}" data-field="time" value="${escapeHtml(hm(e.measured_at))}" aria-label="Time"${isT0(e) ? ' disabled title="Moves with Time 0"' : dis()}></td>
           <td><div class="fl-tags">${chips}${page.canEdit ? tagSelect(e.id) : ''}</div></td>
           <td>${input(e, 'comment', 'Comments', ' l')}</td>
           <td class="small" style="text-align:center;">${escapeHtml(page.initialsOf(e.created_by))}</td>
-          <td>${page.canDelete ? `<button class="br-del" type="button" data-delete-entry="${e.id}" aria-label="Delete measurement">${TRASH_ICON}</button>` : ''}</td></tr>`;
+          <td>${page.canDelete && !isT0(e) ? `<button class="br-del" type="button" data-delete-entry="${e.id}" aria-label="Delete measurement">${TRASH_ICON}</button>` : ''}</td></tr>`;
       }).join('');
-      const glt = gltTotal();
-      const offer = page.canEdit && !page.entries.length && glt && t0
-        ? `<div class="br-note-box">Brewing ended with a GLT total of <b>${glt.extract.toFixed(2)} °P</b>${glt.ph !== null ? ` · pH <b>${glt.ph.toFixed(2)}</b>` : ''} (${glt.volumeHl.toFixed(1)} hl).
-           <button class="br-primary" type="button" id="fl-add-glt">Add as first measurement at Time 0</button></div>` : '';
       document.getElementById('fl-log').innerHTML = `
         <div class="br-head" style="align-items:center;">
           <div class="br-label">Measurements &amp; actions</div>
           ${page.canEdit ? '<button class="br-primary" type="button" id="fl-add-entry">+ Add measurement</button>' : ''}
         </div>
-        ${offer}
         ${page.entries.length ? `<div class="br-table-wrap"><table class="br-ing fl-log" style="min-width:1210px;">
           <thead><tr><th class="r" style="width:50px;">Days</th><th class="r" style="width:66px;">Plato</th><th class="r" style="width:72px;">Temp. high</th>
             <th class="r" style="width:72px;">Temp. low</th><th class="r" style="width:60px;">pH</th><th class="r" style="width:72px;">Plato decr.</th>
@@ -426,7 +463,7 @@
             <th>Comments</th><th style="width:46px;">Op.</th><th style="width:34px;"></th></tr></thead>
           <tbody>${body}</tbody></table></div>`
           : `<div class="br-note">No measurements yet.${t0 ? '' : ' Days count from Time 0, the end of the last brew.'}</div>`}
-        <div class="br-note">Days count from Time 0. A tag on a measurement ticks off the next plan step with that tag.</div>`;
+        <div class="br-note">Days count from Time 0. The first measurement is at Time 0, with the GLT total from Brewing (Plato and pH); it moves when Time 0 changes. A tag on a measurement ticks off the next plan step with that tag.</div>`;
     }
 
     function renderTransfers() {
@@ -572,7 +609,7 @@
         const el = e.target;
         if (el.id === 'fl-glt') return saveBatch({ glt_tank_id: el.value ? Number(el.value) : null });
         if (el.id === 'fl-lt') return saveBatch({ lt_tank_id: el.value ? Number(el.value) : null });
-        if (el.id === 'fl-t0') return saveBatch({ time_zero: el.value ? new Date(el.value).toISOString() : null });
+        if (el.id === 'fl-t0') return setTimeZero(el.value ? new Date(el.value).toISOString() : null);
         if (el.dataset.draft) {
           page.transferDraft[el.dataset.draft] = el.value;
           if (el.dataset.draft === 'destination') renderSoon();
@@ -600,15 +637,10 @@
         }
       });
       main.addEventListener('click', (e) => {
-        if (e.target.closest('#fl-t0-reset')) return saveBatch({ time_zero: null });
+        if (e.target.closest('#fl-t0-reset')) return setTimeZero(null);
         if (e.target.closest('#fl-add-entry')) {
           const now = new Date(); now.setSeconds(0, 0);
           return addEntry({ measured_at: now.toISOString() });
-        }
-        if (e.target.closest('#fl-add-glt')) {
-          const glt = gltTotal();
-          return addEntry({ measured_at: timeZero(), extract: Math.round(glt.extract * 100) / 100,
-            ph: glt.ph !== null ? Math.round(glt.ph * 100) / 100 : null, comment: `GLT total · ${glt.volumeHl.toFixed(1)} hl` }, 'temp_high');
         }
         const gap = e.target.closest('button[data-gap-date]');
         if (gap) return addEntry({ measured_at: new Date(`${gap.dataset.gapDate}T08:00`).toISOString() });
@@ -662,6 +694,7 @@
       showMessage('');
       document.getElementById('fl-content').style.display = 'flex';
       bindEvents();
+      await ensureTimeZeroEntry();
       renderAll();
     }
 
