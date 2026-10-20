@@ -82,16 +82,18 @@ function maturation(lageringStartedAt, lageringTimeDays, now = new Date()) {
 }
 
 /**
- * Cellar loss = volume into GLT − splits from GLT / LT − total HBT end volume.
- * transfers: batch_transfers rows; hbtTankIds: tank ids of the batch's HBTs
- * (a transfer from one of those is after processing, not a cellar split).
+ * Cellar loss = volume into GLT + beer in from splits − splits from GLT / LT
+ * − total HBT end volume. transfers: batch_transfers rows going out;
+ * hbtTankIds: tank ids of the batch's HBTs (a transfer from one of those is
+ * after processing, not a cellar split); incomingHl: batch_stages.incoming_volume_hl.
  */
-function cellarLoss({ gltVolumeHl, transfers = [], hbtTankIds = [], hbtEndTotalHl }) {
+function cellarLoss({ gltVolumeHl, transfers = [], hbtTankIds = [], hbtEndTotalHl, incomingHl = 0 }) {
   const hbt = new Set(hbtTankIds);
   const splitsHl = transfers.filter((t) => !hbt.has(t.from_tank_id)).reduce((s, t) => s + (procNumber(t.volume_hl) || 0), 0);
-  const glt = procNumber(gltVolumeHl);
+  const incoming = procNumber(incomingHl) || 0;
+  const glt = procNumber(gltVolumeHl) === null && incoming ? 0 : procNumber(gltVolumeHl);
   if (glt === null) return { lossHl: null, splitsHl, negative: false };
-  const lossHl = glt - splitsHl - (procNumber(hbtEndTotalHl) || 0);
+  const lossHl = glt + incoming - splitsHl - (procNumber(hbtEndTotalHl) || 0);
   return { lossHl, splitsHl, negative: lossHl < -1e-9 };
 }
 

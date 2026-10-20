@@ -19,7 +19,7 @@ function batchIdFromUrl() {
 async function loadBatchContext(batchId) {
   const [batchRes, stageRes] = await Promise.all([
     supabaseClient.from('batches')
-      .select('*, recipes(id, name, beer_style, location, version_major, version_minor, brew_volume_hl)')
+      .select('*, recipes(id, name, beer_style, location, version_major, version_minor, brew_volume_hl, recipe_group_id)')
       .eq('id', batchId)
       .maybeSingle(),
     supabaseClient.from('batch_stages').select('*').eq('batch_id', batchId).maybeSingle(),

@@ -77,7 +77,7 @@
     const num = (v) => toNumber(v);
     const fmt = (v, digits) => (v === null || v === undefined || v === '' ? '—'
       : Number(v).toLocaleString('en-GB', { maximumFractionDigits: digits ?? 2 }));
-    const amountCtx = () => ({ brewCount: page.ctx.batch.brew_count, brewVolumeHl: page.ctx.recipe.brew_volume_hl });
+    const amountCtx = () => amountContext(page.ctx.batch, page.ctx.recipe, page.ctx.stageRow);
     const orderPicked = () => !!page.ctx.batch.order_picking_completed_at;
     const visibleRows = (types) => page.rows.filter((r) => types.includes(r.addition_type) && !r.is_removed);
     const ingredientName = (r) => page.names[r.ingredient_id] || r.note || '(no ingredient)';
@@ -205,6 +205,7 @@
       };
       const brews = num(batch.brew_count);
       const hl = num(recipe.brew_volume_hl);
+      const incomingHl = num(page.ctx.stageRow && page.ctx.stageRow.incoming_volume_hl);
       const dis = page.canEdit ? '' : ' disabled';
       document.getElementById('ov-batch-card').innerHTML = `
         <div class="br-label">Batch</div>
@@ -212,6 +213,8 @@
         <div class="br-kr"><span class="k">Beer style</span><span class="c">${escapeHtml(recipe.beer_style || '—')}</span></div>
         <div class="br-kr"><span class="k">Brewery</span><span class="c">${escapeHtml(BREWERY_NAMES[recipe.location] || '—')}</span></div>
         <div class="br-kr"><span class="k">Number of brews</span><span class="c">${brews === null ? '—' : fmt(brews)}${hl ? ` × ${fmt(hl)} hl` : ''}</span></div>
+        ${incomingHl ? `<div class="br-kr"><span class="k">From splits</span><span class="c">${fmt(incomingHl)} hl</span></div>
+        <div class="br-kr"><span class="k">Batch volume <span class="br-note">· dosing</span></span><span class="c">${fmt(dosingVolumeHl(amountCtx()))} hl</span></div>` : ''}
         <div class="br-kr"><span class="k">Beer risk · beer status</span><span>${pill(BEER_RISK_LABELS, BEER_RISK_COLORS, risk)} ${pill(BEER_STATUS_LABELS, BEER_STATUS_COLORS, status)}</span></div>
         <div class="br-field"><label class="br-label" for="ov-pick-date">Date order picking</label>
           <input id="ov-pick-date" type="date" value="${escapeHtml(batch.order_picking_date || '')}"${dis}></div>

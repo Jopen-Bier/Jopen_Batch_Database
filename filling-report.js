@@ -90,42 +90,44 @@ function sessionDifference(filledL, sessionVolumeHl) {
 
 /**
  * Volume balance in hl (business-rules.md "Volume balance"):
- * GLT − splits from GLT / LT − cellar loss = in HBT; in HBT − splits from HBT
+ * GLT + in from splits − splits from GLT / LT − cellar loss = in HBT; in HBT − splits from HBT
  * − packaged = filling remainder / loss. transfers: batch_transfers rows;
  * hbtTankIds: tanks of the batch's HBTs (a transfer from one of those is
  * after processing). packagedHl: { bottle, can, keg } in hl.
  */
-function volumeBalance({ gltHl, transfers = [], hbtTankIds = [], hbtEndTotalHl, packagedHl = {} }) {
+function volumeBalance({ gltHl, transfers = [], hbtTankIds = [], hbtEndTotalHl, packagedHl = {}, incomingHl = 0 }) {
   const hbt = new Set(hbtTankIds);
   const vol = (t) => reportNumber(t.volume_hl) || 0;
   const preTransfers = transfers.filter((t) => !hbt.has(t.from_tank_id));
   const postTransfers = transfers.filter((t) => hbt.has(t.from_tank_id));
   const splitsPreHl = preTransfers.reduce((s, t) => s + vol(t), 0);
   const splitsPostHl = postTransfers.reduce((s, t) => s + vol(t), 0);
-  const glt = reportNumber(gltHl);
+  const incoming = reportNumber(incomingHl) || 0;
+  const glt = reportNumber(gltHl) === null && incoming ? 0 : reportNumber(gltHl);
   const inHbtHl = reportNumber(hbtEndTotalHl) || 0;
-  const cellarLossHl = glt === null ? null : glt - splitsPreHl - inHbtHl;
+  const startHl = glt === null ? null : glt + incoming;   // all beer the batch got
+  const cellarLossHl = startHl === null ? null : startHl - splitsPreHl - inHbtHl;
   const pk = { bottle: packagedHl.bottle || 0, can: packagedHl.can || 0, keg: packagedHl.keg || 0 };
   const packaged = pk.bottle + pk.can + pk.keg;
   const availableHl = inHbtHl - splitsPostHl;
   const remainderHl = availableHl - packaged;
   const remainderShare = availableHl > 0 ? remainderHl / availableHl : null;
   return {
-    gltHl: glt, splitsPreHl, splitsPostHl, preTransfers, postTransfers, cellarLossHl, inHbtHl,
+    gltHl: glt, incomingHl: incoming, startHl, splitsPreHl, splitsPostHl, preTransfers, postTransfers, cellarLossHl, inHbtHl,
     availableHl, packagedHl: pk, packagedTotalHl: packaged, remainderHl, remainderShare,
     cellarLossNegative: cellarLossHl !== null && cellarLossHl < -1e-9,
     remainderOk: remainderShare !== null && remainderShare <= FILLING_LOSS_OK_SHARE,
   };
 }
 
-/** Pie parts of a balance: [{ key, label, color, hl, share (of GLT, or null) }]. Negative parts count 0. */
+/** Pie parts of a balance: [{ key, label, color, hl, share (of GLT + incoming, or null) }]. Negative parts count 0. */
 function pieParts(balance) {
   const value = {
     bottle: balance.packagedHl.bottle, can: balance.packagedHl.can, keg: balance.packagedHl.keg,
     splits: balance.splitsPreHl + balance.splitsPostHl,
     cellarLoss: Math.max(0, balance.cellarLossHl || 0), remainder: Math.max(0, balance.remainderHl),
   };
-  return PIE_PARTS.map((p) => ({ ...p, hl: value[p.key], share: balance.gltHl ? value[p.key] / balance.gltHl : null }));
+  return PIE_PARTS.map((p) => ({ ...p, hl: value[p.key], share: balance.startHl ? value[p.key] / balance.startHl : null }));
 }
 
 /** SVG path per part with a value above 0 (circle with radius r around (c, c)), starting at 12 o'clock. */

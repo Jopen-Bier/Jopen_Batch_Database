@@ -471,6 +471,22 @@ Parked columns on `batches` (do not create until Jaap decides):
 batch number, brew count 0). How a base beer line references the source beer
 is open (open-questions).
 
+Built 20-10 (migration `20261020151500_batch_report_splits`):
+- `recipe_ingredients.source_recipe_group_id uuid` and the same on
+  `batch_ingredients` (snapshot copies it); `addition_type` allows
+  `base_beer`; check: base_beer ⇔ source_recipe_group_id set, and on recipe
+  lines no ingredient and 0 < quantity ≤ 100 (%). No foreign key:
+  `recipes.recipe_group_id` is shared by the versions.
+- `save_recipe_ingredients()` saves `source_recipe_group_id`.
+- `split_batch(p_batch_id, p_transferred_at, p_volume_hl, p_from_tank_id,
+  p_destination 'new'|'batch'|'discard', p_recipe_id, p_to_batch_id,
+  p_reason, p_comment)` → `{ transfer_id, to_batch_id, batch_number,
+  log_entry_id }`; security invoker, execute for authenticated only.
+- `batch_stages` appends `incoming_volume_hl`, `first_incoming_at`; a batch
+  without started brews that received beer is brewed (fermentation /
+  lagering) and gets its start date and Time 0 from the first transfer.
+- No new table: `batch_transfers` (phase 4) holds both directions.
+
 ---
 
 ## RLS summary

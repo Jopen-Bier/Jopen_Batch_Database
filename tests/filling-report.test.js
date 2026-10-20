@@ -72,6 +72,13 @@ assert.strictEqual(neg.remainderOk, false);     // nothing packaged: 100 % remai
 assert.strictEqual(r.volumeBalance({ gltHl: null, hbtEndTotalHl: 0 }).cellarLossHl, null);
 assert.strictEqual(r.volumeBalance({ gltHl: 10 }).remainderShare, null);
 
+// A split batch: no GLT volume, 25.5 hl in from splits
+const sb = r.volumeBalance({ gltHl: null, incomingHl: 25.5, hbtEndTotalHl: 25, packagedHl: { can: 24.8 } });
+assert.deepStrictEqual([sb.gltHl, sb.startHl, sb.cellarLossHl], [0, 25.5, 0.5]);
+assert.strictEqual(sb.remainderHl.toFixed(1), '0.2');
+assert.strictEqual(r.pieParts(sb)[1].share.toFixed(3), '0.973');   // share of 25.5 hl
+assert.strictEqual(b.startHl, 80);
+
 // Pie: parts with share of GLT; negatives count 0; slices only above 0
 const parts = r.pieParts(b);
 assert.deepStrictEqual(parts.map((p) => p.key), ['bottle', 'can', 'keg', 'splits', 'cellarLoss', 'remainder']);

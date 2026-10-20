@@ -244,7 +244,7 @@
           <tbody>${hops.map((r) => `<tr><td class="n">${escapeHtml(boilTimeMin(r.timing) ?? r.timing ?? '—')}</td><td>${escapeHtml(name(r))}</td>
             <td class="n">${fmt(r.quantity, 0)}</td><td class="small">${r.hop_dosing_tank ? 'HDT ' + r.hop_dosing_tank : 'No'}</td></tr>`).join('')
             || '<tr><td colspan="4" class="small">No boil hops.</td></tr>'}</tbody></table>`;
-      const ctx = { brewCount: page.ctx.batch.brew_count, brewVolumeHl: page.ctx.recipe.brew_volume_hl };
+      const ctx = amountContext(page.ctx.batch, page.ctx.recipe, page.ctx.stageRow);
       const adds = page.ingredients.filter((r) => r.addition_type === 'brewhouse_addition');
       document.getElementById('bw-additions').innerHTML = `
         <div class="br-label">Additions brewers · per brew</div>
@@ -268,12 +268,12 @@
 
     function renderYeast() {
       const b = page.ctx.batch;
-      const ctx = { brewCount: b.brew_count, brewVolumeHl: page.ctx.recipe.brew_volume_hl };
+      const ctx = amountContext(b, page.ctx.recipe, page.ctx.stageRow);
       const yeasts = page.ingredients.filter((r) => r.addition_type === 'yeast');
       const strain = yeasts.map((r) => page.names[r.ingredient_id] || r.note).filter(Boolean).join(' + ') || '—';
       const weight = yeasts.map((r) => {
         const a = batchAmount('yeast', r.unit, r.quantity, ctx);
-        return a ? `${formatAmount(a)}${/\/hl$/.test(r.unit || '') ? ` <span class="br-note">(${fmt(r.quantity)} ${escapeHtml(r.unit)} × ${fmt((Number(b.brew_count) || 0) * (Number(page.ctx.recipe.brew_volume_hl) || 0), 1)} hl)</span>` : ''}` : '—';
+        return a ? `${formatAmount(a)}${/\/hl$/.test(r.unit || '') ? ` <span class="br-note">(${fmt(r.quantity)} ${escapeHtml(r.unit)} × ${fmt(dosingVolumeHl(ctx), 1)} hl)</span>` : ''}` : '—';
       }).join(' + ') || '—';
       document.getElementById('bw-yeast').innerHTML = `
         <div class="br-label">Dry yeast pitching</div>

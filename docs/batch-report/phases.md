@@ -167,6 +167,11 @@ Base beer lines reference the source beer by recipe group (open-questions
 9). Still open: do existing batches with a fractional brew count keep
 dosing on it? Jaap is still working out the best splitting flow before
 phase 8 starts.
+Built 20-10: `split_batch()`, base beer lines, `splits.js` (+ test), the
+popup and incoming beer on the three tabs, the base beer block in the recipe
+editor, dosing on brews + incoming. Fractional batches keep their brew
+count (answer to the open point: no change needed, they have no incoming
+transfers).
 
 ## Import 2026 batches (after phase 8)
 Agreed 19-10: once all phases are built, the 2026 batches are filled from
