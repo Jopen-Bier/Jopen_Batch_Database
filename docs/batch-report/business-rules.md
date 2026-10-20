@@ -268,6 +268,11 @@ remainder.
 - Popup: "<tank> after transfer" = the volume in the tank (GLT total +
   incoming, or the HBT end value) − transfers out of it − this one.
 - Deleting a transfer keeps a batch made by the split and the log entry.
+- Deleting a batch (Batch creation): a batch that received beer from a split
+  cannot be deleted while that transfer exists; the message names the source
+  batch, volume and date (and stock movements, the other block). Deleting a
+  source batch deletes its transfers out; the confirm question names the
+  receiving batches.
 - Module `splits.js` (next number preview, log text, tank after transfer,
   base beer check), test `tests/splits.test.js`; dosing in
   `batch-ingredients.js` (`dosingVolumeHl`, `amountContext`).

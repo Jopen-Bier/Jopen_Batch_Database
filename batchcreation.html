@@ -486,17 +486,52 @@
       const del = e.target.closest('.bc-verwijder-btn');
       if (del) {
         const nr = Number(del.dataset.batchnummer);
-        if (!confirm(`Delete batch ${nr}? This cannot be undone.`)) return;
+        const links = await batchLinks(nr);
+        const outText = links.outgoing.length
+          ? `\n\nThis batch transferred beer to ${links.outgoing.join(', ')}: those transfers are deleted too, so that batch loses this incoming beer.`
+          : '';
+        if (!confirm(`Delete batch ${nr}? This cannot be undone.${outText}`)) return;
         del.disabled = true;
         const { error } = await supabaseClient.from('batches').delete().eq('batch_number', nr);
         if (error) {
-          alert('Could not delete batch: ' + error.message);
+          alert(error.code === '23503' ? deleteBlockedText(nr, await batchLinks(nr)) : 'Could not delete batch: ' + error.message);
           del.disabled = false;
           return;
         }
         laadRecenteBatches();
       }
     });
+
+    // What links a batch to other records (a delete is blocked by beer it
+    // received from a split and by stock movements; its own transfers out are
+    // deleted with it). Returns { incoming: [text], outgoing: [batch numbers], stockMovements }.
+    async function batchLinks(batchNumber) {
+      const empty = { incoming: [], outgoing: [], stockMovements: 0 };
+      const { data: batch } = await supabaseClient.from('batches').select('id').eq('batch_number', String(batchNumber)).maybeSingle();
+      if (!batch) return empty;
+      const [incoming, outgoing, stock] = await Promise.all([
+        supabaseClient.from('batch_transfers').select('volume_hl, transferred_at, source:batches!batch_transfers_batch_id_fkey(batch_number)').eq('to_batch_id', batch.id),
+        supabaseClient.from('batch_transfers').select('to_batch:batches!batch_transfers_to_batch_id_fkey(batch_number)').eq('batch_id', batch.id).not('to_batch_id', 'is', null),
+        supabaseClient.from('stock_movements').select('id', { count: 'exact', head: true }).eq('batch_id', batch.id),
+      ]);
+      const day = (at) => new Date(at).toLocaleDateString('en-GB');
+      return {
+        incoming: (incoming.data || []).map((t) => `${Number(t.volume_hl).toLocaleString('en-GB', { maximumFractionDigits: 1 })} hl from batch ${t.source ? t.source.batch_number : '?'} (${day(t.transferred_at)})`),
+        outgoing: [...new Set((outgoing.data || []).map((t) => t.to_batch && t.to_batch.batch_number).filter(Boolean))],
+        stockMovements: stock.count || 0,
+      };
+    }
+
+    function deleteBlockedText(batchNumber, links) {
+      const reasons = [];
+      if (links.incoming.length) {
+        reasons.push(`It received beer from a split: ${links.incoming.join('; ')}. Delete that transfer first on the source batch (Fermentation log, Processing or Filling report › Splits / transfers).`);
+      }
+      if (links.stockMovements) {
+        reasons.push(`It has ${links.stockMovements} stock movement(s) in the inventory. Remove or rebook those first.`);
+      }
+      return `Batch ${batchNumber} cannot be deleted.\n\n` + (reasons.join('\n\n') || 'Another record still points to this batch.');
+    }
 
     document.getElementById('bc-f-zoek').addEventListener('input', toonBatches);
     ['bc-f-locatie', 'bc-f-door', 'bc-f-van', 'bc-f-tot'].forEach(id =>
