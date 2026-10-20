@@ -52,10 +52,12 @@ assert.strictEqual(f.hbtFillStatus({ id: 1 }, sessions), 'finished');
 assert.strictEqual(f.hbtFillStatus({ id: 2 }, sessions), 'filling');
 assert.strictEqual(f.hbtFillStatus({ id: 3 }, sessions), 'not_started');
 
-// Day number (mockup: 6 October 2026 = 1010)
-assert.strictEqual(f.dayNumber('2026-10-06'), 1010);
-assert.strictEqual(f.dayNumber(new Date(2026, 9, 6, 23, 30)), 1010);
-assert.strictEqual(f.dayNumber('2024-01-01'), 1);
+// Day number = day of the year, three digits (Jaap, 20-10)
+assert.strictEqual(f.dayNumber('2026-01-01'), '001');
+assert.strictEqual(f.dayNumber('2026-10-06'), '279');
+assert.strictEqual(f.dayNumber(new Date(2026, 9, 6, 23, 30)), '279');
+assert.strictEqual(f.dayNumber('2026-12-31'), '365');
+assert.strictEqual(f.dayNumber('2024-12-31'), '366');   // leap year
 assert.strictEqual(f.dayNumber(null), null);
 
 console.log('filling: all tests passed');

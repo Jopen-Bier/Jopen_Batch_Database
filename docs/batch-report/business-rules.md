@@ -206,8 +206,9 @@ Steps are editable and reorderable in the recipe editor; edited steps get
   without a recipe spec. Cpk = min(hi − mean, mean − lo) / 3σ (sample σ),
   estimated share in spec from the normal distribution; at least 2 values.
 - Out-of-spec measurement cells are red with the same limits.
-- **Day number** = days since 31-12-2023 (6 October 2026 = 1010), shown for
-  today and per filling session date (as the mockup).
+- **Day number** = day of the year, three digits: 1 January = 001 …
+  31 December = 365 / 366 (Jaap, 20-10); shown for today and per filling
+  session date.
 - A new filling session takes today, the first HBT that is not finished, and
   its package when the HBT has one format. "Filled by" = who added the
   session (`created_by`). "HBT finished?" needs an HBT.

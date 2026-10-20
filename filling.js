@@ -106,11 +106,14 @@ function hbtFillStatus(hbt, sessions) {
   return own.length ? 'filling' : 'not_started';
 }
 
-/** Day number of a date: days since 31-12-2023 (6 October 2026 = 1010). */
+/** Day number = day of the year, three digits: 1 January '001' … 31 December '365' / '366'. */
 function dayNumber(date) {
   if (!date) return null;
-  const d = typeof date === 'string' ? new Date(`${date.slice(0, 10)}T12:00:00Z`) : new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate(), 12));
-  return Math.round((d - Date.UTC(2023, 11, 31, 12)) / 86400000);
+  const [y, m, d] = typeof date === 'string'
+    ? date.slice(0, 10).split('-').map(Number)
+    : [date.getFullYear(), date.getMonth() + 1, date.getDate()];
+  const day = Math.round((Date.UTC(y, m - 1, d) - Date.UTC(y, 0, 1)) / 86400000) + 1;
+  return String(day).padStart(3, '0');
 }
 
 if (typeof module !== 'undefined' && module.exports) {
