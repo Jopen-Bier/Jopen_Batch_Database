@@ -287,6 +287,8 @@ select.br-in { text-align: left; cursor: pointer; }
 .fl-legend i.dash { height: 0; border-top: 2px dashed #b4772c; }
 .fl-legend i.dot { height: 0; border-top: 2px dotted #a80016; }
 .fl-svg { width: 100%; height: auto; display: block; }
+.fl-step-choice { display: flex; flex-direction: column; gap: 6px; }
+.fl-step-choice .br-ghost { justify-content: flex-start; text-align: left; }
 .fl-calc-out { display: flex; flex-direction: column; gap: 6px; background: #eef0e6; border-radius: 8px; padding: 10px 12px; margin-top: 8px; }
 .fl-calc-out div { display: flex; justify-content: space-between; gap: 12px; }
 .fl-calc-out b { color: var(--br-hop-dark); font-variant-numeric: tabular-nums; }

@@ -46,6 +46,22 @@ assert.strictEqual(p.done, 3);
 assert.strictEqual(p.total, 5);
 assert.deepStrictEqual(f.planProgress(steps, [], []).rows.map((r) => r.isNext), [true, false, false, false, false]);
 
+// A tag that names a step ticks off that step; the other tags take the open steps in order
+const adds = [
+  { id: 21, sort_order: 10, tag_id: 8, title: 'Addition · Bevasil' },
+  { id: 22, sort_order: 20, tag_id: 8, title: 'Addition · Super F' },
+  { id: 23, sort_order: 30, tag_id: 8, title: 'Addition · Lactic Acid' },
+];
+const day = [{ id: 1, measured_at: at(30, 8) }, { id: 2, measured_at: at(30, 9) }];
+const chosen = f.planProgress(adds, day, [{ id: 101, entry_id: 1, tag_id: 8, batch_cellar_step_id: 22 }, { id: 102, entry_id: 2, tag_id: 8 }]);
+assert.deepStrictEqual(chosen.rows.map((r) => (r.doneBy ? r.doneBy.id : r.isNext ? 'next' : '-')), [2, 1, 'next']);
+assert.strictEqual(chosen.stepOfTag.get(101).title, 'Addition · Super F');
+assert.strictEqual(chosen.stepOfTag.get(102).title, 'Addition · Bevasil');
+assert.strictEqual(chosen.done, 2);
+assert.deepStrictEqual(f.openStepsForTag(adds, day, [{ id: 101, entry_id: 1, tag_id: 8, batch_cellar_step_id: 22 }], 8).map((s) => s.id), [21, 23]);
+// a tag naming a step that is not in the plan (any more) counts as a free tag
+assert.strictEqual(f.planProgress(adds, day, [{ id: 103, entry_id: 1, tag_id: 8, batch_cellar_step_id: 999 }]).rows[0].doneBy.id, 1);
+
 // ADF and theoretical ABV: first and last extract in the log
 const a = f.attenuation([{ id: 1, measured_at: T0, extract: 15 }, { id: 2, measured_at: at(30, 8), extract: null }, { id: 3, measured_at: at(29, 8), extract: '3,0' }]);
 assert.strictEqual(a.adf.toFixed(1), '80.0');

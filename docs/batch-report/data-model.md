@@ -299,6 +299,10 @@ cellar_action_tags`, `batch_id` (for RLS/audit; foreign key (entry_id,
 batch_id) so it is always the batch of the entry). The same tag can be on one
 entry more than once (several additions the same day; migration
 `log_entry_tags_repeat`, 20-10; first version had PK (entry_id, tag_id)).
+`batch_cellar_step_id` (nullable; foreign key (batch_cellar_step_id,
+batch_id) → batch_cellar_steps (id, batch_id), set null on delete): the plan
+step the tag ticks off when the user chose it (migration
+`log_entry_tag_step`).
 
 ### `batch_transfers` (new — created here, full flow in phase 8)
 | Column | Type | Notes |

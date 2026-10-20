@@ -148,9 +148,14 @@ Steps are editable and reorderable in the recipe editor; edited steps get
 `is_generated = false`.
 
 ## Cellar plan progress (batch)
-- Count tag occurrences in `fermentation_log_entry_tags`, ordered by
-  `measured_at` (a tag twice on one entry counts twice, e.g. two additions
-  done the same day). The n-th occurrence of tag T ticks off the n-th
+- A tag that names a step (`fermentation_log_entry_tags.batch_cellar_step_id`)
+  ticks off that step. The other tags are counted per tag, ordered by
+  `measured_at`: the n-th of them ticks off the n-th step with that tag that
+  no tag names (a tag twice on one entry counts twice).
+- Adding the tag **Addition** while two or more Addition steps are open asks
+  "Which step is this addition?"; the chip then shows the step
+  ("Addition · Super F"). Other tags (cooling, dry hop, …) follow the plan
+  order without asking. The n-th occurrence of tag T ticks off the n-th
   `batch_cellar_steps` row (by `sort_order`) with tag T.
 - Done step: green, ✓, date/time/initials of that log entry.
 - First open step: orange, "next".
