@@ -56,6 +56,7 @@ Agreed with Jaap. Date = when decided. Do not change without asking.
 ## Processing / filling
 | Date | Decision |
 |---|---|
+| 20-10 | Minimum maturation is ticked automatically: days since lagering started ≥ the recipe lagering time. Labels Discharges / Interval (min) and Standpipe / Bottom valve stay as in the mockup. |
 | 13-10 | Processing session = start measurements only (centrifuge in/out, start flow, start turbidity). Lagering block removed. Pasteurised-with / avg temp out / avg turbidity removed from the session. |
 | 13-10 | Per HBT, operator enters averages: in-line O2, PU, turbidity, flow — **one set per HBT**, also when it was filled over two sessions. |
 | 13-10 | HBT blocks stacked (full width). |

@@ -362,6 +362,14 @@ PK (entry_id, tag_id), `batch_id` (for RLS/audit; foreign key
 | released_by | uuid → users | |
 | sort_order | integer | |
 
+Built (phase 5, migration `batch_report_processing`): `processing_sessions`
+has unique (batch_id, session_number); `batch_hbts` and `processing_sessions`
+have unique (id, batch_id) so `hbt_readings` points at an HBT and a session of
+its own batch (foreign keys over both columns; deleting a session keeps its
+readings without a session); `batch_hbts` checks released_at and released_by
+together. `batch_stages` adds `first_processing_date`, `hbts_total`,
+`hbts_released`, `hbt_codes`, `hbt_formats`.
+
 ### `hbt_readings` (new)
 | Column | Type | UI |
 |---|---|---|

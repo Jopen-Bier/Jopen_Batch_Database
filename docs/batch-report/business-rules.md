@@ -13,7 +13,7 @@ Evaluated top-down, first match wins:
 | `closed` | `batches.status = 'completed'` (later: filling report signed sets this) |
 | `filled` | the batch has ≥1 `batch_hbts` and every one has a filling session with `is_hbt_finished` |
 | `filling` | the batch has ≥1 `filling_sessions` row |
-| `hbt` | a `processing_sessions` row has `processing_date` |
+| `hbt` | a `processing_sessions` row has `processing_date` (also without brews, e.g. a split batch) |
 | `lagering` | the `batch_cellar_steps` step with `starts_lagering` is done (decision #3: the cooling, not setting an LT) |
 | `fermentation` | number of brews with `brewing_ended_at` ≥ `batches.brew_count` rounded up (brew counts such as 3.33 occur); never for 0 brews |
 | `brewing` | a brew has `mash_in_started_at` |
@@ -165,8 +165,19 @@ Steps are editable and reorderable in the recipe editor; edited steps get
 - "Save to log" adds a log entry with tag Addition and the calculated text.
 
 ## Processing / HBT
-- Duration = end_time − start_time.
-- HBT end value = last `hbt_readings` row (by `sort_order`) of that HBT.
+- Duration = end_time − start_time (an end before the start runs past
+  midnight).
+- **Minimum maturation** (check before processing, ticked automatically):
+  days since lagering started (`batch_stages.lagering_started_at`) ≥
+  `recipe_fermentation.lagering_time`. Not ticked while lagering has not
+  started or the recipe has no lagering time.
+- Cellar additions with a timing that shows on Processing (Settings › Cellar
+  plan) are listed under "From recipe" in Comments processing, with the
+  batch amount, next to `recipe_process_steps.processing_comment`.
+- The calculators (Nagardo, PGA / alginate) are also on Processing; "Save as
+  comment" adds a processing comment.
+- HBT end value = last `hbt_readings` row (by `sort_order`) of that HBT that
+  has a level (a new row still being filled in does not count yet).
   Total end volume = Σ end levels.
 - CO2 status per reading: spec by `co2_target` from `recipe_packaging`
   (`co2_bottle_can_spec` ± `co2_bottle_can_tolerance`, keg: `co2_keg_spec` ±
@@ -174,8 +185,9 @@ Steps are editable and reorderable in the recipe editor; edited steps get
 - Red markers: O2 ≥ HBT spec (50 ppb), start turbidity and avg turbidity >
   `recipe_fermentation.turbidity_after_separation`, avg PU outside
   `pasteurization` ± tol.
-- **Cellar loss** = volume into GLT − splits from GLT/LT − total HBT end
-  volume. Negative → red warning "More out than in — check splits and HBT
+- **Cellar loss** = volume into GLT (GLT total of the brews) − splits from
+  GLT/LT (transfers whose from-tank is not one of the batch's HBTs) − total
+  HBT end volume. Negative → red warning "More out than in — check splits and HBT
   volumes".
 
 ## Filling

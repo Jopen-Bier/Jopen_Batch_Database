@@ -137,6 +137,8 @@ Migration: `batches.cellar_additions_done/tasting_comment/tasting_result`;
 `processing_sessions`, `processing_comments`, `batch_hbts`, `hbt_readings`.
 Page `batch-processing.html` per screens.md, incl. release, totals and cellar
 loss (module + test). `batch_stages`: hbt. Active batches: HBT tiles.
+Built 20-10: `processing.js` (+ test); the transfers card and the calculators
+moved to `batch-report-cards.js` (shared by Fermentation log and Processing).
 
 ## Phase 6 — Filling
 Migration: `filling_sessions`, `filling_measurements`. Page
