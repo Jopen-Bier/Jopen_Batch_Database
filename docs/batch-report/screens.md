@@ -199,6 +199,9 @@ window).
   finished?"**; measurements table per package type (bottle/can: TPO, HSO,
   DO, HS vol., pressure, temp, CO2; keg: CO2, O2).
 - Quality · process capability (n, average, std, Cpk, est. in spec).
+- To fine-tune with the filling department (Jaap, 20-10, after the phase 6
+  test): "a good basis". The fill tube detection checks are only needed for
+  bottles, not for kegs and cans (not changed yet).
 - Built (phase 6): the package choice follows the HBT's intended formats;
   bottle / can sessions show the TPO … CO2 table, keg sessions CO2 / O2;
   "Burst bottles under control" only for bottle; delete a session with its
@@ -213,6 +216,16 @@ window).
 - Splits / transfers out (same record); comments filling; "Summary" popup
   (litres per SKU, material use, blends).
 - Close filling report (Completed / Signed) and Mdrank fields: **parked**.
+- Built (phase 7): "+ Article" offers the active articles of the session's
+  package that are not booked yet; the materials of the BOM appear by
+  themselves with their expected quantity (typing "Used" books them), "+
+  Material" adds one outside the BOM. "Summary" button on the balance card;
+  the popup prints on its own (Print / PDF). "Copy for Mdrank" and comments
+  filling wait for open-questions #8 / #13. Filled batches open on this tab.
+- Settings › Packaging articles (name, package, litres, EAN, Mdrank no.,
+  active, bill of materials per article) and › Packaging materials (name,
+  unit, Mdrank no., active). Booked articles / used materials can only be
+  made inactive.
 
 ## Popups
 - Calculators (`mockup/Calculators.dc.html`): Nagardo, PGA/alginate; "Save

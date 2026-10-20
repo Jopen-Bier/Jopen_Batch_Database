@@ -263,7 +263,7 @@ const BATCH_TABS = [
   { key: 'fermentation', label: 'Fermentation log', page: 'batch-fermentation.html' },
   { key: 'processing', label: 'Processing', page: 'batch-processing.html' },
   { key: 'filling', label: 'Filling', page: 'batch-filling.html' },
-  { key: 'filling-report', label: 'Filling report', page: null, phase: 7 },
+  { key: 'filling-report', label: 'Filling report', page: 'batch-filling-report.html' },
 ];
 
 /** Link to a batch tab, e.g. batchTabHref('overview', 12). */
@@ -274,7 +274,7 @@ function batchTabHref(tabKey, batchId) {
 
 // The tab a batch opens on from a list: the tab of its current stage once
 // that tab exists, else the Overview.
-const STAGE_TABS = { brewing: 'brewing', fermentation: 'fermentation', lagering: 'fermentation', hbt: 'processing', filling: 'filling', filled: 'filling' };
+const STAGE_TABS = { brewing: 'brewing', fermentation: 'fermentation', lagering: 'fermentation', hbt: 'processing', filling: 'filling', filled: 'filling-report' };
 
 // Package formats of an HBT (batch_hbts.intended_formats), in this order.
 const PACKAGE_FORMATS = [

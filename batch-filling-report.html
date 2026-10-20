@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jopen Brouwerij — Filling report</title>
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="stylesheet" href="jopen-shared.css" />
+  <link rel="stylesheet" href="batch-report.css" />
+</head>
+<body class="br-page">
+
+  <div id="jopen-nav"></div>
+
+  <main class="br-main">
+    <div id="fr-header" style="display:flex; flex-direction:column; gap:14px;"></div>
+    <div class="br-message" id="fr-message">Loading batch…</div>
+    <div id="fr-content" style="display:none; flex-direction:column; gap:16px;">
+      <div class="br-card br-cardpad" id="fr-balance"></div>
+      <div id="fr-sessions" style="display:flex; flex-direction:column; gap:16px;"></div>
+      <div class="br-card br-cardpad" id="fr-transfers"></div>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="jopen-utils.js"></script>
+  <script src="nav.js"></script>
+  <script src="batch-stages.js"></script>
+  <script src="batch-brews.js"></script>
+  <script src="fermentation-log.js"></script>
+  <script src="processing.js"></script>
+  <script src="filling-report.js"></script>
+  <script src="batch-report-shell.js"></script>
+  <script src="batch-report-cards.js"></script>
+  <script>
+    const TRASH_ICON = '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2.5 4h9M5.5 4V2.5h3V4M3.5 4l.6 8h5.8l.6-8"></path></svg>';
+    const UNDO_TEXT = 'You can undo this right after deleting. The deletion is recorded in the audit trail.';
+
+    const page = {
+      user: null, canEdit: false, canDelete: false, ctx: null, save: null,
+      sessions: [], hbts: [], readings: [], transfers: [], brews: [], tanks: [],
+      articles: new Map(), materials: new Map(), bom: new Map(), sessionArticles: [], sessionMaterials: [],
+      summaryOpen: false,
+    };
+    const fmt = (v, digits) => (v === null || v === undefined || v === '' ? '—'
+      : Number(v).toLocaleString('en-GB', { maximumFractionDigits: digits ?? 0 }));
+    const hl = (v) => (v === null || v === undefined ? '—' : Number(v).toFixed(1));
+    const pct = (share) => (share === null || share === undefined ? '—' : (share * 100).toFixed(1) + ' %');
+    const signed = (v) => (v > 0 ? '+' : '') + fmt(v);
+    const dis = () => (page.canEdit ? '' : ' disabled');
+    const val = (v) => escapeHtml(v === null || v === undefined ? '' : String(v));
+    const tankCode = (id) => (page.tanks.find((t) => t.id === id) || {}).code || '—';
+    const hbtById = (id) => page.hbts.find((h) => h.id === id) || null;
+    const formatLabel = (code) => (PACKAGE_FORMATS.find((f) => f.code === code) || {}).label || '—';
+    const dayMonthYear = (date) => (date ? `${date.slice(8, 10)}-${date.slice(5, 7)}-${date.slice(0, 4)}` : '—');
+    const byOrder = (a, b) => (a.sort_order || 0) - (b.sort_order || 0) || a.id - b.id;
+
+    function showMessage(text, isError) {
+      const el = document.getElementById('fr-message');
+      el.textContent = text;
+      el.className = 'br-message' + (isError ? ' error' : '');
+      el.style.display = text ? '' : 'none';
+    }
+
+    // ------------------------------------------------------------ loading
+    async function loadAll(batchId) {
+      page.ctx = await loadBatchContext(batchId);
+      const byBatch = (table) => supabaseClient.from(table).select('*').eq('batch_id', batchId);
+      const [sessions, hbts, readings, transfers, brews, tanks, articles, materials, bom, sessionArticles, sessionMaterials] = await Promise.all([
+        byBatch('filling_sessions').order('session_number'),
+        byBatch('batch_hbts').order('sort_order').order('id'),
+        byBatch('hbt_readings').order('sort_order').order('id'),
+        supabaseClient.from('batch_transfers').select(TRANSFER_SELECT).eq('batch_id', batchId).order('transferred_at').order('id'),
+        byBatch('batch_brews').order('brew_number'),
+        supabaseClient.from('tanks').select('id, code, tank_type, number, location, volume_hl, is_active').order('number'),
+        supabaseClient.from('packaging_articles').select('*').order('sort_order').order('id'),
+        supabaseClient.from('packaging_materials').select('*').order('sort_order').order('id'),
+        supabaseClient.from('packaging_article_materials').select('article_id, material_id, quantity'),
+        byBatch('filling_session_articles').order('id'),
+        byBatch('filling_session_materials').order('id'),
+      ]);
+      for (const res of [sessions, hbts, readings, transfers, brews, tanks, articles, materials, bom, sessionArticles, sessionMaterials]) if (res.error) throw res.error;
+      Object.assign(page, {
+        sessions: sessions.data, hbts: hbts.data, readings: readings.data, transfers: transfers.data, brews: brews.data, tanks: tanks.data,
+        articles: new Map(articles.data.map((a) => [a.id, a])), materials: new Map(materials.data.map((m) => [m.id, m])),
+        bom: bomByArticle(bom.data), sessionArticles: sessionArticles.data, sessionMaterials: sessionMaterials.data,
+      });
+    }
+
+    // ------------------------------------------------------------ saving
+    const renderSoon = createRenderer(() => renderAll());
+    const saveRow = (table, row, patch) => saveRowPatch({ table, row, patch, saveStatus: page.save, renderSoon, userId: page.user.id });
+    const insertRow = (table, values, list) => insertBatchRow({ table, values, list, saveStatus: page.save, userId: page.user.id });
+    const sessionById = (id) => page.sessions.find((s) => s.id === id) || null;
+    const articlesOf = (s) => page.sessionArticles.filter((r) => r.filling_session_id === s.id);
+    const materialsOf = (s) => page.sessionMaterials.filter((r) => r.filling_session_id === s.id);
+    const bookOf = (s) => sessionBook(articlesOf(s), materialsOf(s), page.articles, page.bom);
+
+    async function deleteWithUndo(table, row, list, label) {
+      const ok = await confirmDialog({ title: `Delete ${label}?`, text: UNDO_TEXT });
+      if (!ok) return;
+      page.save.saving();
+      const { error } = await supabaseClient.from(table).delete().eq('id', row.id).select('id').single();
+      if (error) { page.save.failed(error.message); return; }
+      list.splice(list.indexOf(row), 1);
+      page.save.saved();
+      renderSoon();
+      showUndoToast(label.charAt(0).toUpperCase() + label.slice(1), async () => {
+        const { id, created_at, updated_at, updated_by, ...values } = row;
+        await insertRow(table, values, list);
+        list.sort((a, b) => a.id - b.id);
+        renderSoon();
+      });
+    }
+
+    async function addArticle(s, articleId) {
+      const row = await insertRow('filling_session_articles',
+        { batch_id: page.ctx.batch.id, filling_session_id: s.id, article_id: articleId, quantity: null }, page.sessionArticles);
+      renderSoon(row ? `[data-article-row="${row.id}"]` : null);
+    }
+
+    async function addMaterial(s, materialId) {
+      const row = await insertRow('filling_session_materials',
+        { batch_id: page.ctx.batch.id, filling_session_id: s.id, material_id: materialId, quantity: null }, page.sessionMaterials);
+      renderSoon(row ? `[data-material-session="${s.id}"][data-material="${materialId}"]` : null);
+    }
+
+    // "Used" of an expected material without a row yet inserts the row.
+    async function setMaterialUsed(s, materialId, quantity) {
+      const row = materialsOf(s).find((r) => r.material_id === materialId);
+      if (row) return saveRow('filling_session_materials', row, { quantity });
+      if (quantity === null) return;
+      await insertRow('filling_session_materials',
+        { batch_id: page.ctx.batch.id, filling_session_id: s.id, material_id: materialId, quantity }, page.sessionMaterials);
+      renderSoon();
+    }
+
+    // ------------------------------------------------------------ calculations
+    function gltVolumeHl() {
+      const calcs = brewCalculations(page.brews);
+      const last = calcs[calcs.length - 1];
+      return last && last.glt.volumeHl ? last.glt.volumeHl : null;
+    }
+
+    function balance() {
+      const total = sessionBook(page.sessionArticles, [], page.articles, page.bom);
+      const hbtEndTotalHl = page.hbts.reduce((s, h) => {
+        const end = hbtEnd(page.readings.filter((r) => r.batch_hbt_id === h.id));
+        return s + (Number(end && end.level_hl) || 0);
+      }, 0);
+      const toHl = (l) => l / 100;
+      return volumeBalance({
+        gltHl: gltVolumeHl(), transfers: page.transfers, hbtTankIds: page.hbts.map((h) => h.tank_id), hbtEndTotalHl,
+        packagedHl: { bottle: toHl(total.litresByFormat.bottle), can: toHl(total.litresByFormat.can), keg: toHl(total.litresByFormat.keg) },
+      });
+    }
+
+    const transferText = (list) => list.map((t) => (t.destination === 'discard' ? 'Discard' : 'To batch ' + (t.to_batch ? t.to_batch.batch_number : ''))).join(', ') || '—';
+
+    // ------------------------------------------------------------ rendering
+    function renderAll() {
+      renderBalance();
+      renderSessions();
+      transfersCard.render();
+      renderSummary();
+    }
+
+    function renderBalance() {
+      const b = balance();
+      const glt = page.ctx.batch.glt_tank_id ? tankCode(page.ctx.batch.glt_tank_id) : 'GLT';
+      const minusRow = (label, value, note, cls = '') => `<tr class="${cls}"><td class="fr-minus">${label}</td><td class="c" style="width:90px;">${value}</td><td class="small">${escapeHtml(note)}</td></tr>`;
+      const subRow = (label, value, note, cls = 'fr-sub') => `<tr class="${cls}"><td>${label}</td><td class="n" style="width:90px;">${value}</td><td class="small">${escapeHtml(note)}</td></tr>`;
+      const lossHl = b.cellarLossHl;
+      const rows = [
+        subRow(`Brewed into ${escapeHtml(glt)}`, hl(b.gltHl), b.gltHl === null ? 'no brew volumes yet · Brewing' : 'from Brewing'),
+        minusRow('− Splits from GLT / LT', b.splitsPreHl ? '−' + hl(b.splitsPreHl) : '0.0', transferText(b.preTransfers)),
+        minusRow('− Cellar loss', lossHl === null ? '—' : lossHl >= 0 ? '−' + hl(lossHl) : '+' + hl(-lossHl),
+          lossHl === null ? '' : b.cellarLossNegative ? 'More out than in — check splits and HBT volumes' : pct(lossHl / b.gltHl) + ' of GLT volume',
+          b.cellarLossNegative ? 'fr-bad' : ''),
+        subRow('= In HBT after processing', hl(b.inHbtHl), 'end values HBT · Processing'),
+        minusRow('− Splits from HBT', b.splitsPostHl ? '−' + hl(b.splitsPostHl) : '0.0', transferText(b.postTransfers)),
+        minusRow('− Packaged', '−' + hl(b.packagedTotalHl), `bottle ${hl(b.packagedHl.bottle)} · can ${hl(b.packagedHl.can)} · keg ${hl(b.packagedHl.keg)}`),
+        subRow('= Filling remainder / loss', hl(b.remainderHl), b.remainderShare === null ? '' : pct(b.remainderShare) + ' of available for filling',
+          b.remainderShare === null ? 'fr-sub' : b.remainderOk ? 'fr-sub fr-ok' : 'fr-sub fr-warn'),
+      ].join('');
+      const parts = pieParts(b);
+      const slices = pieSlices(parts);
+      const legend = parts.map((p) => `<div><span class="sw" style="background:${p.color};${p.key === 'remainder' ? ' border:1px solid #c9c1ae;' : ''}"></span>
+        <span class="lb">${escapeHtml(p.label)}</span><b>${hl(p.hl)} hl</b><span class="pc">${pct(p.share)}</span></div>`).join('');
+      document.getElementById('fr-balance').innerHTML = `
+        <div class="br-head" style="align-items:baseline;">
+          <div class="br-label">Volume balance</div>
+          <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+            <span class="br-note">Every litre from GLT to package · splits from Fermentation log, Processing and this report</span>
+            <button class="br-ghost" type="button" id="fr-open-summary">Summary</button>
+          </div>
+        </div>
+        <div class="fr-balance">
+          <table class="br-ing"><tbody>${rows}</tbody></table>
+          <div class="fr-pie">
+            <svg viewBox="0 0 200 200" role="img" aria-label="Where the GLT volume went: packaged per type, splits, cellar loss and filling remainder">
+              ${slices.length ? slices.map((s) => `<path d="${s.d}" fill="${s.color}" stroke="#ffffff" stroke-width="1.5"></path>`).join('') : '<circle cx="100" cy="100" r="92" fill="#f6f4ee"></circle>'}
+            </svg>
+            <div class="fr-legend">${legend}
+              <div class="br-note" style="border-top:1px solid var(--br-line-soft); padding-top:6px;">Share of ${hl(b.gltHl)} hl brewed into the GLT</div>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function articleTable(s, book) {
+      const booked = new Set(articlesOf(s).map((r) => r.article_id));
+      const options = [...page.articles.values()].filter((a) => a.is_active && !booked.has(a.id) && (!s.package_format || a.package_format === s.package_format)).sort(byOrder);
+      const rows = book.articles.map(({ row, article, litres }) => `<tr>
+        <td><b>${escapeHtml(article ? article.name : '?')}</b></td>
+        <td class="small">${escapeHtml((article && article.ean) || '—')}</td>
+        <td><input class="br-in" inputmode="numeric" data-article-row="${row.id}" value="${val(row.quantity)}" aria-label="Count"${dis()}></td>
+        <td class="c">${fmt(litres)}</td>
+        <td>${page.canDelete ? `<button class="br-del" type="button" data-delete-article="${row.id}" aria-label="Delete article">${TRASH_ICON}</button>` : ''}</td></tr>`).join('');
+      return `<div class="fr-book">
+        <div class="br-label" style="color:var(--br-hop-dark);">Book in (+) · produced</div>
+        <div class="br-table-wrap"><table class="br-ing" style="min-width:440px;">
+          <thead><tr><th>Article</th><th style="width:120px;">EAN</th><th class="r" style="width:90px;">Count</th><th class="r" style="width:80px;">Litres</th><th style="width:34px;"></th></tr></thead>
+          <tbody>${rows || '<tr><td colspan="5" class="small">No articles booked yet.</td></tr>'}
+            <tr class="tot"><td colspan="3">Total</td><td class="n">${fmt(book.litres)}</td><td></td></tr></tbody></table></div>
+        ${page.canEdit ? `<div style="max-width:280px;"><select class="br-input" data-add-article="${s.id}" aria-label="Add article">
+          <option value="">+ Article</option>${options.map((a) => `<option value="${a.id}">${escapeHtml(a.name)}</option>`).join('')}</select></div>` : ''}
+      </div>`;
+    }
+
+    function materialTable(s, book) {
+      const listed = new Set(book.materials.map((m) => m.material_id));
+      const options = [...page.materials.values()].filter((m) => m.is_active && !listed.has(m.id)).sort(byOrder);
+      const rows = book.materials.map((m) => {
+        const mat = page.materials.get(m.material_id);
+        return `<tr>
+          <td><b>${escapeHtml(mat ? mat.name : '?')}</b></td>
+          <td><input class="br-in" inputmode="numeric" data-material-session="${s.id}" data-material="${m.material_id}" value="${val(m.row ? m.row.quantity : '')}" aria-label="Used"${dis()}></td>
+          <td class="c">${fmt(m.expected)}</td>
+          <td style="text-align:center;"><span class="fr-loss ${materialLossClass(m.loss)}">${m.loss === null ? '—' : signed(m.loss)}</span></td>
+          <td>${page.canDelete && m.row ? `<button class="br-del" type="button" data-delete-material="${m.row.id}" aria-label="Delete material">${TRASH_ICON}</button>` : ''}</td></tr>`;
+      }).join('');
+      return `<div class="fr-book">
+        <div class="br-label" style="color:var(--br-hop-dark);">Book out (−) · materials used</div>
+        <div class="br-table-wrap"><table class="br-ing" style="min-width:420px;">
+          <thead><tr><th>Material</th><th class="r" style="width:90px;">Used</th><th class="r" style="width:90px;">Expected</th><th style="width:70px; text-align:center;">Loss</th><th style="width:34px;"></th></tr></thead>
+          <tbody>${rows || '<tr><td colspan="5" class="small">Book the articles first; their materials appear here.</td></tr>'}</tbody></table></div>
+        ${page.canEdit ? `<div style="max-width:280px;"><select class="br-input" data-add-material="${s.id}" aria-label="Add material">
+          <option value="">+ Material</option>${options.map((m) => `<option value="${m.id}">${escapeHtml(m.name)}</option>`).join('')}</select></div>` : ''}
+        <div class="br-note">Expected = count × material per article (bill of materials, Settings). Loss above 0 = material lost; below 0 = check the count.</div>
+      </div>`;
+    }
+
+    function renderSessions() {
+      const el = document.getElementById('fr-sessions');
+      if (!page.sessions.length) {
+        el.innerHTML = `<div class="br-card br-cardpad"><div class="br-label">Filling sessions</div>
+          <div class="br-note">No filling session yet. Add the sessions on the <a href="${batchTabHref('filling', page.ctx.batch.id)}">Filling</a> tab; here you book what each session produced and used.</div></div>`;
+        return;
+      }
+      el.innerHTML = page.sessions.map((s) => {
+        const hbt = hbtById(s.batch_hbt_id);
+        const book = bookOf(s);
+        const diff = sessionDifference(book.litres, s.volume_hl);
+        const sub = [dayMonthYear(s.filling_date), hbt ? tankCode(hbt.tank_id) : null, s.package_format ? formatLabel(s.package_format) : null].filter(Boolean).join(' · ');
+        const filled = diff
+          ? `Filled <b>${fmt(book.litres)} l</b> of ${fmt(Number(s.volume_hl) * 100)} l · <span class="fr-loss ${diff.ok ? 'ok' : 'lost'}">${signed(diff.diffL)} l</span>`
+          : `Filled <b>${fmt(book.litres)} l</b> <span class="br-note">· fill in the session volume on Filling to compare</span>`;
+        return `<div class="br-card br-cardpad" style="display:flex; flex-direction:column; gap:12px;">
+          <div class="br-head" style="align-items:baseline;">
+            <div style="display:flex; gap:10px; align-items:baseline; flex-wrap:wrap;"><b class="fi-title">Session ${s.session_number}</b><span class="br-note">${escapeHtml(sub)}</span></div>
+            <div style="font-size:13px;">${filled}</div>
+          </div>
+          <div class="fr-books">${articleTable(s, book)}${materialTable(s, book)}</div>
+        </div>`;
+      }).join('');
+    }
+
+    function renderSummary() {
+      document.getElementById('fr-summary')?.remove();
+      if (!page.summaryOpen) return;
+      const b = balance();
+      const all = sessionBook(page.sessionArticles, page.sessionMaterials, page.articles, page.bom);
+      const skus = articleTotals(page.sessionArticles, page.articles).map((x) => `<tr><td><b>${escapeHtml(x.article.name)}</b></td>
+        <td class="small">${formatLabel(x.article.package_format)}</td><td class="n">${fmt(x.count)}</td><td class="n">${fmt(x.litres)}</td></tr>`).join('');
+      const splits = page.transfers.map((t) => `<tr><td><b>${t.destination === 'discard' ? 'Discard' : 'To batch ' + escapeHtml(t.to_batch ? t.to_batch.batch_number : '…')}</b></td>
+        <td class="small">Split · ${escapeHtml(tankCode(t.from_tank_id))}</td><td class="c">—</td><td class="n">${fmt(Number(t.volume_hl) * 100)}</td></tr>`).join('');
+      const mats = all.materials.map((m) => `<tr><td><b>${escapeHtml((page.materials.get(m.material_id) || {}).name || '?')}</b></td>
+        <td class="n">${fmt(m.used)}</td><td class="c">${fmt(m.expected)}</td>
+        <td style="text-align:center;"><span class="fr-loss ${materialLossClass(m.loss)}">${m.loss === null ? '—' : signed(m.loss)}</span></td></tr>`).join('');
+      const out = (b.packagedTotalHl + b.splitsPreHl + b.splitsPostHl) * 100;
+      const overlay = document.createElement('div');
+      overlay.className = 'br-dialog-overlay';
+      overlay.id = 'fr-summary';
+      overlay.innerHTML = `<div class="br-dialog fr-summary" role="dialog" aria-modal="true" aria-labelledby="fr-summary-title">
+        <div class="br-head" style="align-items:center;">
+          <div><div class="br-note">Batch ${escapeHtml(page.ctx.batch.batch_number)} · ${escapeHtml(page.ctx.recipe.name || '')} · ${page.sessions.length} filling session${page.sessions.length === 1 ? '' : 's'}</div>
+            <div class="br-dialog-title" id="fr-summary-title" style="font-size:20px;">Filling summary</div></div>
+          <button class="br-ghost" type="button" id="fr-close-summary">Close</button>
+        </div>
+        <div><div class="br-label">Produced per SKU · book in (+)</div>
+          <table class="br-ing"><thead><tr><th>SKU</th><th>Package</th><th class="r">Count</th><th class="r">Litres</th></tr></thead>
+            <tbody>${skus}${splits}${skus || splits ? '' : '<tr><td colspan="4" class="small">Nothing booked yet.</td></tr>'}
+              <tr class="tot"><td colspan="3">Total packaged + split · of ${fmt(b.gltHl === null ? null : b.gltHl * 100)} l in GLT</td><td class="n">${fmt(out)}</td></tr>
+              <tr><td colspan="3" class="small">Cellar loss</td><td class="c">${fmt(b.cellarLossHl === null ? null : b.cellarLossHl * 100)}</td></tr>
+              <tr><td colspan="3" class="small">Filling remainder / loss</td><td class="c">${fmt(b.remainderHl * 100)} · ${pct(b.remainderShare)}</td></tr></tbody></table></div>
+        <div><div class="br-label">Materials used · book out (−)</div>
+          <table class="br-ing"><thead><tr><th>Material</th><th class="r">Used</th><th class="r">Expected</th><th style="width:80px; text-align:center;">Loss</th></tr></thead>
+            <tbody>${mats || '<tr><td colspan="4" class="small">No materials yet.</td></tr>'}</tbody></table></div>
+        <div class="br-dialog-buttons" style="justify-content:space-between; align-items:center;">
+          <span class="br-note">Totals over all filling sessions of this batch</span>
+          <button class="br-ghost" type="button" id="fr-print-summary">Print / PDF</button>
+        </div></div>`;
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay || e.target.closest('#fr-close-summary')) { page.summaryOpen = false; renderSoon(); }
+        if (e.target.closest('#fr-print-summary')) window.print();
+      });
+      document.body.appendChild(overlay);
+    }
+
+    const transfersCard = createTransfersCard(document.getElementById('fr-transfers'), () => {
+      const b = page.ctx.batch;
+      const ids = [b.glt_tank_id, b.lt_tank_id, ...page.hbts.map((h) => h.tank_id)].filter(Boolean);
+      return {
+        batchId: b.id, transfers: page.transfers, tanks: page.tanks, fromTanks: ids.map((id) => page.tanks.find((t) => t.id === id)).filter(Boolean),
+        canEdit: page.canEdit, canDelete: page.canDelete, userId: page.user.id, saveStatus: page.save,
+      };
+    }, renderSoon);
+
+    // ------------------------------------------------------------ events
+    function numberOrBad(el) {
+      const v = parseNumberInput(el.value);
+      if (v === undefined || (v !== null && v < 0)) { el.classList.add('bad'); el.title = 'Not a number of 0 or more'; return undefined; }
+      el.classList.remove('bad');
+      return v;
+    }
+
+    function bindEvents() {
+      const main = document.querySelector('main');
+      main.addEventListener('change', (e) => {
+        const el = e.target;
+        if (transfersCard.handleChange(el)) return;
+        if (el.dataset.articleRow) {
+          const v = numberOrBad(el);
+          if (v === undefined) return;
+          return saveRow('filling_session_articles', page.sessionArticles.find((r) => r.id === Number(el.dataset.articleRow)), { quantity: v });
+        }
+        if (el.dataset.materialSession) {
+          const v = numberOrBad(el);
+          if (v === undefined) return;
+          return setMaterialUsed(sessionById(Number(el.dataset.materialSession)), Number(el.dataset.material), v);
+        }
+        if (el.dataset.addArticle && el.value) return addArticle(sessionById(Number(el.dataset.addArticle)), Number(el.value));
+        if (el.dataset.addMaterial && el.value) return addMaterial(sessionById(Number(el.dataset.addMaterial)), Number(el.value));
+      });
+      main.addEventListener('click', (e) => {
+        const t = e.target;
+        if (transfersCard.handleClick(t)) return;
+        if (t.closest('#fr-open-summary')) { page.summaryOpen = true; return renderSoon(); }
+        const delA = t.closest('button[data-delete-article]');
+        if (delA) return deleteWithUndo('filling_session_articles', page.sessionArticles.find((r) => r.id === Number(delA.dataset.deleteArticle)), page.sessionArticles, 'this article');
+        const delM = t.closest('button[data-delete-material]');
+        if (delM) return deleteWithUndo('filling_session_materials', page.sessionMaterials.find((r) => r.id === Number(delM.dataset.deleteMaterial)), page.sessionMaterials, 'this material');
+      });
+      main.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && e.target.matches('input.br-in, input.br-input')) e.target.blur();
+      });
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && page.summaryOpen) { page.summaryOpen = false; renderSoon(); }
+      });
+    }
+
+    async function initFillingReportPage() {
+      page.user = await getCurrentUser();
+      if (!page.user) return; // nav.js redirects to login
+      if (!(await magBekijkenModule('batches'))) {
+        showMessage('You do not have access to batch reports. Ask an admin for view rights on "Batches & batch reports".');
+        return;
+      }
+      const batchId = batchIdFromUrl();
+      if (!batchId) { showMessage('No batch chosen. Open a batch from All batches or Active batches.', true); return; }
+      page.canEdit = await magBewerkenModule('batches');
+      page.canDelete = await magVerwijderenModule('batches');
+      try {
+        await loadAll(batchId);
+      } catch (err) {
+        showMessage('Could not load the batch: ' + (err.message || err), true);
+        return;
+      }
+      document.title = `Jopen Brouwerij — ${page.ctx.batch.batch_number} Filling report`;
+      page.save = renderBatchHeader(document.getElementById('fr-header'), page.ctx, 'filling-report');
+      showMessage('');
+      document.getElementById('fr-content').style.display = 'flex';
+      bindEvents();
+      renderAll();
+    }
+
+    document.addEventListener('DOMContentLoaded', initFillingReportPage);
+  </script>
+</body>
+</html>

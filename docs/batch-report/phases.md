@@ -152,6 +152,9 @@ Migration: `packaging_articles`, `packaging_materials`,
 `filling_session_articles`, `filling_session_materials`. Page
 `batch-filling-report.html`: volume balance + pie, sessions, materials,
 summary. Closing/Mdrank stays parked (open-questions 8).
+Built 20-10: `filling-report.js` (+ test); seed from the mockup list;
+Settings › Packaging articles / materials; the Filling report tab is active
+and Filled batches open on it.
 
 ## Phase 8 — Splits
 Split / transfer popup on all three tabs, new batch from split (next number,

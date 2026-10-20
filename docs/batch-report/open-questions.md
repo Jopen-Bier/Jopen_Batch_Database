@@ -18,7 +18,7 @@ without the open part and note it in the PR.
 | 10 | "OGW" meaning (Excel). | — |
 | 11 | Keep the checkbox "Do hops smell fresh?"? | 3 |
 | 12 | ~~Four-eyes check for Nagardo?~~ **Answered 19-10:** not now. | 4 |
-| 13 | Definition of a SKU in the Summary (article, or beer + package) and layout per Mdrank. | 7 |
+| 13 | Definition of a SKU in the Summary (article, or beer + package) and layout per Mdrank. **Built 20-10 as one line per packaging article**; the Mdrank layout ("Copy for Mdrank") waits. | 7 |
 | 14 | Translations awaiting Jaap: ~~Discharges / Interval · Standpipe / Bottom valve~~ (OK as is, 20-10) · JK labels · Filling labels · Split / transfer, Transfer moment, To batch, Incoming beer, One line per source beer. | per phase |
 | 15 | ~~Beer status / beer risk dropdown list: what exactly is needed?~~ **Answered 19-10:** the values in the existing recipes; these are already the lists in `recipe-values.js`, the check constraints and the recipe editor dropdowns. Nothing to build. | 0 |
 | 16 | ~~Tanks: all HBTs at WP? CKT used for both fermentation and lagering?~~ **Answered 19-10:** yes, all HBTs are at WP; a CKT is a combi tank. | 0 |

@@ -186,6 +186,41 @@
           <p id="action-tag-message" class="jopen-form-melding"></p>
         </div>
 
+        <!-- Section: Packaging articles (SKUs) with their bill of materials -->
+        <div class="settings-sectie" id="sectie-packaging-articles" data-titel="Packaging articles">
+          <h2>Packaging articles</h2>
+          <p class="uitleg">The articles (SKUs) booked in on the Filling report: package, litres per article and the bill of materials (materials per article). The expected material use of a filling session is count × bill of materials. Inactive articles are no longer offered but stay on old reports; an article that is booked can only be made inactive.</p>
+          <div id="packaging-articles-list"><p class="jopen-subtitel">Loading…</p></div>
+          <table class="cat-tabel">
+            <tbody>
+              <tr class="cat-nieuw-rij">
+                <td><input type="text" id="packaging-article-new-name" placeholder="Name, e.g. 'Box 24x33cl'…" /></td>
+                <td><select id="packaging-article-new-format"><option value="bottle">Bottle</option><option value="can">Can</option><option value="keg">Keg</option></select></td>
+                <td><input type="text" id="packaging-article-new-litres" placeholder="Litres per article" inputmode="decimal" style="max-width:130px;" /></td>
+                <td><button id="packaging-article-add-btn">Add</button></td>
+              </tr>
+            </tbody>
+          </table>
+          <p id="packaging-articles-message" class="jopen-form-melding"></p>
+        </div>
+
+        <!-- Section: Packaging materials -->
+        <div class="settings-sectie" id="sectie-packaging-materials" data-titel="Packaging materials">
+          <h2>Packaging materials</h2>
+          <p class="uitleg">The materials booked out on the Filling report (bottles, labels, caps, boxes, kegs). They make up the bill of materials of the packaging articles. A material that is used can only be made inactive.</p>
+          <div id="packaging-materials-list"><p class="jopen-subtitel">Loading…</p></div>
+          <table class="cat-tabel">
+            <tbody>
+              <tr class="cat-nieuw-rij">
+                <td><input type="text" id="packaging-material-new-name" placeholder="Name, e.g. 'Crown cork'…" /></td>
+                <td><input type="text" id="packaging-material-new-unit" value="pcs" aria-label="Unit" style="max-width:90px;" /></td>
+                <td><button id="packaging-material-add-btn">Add</button></td>
+              </tr>
+            </tbody>
+          </table>
+          <p id="packaging-materials-message" class="jopen-form-melding"></p>
+        </div>
+
         <!-- Sectie: Ingredient declarations -->
         <div class="settings-sectie" id="sectie-declaraties" data-titel="Ingredient declarations">
           <h2>Ingredient declarations</h2>
@@ -227,6 +262,8 @@
       { id: 'water', titel: 'Water', laadFn: laadWaterSectie },
       { id: 'cellar-plan', titel: 'Cellar plan', laadFn: loadCellarPlanSection },
       { id: 'action-tags', titel: 'Cellar action tags', laadFn: loadActionTagsSection },
+      { id: 'packaging-articles', titel: 'Packaging articles', laadFn: loadPackagingSections },
+      { id: 'packaging-materials', titel: 'Packaging materials', laadFn: () => {} },
     ];
 
     let alleCategorieen = [];
@@ -988,6 +1025,225 @@
       document.getElementById('action-tag-new-milestone').checked = false;
       showActionTagMessage('Action tag added.', 'ok');
       loadActionTagsSection();
+    });
+
+    // ----------------------------------------------------------------
+    // Sections: Packaging articles + bill of materials, Packaging materials
+    // (packaging_articles / _materials / _article_materials, batch report
+    // phase 7). Both sections share one load; save / delete per row.
+    // ----------------------------------------------------------------
+    const PACKAGE_FORMAT_LABELS = { bottle: 'Bottle', can: 'Can', keg: 'Keg' };
+    let packaging = { articles: [], materials: [], bom: [], articleUse: new Map(), materialUse: new Map() };
+
+    function showPackagingMessage(which, text, kind) {
+      const el = document.getElementById(`packaging-${which}-message`);
+      el.textContent = text;
+      el.className = 'jopen-form-melding' + (kind ? ' ' + kind : '');
+    }
+
+    const packagingNumber = (text) => {
+      const t = String(text ?? '').trim();
+      if (t === '') return null;
+      const n = Number(t.replace(',', '.'));
+      return Number.isFinite(n) ? n : undefined;
+    };
+
+    async function loadPackagingSections() {
+      const [articles, materials, bom, bookedArticles, bookedMaterials] = await Promise.all([
+        supabaseClient.from('packaging_articles').select('*').order('sort_order').order('id'),
+        supabaseClient.from('packaging_materials').select('*').order('sort_order').order('id'),
+        supabaseClient.from('packaging_article_materials').select('id, article_id, material_id, quantity').order('id'),
+        supabaseClient.from('filling_session_articles').select('article_id'),
+        supabaseClient.from('filling_session_materials').select('material_id'),
+      ]);
+      const failed = [articles, materials, bom].find((r) => r.error);
+      if (failed) {
+        ['articles', 'materials'].forEach((w) => {
+          document.getElementById(`packaging-${w}-list`).innerHTML = `<p class="jopen-form-melding fout">Could not load packaging data: ${escapeHtml(failed.error.message)}</p>`;
+        });
+        return;
+      }
+      const count = (rows, key) => (rows || []).reduce((m, r) => m.set(r[key], (m.get(r[key]) || 0) + 1), new Map());
+      packaging = {
+        articles: articles.data || [], materials: materials.data || [], bom: bom.data || [],
+        articleUse: count(bookedArticles.data, 'article_id'), materialUse: count(bookedMaterials.data, 'material_id'),
+      };
+      renderPackagingArticles();
+      renderPackagingMaterials();
+    }
+
+    function renderPackagingArticles() {
+      const container = document.getElementById('packaging-articles-list');
+      if (!packaging.articles.length) { container.innerHTML = '<p class="jopen-subtitel">No packaging articles yet.</p>'; return; }
+      const materialName = (id) => (packaging.materials.find((m) => m.id === id) || {}).name || '?';
+      const rows = packaging.articles.map((a) => {
+        const bom = packaging.bom.filter((b) => b.article_id === a.id);
+        const inBom = new Set(bom.map((b) => b.material_id));
+        const used = packaging.articleUse.get(a.id) || 0;
+        const bomText = bom.map((b) => `${b.quantity} × ${materialName(b.material_id)}`).join(' · ') || 'no materials';
+        return `
+        <tr data-id="${a.id}"${a.is_active ? '' : ' style="color:#999;"'}>
+          <td><input type="text" class="pa-name" value="${escapeHtml(a.name)}" aria-label="Name" /></td>
+          <td><select class="pa-format" aria-label="Package">${Object.entries(PACKAGE_FORMAT_LABELS).map(([k, l]) => `<option value="${k}"${a.package_format === k ? ' selected' : ''}>${l}</option>`).join('')}</select></td>
+          <td><input type="text" class="pa-litres" value="${escapeHtml(String(a.liters_per_unit))}" inputmode="decimal" aria-label="Litres per article" style="max-width:80px;" /></td>
+          <td><input type="text" class="pa-ean" value="${escapeHtml(a.ean || '')}" aria-label="EAN" /></td>
+          <td><input type="text" class="pa-mdrank" value="${escapeHtml(a.mdrank_article_number || '')}" aria-label="Mdrank article number" /></td>
+          <td class="cat-check"><input type="checkbox" class="pa-active"${a.is_active ? ' checked' : ''} aria-label="Active" /></td>
+          <td style="display:flex; gap:6px;">
+            <button class="pa-save-btn">Save</button>
+            ${used ? '' : '<button class="rij-verwijder-btn pa-delete-btn">Delete</button>'}
+          </td>
+        </tr>
+        <tr data-bom-of="${a.id}">
+          <td colspan="7" style="padding-top:0;">
+            <details>
+              <summary style="cursor:pointer; font-size:0.85em; color:#555;">Bill of materials · ${escapeHtml(bomText)}${used ? ` · booked ${used}×` : ''}</summary>
+              <table class="cat-tabel" style="margin:6px 0 10px; max-width:560px;">
+                <tbody>
+                  ${bom.map((b) => `<tr data-bom-id="${b.id}">
+                    <td>${escapeHtml(materialName(b.material_id))}</td>
+                    <td><input type="text" class="pb-qty" value="${escapeHtml(String(b.quantity))}" inputmode="decimal" aria-label="Quantity per article" style="max-width:80px;" /></td>
+                    <td style="display:flex; gap:6px;"><button class="pb-save-btn">Save</button><button class="rij-verwijder-btn pb-delete-btn">Delete</button></td></tr>`).join('')}
+                  <tr class="cat-nieuw-rij">
+                    <td><select class="pb-new-material" aria-label="Material"><option value="">Material…</option>
+                      ${packaging.materials.filter((m) => m.is_active && !inBom.has(m.id)).map((m) => `<option value="${m.id}">${escapeHtml(m.name)}</option>`).join('')}</select></td>
+                    <td><input type="text" class="pb-new-qty" placeholder="Qty" inputmode="decimal" style="max-width:80px;" /></td>
+                    <td><button class="pb-add-btn">Add</button></td></tr>
+                </tbody>
+              </table>
+            </details>
+          </td>
+        </tr>`;
+      }).join('');
+      const open = new Set([...container.querySelectorAll('tr[data-bom-of] details[open]')].map((d) => d.closest('tr').dataset.bomOf));
+      container.innerHTML = `
+        <table class="cat-tabel">
+          <thead><tr><th>Name</th><th>Package</th><th>Litres</th><th>EAN</th><th>Mdrank no.</th><th class="cat-check">Active</th><th></th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+      container.querySelectorAll('tr[data-bom-of]').forEach((tr) => { if (open.has(tr.dataset.bomOf)) tr.querySelector('details').open = true; });
+      container.querySelectorAll('tr[data-id]').forEach((tr) => {
+        tr.querySelector('.pa-save-btn').addEventListener('click', () => savePackagingArticle(tr));
+        tr.querySelector('.pa-delete-btn')?.addEventListener('click', () => deletePackagingRow('articles', 'packaging_articles', tr.dataset.id, 'article'));
+      });
+      container.querySelectorAll('tr[data-bom-of]').forEach((tr) => {
+        tr.querySelectorAll('tr[data-bom-id]').forEach((row) => {
+          row.querySelector('.pb-save-btn').addEventListener('click', () => saveBomLine(row));
+          row.querySelector('.pb-delete-btn').addEventListener('click', () => deletePackagingRow('articles', 'packaging_article_materials', row.dataset.bomId, 'material line'));
+        });
+        tr.querySelector('.pb-add-btn').addEventListener('click', () => addBomLine(tr));
+      });
+    }
+
+    function renderPackagingMaterials() {
+      const container = document.getElementById('packaging-materials-list');
+      if (!packaging.materials.length) { container.innerHTML = '<p class="jopen-subtitel">No packaging materials yet.</p>'; return; }
+      const rows = packaging.materials.map((m) => {
+        const inBom = packaging.bom.filter((b) => b.material_id === m.id).length;
+        const booked = packaging.materialUse.get(m.id) || 0;
+        return `
+        <tr data-id="${m.id}"${m.is_active ? '' : ' style="color:#999;"'}>
+          <td><input type="text" class="pm-name" value="${escapeHtml(m.name)}" aria-label="Name" /></td>
+          <td style="font-family:monospace; font-size:0.85em; color:#777;">${escapeHtml(m.code)}</td>
+          <td><input type="text" class="pm-unit" value="${escapeHtml(m.unit)}" aria-label="Unit" style="max-width:70px;" /></td>
+          <td><input type="text" class="pm-mdrank" value="${escapeHtml(m.mdrank_article_number || '')}" aria-label="Mdrank article number" /></td>
+          <td class="cat-check"><input type="checkbox" class="pm-active"${m.is_active ? ' checked' : ''} aria-label="Active" /></td>
+          <td style="font-size:0.85em; color:#555;">${inBom} articles · ${booked} booked</td>
+          <td style="display:flex; gap:6px;">
+            <button class="pm-save-btn">Save</button>
+            ${inBom + booked ? '' : '<button class="rij-verwijder-btn pm-delete-btn">Delete</button>'}
+          </td>
+        </tr>`;
+      }).join('');
+      container.innerHTML = `
+        <table class="cat-tabel">
+          <thead><tr><th>Name</th><th>Code</th><th>Unit</th><th>Mdrank no.</th><th class="cat-check">Active</th><th>Used</th><th></th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+      container.querySelectorAll('tr[data-id]').forEach((tr) => {
+        tr.querySelector('.pm-save-btn').addEventListener('click', () => savePackagingMaterial(tr));
+        tr.querySelector('.pm-delete-btn')?.addEventListener('click', () => deletePackagingRow('materials', 'packaging_materials', tr.dataset.id, 'material'));
+      });
+    }
+
+    async function packagingWrite(which, request, okText) {
+      const { error } = await request;
+      if (error) {
+        showPackagingMessage(which, error.code === '23505' ? 'That name or material already exists.'
+          : error.code === '23503' ? 'Could not delete: it is in use. Make it inactive instead.'
+            : 'Save failed: ' + error.message, 'fout');
+        return false;
+      }
+      showPackagingMessage(which, okText, 'ok');
+      loadPackagingSections();
+      return true;
+    }
+
+    function savePackagingArticle(tr) {
+      const name = tr.querySelector('.pa-name').value.trim();
+      const litres = packagingNumber(tr.querySelector('.pa-litres').value);
+      if (!name) return showPackagingMessage('articles', 'Name cannot be empty.', 'fout');
+      if (!litres || litres <= 0) return showPackagingMessage('articles', 'Litres per article must be a number above 0.', 'fout');
+      return packagingWrite('articles', supabaseClient.from('packaging_articles').update({
+        name, package_format: tr.querySelector('.pa-format').value, liters_per_unit: litres,
+        ean: tr.querySelector('.pa-ean').value.trim() || null, mdrank_article_number: tr.querySelector('.pa-mdrank').value.trim() || null,
+        is_active: tr.querySelector('.pa-active').checked,
+      }).eq('id', tr.dataset.id), 'Saved.');
+    }
+
+    function savePackagingMaterial(tr) {
+      const name = tr.querySelector('.pm-name').value.trim();
+      if (!name) return showPackagingMessage('materials', 'Name cannot be empty.', 'fout');
+      return packagingWrite('materials', supabaseClient.from('packaging_materials').update({
+        name, unit: tr.querySelector('.pm-unit').value.trim() || 'pcs',
+        mdrank_article_number: tr.querySelector('.pm-mdrank').value.trim() || null, is_active: tr.querySelector('.pm-active').checked,
+      }).eq('id', tr.dataset.id), 'Saved.');
+    }
+
+    function saveBomLine(row) {
+      const quantity = packagingNumber(row.querySelector('.pb-qty').value);
+      if (!quantity || quantity <= 0) return showPackagingMessage('articles', 'Quantity must be a number above 0.', 'fout');
+      return packagingWrite('articles', supabaseClient.from('packaging_article_materials').update({ quantity }).eq('id', row.dataset.bomId), 'Saved.');
+    }
+
+    function addBomLine(tr) {
+      const materialId = Number(tr.querySelector('.pb-new-material').value);
+      const quantity = packagingNumber(tr.querySelector('.pb-new-qty').value);
+      if (!materialId) return showPackagingMessage('articles', 'Choose a material.', 'fout');
+      if (!quantity || quantity <= 0) return showPackagingMessage('articles', 'Quantity must be a number above 0.', 'fout');
+      return packagingWrite('articles', supabaseClient.from('packaging_article_materials')
+        .insert({ article_id: Number(tr.dataset.bomOf), material_id: materialId, quantity }), 'Material added.');
+    }
+
+    function deletePackagingRow(which, table, id, label) {
+      if (!confirm(`Delete this ${label}?`)) return;
+      return packagingWrite(which, supabaseClient.from(table).delete().eq('id', id), 'Deleted.');
+    }
+
+    const nextSortOrder = (rows) => Math.max(0, ...rows.map((r) => r.sort_order || 0)) + 10;
+
+    document.getElementById('packaging-article-add-btn').addEventListener('click', async () => {
+      const name = document.getElementById('packaging-article-new-name').value.trim();
+      const litres = packagingNumber(document.getElementById('packaging-article-new-litres').value);
+      const code = actionTagCode(name);
+      if (!code) return showPackagingMessage('articles', 'Enter a name for the new article.', 'fout');
+      if (!litres || litres <= 0) return showPackagingMessage('articles', 'Litres per article must be a number above 0.', 'fout');
+      const ok = await packagingWrite('articles', supabaseClient.from('packaging_articles').insert({
+        code, name, package_format: document.getElementById('packaging-article-new-format').value, liters_per_unit: litres,
+        sort_order: nextSortOrder(packaging.articles),
+      }), 'Article added · open its bill of materials to add the materials.');
+      if (ok) ['name', 'litres'].forEach((f) => { document.getElementById(`packaging-article-new-${f}`).value = ''; });
+    });
+
+    document.getElementById('packaging-material-add-btn').addEventListener('click', async () => {
+      const name = document.getElementById('packaging-material-new-name').value.trim();
+      const code = actionTagCode(name);
+      if (!code) return showPackagingMessage('materials', 'Enter a name for the new material.', 'fout');
+      const ok = await packagingWrite('materials', supabaseClient.from('packaging_materials').insert({
+        code, name, unit: document.getElementById('packaging-material-new-unit').value.trim() || 'pcs',
+        sort_order: nextSortOrder(packaging.materials),
+      }), 'Material added.');
+      if (ok) document.getElementById('packaging-material-new-name').value = '';
     });
 
     // ----------------------------------------------------------------

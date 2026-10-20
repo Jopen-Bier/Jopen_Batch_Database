@@ -221,6 +221,20 @@ processing → − splits from HBT → − packaged (bottle, can, keg) → = fil
 remainder/loss (% of available for filling; ≤ 3 % green). Pie chart of
 the shares of the GLT volume: bottle, can, keg, splits, cellar loss, filling
 remainder.
+- Brewed into GLT = the GLT total of Brewing (brews with a volume and an
+  extract); in HBT = Σ HBT end values (Processing); a split from one of the
+  batch's HBTs is "from HBT", any other split "from GLT / LT".
+- Packaged per type = Σ count × litres per article, by the article's
+  package. Negative parts (more out than in) count 0 in the pie; the cellar
+  loss row turns red with "More out than in".
+- Per session: book in = count per article (litres = count × litres per
+  article); book out = materials used. Expected per material = Σ count ×
+  BOM quantity of the booked articles; loss = used − expected (> 0 amber:
+  material lost; < 0 red: check the count; 0 green; "—" while used is
+  empty). Filled litres against the session volume (Filling tab): ±3 %
+  green. Module `filling-report.js`, test `tests/filling-report.test.js`.
+- Summary: produced per SKU (= per packaging article, open-questions #13),
+  the splits, totals, and the materials over all sessions.
 
 ## Transfers (splits)
 - A transfer reduces the source volume and adds an incoming line on the
