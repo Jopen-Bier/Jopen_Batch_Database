@@ -75,6 +75,7 @@ Agreed with Jaap. Date = when decided. Do not change without asking.
 ## Splits / transfers
 | Date | Decision |
 |---|---|
+| 20-10 | Base beer in a recipe references the source beer by **recipe group** (all versions), with a share in %. Batch volume = brews × brew volume + volume added from splits; additions are dosed per hl on that volume (no fractional brew count for new splits). |
 | 13-10 | One **transfer** record links source and receiving batch; shown on Fermentation log, Processing and Filling report (same record). |
 | 13-10 | A split to a new product (incl. barrel aging) always gets a **new sequential batch number** (never a suffix), 0 brews. The recipe must already exist. |
 | 13-10 | Dosing of the new product's ingredients is on the **total volume** of the new batch. The **transfer moment** is when the volume counts. |
