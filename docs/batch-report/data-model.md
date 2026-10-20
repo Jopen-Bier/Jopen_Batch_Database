@@ -410,10 +410,17 @@ together. `batch_stages` adds `first_processing_date`, `hbts_total`,
 | are_burst_bottles_controlled | boolean | bottle only |
 | is_hbt_finished | boolean not null default false | HBT finished? |
 
+Built (migration `batch_report_filling`): unique (batch_id, session_number)
+and (id, batch_id); `batch_hbt_id` is a foreign key over (batch_hbt_id,
+batch_id) to `batch_hbts`, set null when the HBT is deleted.
+`batch_stages` adds `first_filling_date`, `hbts_finished`,
+`filled_volume_hl`.
+
 ### `filling_measurements` (new)
 `id`, `batch_id`, `filling_session_id` (cascade), `measured_time time`,
 `tpo_ppb`, `hso_ppb`, `do_ppb`, `headspace_volume`, `pressure_bar`,
 `temp_c`, `co2_gl` (bottle/can, 20 °C), `keg_co2_gl`, `keg_o2_ppb`.
+Foreign key (filling_session_id, batch_id) → filling_sessions (cascade).
 
 ---
 

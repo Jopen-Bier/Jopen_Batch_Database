@@ -199,6 +199,12 @@ window).
   finished?"**; measurements table per package type (bottle/can: TPO, HSO,
   DO, HS vol., pressure, temp, CO2; keg: CO2, O2).
 - Quality · process capability (n, average, std, Cpk, est. in spec).
+- Built (phase 6): the package choice follows the HBT's intended formats;
+  bottle / can sessions show the TPO … CO2 table, keg sessions CO2 / O2;
+  "Burst bottles under control" only for bottle; delete a session with its
+  measurements, Undo restores both.
+- Active batches: Filling tiles "Bottle + Keg" / "1/2 HBT finished" (with a
+  progress bar); Filled tiles "76.8 hl packaged" / "Filling report open".
 
 ## Filling report (`mockup/FillingReport.dc.html`)
 - **Volume balance** table + **pie chart** with legend (hl and % per part).

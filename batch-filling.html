@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jopen Brouwerij — Filling</title>
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="stylesheet" href="jopen-shared.css" />
+  <link rel="stylesheet" href="batch-report.css" />
+</head>
+<body class="br-page">
+
+  <div id="jopen-nav"></div>
+
+  <main class="br-main">
+    <div id="fi-header" style="display:flex; flex-direction:column; gap:14px;"></div>
+    <div class="br-message" id="fi-message">Loading batch…</div>
+    <div id="fi-content" style="display:none; flex-direction:column; gap:16px;">
+      <div class="br-row2">
+        <div class="br-card br-cardpad" style="flex:1 1 340px; min-width:0;" id="fi-batch"></div>
+        <div class="br-card br-cardpad" style="flex:3 1 600px; min-width:0;" id="fi-specs"></div>
+      </div>
+      <div class="br-card br-cardpad" id="fi-sessions"></div>
+      <div class="br-card br-cardpad" id="fi-quality"></div>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="jopen-utils.js"></script>
+  <script src="nav.js"></script>
+  <script src="recipe-values.js"></script>
+  <script src="batch-stages.js"></script>
+  <script src="processing.js"></script>
+  <script src="filling.js"></script>
+  <script src="batch-report-shell.js"></script>
+  <script src="batch-report-cards.js"></script>
+  <script>
+    const TRASH_ICON = '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2.5 4h9M5.5 4V2.5h3V4M3.5 4l.6 8h5.8l.6-8"></path></svg>';
+    const UNDO_TEXT = 'You can undo this right after deleting. The deletion is recorded in the audit trail.';
+    const PACK_FIELDS = [
+      ['tpo_ppb', 'TPO ppb'], ['hso_ppb', 'HSO ppb'], ['do_ppb', 'DO ppb'], ['headspace_volume', 'HS vol.'],
+      ['pressure_bar', 'Pressure'], ['temp_c', 'Temp. (°C)'], ['co2_gl', 'CO2 g/l (20 °C)'],
+    ];
+    const KEG_FIELDS = [['keg_co2_gl', 'CO2 keg g/l'], ['keg_o2_ppb', 'Oxygen keg ppb']];
+    const CHECKS = [
+      ['is_first_package_checked', 'First package check (two operators)'],
+      ['is_fill_tube_checked_first', 'Fill tube detection check · first package'],
+      ['is_fill_tube_checked_end', 'Fill tube detection check · end of batch'],
+      ['are_burst_bottles_controlled', 'Burst bottles under control', 'bottle'],
+    ];
+
+    const page = {
+      user: null, canEdit: false, canDelete: false, ctx: null, save: null,
+      sessions: [], measurements: [], hbts: [], readings: [], tanks: [], users: [], initialsOf: () => '',
+      packaging: {}, ferm: {},
+    };
+    const fmt = (v, digits) => (v === null || v === undefined || v === '' ? '—'
+      : Number(v).toLocaleString('en-GB', { maximumFractionDigits: digits ?? 2 }));
+    const dis = () => (page.canEdit ? '' : ' disabled');
+    const val = (v) => escapeHtml(v === null || v === undefined ? '' : String(v));
+    const tankCode = (id) => (page.tanks.find((t) => t.id === id) || {}).code || '—';
+    const hbtById = (id) => page.hbts.find((h) => h.id === id) || null;
+    const hbtEndHl = (h) => { const end = hbtEnd(page.readings.filter((r) => r.batch_hbt_id === h.id)); return end ? end.level_hl : null; };
+    const formatLabel = (code) => (PACKAGE_FORMATS.find((f) => f.code === code) || {}).label || '—';
+
+    function showMessage(text, isError) {
+      const el = document.getElementById('fi-message');
+      el.textContent = text;
+      el.className = 'br-message' + (isError ? ' error' : '');
+      el.style.display = text ? '' : 'none';
+    }
+
+    // ------------------------------------------------------------ loading
+    async function loadAll(batchId) {
+      page.ctx = await loadBatchContext(batchId);
+      const recipeId = page.ctx.batch.recipe_id;
+      const byBatch = (table) => supabaseClient.from(table).select('*').eq('batch_id', batchId);
+      const one = (table) => supabaseClient.from(table).select('*').eq('recipe_id', recipeId).maybeSingle();
+      const [sessions, measurements, hbts, readings, tanks, users, packaging, ferm] = await Promise.all([
+        byBatch('filling_sessions').order('session_number'),
+        byBatch('filling_measurements').order('measured_time', { nullsFirst: false }).order('id'),
+        byBatch('batch_hbts').order('sort_order').order('id'),
+        byBatch('hbt_readings').order('sort_order').order('id'),
+        supabaseClient.from('tanks').select('id, code, tank_type, number, volume_hl').eq('tank_type', 'hbt').order('number'),
+        loadUserInitials(),
+        one('recipe_packaging'), one('recipe_fermentation'),
+      ]);
+      for (const res of [sessions, measurements, hbts, readings, tanks]) if (res.error) throw res.error;
+      Object.assign(page, {
+        sessions: sessions.data, measurements: measurements.data, hbts: hbts.data, readings: readings.data, tanks: tanks.data,
+        users: users.users.filter((u) => u.is_active), initialsOf: users.initialsOf,
+        packaging: packaging.data || {}, ferm: ferm.data || {},
+      });
+    }
+
+    // ------------------------------------------------------------ saving
+    const renderSoon = createRenderer(() => renderAll());
+    const saveRow = (table, row, patch) => saveRowPatch({ table, row, patch, saveStatus: page.save, renderSoon, userId: page.user.id });
+    const insertRow = (table, values, list) => insertBatchRow({ table, values, list, saveStatus: page.save, userId: page.user.id });
+    const measurementsOf = (s) => page.measurements.filter((m) => m.filling_session_id === s.id);
+
+    async function addSession() {
+      const last = page.sessions[page.sessions.length - 1];
+      const openHbt = page.hbts.find((h) => hbtFillStatus(h, page.sessions) !== 'finished');
+      const hbt = last && last.batch_hbt_id && hbtFillStatus(hbtById(last.batch_hbt_id) || {}, page.sessions) !== 'finished' ? hbtById(last.batch_hbt_id) : openHbt;
+      const session = await insertRow('filling_sessions', {
+        batch_id: page.ctx.batch.id, session_number: last ? last.session_number + 1 : 1,
+        filling_date: toDateTimeLocal(new Date()).slice(0, 10), batch_hbt_id: hbt ? hbt.id : null,
+        package_format: hbt && hbt.intended_formats.length === 1 ? hbt.intended_formats[0] : null,
+      }, page.sessions);
+      if (session) renderSoon(`[data-session="${session.id}"][data-field="volume_hl"]`);
+    }
+
+    async function deleteSession(s) {
+      const ok = await confirmDialog({ title: `Delete filling session ${s.session_number} and its measurements?`, text: UNDO_TEXT });
+      if (!ok) return;
+      const rows = measurementsOf(s);
+      page.save.saving();
+      const { error } = await supabaseClient.from('filling_sessions').delete().eq('id', s.id).select('id').single();
+      if (error) { page.save.failed(error.message); return; }
+      page.sessions.splice(page.sessions.indexOf(s), 1);
+      page.measurements = page.measurements.filter((m) => m.filling_session_id !== s.id);
+      page.save.saved();
+      renderSoon();
+      showUndoToast(`Filling session ${s.session_number}`, async () => {
+        const { id, created_at, updated_at, updated_by, ...values } = s;
+        const again = await insertRow('filling_sessions', values, page.sessions);
+        if (!again) return;
+        page.sessions.sort((a, b) => a.session_number - b.session_number);
+        for (const m of rows) {
+          const { id: mid, created_at: c, updated_at: u, updated_by: ub, ...mv } = m;
+          await insertRow('filling_measurements', { ...mv, filling_session_id: again.id }, page.measurements);
+        }
+        renderSoon();
+      });
+    }
+
+    async function addMeasurement(s) {
+      const now = new Date();
+      const m = await insertRow('filling_measurements', {
+        batch_id: page.ctx.batch.id, filling_session_id: s.id,
+        measured_time: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
+      }, page.measurements);
+      if (m) renderSoon(`[data-measurement="${m.id}"][data-field="${s.package_format === 'keg' ? 'keg_co2_gl' : 'tpo_ppb'}"]`);
+    }
+
+    async function deleteMeasurement(m) {
+      const ok = await confirmDialog({ title: 'Delete this measurement?', text: UNDO_TEXT });
+      if (!ok) return;
+      page.save.saving();
+      const { error } = await supabaseClient.from('filling_measurements').delete().eq('id', m.id).select('id').single();
+      if (error) { page.save.failed(error.message); return; }
+      page.measurements.splice(page.measurements.indexOf(m), 1);
+      page.save.saved();
+      renderSoon();
+      showUndoToast('Measurement', async () => {
+        const { id, created_at, updated_at, updated_by, ...values } = m;
+        await insertRow('filling_measurements', values, page.measurements);
+        renderSoon();
+      });
+    }
+
+    // ------------------------------------------------------------ rendering
+    function renderAll() {
+      renderBatchCard();
+      renderSpecs();
+      renderSessions();
+      renderQuality();
+    }
+
+    const STATUS_TEXT = { finished: '✓ Finished', filling: 'Filling', not_started: 'Not started' };
+
+    function renderBatchCard() {
+      const [bg, fg] = BEER_RISK_COLORS[page.ferm.beer_risk] || ['#ece8dc', '#33473a'];
+      const statuses = page.hbts.map((h) => ({ h, status: hbtFillStatus(h, page.sessions) }));
+      const finished = statuses.filter((x) => x.status === 'finished').length;
+      const summary = !page.hbts.length ? 'No HBT on Processing yet.'
+        : finished === page.hbts.length ? 'All HBTs finished · the batch is Filled until the filling report is completed and signed'
+          : `${finished} of ${page.hbts.length} HBTs finished · tick "HBT finished?" in the last session of a tank`;
+      document.getElementById('fi-batch').innerHTML = `
+        <div class="br-label">Batch</div>
+        <div style="display:flex; gap:10px; align-items:center; padding:6px 0;"><span class="br-label">Beer risk</span>
+          <span class="br-pill" style="background:${bg}; color:${fg};">${escapeHtml(valueLabel(BEER_RISK_LABELS, page.ferm.beer_risk))}</span></div>
+        <div class="br-note">Ready in HBT · from Processing</div>
+        ${statuses.map(({ h, status }) => `<div class="br-kr"><span class="k">${escapeHtml(tankCode(h.tank_id))} · ${escapeHtml(formatsText(h.intended_formats))}</span>
+          <span class="c">${fmt(hbtEndHl(h), 1)} hl</span><span class="fi-status ${status}">${STATUS_TEXT[status]}</span></div>`).join('')}
+        <div class="br-note" style="padding-top:6px;">${escapeHtml(summary)}</div>
+        <div class="br-kr"><span class="k">Day number <span class="br-note">· today</span></span><span class="c">${dayNumber(new Date())}</span></div>`;
+    }
+
+    function renderSpecs() {
+      const lim = fillingLimits(page.packaging);
+      const p = page.packaging;
+      const maxRow = (label, field, recipeValue) => `<div class="br-kv"><span class="k">${escapeHtml(label)}${recipeValue == null ? ' <span class="br-note">· house limit</span>' : ''}</span>
+        <span class="v">${fmt(lim[field].hi)}</span><span class="u">ppb</span><span class="t">&lt;</span></div>`;
+      const bandRow = (label, spec, tol) => `<div class="br-kv"><span class="k">${escapeHtml(label)}</span>
+        <span class="v">${fmt(spec)}</span><span class="u">g/l</span><span class="t">${spec != null ? '±' + fmt(tol || 0) : ''}</span></div>`;
+      document.getElementById('fi-specs').innerHTML = `
+        <div class="br-label">Specifications · from recipe</div>
+        <div class="br-specs">
+          <div>
+            <div class="br-kv hd"><span class="k">Bottle / can</span><span class="v">Spec</span><span class="u">Unit</span><span class="t">Tol.</span></div>
+            ${maxRow('TPO', 'tpo_ppb', p.tpo_spec)}${maxRow('HSO', 'hso_ppb', p.hso_spec)}${maxRow('DO', 'do_ppb', p.do_spec)}
+            ${bandRow('CO2 (20 °C)', p.co2_bottle_can_spec, p.co2_bottle_can_tolerance)}
+          </div>
+          <div>
+            <div class="br-kv hd"><span class="k">Keg</span><span class="v">Spec</span><span class="u">Unit</span><span class="t">Tol.</span></div>
+            ${bandRow('CO2', p.co2_keg_spec, p.co2_keg_tolerance)}${maxRow('Oxygen', 'keg_o2_ppb', p.o2_keg_spec)}
+          </div>
+        </div>`;
+    }
+
+    function userOptions(selected) {
+      return '<option value="">—</option>' + page.users.map((u) =>
+        `<option value="${u.id}"${u.id === selected ? ' selected' : ''}>${escapeHtml(u.initials || '')} · ${escapeHtml(u.name)}</option>`).join('');
+    }
+
+    function measurementTable(s) {
+      if (!s.package_format) return '<div class="br-note">Choose the package to enter measurements.</div>';
+      const keg = s.package_format === 'keg';
+      const fields = keg ? KEG_FIELDS : PACK_FIELDS;
+      const lim = fillingLimits(page.packaging);
+      const rows = measurementsOf(s).map((m) => `<tr>
+        <td><input class="br-in l" type="time" data-measurement="${m.id}" data-field="measured_time" value="${val((m.measured_time || '').slice(0, 5))}" aria-label="Time"${dis()}></td>
+        ${fields.map(([f, label]) => `<td><input class="br-in${outOfSpec(m[f], lim[f]) ? ' bad' : ''}" data-measurement="${m.id}" data-field="${f}" value="${val(m[f])}" inputmode="decimal" aria-label="${label}"${dis()}></td>`).join('')}
+        <td>${page.canDelete ? `<button class="br-del" type="button" data-delete-measurement="${m.id}" aria-label="Delete measurement">${TRASH_ICON}</button>` : ''}</td></tr>`).join('');
+      return `<div class="br-table-wrap"><table class="br-ing" style="min-width:${keg ? 420 : 860}px;">
+        <thead><tr><th style="width:100px;">Time</th>${fields.map(([, label]) => `<th class="r">${escapeHtml(label)}</th>`).join('')}<th style="width:34px;"></th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="${fields.length + 2}" class="small">No measurements yet.</td></tr>`}</tbody></table></div>
+        ${page.canEdit ? `<div><button class="br-ghost" type="button" data-add-measurement="${s.id}">+ Measurement</button></div>` : ''}`;
+    }
+
+    function renderSessions() {
+      const blocks = page.sessions.map((s) => {
+        const hbt = hbtById(s.batch_hbt_id);
+        const formats = hbt && hbt.intended_formats.length ? hbt.intended_formats : PACKAGE_FORMATS.map((f) => f.code);
+        const field = (id, label, inner) => `<div class="br-field pr-field"><label class="br-label" for="${id}">${label}</label>${inner}</div>`;
+        const checks = CHECKS.filter(([, , only]) => !only || s.package_format === only).map(([f, label]) =>
+          `<label class="br-check pr-check"><input type="checkbox" data-session="${s.id}" data-field="${f}"${s[f] ? ' checked' : ''}${dis()}><span>${label}</span></label>`).join('');
+        return `<div class="pr-hbt fi-session${s.is_hbt_finished ? ' finished' : ''}">
+          <div class="pr-hbt-head">
+            <b class="fi-title">Session ${s.session_number}${hbt ? ' · ' + escapeHtml(tankCode(hbt.tank_id)) : ''}${s.package_format ? ' · ' + formatLabel(s.package_format) : ''}</b>
+            ${page.canDelete ? `<button class="br-del" type="button" data-delete-session="${s.id}" aria-label="Delete filling session" style="margin-left:auto;">${TRASH_ICON}</button>` : ''}
+          </div>
+          <div class="pr-grid">
+            ${field(`fi-date-${s.id}`, `Date${s.filling_date ? ` <span class="br-note">· day ${dayNumber(s.filling_date)}</span>` : ''}`, `<input class="br-input" id="fi-date-${s.id}" type="date" data-session="${s.id}" data-field="filling_date" value="${val(s.filling_date)}"${dis()}>`)}
+            ${field(`fi-hbt-${s.id}`, 'HBT', `<select class="br-input" id="fi-hbt-${s.id}" data-session="${s.id}" data-field="batch_hbt_id"${dis()}><option value="">Choose HBT</option>
+              ${page.hbts.map((h) => `<option value="${h.id}"${h.id === s.batch_hbt_id ? ' selected' : ''}>${escapeHtml(tankCode(h.tank_id))} · ${fmt(hbtEndHl(h), 1)} hl</option>`).join('')}</select>`)}
+            ${field(`fi-pkg-${s.id}`, 'Package', `<select class="br-input" id="fi-pkg-${s.id}" data-session="${s.id}" data-field="package_format"${dis()}><option value="">Choose</option>
+              ${[...new Set([...formats, s.package_format].filter(Boolean))].map((c) => `<option value="${c}"${c === s.package_format ? ' selected' : ''}>${formatLabel(c)}</option>`).join('')}</select>`)}
+            ${field(`fi-vol-${s.id}`, 'Volume (hl)', `<input class="br-input" id="fi-vol-${s.id}" inputmode="decimal" data-session="${s.id}" data-field="volume_hl" value="${val(s.volume_hl)}"${dis()}>`)}
+            ${field(`fi-start-${s.id}`, 'Start filling', `<input class="br-input" id="fi-start-${s.id}" type="time" data-session="${s.id}" data-field="start_time" value="${val((s.start_time || '').slice(0, 5))}"${dis()}>`)}
+            ${field(`fi-end-${s.id}`, 'End filling', `<input class="br-input" id="fi-end-${s.id}" type="time" data-session="${s.id}" data-field="end_time" value="${val((s.end_time || '').slice(0, 5))}"${dis()}>`)}
+            <div class="br-field pr-field"><span class="br-label">Filled by</span><div class="br-calc-box">${escapeHtml(page.initialsOf(s.created_by) || '—')}</div></div>
+            ${field(`fi-sampled-${s.id}`, 'Sampled by', `<select class="br-input" id="fi-sampled-${s.id}" data-session="${s.id}" data-field="sampled_by"${dis()}>${userOptions(s.sampled_by)}</select>`)}
+          </div>
+          <div class="fi-checks">${checks}
+            <label class="br-check pr-check fi-finished"><input type="checkbox" data-session="${s.id}" data-field="is_hbt_finished"${s.is_hbt_finished ? ' checked' : ''}${hbt ? dis() : ' disabled title="Choose the HBT first"'}>
+              <span><b>${hbt ? `${escapeHtml(tankCode(hbt.tank_id))} finished?` : 'HBT finished?'}</b> <span class="br-note">tick in the last session of a tank</span></span></label>
+          </div>
+          ${measurementTable(s)}
+        </div>`;
+      }).join('');
+      document.getElementById('fi-sessions').innerHTML = `
+        <div class="br-head" style="align-items:center;">
+          <div class="br-label">Filling sessions</div>
+          ${page.canEdit ? `<button class="br-primary" type="button" id="fi-add-session"${page.hbts.length ? '' : ' disabled title="Add the HBTs on Processing first"'}>+ Add filling session</button>` : ''}
+        </div>
+        ${blocks || `<div class="br-note">No filling session yet.${page.hbts.length ? ' The first filling date moves the batch to Filling; when every HBT is finished the batch is Filled.' : ' The HBTs come from Processing.'}</div>`}`;
+    }
+
+    function renderQuality() {
+      const rows = qualityRows(page.measurements, page.packaging).map((q) => {
+        const d = q.decimals;
+        const cls = cpkClass(q.cpk);
+        return `<tr><td><b>${escapeHtml(q.label)}</b>${q.limit ? '' : ' <span class="br-note">· no spec in recipe</span>'}</td><td class="n">${q.n}</td>
+          <td class="n">${q.mean === null ? '—' : q.mean.toFixed(d)}</td><td class="n">${q.sd === null ? '—' : q.sd.toFixed(d ? 3 : 1)}</td>
+          <td class="n fi-cpk ${cls}">${q.cpk === null ? '—' : q.cpk.toFixed(2)}</td>
+          <td class="n${q.inSpec !== null && q.inSpec < 0.99 ? ' fi-low' : ''}">${q.inSpec === null ? '—' : (q.inSpec * 100).toFixed(1) + ' %'}</td></tr>`;
+      }).join('');
+      document.getElementById('fi-quality').innerHTML = `
+        <div class="br-head" style="align-items:baseline;">
+          <div class="br-label">Quality · process capability</div>
+          <span class="br-note">Calculated from all filling measurements · Cpk ≥ 1.33 green, ≥ 1 amber, below 1 red</span>
+        </div>
+        <table class="br-ing" style="max-width:820px;"><thead><tr><th>Parameter</th><th class="r">n</th><th class="r">Average</th><th class="r">Std</th><th class="r">Cpk</th><th class="r">Est. in spec</th></tr></thead>
+          <tbody>${rows}</tbody></table>`;
+    }
+
+    // ------------------------------------------------------------ events
+    function bindEvents() {
+      const main = document.querySelector('main');
+      main.addEventListener('change', (e) => {
+        const el = e.target;
+        const f = el.dataset.field;
+        if (el.dataset.session) {
+          const s = page.sessions.find((x) => x.id === Number(el.dataset.session));
+          if (el.type === 'checkbox') return saveRow('filling_sessions', s, { [f]: el.checked });
+          if (f === 'batch_hbt_id') {
+            const hbt = hbtById(Number(el.value));
+            const patch = { batch_hbt_id: el.value ? Number(el.value) : null };
+            if (!hbt) patch.is_hbt_finished = false;
+            if (hbt && hbt.intended_formats.length === 1 && !s.package_format) patch.package_format = hbt.intended_formats[0];
+            return saveRow('filling_sessions', s, patch);
+          }
+          if (f === 'volume_hl') {
+            const v = parseNumberInput(el.value);
+            if (v === undefined) { el.classList.add('bad'); el.title = 'Not a number'; return; }
+            el.classList.remove('bad');
+            return saveRow('filling_sessions', s, { volume_hl: v });
+          }
+          return saveRow('filling_sessions', s, { [f]: el.value || null });
+        }
+        if (el.dataset.measurement) {
+          const m = page.measurements.find((x) => x.id === Number(el.dataset.measurement));
+          if (f === 'measured_time') return saveRow('filling_measurements', m, { measured_time: el.value || null });
+          const v = parseNumberInput(el.value);
+          if (v === undefined) { el.classList.add('bad'); el.title = 'Not a number'; return; }
+          el.classList.remove('bad');
+          return saveRow('filling_measurements', m, { [f]: v });
+        }
+      });
+      main.addEventListener('click', (e) => {
+        const t = e.target;
+        if (t.closest('#fi-add-session')) return addSession();
+        const delS = t.closest('button[data-delete-session]');
+        if (delS) return deleteSession(page.sessions.find((x) => x.id === Number(delS.dataset.deleteSession)));
+        const addM = t.closest('button[data-add-measurement]');
+        if (addM) return addMeasurement(page.sessions.find((x) => x.id === Number(addM.dataset.addMeasurement)));
+        const delM = t.closest('button[data-delete-measurement]');
+        if (delM) return deleteMeasurement(page.measurements.find((x) => x.id === Number(delM.dataset.deleteMeasurement)));
+      });
+      main.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && e.target.matches('input.br-in, input.br-input')) e.target.blur();
+      });
+    }
+
+    async function initFillingPage() {
+      page.user = await getCurrentUser();
+      if (!page.user) return; // nav.js redirects to login
+      if (!(await magBekijkenModule('batches'))) {
+        showMessage('You do not have access to batch reports. Ask an admin for view rights on "Batches & batch reports".');
+        return;
+      }
+      const batchId = batchIdFromUrl();
+      if (!batchId) { showMessage('No batch chosen. Open a batch from All batches or Active batches.', true); return; }
+      page.canEdit = await magBewerkenModule('batches');
+      page.canDelete = await magVerwijderenModule('batches');
+      try {
+        await loadAll(batchId);
+      } catch (err) {
+        showMessage('Could not load the batch: ' + (err.message || err), true);
+        return;
+      }
+      document.title = `Jopen Brouwerij — ${page.ctx.batch.batch_number} Filling`;
+      page.save = renderBatchHeader(document.getElementById('fi-header'), page.ctx, 'filling');
+      showMessage('');
+      document.getElementById('fi-content').style.display = 'flex';
+      bindEvents();
+      renderAll();
+    }
+
+    document.addEventListener('DOMContentLoaded', initFillingPage);
+  </script>
+</body>
+</html>

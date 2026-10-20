@@ -94,6 +94,8 @@ function toBatchRow(batch, stageRow) {
     hbtsReleased: (stageRow && stageRow.hbts_released) || 0,
     hbtCodes: (stageRow && stageRow.hbt_codes) || null,
     hbtFormats: (stageRow && stageRow.hbt_formats) || [],
+    hbtsFinished: (stageRow && stageRow.hbts_finished) || 0,
+    filledVolumeHl: (stageRow && stageRow.filled_volume_hl) ?? null,
     // the tank the beer is in: the lager tank once it is pushed over, else the fermentation tank
     // (from HBT on: the bright beer tanks)
     tankCode: (['hbt', 'filling', 'filled'].includes(stageRow && stageRow.stage) && stageRow.hbt_codes)
@@ -233,6 +235,24 @@ function tileLines(row, now = new Date()) {
       progress: null,
     };
   }
+  if (row.stage === 'filling') {
+    const total = row.hbtsTotal || 0, finished = row.hbtsFinished || 0;
+    return {
+      line1: formatsText(row.hbtFormats),
+      line2: `${finished}/${total} HBT finished`,
+      isOk: false,
+      progress: total ? Math.min(1, finished / total) : null,
+    };
+  }
+  if (row.stage === 'filled') {
+    const hl = Number(row.filledVolumeHl);
+    return {
+      line1: Number.isFinite(hl) && row.filledVolumeHl !== null ? `${hl.toLocaleString('en-GB', { maximumFractionDigits: 1 })} hl packaged` : 'Packaged',
+      line2: 'Filling report open',   // phase 7: completed / signed
+      isOk: false,
+      progress: null,
+    };
+  }
   return { line1: stageInfo(row.stage).label, line2: '', isOk: false, progress: null };
 }
 
@@ -242,7 +262,7 @@ const BATCH_TABS = [
   { key: 'brewing', label: 'Brewing', page: 'batch-brewing.html' },
   { key: 'fermentation', label: 'Fermentation log', page: 'batch-fermentation.html' },
   { key: 'processing', label: 'Processing', page: 'batch-processing.html' },
-  { key: 'filling', label: 'Filling', page: null, phase: 6 },
+  { key: 'filling', label: 'Filling', page: 'batch-filling.html' },
   { key: 'filling-report', label: 'Filling report', page: null, phase: 7 },
 ];
 
@@ -254,7 +274,7 @@ function batchTabHref(tabKey, batchId) {
 
 // The tab a batch opens on from a list: the tab of its current stage once
 // that tab exists, else the Overview.
-const STAGE_TABS = { brewing: 'brewing', fermentation: 'fermentation', lagering: 'fermentation', hbt: 'processing' };
+const STAGE_TABS = { brewing: 'brewing', fermentation: 'fermentation', lagering: 'fermentation', hbt: 'processing', filling: 'filling', filled: 'filling' };
 
 // Package formats of an HBT (batch_hbts.intended_formats), in this order.
 const PACKAGE_FORMATS = [
