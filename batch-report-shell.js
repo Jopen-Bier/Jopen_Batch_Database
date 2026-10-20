@@ -10,7 +10,7 @@
 const BATCH_TABS = [
   { key: 'overview', label: 'Overview', page: 'batch-overview.html' },
   { key: 'brewing', label: 'Brewing', page: 'batch-brewing.html' },
-  { key: 'fermentation', label: 'Fermentation log', page: null, phase: 4 },
+  { key: 'fermentation', label: 'Fermentation log', page: 'batch-fermentation.html' },
   { key: 'processing', label: 'Processing', page: null, phase: 5 },
   { key: 'filling', label: 'Filling', page: null, phase: 6 },
   { key: 'filling-report', label: 'Filling report', page: null, phase: 7 },
@@ -38,12 +38,12 @@ async function loadBatchContext(batchId) {
       .select('*, recipes(id, name, beer_style, location, version_major, version_minor, brew_volume_hl)')
       .eq('id', batchId)
       .maybeSingle(),
-    supabaseClient.from('batch_stages').select('stage, start_date, end_date').eq('batch_id', batchId).maybeSingle(),
+    supabaseClient.from('batch_stages').select('*').eq('batch_id', batchId).maybeSingle(),
   ]);
   if (batchRes.error) throw batchRes.error;
   if (!batchRes.data) throw new Error(`Batch ${batchId} not found.`);
   const { recipes: recipe, ...batch } = batchRes.data;
-  return { batch, recipe: recipe || {}, stage: (stageRes.data && stageRes.data.stage) || 'raw' };
+  return { batch, recipe: recipe || {}, stage: (stageRes.data && stageRes.data.stage) || 'raw', stageRow: stageRes.data || null };
 }
 
 /**

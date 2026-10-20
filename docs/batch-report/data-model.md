@@ -222,7 +222,7 @@ total, total brewing time (business-rules.md).
 ### `batches` (new columns)
 | Column | Type | Notes |
 |---|---|---|
-| time_zero | timestamptz | "Time 0 · last brew in tank"; default = `brewing_ended_at` of the last brew, editable |
+| time_zero | timestamptz | "Time 0 · last brew in tank"; empty = `brewing_ended_at` of the last brew (`batch_stages.time_zero` gives the value in use), editable |
 | glt_tank_id | bigint → tanks | fermentation tank (GLT or CKT) — **built in phase 3** |
 | lt_tank_id | bigint → tanks | lager tank when pushed over; null = stays in GLT |
 
@@ -233,6 +233,16 @@ total, total brewing time (business-rules.md).
 Dryhopping*, Tasting, Cooling*, Addition*, Pump start, Pump stop, Transfer,
 Transport, Processing, Sample to lab*, Blending, Other (* = milestone; see
 mockup `Settings.dc.html`). RLS: select all logged-in; write via `settings`.
+
+### `cellar_plan_parts` (new) — Settings › Cellar plan
+`id`, `code text unique`, `kind` check in (`dry_warm`, `cold_dry_hop`,
+`cooling_lagering`, `sample_lab`, `dry_hop_at_lagering`, `addition_timing`),
+`label`, `shows_on` check in (`cellar_plan`, `processing`),
+`on_addition_day boolean`, `sort_order`, `is_active`. Fixed parts have
+`code = kind`; `addition_timing` rows are the timing values of cellar
+additions (`recipe_ingredients.timing` holds the code). Order = order of the
+generated plan (business-rules). RLS: select all logged-in; write via
+`settings`; only timing values can be inserted / deleted.
 
 ### `recipe_cellar_steps` (new)
 | Column | Type | Notes |
@@ -246,18 +256,27 @@ mockup `Settings.dc.html`). RLS: select all logged-in; write via `settings`.
 | trigger_type | text not null | check in (`extract`,`day`,`after_previous`,`temperature`) |
 | trigger_value | numeric | °P / day from Time 0 / °C |
 | trigger_tol | numeric | ± tolerance |
-| recipe_ingredient_ids | bigint[] | linked dry hop / cellar addition lines |
+| planned_day | numeric | day from Time 0: the trigger for `day`, else indicative ("~day 3"); required for `day` |
+| recipe_ingredient_ids | bigint[] not null default '{}' | linked dry hop / cellar addition lines |
 | starts_lagering | boolean not null default false | true on "Cooling to [lagering temp]" |
 | is_generated | boolean not null default true | false once edited by hand (regeneration leaves it alone) |
+| generated_key | text | which generated step this is (unique per recipe); null for steps added by hand |
 
-Function `generate_recipe_cellar_steps(p_recipe_id)` implements the rules in
-business-rules.md; backfill for active recipes. RLS via `recipes`.
+Function `generate_recipe_cellar_steps(p_recipe_id, p_reset_order default false)`
+implements the rules in business-rules.md; `apply_cellar_plan_order()`
+regenerates all recipes with a plan in the Settings order; `save_recipe_cellar_steps(p_recipe_id, p_steps jsonb)`
+saves the editor's plan (as `save_recipe_ingredients`) and then regenerates.
+Helper `tolerance_value(text)`. Backfill
+for active recipes and the recipes of planned batches. RLS via `recipes`.
 
 ### `batch_cellar_steps` (new) — snapshot per batch
-Same columns as `recipe_cellar_steps` minus `is_generated`, with `batch_id`
-instead of `recipe_id` and `recipe_cellar_step_id` (traceability). Filled by
-the batch snapshot (extend `snapshot_batch_ingredients` → rename to
-`snapshot_batch(p_batch_id)`). Done-status is **derived** (business-rules).
+Same columns as `recipe_cellar_steps` minus `is_generated`/`generated_key`,
+with `batch_id` instead of `recipe_id` and `recipe_cellar_step_id`
+(traceability). Filled by `snapshot_batch_cellar_steps(p_batch_id)` (batch
+insert trigger next to `snapshot_batch_ingredients`, backfill of planned
+batches, and on opening the tab). Done-status is **derived** (business-rules);
+`batch_stages` adds `time_zero`, `cellar_steps_total`, `cellar_steps_done`,
+`next_cellar_step`, `lagering_started_at`.
 
 ### `fermentation_log_entries` (new)
 | Column | Type | Notes |
@@ -274,7 +293,8 @@ Day (since Time 0), °P decrease and hours are calculated.
 
 ### `fermentation_log_entry_tags` (new)
 `entry_id → fermentation_log_entries` (cascade), `tag_id → cellar_action_tags`,
-PK (entry_id, tag_id), `batch_id` (for RLS/audit).
+PK (entry_id, tag_id), `batch_id` (for RLS/audit; foreign key
+(entry_id, batch_id) so it is always the batch of the entry).
 
 ### `batch_transfers` (new — created here, full flow in phase 8)
 | Column | Type | Notes |

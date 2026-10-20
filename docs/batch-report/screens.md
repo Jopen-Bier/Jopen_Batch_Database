@@ -120,10 +120,39 @@ their own screen). Filters: search, status, year (default all years), WP/JK.
   Processing and Filling report; "+ Split / transfer" opens the popup.
 - Fermentation curve: Plato and temperatures vs days since Time 0, spec lines
   (final extract, warm dry hop extract).
+- Built (phase 4): Time 0 shows "End of the last brew" or "Set by hand · use
+  end of last brew"; the GLT total from Brewing is offered as the first
+  measurement when the log is empty; a run of more than 3 days without a
+  measurement is one dashed row; transfers use an inline form (date, hl, from
+  GLT/LT, To batch by batch number or Discard with a required reason) and are
+  deleted / re-added rather than edited; the plan on the batch is read-only
+  (it is the snapshot of the recipe plan). Calculators: Nagardo and PGA /
+  alginate (Nano Flavor is not built: concept only).
 
 ## Settings · action tags (`mockup/Settings.dc.html`)
 CRUD of `cellar_action_tags` (label, milestone yes/no, order, active).
-Lives on `settings.html` (or its own section) under module `settings`.
+Section "Cellar action tags" on `settings.html` (`#action-tags`), module
+`settings`. Code is made from the label on add and not changed after. Columns:
+drag handle · Label · Code · Milestone · Active · Used (in logs · in plans) ·
+Save / Delete. A used tag has no Delete: make it inactive.
+
+## Settings · cellar plan
+Section "Cellar plan" on `settings.html` (`#cellar-plan`), module `settings`.
+One table of `cellar_plan_parts` in plan order: drag handle · label · kind
+(fixed / timing value) · shows on (Cellar plan / Processing) · on addition
+day · active · used (recipe lines) · Save / Delete (only unused timing
+values). Add a timing value; button "Apply order to the recipes" (confirm).
+
+## Recipe editor · cellar plan
+Block "Cellar plan" on `recept-invoer.html` after Process steps
+(`recipe-cellar-plan.js`). Per step: ▲▼ · Step · What · Tag · When (at
+extract / at temperature / on day / after previous) · value · ± · day ·
+lagering starts. Status per step: "from recipe data", "edited" or "added by
+hand"; generated steps have no delete ("auto": change the recipe data
+instead). The Timing of a cellar addition is a dropdown of the timing values
+(an old free text stays selectable, marked "(old text)"). Saved with the recipe; the generator then refreshes the generated
+steps. An "On day" step without a day blocks the save (message in the save
+window).
 
 ## Processing (`mockup/Processing.dc.html`)
 - Check before processing (beer risk, minimum maturation auto-check,

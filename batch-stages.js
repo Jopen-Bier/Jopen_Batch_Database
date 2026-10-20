@@ -86,7 +86,12 @@ function toBatchRow(batch, stageRow) {
     brewsStarted: (stageRow && stageRow.brews_started) || 0,
     brewsEnded: (stageRow && stageRow.brews_ended) || 0,
     lastBrewEndedAt: (stageRow && stageRow.last_brew_ended_at) || null,
-    tankCode: (batch.glt_tank && batch.glt_tank.code) || null,   // fermentation tank (batches.glt_tank_id)
+    timeZero: (stageRow && stageRow.time_zero) || null,
+    cellarStepsTotal: (stageRow && stageRow.cellar_steps_total) || 0,
+    cellarStepsDone: (stageRow && stageRow.cellar_steps_done) || 0,
+    nextCellarStep: (stageRow && stageRow.next_cellar_step) || null,
+    // the tank the beer is in: the lager tank once it is pushed over, else the fermentation tank
+    tankCode: (batch.lt_tank && batch.lt_tank.code) || (batch.glt_tank && batch.glt_tank.code) || null,
     attention: [],    // "!" reasons; rules still to be agreed (open-questions #1)
   };
 }
@@ -182,7 +187,7 @@ function dayMonth(isoDate) {
  * progress } (progress 0–1 for the bar, or null). Stages without data yet get
  * their lines in the phase that creates their tables.
  */
-function tileLines(row) {
+function tileLines(row, now = new Date()) {
   if (row.stage === 'raw') {
     return {
       line1: row.orderPickingDate ? `Order picking ${dayMonth(row.orderPickingDate)}` : 'No order picking date',
@@ -201,12 +206,15 @@ function tileLines(row) {
       progress: planned ? Math.min(1, ended / planned) : null,
     };
   }
-  if (row.stage === 'fermentation') {
+  if (row.stage === 'fermentation' || row.stage === 'lagering') {
+    const total = row.cellarStepsTotal || 0, done = row.cellarStepsDone || 0;
+    const days = row.timeZero ? (new Date(now) - new Date(row.timeZero)) / 86400000 : null;
+    const allDone = total > 0 && done >= total;
     return {
-      line1: `${row.brewsEnded} ${row.brewsEnded === 1 ? 'brew' : 'brews'} in tank`,
-      line2: row.lastBrewEndedAt ? `Last brew ended ${dayMonth(row.lastBrewEndedAt)}` : '',
-      isOk: false,
-      progress: null,
+      line1: [days !== null ? `Day ${Math.max(0, days).toFixed(1)}` : null, total ? `tasks ${done}/${total}` : 'no cellar plan'].filter(Boolean).join(' · '),
+      line2: allDone ? '✓ All tasks done' : row.nextCellarStep ? `Next: ${row.nextCellarStep}` : '',
+      isOk: allDone,
+      progress: total ? Math.min(1, done / total) : null,
     };
   }
   return { line1: stageInfo(row.stage).label, line2: '', isOk: false, progress: null };
