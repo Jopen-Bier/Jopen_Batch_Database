@@ -149,7 +149,7 @@
         <!-- Section: Cellar plan -->
         <div class="settings-sectie" id="sectie-cellar-plan" data-titel="Cellar plan">
           <h2>Cellar plan</h2>
-          <p class="uitleg">The order of the cellar plan that is generated for each recipe, and the timing values of cellar additions (the Timing dropdown of Additions Cellar in the recipe). Drag rows by the handle to change the order. Fixed parts come from the recipe data; a timing value puts one step per cellar addition with that timing at its place. "Processing" values are not in the plan: they show on the Processing tab. A new order applies to a recipe when it is saved, or to all recipes at once with the button below; batches keep the plan they got when they were created.</p>
+          <p class="uitleg">The order of the cellar plan that is generated for each recipe, and the timing values of cellar additions (the Timing dropdown of Additions Cellar in the recipe). Drag rows by the handle to change the order. Fixed parts come from the recipe data; a timing value puts one step per cellar addition with that timing at its place. The Tag is the action tag that ticks the step off in the fermentation log. "Processing" values are not in the plan: they show on the Processing tab. A change applies to a recipe when it is saved, or to all recipes at once with the button below, which also gives planned batches without log entries the new plan; batches that have started keep theirs.</p>
 
           <div id="cellar-plan-list"><p class="jopen-subtitel">Loading…</p></div>
 
@@ -667,6 +667,7 @@
     // Section: Cellar plan (cellar_plan_parts, batch report phase 4)
     // ----------------------------------------------------------------
     let allCellarPlanParts = [];
+    let cellarPlanTags = [];
 
     function showCellarPlanMessage(text, kind) {
       const el = document.getElementById('cellar-plan-message');
@@ -676,8 +677,12 @@
 
     async function loadCellarPlanSection() {
       const container = document.getElementById('cellar-plan-list');
-      const { data, error } = await supabaseClient.from('cellar_plan_parts')
-        .select('id, code, kind, label, shows_on, on_addition_day, sort_order, is_active').order('sort_order').order('id');
+      const [{ data, error }, tags] = await Promise.all([
+        supabaseClient.from('cellar_plan_parts')
+          .select('id, code, kind, label, shows_on, on_addition_day, sort_order, is_active, tag_id').order('sort_order').order('id'),
+        supabaseClient.from('cellar_action_tags').select('id, code, label, is_active').order('sort_order').order('id'),
+      ]);
+      cellarPlanTags = tags.data || [];
       if (error) {
         container.innerHTML = `<p class="jopen-form-melding fout">Could not load the cellar plan: ${escapeHtml(error.message)}</p>`;
         return;
@@ -710,6 +715,8 @@
           <td>${timing
             ? `<select class="cellar-part-shows-on" aria-label="Shows on"><option value="cellar_plan"${inPlan ? ' selected' : ''}>Cellar plan</option><option value="processing"${inPlan ? '' : ' selected'}>Processing</option></select>`
             : 'Cellar plan'}</td>
+          <td><select class="cellar-part-tag" aria-label="Tag">${cellarPlanTags.filter((t) => t.is_active || t.id === p.tag_id)
+            .map((t) => `<option value="${t.id}"${t.id === p.tag_id ? ' selected' : ''}>${escapeHtml(t.label)}</option>`).join('')}</select></td>
           <td class="cat-check">${timing ? `<input type="checkbox" class="cellar-part-day"${p.on_addition_day ? ' checked' : ''} aria-label="On addition day" />` : ''}</td>
           <td class="cat-check">${timing ? `<input type="checkbox" class="cellar-part-active"${p.is_active ? ' checked' : ''} aria-label="Active" />` : ''}</td>
           <td style="font-size:0.85em; color:#555;">${timing ? `${p.used} recipe lines` : ''}</td>
@@ -721,7 +728,7 @@
       }).join('');
       container.innerHTML = `
         <table class="cat-tabel">
-          <thead><tr><th></th><th>Part / timing value</th><th>Kind</th><th>Shows on</th><th class="cat-check">On addition day</th><th class="cat-check">Active</th><th>Used</th><th></th></tr></thead>
+          <thead><tr><th></th><th>Part / timing value</th><th>Kind</th><th>Shows on</th><th title="The action tag that ticks the step off. Cold dry hop: the tag of the cooling (the dry hop itself is Dryhopping).">Tag</th><th class="cat-check">On addition day</th><th class="cat-check">Active</th><th>Used</th><th></th></tr></thead>
           <tbody id="cellar-plan-tbody">${rows}</tbody>
         </table>`;
       container.querySelectorAll('tr[data-id]').forEach((tr) => {
@@ -775,7 +782,7 @@
       const part = allCellarPlanParts.find((p) => String(p.id) === tr.dataset.id);
       const label = tr.querySelector('.cellar-part-label').value.trim();
       if (!label) { showCellarPlanMessage('Label cannot be empty.', 'fout'); return; }
-      const patch = { label };
+      const patch = { label, tag_id: Number(tr.querySelector('.cellar-part-tag').value) };
       if (part.kind === 'addition_timing') {
         patch.shows_on = tr.querySelector('.cellar-part-shows-on').value;
         patch.on_addition_day = tr.querySelector('.cellar-part-day').checked;
@@ -803,6 +810,7 @@
         code, kind: 'addition_timing', label,
         shows_on: document.getElementById('cellar-timing-new-shows-on').value,
         on_addition_day: document.getElementById('cellar-timing-new-day').checked,
+        tag_id: (cellarPlanTags.find((t) => t.code === 'addition') || cellarPlanTags[0] || {}).id,
         sort_order: Math.max(0, ...allCellarPlanParts.map((p) => p.sort_order || 0)) + 10,
       });
       if (error) {
@@ -816,7 +824,7 @@
     });
 
     document.getElementById('cellar-plan-apply-btn').addEventListener('click', async () => {
-      if (!confirm('Put the cellar plan of every active recipe (and every recipe of a planned batch) in this order? Steps changed by hand keep their text. Batches keep their plan.')) return;
+      if (!confirm('Put the cellar plan of every active recipe (and every recipe of a planned batch) in this order, with these tags? Steps changed by hand keep their text. Planned batches without log entries get the new plan; batches that have started keep theirs.')) return;
       showCellarPlanMessage('Applying…');
       const { data, error } = await supabaseClient.rpc('apply_cellar_plan_order');
       if (error) { showCellarPlanMessage('Could not apply: ' + error.message, 'fout'); return; }

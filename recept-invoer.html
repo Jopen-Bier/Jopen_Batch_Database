@@ -618,6 +618,13 @@
       </div>
 
       <div class="re-section">
+        <h2>Cellar plan</h2>
+        <p class="re-cp-intro">Steps on the fermentation log of every new batch. Steps marked "from recipe data" follow the dry hops, cellar additions and fermentation data each time you save; a step you change keeps your text. A log entry with the step's tag ticks the step off.</p>
+        <div id="re-cellar-plan"><div class="re-leeg">Loading…</div></div>
+        <button type="button" class="re-btn secundair" id="re-cellar-plan-add">+ Add step</button>
+      </div>
+
+      <div class="re-section">
         <h2 class="re-h2-met-knop">Target water profile
           <button type="button" class="re-wz-open-btn" id="re-wz-open-btn">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"></rect><path d="M8 6h8M8 11h2M14 11h2M8 15h2M14 15h2M8 19h2M14 19h2"></path></svg>
@@ -635,17 +642,13 @@
         <div id="re-formaten-checkboxen" class="re-grid"></div>
       </div>
 
-      <div class="re-section">
+      <!-- Process steps: replaced by the Cellar plan (Jaap, 20-10). Kept hidden
+           so saving the recipe keeps the stored values of recipe_process_steps. -->
+      <div class="re-section" style="display:none;">
         <h2>Process steps</h2>
         <div id="re-processtappen-checkboxen" class="re-grid"></div>
       </div>
 
-      <div class="re-section">
-        <h2>Cellar plan</h2>
-        <p class="re-cp-intro">Steps on the fermentation log of every new batch. Steps marked "from recipe data" follow the dry hops, cellar additions and fermentation data each time you save; a step you change keeps your text. A log entry with the step's tag ticks the step off.</p>
-        <div id="re-cellar-plan"><div class="re-leeg">Loading…</div></div>
-        <button type="button" class="re-btn secundair" id="re-cellar-plan-add">+ Add step</button>
-      </div>
 
       <div class="re-section">
         <h2>Costs</h2>
@@ -2241,7 +2244,6 @@ const KOPIEER_BLOKKEN = [
   { id: 'keldertoegift', label: 'Additions Cellar', rollen: ['cellar_addition'] },
   { id: 'water', label: 'Target water profile' },
   { id: 'verpakking', label: 'Packaging' },
-  { id: 'processtappen', label: 'Process steps' },
   { id: 'kosten', label: 'Costs' },
   { id: 'comments', label: 'Comments' },
 ];

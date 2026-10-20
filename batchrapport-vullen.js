@@ -769,7 +769,7 @@ async function haalBatchDataOpBrowser(supabase, batchnummer) {
   if (batchErr || !batch) throw new Error(`Batch ${batchnummer} niet gevonden: ${batchErr?.message || ''}`);
 
   const recipeId = batch.recipe_id;
-  const [recipe, specs, ferm, brouw, water, verpakking, processtappen, comments, ingredients, revisies, alleIngredienten] =
+  const [recipe, specs, ferm, brouw, water, verpakking, processtappen, comments, ingredients, revisies, alleIngredienten, cellarTimings] =
     await Promise.all([
       supabase.from('recipes').select('*').eq('id', recipeId).single(),
       supabase.from('recipe_specs').select('*').eq('recipe_id', recipeId).maybeSingle(),
@@ -784,11 +784,14 @@ async function haalBatchDataOpBrowser(supabase, batchnummer) {
         .order('version_major', { ascending: false }).order('version_minor', { ascending: false }).order('id', { ascending: false })
         .limit(4),
       supabase.from('ingredients').select('id, naam:name'),
+      supabase.from('cellar_plan_parts').select('code, label').eq('kind', 'addition_timing'),
     ]);
 
   if (recipe.error || !recipe.data) throw new Error(`Recept ${recipeId} niet gevonden: ${recipe.error?.message || ''}`);
 
   const ingredientNaam = new Map((alleIngredienten.data || []).map(i => [i.id, i.naam]));
+  // Timing of a cellar addition is a code (Settings › Cellar plan); the report shows its label.
+  const cellarTimingLabel = new Map(((cellarTimings && cellarTimings.data) || []).map(t => [t.code, t.label]));
 
   return {
     batch,
@@ -807,6 +810,7 @@ async function haalBatchDataOpBrowser(supabase, batchnummer) {
     recipe_ingredients: (ingredients.data || []).map(r => fromDb('recipe_ingredients', r)),
     recipe_revisies: (revisies.data || []).map(r => fromDb('recipe_revisions', r)),
     ingredientNaam,
+    cellarTimingLabel,
   };
 }
 
@@ -1118,6 +1122,8 @@ async function brVulIngredientRijen(writer, bundel, ingredientMap, overloop, sty
             }
           } else if (attr === 'tijdstip' && rol === 'dry_hop') {
             waarde = formatDryHopTiming(regel.tijdstip);
+          } else if (attr === 'tijdstip' && rol === 'cellar_addition') {
+            waarde = (bundel.cellarTimingLabel && bundel.cellarTimingLabel.get(regel.tijdstip)) || regel.tijdstip || null;
           } else {
             waarde = regel[attr];
           }

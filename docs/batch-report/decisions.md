@@ -46,6 +46,10 @@ Agreed with Jaap. Date = when decided. Do not change without asking.
 | 19-10 | Cellar additions go to the cellar plan or to Processing **by keywords** in their timing; the timing texts are streamlined to standard values (business-rules.md). |
 | 19-10 | No four-eyes check for Nagardo for now. |
 | 20-10 | The order of the cellar plan and the timing values of cellar additions are managed in **Settings › Cellar plan** (drag and drop; "Apply order to the recipes"). Sample to lab always right after cooling to the lagering temperature; a cold dry hop at the lagering temperature comes after the sample. |
+| 20-10 | Each cellar plan part has its own tag (Settings); the cooling before a cold dry hop uses the milestone tag "Cooling 16C". |
+| 20-10 | The fermentation log always starts with the Time 0 measurement (GLT total from Brewing). |
+| 20-10 | Recipe editor: Process steps block removed (values kept in the database), Cellar plan right after Additions Cellar; the recipe overview shows the cellar plan instead of the process steps. |
+| 20-10 | Lists (All batches, Active batches) open a batch on the tab of its stage. |
 | 20-10 | Timing of cellar additions = dropdown of standard values (review sheet approved, extra text moved to the note); new value "With warm dry hop". Recipe data fixes from the plan review (lagering temperatures, dry hop timings) done in the phase 4 migration. |
 | 19-10 | The cellar plan regenerates from the recipe data on every recipe save; steps changed or added by hand are kept. The batch keeps the snapshot it got at creation. |
 

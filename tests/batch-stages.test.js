@@ -125,4 +125,11 @@ assert.strictEqual(states('hbt'), 'done done now todo todo');
 assert.strictEqual(states('filled'), 'done done done done now');
 assert.strictEqual(states('closed'), 'done done done done done');
 
+// A list opens a batch on the tab of its stage
+assert.strictEqual(s.batchHref('fermentation', 7), 'batch-fermentation.html?id=7');
+assert.strictEqual(s.batchHref('lagering', 7), 'batch-fermentation.html?id=7');
+assert.strictEqual(s.batchHref('brewing', 7), 'batch-brewing.html?id=7');
+assert.strictEqual(s.batchHref('raw', 7), 'batch-overview.html?id=7');
+assert.strictEqual(s.batchHref('hbt', 7), 'batch-overview.html?id=7');   // Processing tab not built yet
+
 console.log('batch-stages: all tests passed');

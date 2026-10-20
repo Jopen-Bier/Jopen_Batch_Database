@@ -367,6 +367,7 @@
 <script src="recipe-values.js"></script>
 <script src="nav.js"></script>
 <script src="brew-calculations.js"></script>
+<script src="fermentation-log.js"></script>
 <script>
 // Supabase-client (supabaseClient) en auth komen nu uit config.js, gedeeld
 // door alle Jopen-app-pagina's. Zie config.js voor de credentials.
@@ -849,7 +850,7 @@ async function openDetail(id) {
   const container = document.getElementById('detail-container');
   container.innerHTML = `<div class="loading">Loading recipe…</div>`;
 
-  const [recipe, specs, ferm, brouw, water, verpakking, processtappen, comments, kosten, ingredients, revisies] = await Promise.all([
+  const [recipe, specs, ferm, brouw, water, verpakking, processtappen, comments, kosten, ingredients, revisies, cellarSteps, cellarTags, cellarTimings] = await Promise.all([
     supabaseClient.from('recipes').select('*').eq('id', id).single().then(r => fromDbResult('recipes', r)),
     supabaseClient.from('recipe_specs').select('*').eq('recipe_id', id).maybeSingle().then(r => fromDbResult('recipe_specs', r)),
     supabaseClient.from('recipe_fermentation').select('*').eq('recipe_id', id).maybeSingle().then(r => fromDbResult('recipe_fermentation', r)),
@@ -859,8 +860,11 @@ async function openDetail(id) {
     supabaseClient.from('recipe_process_steps').select('*').eq('recipe_id', id).maybeSingle().then(r => fromDbResult('recipe_process_steps', r)),
     supabaseClient.from('recipe_comments').select('*').eq('recipe_id', id).maybeSingle().then(r => fromDbResult('recipe_comments', r)),
     supabaseClient.from('recipe_costs').select('*').eq('recipe_id', id).maybeSingle().then(r => fromDbResult('recipe_costs', r)),
-    supabaseClient.from('recipe_ingredients').select('rol:addition_type, hoeveelheid:quantity, eenheid:unit, tijdstip:timing, volgorde:sort_order, hdt:hop_dosing_tank, alpha_pct, kleur_ebc:color_ebc, notitie:note, ingredients(naam:name)').eq('recipe_id', id).order('addition_type').order('sort_order'),
+    supabaseClient.from('recipe_ingredients').select('id, rol:addition_type, hoeveelheid:quantity, eenheid:unit, tijdstip:timing, volgorde:sort_order, hdt:hop_dosing_tank, alpha_pct, kleur_ebc:color_ebc, notitie:note, ingredients(naam:name)').eq('recipe_id', id).order('addition_type').order('sort_order'),
     supabaseClient.from('recipe_revisions').select('*').eq('recipe_id', id).order('version_major', { ascending: false }).order('version_minor', { ascending: false }).order('id', { ascending: false }).then(r => fromDbResult('recipe_revisions', r)),
+    supabaseClient.from('recipe_cellar_steps').select('*').eq('recipe_id', id).order('sort_order').order('id'),
+    supabaseClient.from('cellar_action_tags').select('id, label'),
+    supabaseClient.from('cellar_plan_parts').select('code, label').eq('kind', 'addition_timing'),
   ]);
 
   if (recipe.error) {
@@ -1040,6 +1044,21 @@ async function openDetail(id) {
   };
   const processtappenActief = Object.entries(processtappenLabels).filter(([key]) => pt[key]).map(([,label]) => label);
 
+  // Cellar plan (recipe_cellar_steps), read only; edited in the recipe editor.
+  function cellarPlanHtml() {
+    const steps = cellarSteps.data || [];
+    if (!steps.length) return '<div class="empty">No cellar plan yet: it is generated when the recipe is saved.</div>';
+    const tagLabel = new Map((cellarTags.data || []).map((t) => [t.id, t.label]));
+    const lineName = new Map(ings.map((i) => [i.id, (i.ingredients && i.ingredients.naam) || i.notitie || '?']));
+    const rows = steps.map((st, n) => {
+      const what = [st.description, ...(st.recipe_ingredient_ids || []).map((lid) => lineName.get(lid)).filter(Boolean)].filter(Boolean).join(' · ');
+      return `<tr><td>${n + 1}</td><td><strong>${escapeHtml(st.title)}</strong>${st.starts_lagering ? ' <span class="rol-tag">lagering starts</span>' : ''}</td>
+        <td>${escapeHtml(what || '—')}</td><td>${escapeHtml(stepWhen(st, n ? steps[n - 1] : null, null))}</td>
+        <td><span class="rol-tag">${escapeHtml(tagLabel.get(st.tag_id) || '?')}</span></td></tr>`;
+    }).join('');
+    return `<table class="ing-table"><thead><tr><th style="width:36px;">#</th><th>Step</th><th>What</th><th>When</th><th>Tag</th></tr></thead><tbody>${rows}</tbody></table>`;
+  }
+
   function paramColumnsHtml(rows) {
     if (rows.length === 0) return '';
     return `<div class="param-columns">${rows.map(([label, val, unit, tol]) => `
@@ -1126,7 +1145,9 @@ async function openDetail(id) {
     return [...boil, ...dryHop];
   }
 
+  const cellarTimingLabel = new Map((cellarTimings.data || []).map((t) => [t.code, t.label]));
   function timingWeergave(i) {
+    if (i.rol === 'cellar_addition') return cellarTimingLabel.get(i.tijdstip) || i.tijdstip || '—';
     if (i.rol === 'dry_hop') {
       const { categorie, temp } = ontleedDryHopTijdstip(i.tijdstip);
       if (categorie === 'warm') return 'Warm';
@@ -1395,17 +1416,15 @@ async function openDetail(id) {
     ${ingTabelHtml(['cellar_addition'], false, false, false, false, false, true)}
     ${paramColumnsHtml(cellarNotesRows)}
 
+    <div class="section-title">Cellar plan</div>
+    ${cellarPlanHtml()}
+
     <div class="section-title">Target water profile</div>
     ${paramColumnsHtml(waterRows) || '<div class="empty">None entered.</div>'}
 
     <div class="section-title">Packaging</div>
     ${paramColumnsHtml(verpakkingRows) || '<div class="empty">None entered.</div>'}
     ${(vp.formaten && vp.formaten.length > 0) ? `<div class="ing-table" style="padding:10px 14px; background:#fff;">${vp.formaten.map(f => `<span class="rol-tag" style="margin-right:10px;">${escapeHtml(f)}</span>`).join('')}</div>` : ''}
-
-    <div class="section-title">Process steps</div>
-    ${processtappenActief.length > 0
-      ? `<div class="ing-table" style="padding:10px 14px; background:#fff;">${processtappenActief.map(l => `<span class="rol-tag" style="margin-right:10px;">${escapeHtml(l)}</span>`).join('')}</div>`
-      : '<div class="empty">None checked.</div>'}
 
     <div class="section-title">Costs</div>
     ${paramColumnsHtml(kostenRows) || '<div class="empty">None entered.</div>'}
