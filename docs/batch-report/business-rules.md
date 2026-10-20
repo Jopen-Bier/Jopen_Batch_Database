@@ -15,7 +15,7 @@ Evaluated top-down, first match wins:
 | `filling` | a `filling_sessions` row has `filling_date` (as HBT starts with the processing date) |
 | `hbt` | a `processing_sessions` row has `processing_date` (also without brews, e.g. a split batch) |
 | `lagering` | the `batch_cellar_steps` step with `starts_lagering` is done (decision #3: the cooling, not setting an LT) |
-| `fermentation` | number of brews with `brewing_ended_at` ≥ `batches.brew_count` rounded up (brew counts such as 3.33 occur); never for 0 brews |
+| `fermentation` | number of brews with `brewing_ended_at` ≥ `batches.brew_count` rounded up (brew counts such as 3.33 occur); or, for a batch without started brews (a split batch), from its first incoming transfer (phase 8) |
 | `brewing` | a brew has `mash_in_started_at` |
 | `raw` | otherwise (batch report exists, not brewed yet) |
 
@@ -23,7 +23,9 @@ UI labels: Raw material preparation · Brewing · Fermentation · Lagering ·
 HBT · Filling · Filled · Closed. Active batches shows Fermentation and
 Lagering as two rows of one "Cellar" block.
 
-- **Start date** = earliest `mash_in_started_at` of the batch.
+- **Start date** = earliest `mash_in_started_at` of the batch; a split batch
+  (no brew started): its first incoming transfer. Its Time 0 is that moment
+  too, unless `batches.time_zero` is set.
 - **End date** = filling report signed (parked). Until then empty; for
   historical `completed` batches leave empty.
 
@@ -241,6 +243,34 @@ remainder.
   receiving batch from `transferred_at`.
 - New batch from split: next sequential batch number, brew count 0, recipe
   must exist; its ingredients are dosed on the **total** volume (Σ incoming).
+- Built (phase 8), `split_batch()` (one transaction, rights of the user):
+  - destination **new**: the next number of the year = highest
+    `YY` + 3 digits + 1 (e.g. 26351 → 26352), name = recipe name, 0 brews,
+    status planned; the insert trigger snapshots its ingredients and cellar
+    plan; **batch**: an existing batch by number (not itself); **discard**:
+    reason required.
+  - always a log entry on the source batch at the transfer moment, tag
+    Transfer, text "Transfer · 20.0 hl from GLT7 to new batch 26352 (Nel
+    Framboos) · comment".
+- **Dosing volume** (Jaap, 20-10) = brews × brew volume + Σ incoming
+  transfers (`batch_stages.incoming_volume_hl`); per-brew amounts (malt,
+  boil hops) follow the brews only. Batches with a fractional brew count
+  (3.33, the old workaround) keep dosing on it; do not record a split into
+  such a batch as well (it would count twice).
+- **Base beer** in a recipe: `addition_type = 'base_beer'`,
+  `source_recipe_group_id` = the source beer over all its versions,
+  quantity = share in % (> 0, ≤ 100), no ingredient. The popup compares the
+  incoming beer per recipe group with the shares (expected hl = share ×
+  total incoming) and warns when the source beer is not a base beer of the
+  receiving recipe (a warning, not a block).
+- Cellar loss and the volume balance count the incoming beer with the GLT
+  volume ("+ In from splits"); the pie shares are of brewed + received.
+- Popup: "<tank> after transfer" = the volume in the tank (GLT total +
+  incoming, or the HBT end value) − transfers out of it − this one.
+- Deleting a transfer keeps a batch made by the split and the log entry.
+- Module `splits.js` (next number preview, log text, tank after transfer,
+  base beer check), test `tests/splits.test.js`; dosing in
+  `batch-ingredients.js` (`dosingVolumeHl`, `amountContext`).
 
 ## Needs attention (!) on Active batches
 To be defined by Jaap (open-questions). Mockup examples: overdue cellar step,

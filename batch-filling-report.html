@@ -36,7 +36,9 @@
   <script src="batch-brews.js"></script>
   <script src="fermentation-log.js"></script>
   <script src="processing.js"></script>
+  <script src="batch-ingredients.js"></script>
   <script src="filling-report.js"></script>
+  <script src="splits.js"></script>
   <script src="batch-report-shell.js"></script>
   <script src="batch-report-cards.js"></script>
   <script>
@@ -45,7 +47,7 @@
 
     const page = {
       user: null, canEdit: false, canDelete: false, ctx: null, save: null,
-      sessions: [], hbts: [], readings: [], transfers: [], brews: [], tanks: [],
+      sessions: [], incoming: [], hbts: [], readings: [], transfers: [], brews: [], tanks: [],
       articles: new Map(), materials: new Map(), bom: new Map(), sessionArticles: [], sessionMaterials: [],
       summaryOpen: false,
     };
@@ -92,6 +94,9 @@
         articles: new Map(articles.data.map((a) => [a.id, a])), materials: new Map(materials.data.map((m) => [m.id, m])),
         bom: bomByArticle(bom.data), sessionArticles: sessionArticles.data, sessionMaterials: sessionMaterials.data,
       });
+      const incoming = await supabaseClient.from('batch_transfers').select(INCOMING_SELECT).eq('to_batch_id', batchId).order('transferred_at').order('id');
+      if (incoming.error) throw incoming.error;
+      page.incoming = incoming.data;
     }
 
     // ------------------------------------------------------------ saving
@@ -157,11 +162,12 @@
       }, 0);
       const toHl = (l) => l / 100;
       return volumeBalance({
-        gltHl: gltVolumeHl(), transfers: page.transfers, hbtTankIds: page.hbts.map((h) => h.tank_id), hbtEndTotalHl,
+        gltHl: gltVolumeHl(), incomingHl: page.ctx.stageRow && page.ctx.stageRow.incoming_volume_hl, transfers: page.transfers, hbtTankIds: page.hbts.map((h) => h.tank_id), hbtEndTotalHl,
         packagedHl: { bottle: toHl(total.litresByFormat.bottle), can: toHl(total.litresByFormat.can), keg: toHl(total.litresByFormat.keg) },
       });
     }
 
+    const incomingText = () => page.incoming.map((t) => (t.source ? t.source.batch_number : '?') + ' · ' + hl(t.volume_hl) + ' hl').join(', ');
     const transferText = (list) => list.map((t) => (t.destination === 'discard' ? 'Discard' : 'To batch ' + (t.to_batch ? t.to_batch.batch_number : ''))).join(', ') || '—';
 
     // ------------------------------------------------------------ rendering
@@ -180,9 +186,10 @@
       const lossHl = b.cellarLossHl;
       const rows = [
         subRow(`Brewed into ${escapeHtml(glt)}`, hl(b.gltHl), b.gltHl === null ? 'no brew volumes yet · Brewing' : 'from Brewing'),
+        ...(b.incomingHl ? [`<tr><td class="fr-minus">+ In from splits</td><td class="c" style="width:90px;">+${hl(b.incomingHl)}</td><td class="small">${escapeHtml(incomingText())}</td></tr>`] : []),
         minusRow('− Splits from GLT / LT', b.splitsPreHl ? '−' + hl(b.splitsPreHl) : '0.0', transferText(b.preTransfers)),
         minusRow('− Cellar loss', lossHl === null ? '—' : lossHl >= 0 ? '−' + hl(lossHl) : '+' + hl(-lossHl),
-          lossHl === null ? '' : b.cellarLossNegative ? 'More out than in — check splits and HBT volumes' : pct(lossHl / b.gltHl) + ' of GLT volume',
+          lossHl === null ? '' : b.cellarLossNegative ? 'More out than in — check splits and HBT volumes' : pct(lossHl / b.startHl) + ' of GLT volume',
           b.cellarLossNegative ? 'fr-bad' : ''),
         subRow('= In HBT after processing', hl(b.inHbtHl), 'end values HBT · Processing'),
         minusRow('− Splits from HBT', b.splitsPostHl ? '−' + hl(b.splitsPostHl) : '0.0', transferText(b.postTransfers)),
@@ -209,7 +216,7 @@
               ${slices.length ? slices.map((s) => `<path d="${s.d}" fill="${s.color}" stroke="#ffffff" stroke-width="1.5"></path>`).join('') : '<circle cx="100" cy="100" r="92" fill="#f6f4ee"></circle>'}
             </svg>
             <div class="fr-legend">${legend}
-              <div class="br-note" style="border-top:1px solid var(--br-line-soft); padding-top:6px;">Share of ${hl(b.gltHl)} hl brewed into the GLT</div>
+              <div class="br-note" style="border-top:1px solid var(--br-line-soft); padding-top:6px;">Share of ${hl(b.startHl)} hl ${b.incomingHl ? 'brewed and received' : 'brewed into the GLT'}</div>
             </div>
           </div>
         </div>`;
@@ -308,7 +315,7 @@
         <div><div class="br-label">Produced per SKU · book in (+)</div>
           <table class="br-ing"><thead><tr><th>SKU</th><th>Package</th><th class="r">Count</th><th class="r">Litres</th></tr></thead>
             <tbody>${skus}${splits}${skus || splits ? '' : '<tr><td colspan="4" class="small">Nothing booked yet.</td></tr>'}
-              <tr class="tot"><td colspan="3">Total packaged + split · of ${fmt(b.gltHl === null ? null : b.gltHl * 100)} l in GLT</td><td class="n">${fmt(out)}</td></tr>
+              <tr class="tot"><td colspan="3">Total packaged + split · of ${fmt(b.startHl === null ? null : b.startHl * 100)} l in GLT</td><td class="n">${fmt(out)}</td></tr>
               <tr><td colspan="3" class="small">Cellar loss</td><td class="c">${fmt(b.cellarLossHl === null ? null : b.cellarLossHl * 100)}</td></tr>
               <tr><td colspan="3" class="small">Filling remainder / loss</td><td class="c">${fmt(b.remainderHl * 100)} · ${pct(b.remainderShare)}</td></tr></tbody></table></div>
         <div><div class="br-label">Materials used · book out (−)</div>
@@ -325,12 +332,22 @@
       document.body.appendChild(overlay);
     }
 
+    // Volume in a tank before transfers: GLT total (+ beer in from splits), HBT end value.
+    function tankStartHl(id) {
+      if (id === page.ctx.batch.glt_tank_id) return (gltVolumeHl() || 0) + (Number(page.ctx.stageRow && page.ctx.stageRow.incoming_volume_hl) || 0) || null;
+      const h = page.hbts.find((x) => x.tank_id === id);
+      const end = h ? hbtEnd(page.readings.filter((r) => r.batch_hbt_id === h.id)) : null;
+      return end ? Number(end.level_hl) : null;
+    }
+
     const transfersCard = createTransfersCard(document.getElementById('fr-transfers'), () => {
       const b = page.ctx.batch;
       const ids = [b.glt_tank_id, b.lt_tank_id, ...page.hbts.map((h) => h.tank_id)].filter(Boolean);
       return {
-        batchId: b.id, transfers: page.transfers, tanks: page.tanks, fromTanks: ids.map((id) => page.tanks.find((t) => t.id === id)).filter(Boolean),
+        batchId: b.id, batch: b, recipe: page.ctx.recipe, transfers: page.transfers, incoming: page.incoming,
+        tanks: page.tanks, fromTanks: ids.map((id) => page.tanks.find((t) => t.id === id)).filter(Boolean), tankStartHl,
         canEdit: page.canEdit, canDelete: page.canDelete, userId: page.user.id, saveStatus: page.save,
+        onSaved: async () => { await loadAll(b.id); },
       };
     }, renderSoon);
 

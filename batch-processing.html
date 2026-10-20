@@ -47,6 +47,7 @@
   <script src="batch-brews.js"></script>
   <script src="fermentation-log.js"></script>
   <script src="processing.js"></script>
+  <script src="splits.js"></script>
   <script src="batch-report-shell.js"></script>
   <script src="batch-report-cards.js"></script>
   <script>
@@ -55,7 +56,7 @@
 
     const page = {
       user: null, canEdit: false, canDelete: false, ctx: null, save: null,
-      sessions: [], comments: [], hbts: [], readings: [], transfers: [], brews: [], tanks: [],
+      sessions: [], comments: [], hbts: [], readings: [], transfers: [], incoming: [], brews: [], tanks: [],
       users: [], initialsOf: () => '', ferm: {}, packaging: {}, processSteps: {}, ingredients: [], names: {}, timings: [],
       activeSessionId: null, commentDraft: false,
     };
@@ -102,6 +103,9 @@
         ferm: ferm.data || {}, packaging: packaging.data || {}, processSteps: processSteps.data || {},
         ingredients: ingredients.data.filter((r) => !r.is_removed), timings: timings.data || [],
       });
+      const incoming = await supabaseClient.from('batch_transfers').select(INCOMING_SELECT).eq('to_batch_id', batchId).order('transferred_at').order('id');
+      if (incoming.error) throw incoming.error;
+      page.incoming = incoming.data;
       const ids = [...new Set(page.ingredients.map((r) => r.ingredient_id).filter(Boolean))];
       if (ids.length) {
         const { data } = await supabaseClient.from('ingredients').select('id, name').in('id', ids);
@@ -327,7 +331,7 @@
     function processingAdditions() {
       const processingCodes = new Set(page.timings.filter((t) => t.shows_on === 'processing').map((t) => t.code));
       const label = (code) => (page.timings.find((t) => t.code === code) || {}).label || code;
-      const ctx = { brewCount: page.ctx.batch.brew_count, brewVolumeHl: page.ctx.recipe.brew_volume_hl };
+      const ctx = amountContext(page.ctx.batch, page.ctx.recipe, page.ctx.stageRow);
       return page.ingredients.filter((r) => r.addition_type === 'cellar_addition' && processingCodes.has(r.timing)).map((r) => {
         const amount = batchAmount(r.addition_type, r.unit, r.quantity, ctx);
         return `${label(r.timing)}: ${page.names[r.ingredient_id] || r.note || '(no ingredient)'}${amount ? ' ' + formatAmount(amount) : ''}${r.note && page.names[r.ingredient_id] ? ` (${r.note})` : ''}`;
@@ -432,7 +436,7 @@
       const ends = hbtsInOrder().map((h) => ({ h, end: hbtEnd(readingsOf(h)) }));
       const total = ends.reduce((s, x) => s + (Number(x.end && x.end.level_hl) || 0), 0);
       const glt = gltVolumeHl();
-      const loss = cellarLoss({ gltVolumeHl: glt, transfers: page.transfers, hbtTankIds: page.hbts.map((h) => h.tank_id), hbtEndTotalHl: total });
+      const loss = cellarLoss({ gltVolumeHl: glt, transfers: page.transfers, hbtTankIds: page.hbts.map((h) => h.tank_id), hbtEndTotalHl: total, incomingHl: page.ctx.stageRow && page.ctx.stageRow.incoming_volume_hl });
       const avg = (h, field, bad) => `<td><input class="br-in${bad ? ' bad' : ''}" data-hbt="${h.id}" data-field="${field}" value="${val(h[field])}" inputmode="decimal" aria-label="${field}"${dis()}></td>`;
       const rows = ends.map(({ h, end }) => `<tr><td><b>${escapeHtml(tankCode(h.tank_id))}</b></td><td>${escapeHtml(formatsText(h.intended_formats))}</td>
         <td class="cv">${fmt(end && end.level_hl, 1)}</td><td class="cv">${fmt(end && end.o2_ppb)}</td><td class="cv">${fmt(end && end.co2_gl)}</td>
@@ -459,12 +463,22 @@
         </div>`;
     }
 
+    // Volume in a tank before transfers: GLT total (+ beer in from splits), HBT end value.
+    function tankStartHl(id) {
+      if (id === page.ctx.batch.glt_tank_id) return (gltVolumeHl() || 0) + (Number(page.ctx.stageRow && page.ctx.stageRow.incoming_volume_hl) || 0) || null;
+      const h = page.hbts.find((x) => x.tank_id === id);
+      const end = h ? hbtEnd(readingsOf(h)) : null;
+      return end ? Number(end.level_hl) : null;
+    }
+
     const transfersCard = createTransfersCard(document.getElementById('pr-transfers'), () => {
       const b = page.ctx.batch;
       const ids = [b.glt_tank_id, b.lt_tank_id, ...page.hbts.map((h) => h.tank_id)].filter(Boolean);
       return {
-        batchId: b.id, transfers: page.transfers, tanks: page.tanks, fromTanks: ids.map((id) => page.tanks.find((t) => t.id === id)).filter(Boolean),
+        batchId: b.id, batch: b, recipe: page.ctx.recipe, transfers: page.transfers, incoming: page.incoming,
+        tanks: page.tanks, fromTanks: ids.map((id) => page.tanks.find((t) => t.id === id)).filter(Boolean), tankStartHl,
         canEdit: page.canEdit, canDelete: page.canDelete, userId: page.user.id, saveStatus: page.save,
+        onSaved: async () => { await loadAll(b.id); },
       };
     }, renderSoon);
 

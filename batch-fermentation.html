@@ -42,6 +42,7 @@
   <script src="batch-ingredients.js"></script>
   <script src="batch-brews.js"></script>
   <script src="fermentation-log.js"></script>
+  <script src="splits.js"></script>
   <script src="batch-report-shell.js"></script>
   <script src="batch-report-cards.js"></script>
   <script>
@@ -49,7 +50,7 @@
 
     const page = {
       user: null, canEdit: false, canDelete: false, ctx: null, save: null,
-      steps: [], entries: [], entryTags: [], tags: [], transfers: [], brews: [], tanks: [],
+      steps: [], entries: [], entryTags: [], tags: [], transfers: [], incoming: [], brews: [], tanks: [],
       users: [], initialsOf: () => '', ferm: {}, specs: {}, ingredients: [], names: {},
 
     };
@@ -98,6 +99,9 @@
       page.entryTags = entryTags.data;
       page.tags = tags.data;
       page.transfers = transfers.data;
+      const incomingRes = await supabaseClient.from('batch_transfers').select(INCOMING_SELECT).eq('to_batch_id', batchId).order('transferred_at').order('id');
+      if (incomingRes.error) throw incomingRes.error;
+      page.incoming = incomingRes.data;
       page.brews = brews.data;
       page.tanks = tanks.data;
       page.users = users.users;
@@ -341,7 +345,7 @@
     }
 
     function amountCtx() {
-      return { brewCount: page.ctx.batch.brew_count, brewVolumeHl: page.ctx.recipe.brew_volume_hl };
+      return amountContext(page.ctx.batch, page.ctx.recipe, page.ctx.stageRow);
     }
 
     function linkedLines(step) {
@@ -455,8 +459,11 @@
     }
 
     const transfersCard = createTransfersCard(document.getElementById('fl-transfers'), () => ({
-      batchId: page.ctx.batch.id, transfers: page.transfers, tanks: page.tanks, fromTanks: batchTanks(),
+      batchId: page.ctx.batch.id, batch: page.ctx.batch, recipe: page.ctx.recipe, transfers: page.transfers, incoming: page.incoming,
+      tanks: page.tanks, fromTanks: batchTanks(),
+      tankStartHl: (id) => (id === page.ctx.batch.glt_tank_id ? ((gltTotal() || {}).volumeHl || 0) + (Number(page.ctx.stageRow && page.ctx.stageRow.incoming_volume_hl) || 0) || null : null),
       canEdit: page.canEdit, canDelete: page.canDelete, userId: page.user.id, saveStatus: page.save,
+      onSaved: async () => { await loadAll(page.ctx.batch.id); },
     }), renderSoon);
     const renderTransfers = () => transfersCard.render();
 
@@ -507,7 +514,8 @@
     // Calculators (business-rules.md "Calculators"); "Save to log" adds an Addition entry.
     function batchVolumeL() {
       const glt = gltTotal();
-      const hl = glt ? glt.volumeHl : (Number(page.ctx.batch.brew_count) || 0) * (Number(page.ctx.recipe.brew_volume_hl) || 0);
+      const hl = (glt ? glt.volumeHl : 0) + (Number(page.ctx.stageRow && page.ctx.stageRow.incoming_volume_hl) || 0)
+        || dosingVolumeHl(amountCtx());
       return hl ? Math.round(hl * 100) : '';
     }
 

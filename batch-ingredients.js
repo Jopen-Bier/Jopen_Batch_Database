@@ -23,6 +23,7 @@ const INGREDIENT_CARDS = [
 const ADDITION_CATEGORY = {
   malt: 'malt', boil_hop: 'boil hop', dry_hop: 'dry hop',
   brewhouse_addition: 'brewing addition', cellar_addition: 'cellar addition', yeast: 'yeast',
+  base_beer: 'base beer',
 };
 
 function toNumber(value) {
@@ -58,22 +59,40 @@ function amountBasis(additionType, unit) {
 }
 
 /**
+ * Volume a batch is dosed on, in hl: brews × brew volume + the beer that
+ * came in from splits (Jaap, 20-10). ctx = { brewCount, brewVolumeHl, incomingHl }.
+ */
+function dosingVolumeHl(ctx) {
+  return (toNumber(ctx.brewVolumeHl) || 0) * (toNumber(ctx.brewCount) || 0) + (toNumber(ctx.incomingHl) || 0);
+}
+
+/** Dosing context of a batch: batch row, its recipe, its batch_stages row. */
+function amountContext(batch, recipe, stageRow) {
+  return {
+    brewCount: batch ? batch.brew_count : null,
+    brewVolumeHl: recipe ? recipe.brew_volume_hl : null,
+    incomingHl: stageRow ? stageRow.incoming_volume_hl : null,
+  };
+}
+
+/**
  * Batch total of an amount: { q, unit } or null.
- * ctx = { brewCount, brewVolumeHl } (total volume = brew volume × brews).
+ * ctx = { brewCount, brewVolumeHl, incomingHl } (total volume = dosingVolumeHl).
+ * Per brew amounts follow the brews only.
  */
 function batchAmount(additionType, unit, amount, ctx) {
   const q = toNumber(amount);
   const basis = amountBasis(additionType, unit);
   if (q === null || !basis) return null;
   const brews = toNumber(ctx.brewCount) || 0;
-  const totalHl = (toNumber(ctx.brewVolumeHl) || 0) * brews;
+  const totalHl = dosingVolumeHl(ctx);
   const factor = { brew: brews, hl: totalHl, l: totalHl * 100, batch: 1 }[basis.per];
   return { q: q * factor, unit: basis.unit };
 }
 
 /** Amount for one brew (Additions Brewing: "Weigh for this brew"). */
 function brewAmount(additionType, unit, amount, ctx) {
-  return batchAmount(additionType, unit, amount, { brewCount: 1, brewVolumeHl: ctx.brewVolumeHl });
+  return batchAmount(additionType, unit, amount, { brewCount: 1, brewVolumeHl: ctx.brewVolumeHl, incomingHl: 0 });
 }
 
 /** Kind of change of a snapshot row: 'Added' | 'Removed' | 'Changed' | null. */
@@ -187,7 +206,7 @@ function hopTotals(rows, ctx, names = {}) {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     INGREDIENT_CARDS, ADDITION_CATEGORY,
-    toNumber, sameNumber, amountBasis, batchAmount, brewAmount,
+    toNumber, sameNumber, amountBasis, dosingVolumeHl, amountContext, batchAmount, brewAmount,
     deviationKind, alphaDiffers, colorDiffers, deviationDelta, inventoryEffect,
     formatAmount, deviationList, boilTimeMin, hopTotals,
   };

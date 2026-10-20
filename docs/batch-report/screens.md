@@ -237,5 +237,17 @@ window).
   recipe (existing only), next batch number, 0 brews; preview of the
   receiving batch (incoming beer lines, recipe ingredients dosed on total
   volume, lots/status). Phase 8.
+  Built (phase 8): the popup on Fermentation log, Processing and Filling
+  report ("+ Split / transfer" on the Splits card); the preview also shows
+  the base beer check (share, expected / incoming hl, warning). Not built:
+  "+ Beer from another batch" in the same popup (do a second split from
+  that batch into the new one) and lots / stock status (inventory coupling,
+  later). The Splits card lists the **Incoming beer** of the batch. After a
+  save the card links to the receiving batch.
+- Recipe editor: **Base beer** block before Malt & Grains (beer = recipe
+  group, named after its newest version; share %; note); the total share is
+  marked when it is not 100 %. Recipe overview shows it read-only.
+- Overview batch card: "From splits" and "Batch volume · dosing" when beer
+  came in.
 - Batch creation lot selection (`mockup/BatchCreation.dc.html`): sketch for
   the later inventory coupling — not in these phases.

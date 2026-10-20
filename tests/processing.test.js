@@ -51,5 +51,8 @@ assert.strictEqual(loss.lossHl.toFixed(1), '1.5');
 assert.strictEqual(loss.negative, false);
 assert.strictEqual(p.cellarLoss({ gltVolumeHl: 70, hbtEndTotalHl: 75.5 }).negative, true);
 assert.strictEqual(p.cellarLoss({ gltVolumeHl: null, hbtEndTotalHl: 10 }).lossHl, null);
+// beer in from splits counts with the GLT volume; a split batch has no GLT volume
+assert.strictEqual(p.cellarLoss({ gltVolumeHl: 80, incomingHl: 20, hbtEndTotalHl: 98 }).lossHl, 2);
+assert.strictEqual(p.cellarLoss({ gltVolumeHl: null, incomingHl: '25.5', hbtEndTotalHl: 25 }).lossHl, 0.5);
 
 console.log('processing: all tests passed');

@@ -50,7 +50,9 @@ batch-brews.js             brew log rows and calculations (evaporation, GLT volu
 fermentation-log.js        fermentation log: days, gap days, cellar plan progress, ADF/ABV, calculators (has a test)
 recipe-cellar-plan.js      cellar plan block of the recipe editor (recipe_cellar_steps)
 processing.js              Processing tab: duration, HBT end value, CO2/O2/PU status, maturation, cellar loss (has a test)
-batch-report-cards.js      shared batch-tab cards: splits / transfers, cellar calculators, insertBatchRow
+batch-report-cards.js      shared batch-tab cards: splits / transfers (+ incoming beer, Split / transfer popup via split_batch()), cellar calculators, insertBatchRow
+splits.js                  Split / transfer popup: next batch number, log text, tank after transfer, base beer check (has a test)
+recipe-base-beer.js        Base beer block of the recipe editor (source beer by recipe group, share %)
 filling.js                 Filling tab: spec limits, Cpk / process capability, HBT filling status, day number (has a test)
 filling-report.js          Filling report tab: book in / out per session (BOM expected, loss), volume balance, pie chart (has a test)
 batch-report-shell.js      shared frame of the batch tabs: header, tabs, autosave, confirm dialog, undo toast
@@ -219,7 +221,7 @@ Agreed table and column names per table: `supabase/rename-map.json`.
 |---|---|---|
 | `index.html` | — (tiles per module) | |
 | `login.html`, `accept-invite.html` | — | auth only |
-| `recept-invoer.html` | recipes | recipes, recipe_* (brewing_specs, fermentation, water, ingredients, costs, process_steps, specs, packaging, comments, revisions), ingredients, units, water_settings. Ingredient lines are saved with `save_recipe_ingredients()` (one transaction; existing lines keep their id); the cellar plan (`recipe_cellar_steps`, via `recipe-cellar-plan.js`) with `save_recipe_cellar_steps()`, which regenerates it |
+| `recept-invoer.html` | recipes | recipes, recipe_* (brewing_specs, fermentation, water, ingredients, costs, process_steps, specs, packaging, comments, revisions), ingredients, units, water_settings. Ingredient lines are saved with `save_recipe_ingredients()` (one transaction; existing lines keep their id); the cellar plan (`recipe_cellar_steps`, via `recipe-cellar-plan.js`) with `save_recipe_cellar_steps()`, which regenerates it; base beer lines (`addition_type = base_beer`, `recipe-base-beer.js`) go with the ingredient lines |
 | `receptoverzicht.html` | recipes | recipes, recipe_*, recipe_cellar_steps, cellar_action_tags, cellar_plan_parts, product_sheet_status (view), batches |
 | `ingredienten.html` | ingredients | ingredients, ingredient_categories, ingredient_documents, ingredient_revisions, ingredient_declarations, ingredient_usage_counts (view), document_types, recipe_ingredients, units |
 | `productsheet.html`, `productsheet-invoer.html` | product_sheets | product_sheets, product_sheet_revisions, product_sheet_status (view), recipes |
@@ -228,10 +230,10 @@ Agreed table and column names per table: `supabase/rename-map.json`.
 | `batchcreation.html` | batches | batches, recipes, recipe_fermentation (+ batch report via `batchrapport-vullen.js`) |
 | `all-batches.html` | batches | batches, recipes, batch_stages (view) |
 | `active-batches.html` | batches | batches, recipes, tanks, batch_stages (view) |
-| `batch-filling-report.html` | batches | batches, filling_sessions, filling_session_articles, filling_session_materials, packaging_articles/_materials/_article_materials, batch_hbts, hbt_readings, batch_transfers, batch_brews, tanks |
+| `batch-filling-report.html` | batches | batches, filling_sessions, filling_session_articles, filling_session_materials, packaging_articles/_materials/_article_materials, batch_hbts, hbt_readings, batch_transfers, batch_brews, tanks, incoming batch_transfers, `split_batch()` (Split / transfer popup), recipes, recipe_ingredients / batch_ingredients of the receiving batch |
 | `batch-filling.html` | batches | batches, filling_sessions, filling_measurements, batch_hbts, hbt_readings, tanks, users, recipe_packaging/_fermentation |
-| `batch-processing.html` | batches | batches, processing_sessions, processing_comments, batch_hbts, hbt_readings, batch_transfers, batch_brews, batch_ingredients, tanks, users, cellar_plan_parts, recipe_fermentation/_packaging/_process_steps |
-| `batch-fermentation.html` | batches | batches, batch_cellar_steps (`snapshot_batch_cellar_steps()`), fermentation_log_entries, fermentation_log_entry_tags, cellar_action_tags, batch_transfers, batch_brews, batch_ingredients, tanks, users, recipe_specs/_fermentation |
+| `batch-processing.html` | batches | batches, processing_sessions, processing_comments, batch_hbts, hbt_readings, batch_transfers, batch_brews, batch_ingredients, tanks, users, cellar_plan_parts, recipe_fermentation/_packaging/_process_steps, incoming batch_transfers, `split_batch()` (Split / transfer popup), recipes, recipe_ingredients / batch_ingredients of the receiving batch |
+| `batch-fermentation.html` | batches | batches, batch_cellar_steps (`snapshot_batch_cellar_steps()`), fermentation_log_entries, fermentation_log_entry_tags, cellar_action_tags, batch_transfers, batch_brews, batch_ingredients, tanks, users, recipe_specs/_fermentation, incoming batch_transfers, `split_batch()` (Split / transfer popup), recipes, recipe_ingredients / batch_ingredients of the receiving batch |
 | `batch-brewing.html` | batches | batches, batch_brews, batch_brew_comments, batch_ingredients, tanks, users, recipe_brewing_specs/_specs/_fermentation/_comments |
 | `batch-overview.html` | batches | batches, batch_ingredients, `snapshot_batch_ingredients()`, recipes + recipe_specs/_fermentation/_brewing_specs/_packaging/_water/_revisions, ingredients, stock_movements, lots |
 | `voorraad-overzicht/inboeken/uitboeken.html` | inventory | lots, stock_movements, ingredients, batches, users |

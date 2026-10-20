@@ -16,9 +16,12 @@ function logNumber(value) {
   return Number.isFinite(n) ? n : null;
 }
 
-/** Time 0 in use: the one set on the batch, else the end of the last brew. */
+/**
+ * Time 0 in use: the one set on the batch, else the end of the last brew, or
+ * for a split batch the first incoming transfer (batch_stages.time_zero).
+ */
 function effectiveTimeZero(batch, stageRow) {
-  return (batch && batch.time_zero) || (stageRow && stageRow.last_brew_ended_at) || null;
+  return (batch && batch.time_zero) || (stageRow && (stageRow.time_zero || stageRow.last_brew_ended_at)) || null;
 }
 
 /** Days since Time 0 as a number with 1 decimal, or null. */

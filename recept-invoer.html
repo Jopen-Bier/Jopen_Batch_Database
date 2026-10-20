@@ -337,6 +337,10 @@
   .re-loading { text-align: center; padding: 60px 20px; font-family: var(--mono); font-size: 13px; color: #7a7266; }
   .re-geen-rechten { text-align: center; padding: 60px 20px; font-family: var(--mono); font-size: 13px; color: #a33f2c; }
   .re-leeg { font-family: var(--mono); font-size: 12px; color: #7a7266; padding: 8px 0; }
+  /* Base beer block (recipe-base-beer.js) */
+  .re-bb-table tfoot td { font-weight: 700; padding-top: 6px; }
+  .re-bb-off { color: #a33f2c; }
+  .re-bb-del { border: 0; background: transparent; color: #a33f2c; font-size: 18px; cursor: pointer; }
   /* Cellar plan block (recipe-cellar-plan.js) */
   .re-cp-intro { font-size: 13px; color: #6b6355; margin: -4px 0 10px; }
   .re-cp-table td { vertical-align: top; }
@@ -491,6 +495,13 @@
         <h2>Brewing parameters</h2>
         <div class="re-brouw-algemeen" id="re-brouw-algemeen-grid"></div>
         <div class="re-param-columns re-param-columns-3" id="re-brouw-grid"></div>
+      </div>
+
+      <div class="re-section">
+        <h2>Base beer</h2>
+        <p class="re-cp-intro">For a recipe made from a split of another beer (a blend, a fruit or barrel-aged version): the beer it comes from, over all its versions, and its share. The volume is entered with Split / transfer on the batch; the additions are dosed on the volume of the batch.</p>
+        <div id="re-base-beer"><div class="re-leeg">Loading…</div></div>
+        <button type="button" class="re-btn secundair" id="re-base-beer-add">+ Add base beer</button>
       </div>
 
       <div class="re-section">
@@ -764,6 +775,7 @@
 <script src="waterzouten.js"></script>
 <script src="brew-calculations.js"></script>
 <script src="recipe-cellar-plan.js"></script>
+<script src="recipe-base-beer.js"></script>
 <script>
 const SPECS_FIELDS = [
   ['origineel_extract', 'Original extract', '°P', 'number'],
@@ -2209,7 +2221,9 @@ async function initReceptInvoer() {
 
   const id = urlParam('id');
   bindCellarPlanEvents();
-  await loadCellarTimings();   // the Timing dropdown of Additions Cellar needs them
+  bindBaseBeerEvents();
+  await Promise.all([loadCellarTimings(), loadBaseBeerGroups(null)]);   // dropdowns of Additions Cellar and Base beer
+  fillBaseBeerLines([]);
   loadCellarPlan(id || null);
   if (id) {
     await laadBestaandRecept(id);
@@ -2242,6 +2256,7 @@ const KOPIEER_BLOKKEN = [
   { id: 'brouwtoegift', label: 'Additions Brewing', rollen: ['brewhouse_addition'] },
   { id: 'gist', label: 'Yeasts', rollen: ['yeast'] },
   { id: 'keldertoegift', label: 'Additions Cellar', rollen: ['cellar_addition'] },
+  { id: 'basisbier', label: 'Base beer', rollen: ['base_beer'] },
   { id: 'water', label: 'Target water profile' },
   { id: 'verpakking', label: 'Packaging' },
   { id: 'kosten', label: 'Costs' },
@@ -2355,6 +2370,7 @@ function vulIngredientSectiesUit(ingredients) {
     else if (regel.rol === 'yeast') voegIngredientRegelToe('re-ing-gist-tbody', ['yeast'], regel);
     else if (regel.rol === 'cellar_addition') voegIngredientRegelToe('re-ing-keldertoegift-tbody', ['cellar_addition'], regel);
   });
+  fillBaseBeerLines(ingredients);
   herberekenHopgewichten();
   herberekenHopRendementEnEbu();
   herberekenMoutTotalen();
@@ -2489,6 +2505,7 @@ async function laadBestaandRecept(id) {
   }
 
   bestaandRecept = recipe.data;
+  baseBeer.ownGroupId = bestaandRecept.recipe_group_id || null;   // a recipe is not its own base beer
 
   document.getElementById('re-titel').textContent = 'Edit: ' + bestaandRecept.naam;
   document.getElementById('re-subtitel').textContent =
@@ -2561,8 +2578,8 @@ async function maakNieuwRecept() {
     melding.className = 're-melding fout';
     return;
   }
-  if (cellarPlanProblem()) {
-    melding.textContent = cellarPlanProblem();
+  if (cellarPlanProblem() || baseBeerProblem()) {
+    melding.textContent = cellarPlanProblem() || baseBeerProblem();
     melding.className = 're-melding fout';
     return;
   }
@@ -2712,7 +2729,7 @@ document.getElementById('re-modal-confirm-btn').addEventListener('click', async 
     ? 'Name is required: fill it in at the top of the recipe, then save again.'
     : (mode !== 'overwrite' && !document.getElementById('veld-wijziging').value.trim())
       ? 'Please describe what you changed. The recipe is not saved yet.'
-      : cellarPlanProblem();
+      : cellarPlanProblem() || baseBeerProblem();
   if (fout) {
     toonModalMelding(fout);
     if (leesBasisgegevens().naam) document.getElementById('veld-wijziging').focus();
@@ -2955,7 +2972,7 @@ async function schrijfGerelateerdeData(recipeId) {
   // inserted, removed ones deleted. A failure leaves the old lines untouched.
   const { error: ingredientErr } = await supabaseClient.rpc('save_recipe_ingredients', {
     p_recipe_id: recipeId,
-    p_lines: toDb('recipe_ingredients', ingredientRegels),
+    p_lines: toDb('recipe_ingredients', ingredientRegels).concat(readBaseBeerLines()),
   });
   if (ingredientErr) return 'ingredients: ' + ingredientErr.message;
 

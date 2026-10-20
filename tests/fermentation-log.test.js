@@ -9,6 +9,8 @@ const at = (d, h, m = 0) => new Date(2026, 8, d, h, m).toISOString();
 assert.strictEqual(f.effectiveTimeZero({ time_zero: T0 }, { last_brew_ended_at: at(27, 9) }), T0);
 assert.strictEqual(f.effectiveTimeZero({ time_zero: null }, { last_brew_ended_at: T0 }), T0);
 assert.strictEqual(f.effectiveTimeZero({}, null), null);
+// split batch: batch_stages.time_zero = the first incoming transfer
+assert.strictEqual(f.effectiveTimeZero({ time_zero: null }, { time_zero: T0, last_brew_ended_at: null }), T0);
 assert.strictEqual(f.daysSince(at(29, 8), T0), 0.8);
 assert.strictEqual(f.daysSince(null, T0), null);
 

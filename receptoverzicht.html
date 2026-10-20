@@ -860,7 +860,7 @@ async function openDetail(id) {
     supabaseClient.from('recipe_process_steps').select('*').eq('recipe_id', id).maybeSingle().then(r => fromDbResult('recipe_process_steps', r)),
     supabaseClient.from('recipe_comments').select('*').eq('recipe_id', id).maybeSingle().then(r => fromDbResult('recipe_comments', r)),
     supabaseClient.from('recipe_costs').select('*').eq('recipe_id', id).maybeSingle().then(r => fromDbResult('recipe_costs', r)),
-    supabaseClient.from('recipe_ingredients').select('id, rol:addition_type, hoeveelheid:quantity, eenheid:unit, tijdstip:timing, volgorde:sort_order, hdt:hop_dosing_tank, alpha_pct, kleur_ebc:color_ebc, notitie:note, ingredients(naam:name)').eq('recipe_id', id).order('addition_type').order('sort_order'),
+    supabaseClient.from('recipe_ingredients').select('id, rol:addition_type, hoeveelheid:quantity, eenheid:unit, tijdstip:timing, volgorde:sort_order, hdt:hop_dosing_tank, alpha_pct, kleur_ebc:color_ebc, notitie:note, source_recipe_group_id, ingredients(naam:name)').eq('recipe_id', id).order('addition_type').order('sort_order'),
     supabaseClient.from('recipe_revisions').select('*').eq('recipe_id', id).order('version_major', { ascending: false }).order('version_minor', { ascending: false }).order('id', { ascending: false }).then(r => fromDbResult('recipe_revisions', r)),
     supabaseClient.from('recipe_cellar_steps').select('*').eq('recipe_id', id).order('sort_order').order('id'),
     supabaseClient.from('cellar_action_tags').select('id, label'),
@@ -882,6 +882,20 @@ async function openDetail(id) {
   const ko = kosten.data || {};
   const ings = ingredients.data || [];
   const revisieData = revisies.data || [];
+
+  // Base beer lines (split / blend recipes): the source beer by recipe group,
+  // named after its newest version.
+  const baseBeerLines = ings.filter(i => i.rol === 'base_beer');
+  const baseBeerNames = new Map();
+  if (baseBeerLines.length) {
+    const { data: groupRecipes } = await supabaseClient.from('recipes')
+      .select('name, recipe_group_id, version_major, version_minor')
+      .in('recipe_group_id', baseBeerLines.map(i => i.source_recipe_group_id));
+    (groupRecipes || []).sort((a, b) => a.version_major - b.version_major || a.version_minor - b.version_minor)
+      .forEach(g => baseBeerNames.set(g.recipe_group_id, g.name));
+  }
+  const baseBeerHtml = () => `<table class="ing-table"><thead><tr><th>Beer (all versions)</th><th>Share</th><th>Note</th></tr></thead><tbody>
+    ${baseBeerLines.map(i => `<tr><td>${escapeHtml(baseBeerNames.get(i.source_recipe_group_id) || '?')}</td><td>${escapeHtml(String(i.hoeveelheid ?? '—'))} %</td><td>${escapeHtml(i.notitie || '')}</td></tr>`).join('')}</tbody></table>`;
 
   // Andere versies van hetzelfde recept (zelfde recipe_group_id), voor het
   // "Previous versions"-lijstje onderaan de kaart.
@@ -1394,6 +1408,9 @@ async function openDetail(id) {
 
     <div class="section-title">Brewing parameters</div>
     ${paramSectiesHtml(brouwSecties) || '<div class="empty">None entered.</div>'}
+
+    ${baseBeerLines.length ? `<div class="section-title">Base beer</div>
+    ${baseBeerHtml()}` : ''}
 
     <div class="section-title">Malt &amp; Grains</div>
     ${ingTabelHtml(['malt'], false, false, false, true)}

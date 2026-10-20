@@ -23,6 +23,17 @@ assert.deepStrictEqual(b.amountBasis('brewhouse_addition', 'g/brew'), { per: 'br
 assert.deepStrictEqual(b.amountBasis('cellar_addition', 'hl'), { per: 'batch', unit: 'hl' });
 assert.strictEqual(b.amountBasis('cellar_addition', null), null);
 
+// Dosing volume = brews × brew volume + incoming from splits (Jaap, 20-10)
+assert.strictEqual(b.dosingVolumeHl({ brewCount: 2, brewVolumeHl: 40 }), 80);
+assert.strictEqual(b.dosingVolumeHl({ brewCount: 0, brewVolumeHl: 40, incomingHl: 25.5 }), 25.5);
+assert.strictEqual(b.dosingVolumeHl({ brewCount: 2, brewVolumeHl: 40, incomingHl: '20' }), 100);
+assert.strictEqual(b.dosingVolumeHl({ brewCount: 3.33, brewVolumeHl: 40 }).toFixed(1), '133.2');   // fractional workaround still works
+assert.deepStrictEqual(b.batchAmount('cellar_addition', 'g/hl', 10, { brewCount: 0, brewVolumeHl: 40, incomingHl: 20 }), { q: 200, unit: 'g' });
+assert.deepStrictEqual(b.batchAmount('malt', 'kg', 400, { brewCount: 0, brewVolumeHl: 40, incomingHl: 20 }), { q: 0, unit: 'kg' });   // per brew
+assert.deepStrictEqual(b.brewAmount('brewhouse_addition', 'g/hl', 2, { brewCount: 2, brewVolumeHl: 40, incomingHl: 20 }), { q: 80, unit: 'g' });
+assert.deepStrictEqual(b.amountContext({ brew_count: 0 }, { brew_volume_hl: 40 }, { incoming_volume_hl: 20 }), { brewCount: 0, brewVolumeHl: 40, incomingHl: 20 });
+assert.deepStrictEqual(b.amountContext({ brew_count: 2 }, {}, null), { brewCount: 2, brewVolumeHl: undefined, incomingHl: null });
+
 // Worked examples, test-scenarios.md "Deviations": 2 brews × 40 hl
 const ctx = { brewCount: 2, brewVolumeHl: 40 };
 const row = (o) => Object.assign({ id: o.id || 1, is_added: false, is_removed: false, sort_order: 0 }, o);
