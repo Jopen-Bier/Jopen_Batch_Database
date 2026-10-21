@@ -32,7 +32,7 @@ serve(async (req) => {
     const email: string | undefined = body.email;
     const name: string | undefined = body.name ?? body.naam; // `naam`: pre-2026-10-16 page
     const resendUserId: string | undefined = body.user_id; // new link for an existing account
-    // Initials as written on the floor; empty = generated from the name (trigger).
+    // Initials as written on the floor (typed by hand; unique, ignoring case).
     const initials: string | null = typeof body.initials === "string" && body.initials.trim()
       ? body.initials.trim().toUpperCase().slice(0, 4) : null;
     if (!resendUserId && (!email || !name)) {
@@ -119,7 +119,11 @@ serve(async (req) => {
       .insert({ id: linkData.user.id, name, role_id: roleRow.id, is_active: true, initials: initials || null });
 
     if (insertErr) {
-      return json({ error: `Link generated, but could not create users row: ${insertErr.message}` }, 500);
+      // The auth account exists without a users row: remove it so the invite
+      // can simply be tried again (e.g. with other initials).
+      await adminClient.auth.admin.deleteUser(linkData.user.id);
+      const taken = insertErr.code === "23505";
+      return json({ error: taken ? `Initials ${initials} are already used by someone else` : `Could not create users row: ${insertErr.message}` }, taken ? 400 : 500);
     }
 
     // BELANGRIJK: we sturen bewust NIET linkData.properties.action_link mee.

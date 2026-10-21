@@ -26,6 +26,9 @@
     .user-delete-btn { padding: 4px 10px; border: 1px solid #A80016; color: #A80016; border-radius: 4px; background: #fff; cursor: pointer; }
     .user-delete-btn:hover { background: #fbe4e6; }
     .user-self { color: #999; font-size: 0.85em; font-style: italic; }
+    .user-row-status { display: block; font-size: 0.85em; margin-top: 4px; }
+    .user-row-status.ok { color: #2f7d3c; }
+    .user-row-status.error { color: #A80016; }
   </style>
 </head>
 <body>
@@ -52,8 +55,8 @@
         <label for="invite-name">Name</label>
         <input type="text" id="invite-name" required />
 
-        <label for="invite-initials">Initials <span class="jopen-subtitel" style="display:inline;">(optional, empty = from the name)</span></label>
-        <input type="text" id="invite-initials" maxlength="4" style="text-transform:uppercase;" />
+        <label for="invite-initials">Initials <span class="jopen-subtitel" style="display:inline;">(as used on the floor, e.g. EVL)</span></label>
+        <input type="text" id="invite-initials" maxlength="4" required style="text-transform:uppercase;" />
 
         <label for="invite-role">Role</label>
         <select id="invite-role" required style="width:100%; padding:8px; border:1px solid #ccc; border-radius:4px;"></select>
@@ -105,6 +108,10 @@
 
     function setMessage(el, text, kind) {
       el.textContent = text;
+      if (el.classList.contains('user-row-status')) {
+        el.className = 'user-row-status' + (kind ? ' ' + kind : '');
+        return;
+      }
       el.className = 'jopen-form-melding' + (kind === 'error' ? ' fout' : kind === 'ok' ? ' ok' : '');
     }
 
@@ -165,8 +172,8 @@
       const msg = document.getElementById('invite-message');
       const resultDiv = document.getElementById('link-result');
 
-      if (!email || !name) {
-        setMessage(msg, 'Fill in email address and name first.', 'error');
+      if (!email || !name || !initials) {
+        setMessage(msg, 'Fill in email address, name and initials first.', 'error');
         return;
       }
 
@@ -291,7 +298,7 @@
           <td>${escapeHtml(u.name)}</td>
           <td><input type="text" class="user-initials-input" maxlength="4"
                      value="${escapeHtml(u.initials || '')}"
-                     title="Leave empty to generate from the name" /></td>
+                     title="Initials as used on the floor (unique)" /></td>
           <td>
             ${isSelf
               ? `<span class="role-badge ${uRole === 'admin' ? 'admin' : ''}">${escapeHtml(rolLabel(uRole))}</span>`
@@ -306,6 +313,7 @@
               : `<button class="user-save-btn">Save</button>
                  ${lastLoginByUser[u.id] || loginsResult.error ? '' : '<button class="user-link-btn" title="The account has never logged in: make a fresh invite link">New invite link</button>'}
                  <button class="user-delete-btn">Delete</button>`}
+            <span class="user-row-status"></span>
           </td>
         </tr>`;
       }).join('');
@@ -326,28 +334,37 @@
       });
     }
 
-    // Saves initials and, for other users, the role. Empty initials are
-    // regenerated from the name by the database trigger.
+    // Saves initials and, for other users, the role. The result shows on the
+    // row itself; the list is not reloaded, so other rows keep their edits.
     async function saveUser(tr) {
-      const msg = document.getElementById('list-message');
+      const status = tr.querySelector('.user-row-status');
+      const input = tr.querySelector('.user-initials-input');
       const id = tr.dataset.id;
-      const initials = tr.querySelector('.user-initials-input').value.trim().toUpperCase();
+      const initials = input.value.trim().toUpperCase();
       const changes = { initials: initials || null };
       const roleSelect = tr.querySelector('.user-role-select');
       if (roleSelect) changes.role_id = Number(roleSelect.value);
 
-      setMessage(msg, 'Saving…');
-      const { error } = await supabaseClient
+      setMessage(status, 'Saving…');
+      // .select() returns the saved row: no row back means nothing was saved
+      // (an update the access rules filter out still answers "OK").
+      const { data, error } = await supabaseClient
         .from('users')
         .update(changes)
-        .eq('id', id);
+        .eq('id', id)
+        .select('initials');
 
       if (error) {
-        setMessage(msg, 'Save failed: ' + error.message, 'error');
+        const taken = error.code === '23505';
+        setMessage(status, taken ? `Not saved: ${initials} is already used by someone else.` : 'Not saved: ' + error.message, 'error');
         return;
       }
-      setMessage(msg, 'User updated.', 'ok');
-      loadUserList();
+      if (!data || data.length === 0) {
+        setMessage(status, 'Not saved: no permission to change this user.', 'error');
+        return;
+      }
+      input.value = data[0].initials || '';
+      setMessage(status, 'Saved ✓', 'ok');
     }
 
     async function deleteUser(tr) {

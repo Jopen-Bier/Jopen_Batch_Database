@@ -30,8 +30,8 @@ Lagering as two rows of one "Cellar" block.
   historical `completed` batches leave empty.
 
 ## Initials
-`upper(left(first word of name,1) || left(last word of name,1))`; stored in
-`users.initials` by trigger when null; editable.
+Typed by hand on the Users page (required on the invite form), unique
+ignoring case; no longer generated from the name (21-10).
 
 ## Ingredient snapshot and deviations
 - Snapshot copies every `recipe_ingredients` row of the batch's recipe into
