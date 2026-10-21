@@ -167,6 +167,9 @@ def to_date(v):
     if v is None:
         return None
     s = str(v).strip()
+    m = re.match(r'^(\d{4})-(\d{1,2})-(\d{1,2})', s)  # ISO date typed as text
+    if m:
+        return datetime.date(int(m.group(1)), int(m.group(2)), int(m.group(3))).isoformat()
     m = re.match(r'^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})$', s)
     if m:
         d, mo, y = (int(x) for x in m.groups())
@@ -350,6 +353,19 @@ def read_brewing(b, out):
                 b.note(sh, f'{uc}{r}', f'{b.raw(sh, f"P{r}")} · brew {n} (unit cell)', u,
                        'batch_brew_comments', 'suspicious', 'text in the unit cell; kept as comment')
     out['brews'] = [x for x in brews.values() if any(k != 'brew_number' for k in x)]
+    # Remarks of the batch ("Opmerkingen :" in column A, below the recipe block).
+    for r, label in b.rows(sh, 'A'):
+        if label.startswith('opmerkingen'):
+            x = r + 1
+            while x <= b.v[sh].max_row and not norm(b.raw(sh, f'K{x}')).startswith('programma'):
+                v, st = b.get(sh, f'A{x}')
+                if v is not None and st == 'read' and str(v).strip() not in ('', '-', '0'):
+                    comments.append({'brew_number': None, 'comment': str(v).strip()})
+                    b.note(sh, f'A{x}', 'Remarks (Opmerkingen)', v, 'batch_brew_comments', 'read', 'all brews')
+                x += 1
+                if x > r + 15:
+                    break
+            break
     for r, label in b.rows(sh, 'G'):
         if label == 'glt':
             n = F(f'I{r}', 'GLT', 'batches.glt_tank_id', 'num')
@@ -705,7 +721,7 @@ MATERIALS = [  # -> packaging_materials.code (None = no longer used: reported)
     ('kroonkurk', 'crown_cork'), ('kurk', 'cork'), ('musselet', 'muselet'),
     ('blik 33cl', 'can_33'), ('blik 44cl', 'can_44'), ('blik deksel', 'can_lid'),
     ('global keg 20l', None), ('jopen fust 20l', 'jopen_keg_20'), ('jopen fust 30l', 'jopen_keg_30'),
-    ('jopen fust 50l', 'jopen_keg_50'), ('fustdop', 'keg_cap'), ('keykegfustdop', 'keykeg_cap'),
+    ('jopen fust 50l', 'jopen_keg_50'), ('gdv 20l', 'gbr_door_vrouwen_keg_20'), ('fustdop', 'keg_cap'), ('keykegfustdop', 'keykeg_cap'),
     ('keykeg 20l', 'keykeg_20'), ('keykeg 30l', 'keykeg_30'),
 ]
 
@@ -1016,10 +1032,28 @@ def resolve(b, out, ref):
         check(s.get('filled_by'), 'filling'); check(s.get('sampled_by'), 'filling')
 
 
+def workbook_type(b):
+    """generated / old (batch report) or barrel_aging; None = unknown layout."""
+    names = {n.strip() for n in b.v}
+    if 'Hout Rijping' in names:
+        return 'barrel_aging'
+    if {'Brouwen', 'Gistkaart Invoer', 'Verwerking', 'Afvullen', 'Afvulverslag'} <= names:
+        return 'old' if 'EBU Berekening' in names else 'generated'
+    return None
+
+
 def read_workbook(path, ref):
     b = Book(path)
     name = os.path.basename(path)
-    out = {'source': name, 'batch_number': None, 'batch': {}}
+    out = {'source': name, 'batch_number': None, 'batch': {}, 'type': workbook_type(b)}
+    if out['type'] not in ('generated', 'old'):
+        # Not a batch report this reader knows: held back, never guessed.
+        m = re.match(r'^(\d{5})', name)
+        out['batch_number'] = m.group(1) if m else None
+        out['hold'] = ('barrel aging workbook: separate import (see import-2026.md)' if out['type'] == 'barrel_aging'
+                       else 'unknown layout: sheets ' + ', '.join(b.v))
+        out['review'], out['warnings'] = [], [out['hold']]
+        return out
     for sh, cell in (('Brouwen', 'N3'), ('Verwerking', 'L3'), ('Afvullen', 'E3'), ('Afvulverslag', 'H3')):
         if b.has(sh) and b.raw(sh, cell) is not None:
             out['batch_number'] = str(int(to_num(b.raw(sh, cell))))
@@ -1050,14 +1084,29 @@ def main():
     out_dir, ref_path, books = sys.argv[1], sys.argv[2], sys.argv[3:]
     ref = json.load(open(ref_path))
     os.makedirs(out_dir, exist_ok=True)
+    failed = []
     for p in books:
-        data = read_workbook(p, ref)
+        try:
+            data = read_workbook(p, ref)
+        except Exception as e:  # one bad workbook must not stop the run
+            import traceback
+            failed.append(os.path.basename(p))
+            print(f'FAILED {os.path.basename(p)}: {type(e).__name__}: {e}')
+            with open(os.path.join(out_dir, f'FAILED_{os.path.basename(p)}.txt'), 'w') as f:
+                f.write(traceback.format_exc())
+            continue
         dest = os.path.join(out_dir, f'{data["batch_number"] or os.path.basename(p)}.json')
+        if os.path.exists(dest) and json.load(open(dest)).get('source') != data['source']:
+            data['warnings'].append(f'batch number also in {json.load(open(dest))["source"]}: check')
+            dest = dest[:-5] + '_2.json'
         with open(dest, 'w') as f:
             json.dump(data, f, indent=1, ensure_ascii=False, default=str)
         counts = {k: len(data.get(k, [])) for k in ('brews', 'fermentation_log', 'processing_sessions',
                                                     'hbts', 'filling_sessions')}
-        print(data['batch_number'], counts, f'{len(data["warnings"])} warnings')
+        print(data['batch_number'], data['type'] or 'unknown', 'HOLD' if data.get('hold') else counts,
+              f'{len(data["warnings"])} warnings')
+    if failed:
+        print(f'{len(failed)} failed:', ', '.join(failed))
 
 
 if __name__ == '__main__':

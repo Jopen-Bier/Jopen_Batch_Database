@@ -60,6 +60,8 @@ def main():
            [('2026-02-11', 11, 28.9), ('2026-02-12', 13, 14.0), ('2026-02-12', 13, 6.0)], 'session from the filling report only')
         eq([s.get('is_hbt_finished', False) for s in x['filling_sessions']], [True, False, True], 'HBT13 finished with 14 + 6 hl')
         eq([len(h['readings']) for h in x['hbts']], [3, 2], 'pre-filled HBT rows without values dropped')
+        eq([c['comment'] for c in x['brew_comments'] if c['brew_number'] is None][-1],
+           'Added 120ml zincsulfate to WP of brew A', 'remarks (Opmerkingen) as batch-wide brew comments')
     p = find(d, '26001')
     if p:
         eq(reader.read_workbook(p, ref)['batch']['yeast_strain'], 'Munich classic', 'trailing dash trimmed')
@@ -71,6 +73,10 @@ def main():
            [('26321', 104.4, 'LT56')], 'transfer from "End value" without HBT')
         eq(x['transfers'][0]['transferred_at'], '2026-09-29T12:00:00+02:00', 'transfer date from the log')
         eq(x['transfers'][0]['source'], 'Verwerking!E58 + Afvulverslag!D45', 'transfer found on both forms')
+    p = find(d, '26058')
+    if p:
+        x = reader.read_workbook(p, ref)
+        eq((x['type'], x['batch_number'], bool(x.get('hold'))), ('barrel_aging', '26058', True), 'barrel aging held, not guessed')
     print(f'test_reader: {ok} checks passed')
 
 

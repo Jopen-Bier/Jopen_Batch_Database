@@ -164,9 +164,47 @@ Seen in 26001-26005 (21-10): a filling session written only on the
 filling report (26003: made from the report: date, HBT, volume, articles),
 template HBT numbers in empty reading rows (dropped), yeast strain typed
 with a trailing dash ("US-05-", trimmed), file names without a minor
-version ("v4") or without a version. The review flags a workbook whose
-number of brews differs from the app's brew count (26002-26004: 2 brews,
-brew count 1).
+version ("v4") or without a version. **Brew count follows the workbook**
+(Jaap, 21-10: the app does not know how many brews these batches had):
+the SQL sets `batches.brew_count` to the number of brews read, when they
+differ; the result line shows "brew_count 1->2". "GdV 20L" (kegs used)
+is the material `gbr_door_vrouwen_keg_20` (migration `20261021140000`).
+Initials of former employees (MM, FI, ...) become inactive users without a
+login (one SQL file once the full scan lists them all), so the history
+keeps the person.
+
+**Coverage check** (21-10, all 8 workbooks): every typed cell of the five
+operator sheets that the reader does not take was listed. Added after it:
+the brewers' remarks ("Opmerkingen :", column A below the recipe block) as
+batch-wide brew comments. Not taken, by design: the recipe / spec blocks
+(typed in the old reports), calculators, pre-filled dates and tank
+numbers without values, EAN codes and lot numbers, material remarks
+("Printed", "GdV"), "Ingevuld door" of the filling report (parked column),
+the Time 0 row of the fermentation sheet (the app makes it), later
+centrifuge rows, avg temp out, start date lagering, measurement after
+pushing over.
+
+### Workbook types and hold (21-10)
+The reader first decides the type: `generated` / `old` (batch report) or
+`barrel_aging` ("Hout Rijping" sheet); anything else is unknown. Only batch
+reports are read; the rest is **held**: listed in the review with the
+reason, left out of the SQL, never guessed. A workbook that fails to read
+is written as `FAILED_<file>.txt` and the run goes on. Per chunk (a month)
+the review is gone through before any SQL; after a reader change the
+tests run and the imported batches are re-read and compared (a difference
+gets a correction SQL, never a silent change). A major deviation goes to
+Jaap: extend the reader for a recurring type, a one-off SQL after his OK,
+or left for entering by hand.
+
+**Barrel aging** (26058-26064, 26089, 26090; 21-10): sheets Hout Rijping,
+Gistkaart Invoer, " Verwerking", Afvullen, Afvulverslag, Lab uitslag, Ruwe
+data, Etiketsheet. All nine still aging (no emptying date); only Hout
+Rijping is filled: source batch, barreled volume, barrels, fill date,
+treatment, original beer values, additions. The source batches book most
+of them off as "TBV BARREL AGING BATCH" (26042 does not). Proposal to
+Jaap: a split from the source batch at the barrel fill date (brew count
+0), barrel information as a log entry, additions as Addition entries;
+per-barrel data waits for barrel-aging support in the app.
 
 ### SQL per chunk (step 5)
 `tools/batch-import/generate_sql.py <reader_out> <app.json> <out_dir> <chunk> [batch ...]`
@@ -179,11 +217,19 @@ before -> after. Tested on a local Postgres with `supabase/schema.sql`
 (dry run rolls back; a second run skips every batch).
 
 ### Documents (Filling report)
-The new repo has a folder per batch: the workbook plus the scans for
-`batch_documents` (production order, filling order, filling report,
-other). Files go to the private bucket `batch-documents`
-(`<batch_id>/<type>/<file>`), which SQL cannot fill: a separate upload
-step, to agree with Jaap once the file names are known.
+The PDFs are in the batch-reports repo, the batch number in the file name
+(Jaap, 21-10): `...ProductieBon...` = production order, `...AfvulOrderBon...`
+= filling order, `av_<batch>...` = filling report, anything else = other.
+`tools/batch-import/upload_documents.py` uploads them to the private bucket
+`batch-documents` (`<batch_id>/<type>/<ms>_<file>`) with a `batch_documents`
+row, as the Filling report tab does (no file without a row). Run by the
+workflow "Upload documents" in batch-reports-2026 (Actions tab; dry run
+first, then with "Upload" ticked); needs the repo secret
+`SUPABASE_SERVICE_ROLE_KEY`. Held, not uploaded: no batch number, a batch
+not in the app, larger than 20 MB, two files of one fixed type for a
+batch. Skipped: a fixed type the batch already has, an "other" file with
+the same name. Tested against a local stand-in of the API (upload, row,
+removal of the file when the row fails).
 
 ### Stages after import
 `batch_stages` follows the data: brews ended → fermentation, lagering step

@@ -89,6 +89,11 @@ def batch_sql(d):
             sets.append(f'{key} = coalesce({key}, {val})')
     if sets:
         out.append('    update public.batches set ' + ',\n        '.join(sets) + '\n    where id = v_batch;\n')
+    # Brew count: the workbook knows how many brews were done (Jaap, 21-10).
+    nb = len(d.get('brews', []))
+    out.append("    select brew_count into v_bc from public.batches where id = v_batch;\n")
+    if nb:
+        out.append(f"    update public.batches set brew_count = {nb} where id = v_batch and brew_count is distinct from {nb};\n")
     for x in d.get('brews', []):
         cols = {'batch_id': 'v_batch', 'brew_number': lit(x['brew_number'])}
         for k, v in x.items():
@@ -173,7 +178,7 @@ def batch_sql(d):
     out.append('    select stage into v_after from public.batch_stages where batch_id = v_batch;\n')
     counts = ' || '.join(
         f"' {SHORT[t]} ' || (select count(*) from public.{t} where batch_id = v_batch)" for t in TABLES)
-    out.append(f"    v_lines := v_lines || ({lit(n + ': ')} || coalesce(v_before, '?') || '->' || coalesce(v_after, '?') || {counts});\n")
+    out.append(f"    v_lines := v_lines || ({lit(n + ': ')} || coalesce(v_before, '?') || '->' || coalesce(v_after, '?') || case when v_bc is distinct from (select brew_count from public.batches where id = v_batch) then ' brew_count ' || coalesce(v_bc::text, '-') || '->' || (select brew_count from public.batches where id = v_batch) else '' end || {counts});\n")
     out.append("    v_done := v_done + 1;\n  end if;\n")
     return ''.join(out)
 
@@ -196,6 +201,9 @@ def main():
     for p in sorted(glob.glob(os.path.join(src, '*.json'))):
         d = json.load(open(p))
         if wanted and d['batch_number'] not in wanted:
+            continue
+        if d.get('hold'):
+            print(f'{d["batch_number"]}: held ({d["hold"]}): left out')
             continue
         a = app.get(d['batch_number'])
         if not a or a['has_data']:
@@ -229,7 +237,7 @@ def main():
                "  v_materials jsonb := (select jsonb_object_agg(code, id) from public.packaging_materials);\n"
                f"  v_numbers text[] := {numbers};\n"
                "  v_batch bigint;\n  v_id bigint;\n  v_proc bigint[];\n  v_hbt bigint[];\n"
-               "  v_before text;\n  v_after text;\n  v_done int := 0;\n"
+               "  v_before text;\n  v_after text;\n  v_bc numeric;\n  v_done int := 0;\n"
                "  v_lines text[] := '{}';\n  v_skipped text[] := '{}';\n  v_result text;\n"
                "begin\n" + body +
                f"\n  v_result := format('%s imported, skipped: %s' || chr(10) || '%s' || chr(10) || 'Totals:%s',\n"
