@@ -229,6 +229,16 @@ The "End value HBT" rows also hold splits and tank beer:
 - A batch number cell with a date (26028 Brouwen N3) is skipped for the
   next sheet.
 
+### English template (26332 and later; full scan 21-10)
+The newest workbooks have English sheet names (Brew Sheet, Fermentation
+Chart, Processing, Filling, Filling Report) and labels, same cells as the
+generated Dutch report. The reader maps the sheet names to the Dutch ones
+and knows the English labels (type `generated_en`). Also from the full
+scan: tank number 0 and a pitching date "00:00:00" are empty; initials are
+cleaned ("SB\\", "NS?", "EP\\FH"); JK rows "Beluchtingsfilter gestoomd?",
+"Wortline gesteriliseerd?", "CKT CIP" are read; more spellings of the KU /
+GdV / KeyKeg kegs on the filling report.
+
 ### SQL per chunk (step 5)
 `tools/batch-import/generate_sql.py <reader_out> <app.json> <out_dir> <chunk> [batch ...]`
 writes `import_<chunk>_dry_run.sql` and `import_<chunk>_run.sql`: one DO
