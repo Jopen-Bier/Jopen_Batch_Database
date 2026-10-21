@@ -466,6 +466,13 @@ Built 20-10 (migration `20261020150212_batch_report_filling_report`):
   longer used and the Global Keg is not filled — removed, leaving 17
   articles, 29 materials, 53 BOM lines.
 - No new `batch_stages` columns: the balance is computed in the page.
+- Package format **tank** (Jaap, 21-10, migration `20261021160000`): tank
+  beer for the Jopenkerk, processed into the transport tank **TT60** (an
+  inactive tank of type hbt, so it is a fill in the history but not offered
+  in dropdowns) and booked as article `tank_jopenkerk` (100 l per unit, no
+  materials). Counts as packaged; measured like a keg (CO2 / O2, keg spec).
+  The format checks on `packaging_articles`, `filling_sessions`,
+  `batch_hbts.intended_formats` and `hbt_readings.co2_target` include it.
 
 Documents (Jaap, 21-10; migration `20261021061848_batch_documents`):
 `batch_documents`: `id`, `batch_id` (cascade), `document_type`

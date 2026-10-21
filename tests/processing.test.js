@@ -18,6 +18,7 @@ assert.strictEqual(p.hbtEnd([{ id: 1, sort_order: 1, level_hl: 10 }, { id: 2, so
 const pack = { co2_bottle_can_spec: 5.5, co2_bottle_can_tolerance: null, co2_keg_spec: 4.7, co2_keg_tolerance: 0.3 };
 assert.deepStrictEqual(p.co2Spec(pack, 'can'), { spec: 5.5, tol: 0 });
 assert.deepStrictEqual(p.co2Spec(pack, 'keg'), { spec: 4.7, tol: 0.3 });
+assert.deepStrictEqual(p.co2Spec(pack, 'tank'), { spec: 4.7, tol: 0.3 });   // tank beer: keg spec
 assert.strictEqual(p.co2Spec(pack, null), null);
 assert.strictEqual(p.co2Spec({}, 'keg'), null);
 assert.strictEqual(p.co2Status('5.5', p.co2Spec(pack, 'can')), 'OK');

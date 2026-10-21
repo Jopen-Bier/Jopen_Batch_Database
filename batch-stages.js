@@ -299,6 +299,7 @@ const PACKAGE_FORMATS = [
   { code: 'bottle', label: 'Bottle' },
   { code: 'can', label: 'Can' },
   { code: 'keg', label: 'Keg' },
+  { code: 'tank', label: 'Tank' },   // tank beer for the Jopenkerk (TT60), measured like a keg
 ];
 
 /** 'Bottle + Keg' from ['keg', 'bottle']. */

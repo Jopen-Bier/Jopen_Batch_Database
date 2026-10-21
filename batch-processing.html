@@ -397,7 +397,8 @@
         const sessions = [...new Set(rows.map((r) => r.processing_session_id).filter(Boolean))]
           .map((id) => page.sessions.find((s) => s.id === id)).filter(Boolean).sort((a, b) => a.session_number - b.session_number)
           .map((s) => `${s.session_number} · ${sessionDay(s.processing_date)}`);
-        const tankChoices = page.tanks.filter((t) => t.tank_type === 'hbt' && (t.id === h.tank_id || t.is_active));
+        // The fill's own tank always (also an inactive one or, one-off, a CKT filled from directly; Jaap 21-10).
+        const tankChoices = page.tanks.filter((t) => t.id === h.tank_id || (t.tank_type === 'hbt' && t.is_active));
         const name = hbtName(h);
         return `<div class="pr-hbt" data-hbt-block="${h.id}">
           <div class="pr-hbt-head">

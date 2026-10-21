@@ -16,6 +16,7 @@ const PIE_PARTS = [
   { key: 'bottle', label: 'Bottle', color: '#1c2b26' },
   { key: 'can', label: 'Can', color: '#4c6b4f' },
   { key: 'keg', label: 'Keg', color: '#b5c7a8' },
+  { key: 'tank', label: 'Tank', color: '#7d9b86' },
   { key: 'splits', label: 'Splits', color: '#b4772c' },
   { key: 'cellarLoss', label: 'Cellar loss', color: '#d9a07a' },
   { key: 'remainder', label: 'Filling remainder / loss', color: '#ece8dc' },
@@ -42,13 +43,13 @@ function bomByArticle(bomRows) {
  * articleRows / materialRows: filling_session_articles / _materials rows;
  * articles: Map(id -> packaging_articles row); bom: bomByArticle().
  * Returns { articles: [{ row, article, count, litres }], litres,
- * litresByFormat: { bottle, can, keg }, materials: [{ material_id, row,
+ * litresByFormat: { bottle, can, keg, tank }, materials: [{ material_id, row,
  * used, expected, loss }] }. Materials: the expected ones (from the BOM of
  * the booked articles) first, in booking order, then the other booked ones;
  * loss = used − expected (null while "used" is empty).
  */
 function sessionBook(articleRows, materialRows, articles, bom) {
-  const litresByFormat = { bottle: 0, can: 0, keg: 0 };
+  const litresByFormat = { bottle: 0, can: 0, keg: 0, tank: 0 };
   const expected = new Map();
   let litres = 0;
   const booked = (articleRows || []).map((row) => {
@@ -93,7 +94,7 @@ function sessionDifference(filledL, sessionVolumeHl) {
  * GLT + in from splits − splits from GLT / LT − cellar loss = in HBT; in HBT − splits from HBT
  * − packaged = filling remainder / loss. transfers: batch_transfers rows;
  * hbtTankIds: tanks of the batch's HBTs (a transfer from one of those is
- * after processing). packagedHl: { bottle, can, keg } in hl.
+ * after processing). packagedHl: { bottle, can, keg, tank } in hl.
  */
 function volumeBalance({ gltHl, transfers = [], hbtTankIds = [], hbtEndTotalHl, packagedHl = {}, incomingHl = 0 }) {
   const hbt = new Set(hbtTankIds);
@@ -107,8 +108,8 @@ function volumeBalance({ gltHl, transfers = [], hbtTankIds = [], hbtEndTotalHl, 
   const inHbtHl = reportNumber(hbtEndTotalHl) || 0;
   const startHl = glt === null ? null : glt + incoming;   // all beer the batch got
   const cellarLossHl = startHl === null ? null : startHl - splitsPreHl - inHbtHl;
-  const pk = { bottle: packagedHl.bottle || 0, can: packagedHl.can || 0, keg: packagedHl.keg || 0 };
-  const packaged = pk.bottle + pk.can + pk.keg;
+  const pk = { bottle: packagedHl.bottle || 0, can: packagedHl.can || 0, keg: packagedHl.keg || 0, tank: packagedHl.tank || 0 };
+  const packaged = pk.bottle + pk.can + pk.keg + pk.tank;
   const availableHl = inHbtHl - splitsPostHl;
   const remainderHl = availableHl - packaged;
   const remainderShare = availableHl > 0 ? remainderHl / availableHl : null;
@@ -123,7 +124,7 @@ function volumeBalance({ gltHl, transfers = [], hbtTankIds = [], hbtEndTotalHl, 
 /** Pie parts of a balance: [{ key, label, color, hl, share (of GLT + incoming, or null) }]. Negative parts count 0. */
 function pieParts(balance) {
   const value = {
-    bottle: balance.packagedHl.bottle, can: balance.packagedHl.can, keg: balance.packagedHl.keg,
+    bottle: balance.packagedHl.bottle, can: balance.packagedHl.can, keg: balance.packagedHl.keg, tank: balance.packagedHl.tank || 0,
     splits: balance.splitsPreHl + balance.splitsPostHl,
     cellarLoss: Math.max(0, balance.cellarLossHl || 0), remainder: Math.max(0, balance.remainderHl),
   };

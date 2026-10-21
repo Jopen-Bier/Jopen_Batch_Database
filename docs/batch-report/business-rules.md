@@ -235,7 +235,7 @@ remainder.
   extract); in HBT = Σ HBT end values (Processing); a split from one of the
   batch's HBTs is "from HBT", any other split "from GLT / LT".
 - Packaged per type = Σ count × litres per article, by the article's
-  package. Negative parts (more out than in) count 0 in the pie; the cellar
+  package (bottle, can, keg, tank: tank beer for the Jopenkerk, own pie part). Negative parts (more out than in) count 0 in the pie; the cellar
   loss row turns red with "More out than in".
 - Per session: book in = count per article (litres = count × litres per
   article); book out = materials used. Expected per material = Σ count ×
