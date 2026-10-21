@@ -60,6 +60,8 @@ def main():
            [('2026-02-11', 11, 28.9), ('2026-02-12', 13, 14.0), ('2026-02-12', 13, 6.0)], 'session from the filling report only')
         eq([s.get('is_hbt_finished', False) for s in x['filling_sessions']], [True, False, True], 'HBT13 finished with 14 + 6 hl')
         eq([len(h['readings']) for h in x['hbts']], [3, 2], 'pre-filled HBT rows without values dropped')
+        eq([c['comment'] for c in x['brew_comments'] if c['brew_number'] is None][-1],
+           'Added 120ml zincsulfate to WP of brew A', 'remarks (Opmerkingen) as batch-wide brew comments')
     p = find(d, '26001')
     if p:
         eq(reader.read_workbook(p, ref)['batch']['yeast_strain'], 'Munich classic', 'trailing dash trimmed')
