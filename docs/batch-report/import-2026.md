@@ -214,10 +214,18 @@ The "End value HBT" rows also hold splits and tank beer:
   tank is where the receiving batch got it). The filling report's "TBV
   ... <batch>" liters are compared per receiving batch (one transfer can
   be spread over several HBTs).
-- **TT60** ("TT60 Kerk", 30-61 hl) and a filling-report column "Kerk":
-  tank beer for the Jopenkerk; JK **GLT2** "direct afgevuld op fust":
-  filled from the fermentation tank. Kept in `other_end_values`, not
-  imported: Jaap decides how to record them.
+- **TT60** ("TT60 Kerk", 30-61 hl, 7 batches): tank beer for the
+  Jopenkerk, a filled product (Jaap, 21-10; package format "tank", #34). The
+  reader makes a fill of TT60 (inactive tank) and one filling session of
+  package "tank" (article `tank_jopenkerk`, in hl), dated from the filling
+  report entry with that volume (a TT60 / "Kerk" column or a "TBV ..." row;
+  one delivery written there twice counts once), else the last processing
+  date (warning).
+- **26020** (JK, "GLT2 direct afgevuld op fust"): kegs filled straight from
+  CKT2, allowed as a one-off (Jaap: fermentation tanks stay out of the HBT
+  list): `tools/batch-import/overrides.json`, the place for corrections
+  agreed per batch. Anything else outside an HBT and not to a batch is
+  reported ("ask Jaap"), not imported.
 - A batch number cell with a date (26028 Brouwen N3) is skipped for the
   next sheet.
 

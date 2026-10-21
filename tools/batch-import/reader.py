@@ -666,10 +666,9 @@ def read_hbts(b, out, labels, hbt_row):
                 b.note(sh, f'E{r}', f'End value {code or "(no tank)"}', f'{level} ({note})', 'batch_transfers', 'suspicious',
                        f'transfer to batch {m.group(1)}: check date and volume')
             elif level:
-                out.setdefault('other_end_values', []).append({'tank': code, 'volume_hl': level, 'comment': note})
-                b.note(sh, f'E{r}', f'End value {code or "(no tank)"}', f'{level} ({note})', '-', 'not_imported',
-                       'beer not in an HBT and not to a batch: ask Jaap')
-                b.warn(sh, f'D{r}', f'end value {level:g} hl in {code or "no tank"} ({note or "no comment"}): not imported, ask Jaap')
+                out.setdefault('other_end_values', []).append({
+                    'kind': 'end', 'tank': code, 'volume_hl': level, 'comment': note, 'cell': f'{sh}!E{r}',
+                    'o2_ppb': b.get(sh, f'G{r}')[0], 'co2_gl': b.get(sh, f'I{r}')[0]})
             continue
         tank = code
         g = next((x for x in groups[used:] if x['tank'] == tank and 'end' not in x), None)
@@ -856,12 +855,10 @@ def read_filling_report(b, out, sessions, ref):
             kind, code = parse_tank(hbt)
             if hbt is not None and kind != 'hbt':
                 # Not from an HBT (e.g. "TT60" / "Kerk": tank beer for the Jopenkerk).
-                vol = b.get(sh, f'{c}11')[0]
-                out.setdefault('other_end_values', []).append(
-                    {'tank': code, 'volume_hl': to_num(vol) if vol is not None else None, 'comment': f'filling report {to_date(date)}'})
-                b.note(sh, f'{c}9', f'Filling report column {c}', f'{hbt}, {vol} hl', '-', 'not_imported',
-                       'not from an HBT: ask Jaap')
-                b.warn(sh, f'{c}9', f'filling report column {c} ({to_date(date)}): "{hbt}" {vol} hl is not an HBT: not imported, ask Jaap')
+                vol = to_num(b.get(sh, f'{c}11')[0])
+                out.setdefault('other_end_values', []).append({
+                    'kind': 'report', 'tank': code, 'volume_hl': vol / 100 if vol and vol > 300 else vol,  # liters or hl
+                    'date': to_date(date), 'comment': f'filling report column {c}', 'cell': f'{sh}!{c}9'})
                 continue
             s = {'session_number': len(sessions) + 1, 'filling_date': to_date(date), 'column': i,
                  'hbt_tank': int(to_num(hbt)) if to_num(hbt) is not None else None, 'measurements': [],
@@ -899,8 +896,11 @@ def read_filling_report(b, out, sessions, ref):
                         continue
                     liters = to_num(v)
                     if not m:
-                        b.note(sh, f'{c}{x}', name, v, 'batch_transfers', 'not_imported', 'no batch number in the name')
-                        b.warn(sh, f'{c}{x}', f'{liters:g} l "{name}" without a batch number: not imported')
+                        date = b.get(sh, f'{c}7')[0]
+                        out.setdefault('other_end_values', []).append({
+                            'kind': 'tbv', 'tank': 'TT60' if re.search(r'tt\s*60|kerk', name, re.I) else None,
+                            'volume_hl': round(liters / 100, 2), 'date': to_date(date) if date else None,
+                            'comment': name, 'cell': f'{sh}!{c}{x}'})
                         continue
                     date = b.get(sh, f'{c}7')[0]
                     out.setdefault('report_transfers', []).append({
@@ -950,6 +950,86 @@ def flag_outliers(b, sessions):
 
 
 # ------------------------------------------------- links between the parts
+
+TANK_BEER = 'TT60'   # the transport tank for the Jopenkerk (package format "tank", Jaap 21-10)
+
+
+def tank_beer(b, out):
+    """Beer processed into TT60 for the Jopenkerk: a fill of TT60 plus one filling
+    session of package "tank" (article tank_jopenkerk, counted in hl). The date
+    comes from the filling report entry with that volume (a TT60 / "Kerk"
+    column or a "TBV ..." row), else the last processing date. Everything else
+    outside an HBT is reported for Jaap, not imported."""
+    other = out.pop('other_end_values', [])
+    used = set()
+    for i, e in enumerate(other):
+        if e['kind'] != 'end' or not (e['tank'] or '').startswith('TT'):
+            continue
+        used.add(i)
+        vol = e['volume_hl']
+        match = next((j for j, x in enumerate(other) if j not in used and x['kind'] in ('report', 'tbv')
+                      and x.get('volume_hl') and abs(x['volume_hl'] - vol) <= max(0.5, 0.03 * vol)), None)
+        if match is not None:
+            used.add(match)
+            date = other[match].get('date')
+            # The same delivery written twice on the filling report (a column and a "TBV ..." row).
+            for j, x in enumerate(other):
+                if j not in used and x['kind'] in ('report', 'tbv') and x.get('tank') == TANK_BEER and x.get('volume_hl') \
+                        and abs(x['volume_hl'] - vol) <= max(0.5, 0.03 * vol):
+                    used.add(j)
+                    date = date or x.get('date')
+        else:
+            date = None
+        if not date:
+            dates = [s['processing_date'] for s in out.get('processing_sessions', []) if s.get('processing_date')]
+            date = max(dates) if dates else None
+            b.warn('-', '-', f'tank beer {vol:g} hl ({e["tank"]}): '
+                             + ('the filling report entry has no date' if match is not None else 'not on the filling report')
+                             + f', date = last processing date {date}')
+        reading = {'sort_order': 1, 'level_hl': vol, 'comment': 'End value (tank beer Jopenkerk)', 'co2_target': 'tank'}
+        for k in ('o2_ppb', 'co2_gl'):
+            if to_num(e.get(k)) is not None:
+                reading[k] = to_num(e[k])
+        hbts = out.setdefault('hbts', [])
+        hbts.append({'tank': TANK_BEER, 'sort_order': len(hbts) + 1, 'intended_formats': ['tank'],
+                     'readings': [reading], 'end_level_hl': vol})
+        sessions = out.setdefault('filling_sessions', [])
+        if not date:
+            b.warn('-', '-', f'tank beer {vol:g} hl: no date at all, no filling session made')
+            continue
+        sessions.append({'session_number': len(sessions) + 1, 'filling_date': date, 'hbt_tank': TANK_BEER,
+                         'package_format': 'tank', 'volume_hl': vol, 'measurements': [],
+                         'articles': [{'code': 'tank_jopenkerk', 'quantity': vol}], 'materials': []})
+        b.note(*e['cell'].split('!'), f'End value {e["tank"]}', f'{vol} ({e["comment"]})', 'filling_sessions (tank)', 'read',
+               f'tank beer Jopenkerk, filled {date}' + (f' ({other[match]["cell"]})' if match is not None else ''))
+    for i, e in enumerate(other):
+        if i in used:
+            continue
+        sh, cell = e['cell'].split('!')
+        b.note(sh, cell, f'{e["kind"]}: {e["tank"] or e["comment"]}', f'{e["volume_hl"]} hl ({e["comment"]})', '-',
+               'not_imported', 'not from an HBT and not to a batch: ask Jaap')
+        b.warn(sh, cell, f'{e["volume_hl"]:g} hl {e["tank"] or ""} ({e["comment"] or "no comment"}): not imported, ask Jaap')
+        out.setdefault('other_end_values', []).append(e)
+
+
+def apply_overrides(b, out, path=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'overrides.json')):
+    """One-off corrections agreed with Jaap (overrides.json), per batch number."""
+    if not os.path.exists(path):
+        return
+    o = json.load(open(path)).get(out['batch_number'] or '')
+    if not o:
+        return
+    for h in o.get('hbts', []):
+        hbts = out.setdefault('hbts', [])
+        hbts.append({**h, 'sort_order': len(hbts) + 1})
+    for s in o.get('filling_sessions', []):
+        sessions = out.setdefault('filling_sessions', [])
+        sessions.append({**s, 'session_number': len(sessions) + 1})
+    if o.get('drop_other_end_values'):
+        out.pop('other_end_values', None)
+        b.warnings[:] = [w for w in b.warnings if 'ask Jaap' not in w]
+    b.note('-', '-', 'One-off correction', o.get('note', ''), 'overrides.json', 'read', 'agreed with Jaap')
+
 
 def link_hbts(b, out):
     """Filling sessions -> HBT fill (index), and HBT finished.
@@ -1053,6 +1133,10 @@ def resolve(b, out, ref):
     """Tank numbers -> codes; check initials, tags, codes against the app."""
     tanks = ref['tanks']
     def tank_code(n, types):
+        if isinstance(n, str):
+            hits = [t['code'] for t in tanks if t['code'] == n]
+            if hits:
+                return hits[0]
         hits = [t['code'] for t in tanks if t['n'] == n and t['type'] in types]
         if len(hits) == 1:
             return hits[0]
@@ -1126,6 +1210,8 @@ def read_workbook(path, ref):
     read_fermentation(b, out)
     read_processing(b, out)
     read_filling(b, out, ref)
+    tank_beer(b, out)
+    apply_overrides(b, out)
     link_hbts(b, out)
     merge_transfers(b, out)
     date_transfers(b, out)

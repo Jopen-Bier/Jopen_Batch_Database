@@ -84,7 +84,20 @@ def main():
         eq([(t['to_batch_number'], t['volume_hl'], t['from_tank']) for t in x['transfers']],
            [('26132', 10.0, 'HBT13'), ('26132', 30.0, 'HBT12'), ('26133', 28.2, 'HBT16')], 'splits from HBTs')
         eq(not any('Processing' in w and 'filling report' in w for w in x['warnings']), True, 'split volumes match the filling report')
-        eq([(o['tank'], o['volume_hl']) for o in x['other_end_values']], [('TT60', 40.0)], 'TT60 kept apart, not imported')
+        eq([(h['tank'], h['end_level_hl']) for h in x['hbts']][-1], ('TT60', 40.0), 'TT60 as a fill (tank beer)')
+        eq([(s['package_format'], s['volume_hl'], s['articles']) for s in x['filling_sessions'] if s['package_format'] == 'tank'],
+           [('tank', 40.0, [{'code': 'tank_jopenkerk', 'quantity': 40.0}])], 'tank beer filling session')
+    p = find(d, '26028')
+    if p:
+        x = reader.read_workbook(p, ref)
+        eq([(s['filling_date'], s['package_format'], s['volume_hl']) for s in x['filling_sessions'] if s['package_format'] == 'tank'],
+           [('2026-03-20', 'tank', 32.0)], 'TT60 dated from the filling report, written twice there, counted once')
+        eq(x.get('other_end_values'), None, 'nothing left for Jaap')
+    p = find(d, '26020')
+    if p:
+        x = reader.read_workbook(p, ref)
+        eq([(h['tank'], h['end_level_hl']) for h in x['hbts']], [('CKT2', 16.5)], 'one-off: filled from CKT2 (overrides.json)')
+        eq([(s['package_format'], s.get('hbt_index'), s.get('is_hbt_finished')) for s in x['filling_sessions']], [('keg', 0, True)], 'one-off session')
     p = find(d, '26285')
     if p:
         x = reader.read_workbook(p, ref)
