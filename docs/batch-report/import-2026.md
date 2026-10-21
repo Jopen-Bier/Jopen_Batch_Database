@@ -108,6 +108,41 @@ grid view, label diff between two workbooks).
   totals in the workbook that differ from what the app calculates
   (e.g. GLT volume, filled litres).
 
+### Reader findings (samples 26260, 26292, 26293; 21-10)
+`tools/batch-import/reader.py` + `review.py`. Choices made, to confirm:
+- **Yeast block** (Brouwen K44-N52) is mostly formulas (recipe values the
+  brewer accepted); imported, marked `formula` in the review. All 2026
+  batches have empty yeast columns in the app.
+- **GLT** comes from Brouwen I5 (typed); Gistkaart D4 is a formula copy.
+- **WP brew sheets fill "Spoelwater" and "Eerste afloop"**: imported into
+  `sparge_water_hl` / `first_wort_volume_hl`, which the Brewing tab shows
+  for JK only (the data is kept; the tab hides it for WP).
+- **Section rows** of the brew sheet (Maischen, Koken: "salts", "520g
+  Flex"), text in number cells and text in unit cells become brew comments.
+- **Log entries without an hour** get 12:00 (review: `missing`). Row 13
+  (Time 0) is skipped. Several operators: the first is `created_by`, the
+  others go into the comment ("Op. TM/JB").
+- **Processing**: a block counts only with a date or operator (template
+  defaults "Standpijp", losses 1 / 10, "Can" fill the empty ones). Only the
+  first centrifuge row has columns (start flow / turbidity); the other rows
+  and "Pasteurised with / avg temp / avg turbidity" go into a processing
+  comment per session. With one session the HBT readings and averages are
+  linked to it; with more, the workbook does not say which fill came from
+  which session (left empty, warning).
+- **HBT fills**: readings grouped per fill (an empty row closes a fill);
+  "End value HBT" rows match the fills in order and add a last reading.
+  Filling sessions of a tank go to its fills in date order; a fill is
+  finished once the filled volume reaches its end value (3 %).
+- **Package per filling session** from the articles booked (Afvulverslag),
+  else keg when keg CO2 / O2 is measured.
+- **Transfers**: an "End value HBT" without tank but with a batch number
+  ("to 26321", 26293) is a transfer; the date comes from the log entry that
+  names the volume. Receiving batches with a fractional brew count (26321:
+  3.4) already include it (old workaround): the review warns.
+- Not imported (no column): later centrifuge rows, measurement after
+  pushing over, start date lagering, lot numbers on Afvulverslag, liters
+  "TBV batch / barrel aging" (record as a split).
+
 ### Stages after import
 `batch_stages` follows the data: brews ended → fermentation, lagering step
 done → lagering, processing date → hbt, filling date → filling, all HBTs
