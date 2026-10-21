@@ -54,12 +54,13 @@ RLS: select for every logged-in user; insert/update/delete via `settings`.
 No access for `anon`.
 
 ### `users.initials` (new column)
-text, nullable. Trigger `set_user_initials()` before insert/update of `name`:
-if `initials` is null → upper(first letter of first word + first letter of
-last word), via `initials_from_name(name)`. Backfill existing users.
-Single-word names get one letter; Jaap corrects by hand. Editable on
-`gebruikers.html` (admin); saving an empty value regenerates them. On a
-change of name, generated initials follow the new name, hand-typed ones stay.
+text, nullable. Typed by hand (invite form and Users list), as used on the
+floor (EVL, BS1, MVG). Unique ignoring case (`users_initials_key` on
+`upper(initials)`): the 2026 Excel import links initials to users.
+Changed 21-10 (migration `20261021073000_users_initials_manual`, Jaap): the
+first version generated initials from the name (`set_user_initials()` /
+`initials_from_name()`); these clashed with the floor initials and were
+dropped.
 
 ### Permission module
 `update permission_modules set name = 'Batches & batch reports' where module_key = 'batches'`.
