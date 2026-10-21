@@ -150,7 +150,7 @@
         batch_id: page.ctx.batch.id, filling_session_id: s.id,
         measured_time: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
       }, page.measurements);
-      if (m) renderSoon(`[data-measurement="${m.id}"][data-field="${s.package_format === 'keg' ? 'keg_co2_gl' : 'tpo_ppb'}"]`);
+      if (m) renderSoon(`[data-measurement="${m.id}"][data-field="${s.package_format === 'keg' || s.package_format === 'tank' ? 'keg_co2_gl' : 'tpo_ppb'}"]`);
     }
 
     async function deleteMeasurement(m) {
@@ -226,7 +226,7 @@
 
     function measurementTable(s) {
       if (!s.package_format) return '<div class="br-note">Choose the package to enter measurements.</div>';
-      const keg = s.package_format === 'keg';
+      const keg = s.package_format === 'keg' || s.package_format === 'tank';   // tank beer: measured like a keg
       const fields = keg ? KEG_FIELDS : PACK_FIELDS;
       const lim = fillingLimits(page.packaging);
       const rows = measurementsOf(s).map((m) => `<tr>

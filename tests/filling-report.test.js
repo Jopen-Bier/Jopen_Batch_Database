@@ -81,14 +81,25 @@ assert.strictEqual(b.startHl, 80);
 
 // Pie: parts with share of GLT; negatives count 0; slices only above 0
 const parts = r.pieParts(b);
-assert.deepStrictEqual(parts.map((p) => p.key), ['bottle', 'can', 'keg', 'splits', 'cellarLoss', 'remainder']);
-assert.strictEqual(parts[3].hl, 4.5);
+assert.deepStrictEqual(parts.map((p) => p.key), ['bottle', 'can', 'keg', 'tank', 'splits', 'cellarLoss', 'remainder']);
+assert.strictEqual(parts[3].hl, 0);     // no tank beer
+assert.strictEqual(parts[4].hl, 4.5);
 assert.strictEqual(parts[1].share.toFixed(3), '0.495');
-assert.strictEqual(r.pieParts(neg)[4].hl, 0);
+assert.strictEqual(r.pieParts(neg)[5].hl, 0);
 const slices = r.pieSlices(parts);
 assert.strictEqual(slices.length, 6);
 assert.ok(slices[0].d.startsWith('M100,100 L100.00,8.00 A92,92'));
 assert.strictEqual(r.pieSlices([{ key: 'can', hl: 5, color: '#000' }])[0].d, 'M8,100 a92,92 0 1,0 184,0 a92,92 0 1,0 -184,0');
 assert.deepStrictEqual(r.pieSlices([{ key: 'can', hl: 0 }]), []);
+
+// Tank beer (TT60 to the Jopenkerk, 21-10): counted as packaged, own pie part
+const tankArticles = new Map([[9, { id: 9, package_format: 'tank', liters_per_unit: 100 }]]);
+const tb = r.sessionBook([{ article_id: 9, quantity: 40 }], [], tankArticles, new Map());
+assert.strictEqual(tb.litresByFormat.tank, 4000);
+assert.strictEqual(tb.materials.length, 0);
+const bt = r.volumeBalance({ gltHl: 42, hbtEndTotalHl: 40, packagedHl: { tank: 40 } });
+assert.strictEqual(bt.packagedTotalHl, 40);
+assert.strictEqual(bt.remainderHl, 0);
+assert.strictEqual(r.pieParts(bt).find((p) => p.key === 'tank').hl, 40);
 
 console.log('filling-report: all tests passed');

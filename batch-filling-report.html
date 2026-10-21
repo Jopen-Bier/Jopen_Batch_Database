@@ -226,7 +226,7 @@
       const toHl = (l) => l / 100;
       return volumeBalance({
         gltHl: gltVolumeHl(), incomingHl: page.ctx.stageRow && page.ctx.stageRow.incoming_volume_hl, transfers: page.transfers, hbtTankIds: page.hbts.map((h) => h.tank_id), hbtEndTotalHl,
-        packagedHl: { bottle: toHl(total.litresByFormat.bottle), can: toHl(total.litresByFormat.can), keg: toHl(total.litresByFormat.keg) },
+        packagedHl: { bottle: toHl(total.litresByFormat.bottle), can: toHl(total.litresByFormat.can), keg: toHl(total.litresByFormat.keg), tank: toHl(total.litresByFormat.tank) },
       });
     }
 
@@ -283,7 +283,7 @@
           b.cellarLossNegative ? 'fr-bad' : ''),
         subRow('= In HBT after processing', hl(b.inHbtHl), 'end values HBT · Processing'),
         minusRow('− Splits from HBT', b.splitsPostHl ? '−' + hl(b.splitsPostHl) : '0.0', transferText(b.postTransfers)),
-        minusRow('− Packaged', '−' + hl(b.packagedTotalHl), `bottle ${hl(b.packagedHl.bottle)} · can ${hl(b.packagedHl.can)} · keg ${hl(b.packagedHl.keg)}`),
+        minusRow('− Packaged', '−' + hl(b.packagedTotalHl), `bottle ${hl(b.packagedHl.bottle)} · can ${hl(b.packagedHl.can)} · keg ${hl(b.packagedHl.keg)}${b.packagedHl.tank ? ' · tank ' + hl(b.packagedHl.tank) : ''}`),
         subRow('= Filling remainder / loss', hl(b.remainderHl), b.remainderShare === null ? '' : pct(b.remainderShare) + ' of available for filling',
           b.remainderShare === null ? 'fr-sub' : b.remainderOk ? 'fr-sub fr-ok' : 'fr-sub fr-warn'),
       ].join('');

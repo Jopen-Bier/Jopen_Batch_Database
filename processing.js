@@ -47,9 +47,10 @@ function hbtEnd(readings) {
 /** CO2 spec of a target from recipe_packaging: { spec, tol } or null. */
 function co2Spec(packaging, target) {
   const p = packaging || {};
-  const spec = target === 'keg' ? procNumber(p.co2_keg_spec) : target === 'bottle' || target === 'can' ? procNumber(p.co2_bottle_can_spec) : null;
+  const kegLike = target === 'keg' || target === 'tank';   // tank beer has the keg spec
+  const spec = kegLike ? procNumber(p.co2_keg_spec) : target === 'bottle' || target === 'can' ? procNumber(p.co2_bottle_can_spec) : null;
   if (spec === null) return null;
-  const tol = procNumber(target === 'keg' ? p.co2_keg_tolerance : p.co2_bottle_can_tolerance) || 0;
+  const tol = procNumber(kegLike ? p.co2_keg_tolerance : p.co2_bottle_can_tolerance) || 0;
   return { spec, tol };
 }
 
