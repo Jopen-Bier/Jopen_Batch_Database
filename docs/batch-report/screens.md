@@ -222,7 +222,8 @@ window).
   Material" adds one outside the BOM. "Summary" button on the balance card;
   the popup prints on its own (Print / PDF). "Copy for Mdrank" and comments
   filling wait for open-questions #8 / #13. Filled batches open on this tab.
-- **Documents** card under the volume balance (Jaap, 21-10): Production
+- **Documents** card at the bottom, after Splits / transfers; the signing
+  block (parked, open-questions #8) comes after it (Jaap, 21-10): Production
   order, Filling order, Filling report — Upload / Replace (PDF or photo, up
   to 20 MB), open (signed link), delete (confirm, no undo); who and when;
   plus **Other**: any number of files ("+ Add", several at once).
