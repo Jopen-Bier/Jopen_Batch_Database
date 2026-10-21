@@ -164,9 +164,25 @@ Seen in 26001-26005 (21-10): a filling session written only on the
 filling report (26003: made from the report: date, HBT, volume, articles),
 template HBT numbers in empty reading rows (dropped), yeast strain typed
 with a trailing dash ("US-05-", trimmed), file names without a minor
-version ("v4") or without a version. The review flags a workbook whose
-number of brews differs from the app's brew count (26002-26004: 2 brews,
-brew count 1).
+version ("v4") or without a version. **Brew count follows the workbook**
+(Jaap, 21-10: the app does not know how many brews these batches had):
+the SQL sets `batches.brew_count` to the number of brews read, when they
+differ; the result line shows "brew_count 1->2". "GdV 20L" (kegs used)
+is the material `gbr_door_vrouwen_keg_20` (migration `20261021140000`).
+Initials of former employees (MM, FI, ...) become inactive users without a
+login (one SQL file once the full scan lists them all), so the history
+keeps the person.
+
+**Coverage check** (21-10, all 8 workbooks): every typed cell of the five
+operator sheets that the reader does not take was listed. Added after it:
+the brewers' remarks ("Opmerkingen :", column A below the recipe block) as
+batch-wide brew comments. Not taken, by design: the recipe / spec blocks
+(typed in the old reports), calculators, pre-filled dates and tank
+numbers without values, EAN codes and lot numbers, material remarks
+("Printed", "GdV"), "Ingevuld door" of the filling report (parked column),
+the Time 0 row of the fermentation sheet (the app makes it), later
+centrifuge rows, avg temp out, start date lagering, measurement after
+pushing over.
 
 ### SQL per chunk (step 5)
 `tools/batch-import/generate_sql.py <reader_out> <app.json> <out_dir> <chunk> [batch ...]`

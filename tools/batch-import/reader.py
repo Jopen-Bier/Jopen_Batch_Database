@@ -350,6 +350,19 @@ def read_brewing(b, out):
                 b.note(sh, f'{uc}{r}', f'{b.raw(sh, f"P{r}")} · brew {n} (unit cell)', u,
                        'batch_brew_comments', 'suspicious', 'text in the unit cell; kept as comment')
     out['brews'] = [x for x in brews.values() if any(k != 'brew_number' for k in x)]
+    # Remarks of the batch ("Opmerkingen :" in column A, below the recipe block).
+    for r, label in b.rows(sh, 'A'):
+        if label.startswith('opmerkingen'):
+            x = r + 1
+            while x <= b.v[sh].max_row and not norm(b.raw(sh, f'K{x}')).startswith('programma'):
+                v, st = b.get(sh, f'A{x}')
+                if v is not None and st == 'read' and str(v).strip() not in ('', '-', '0'):
+                    comments.append({'brew_number': None, 'comment': str(v).strip()})
+                    b.note(sh, f'A{x}', 'Remarks (Opmerkingen)', v, 'batch_brew_comments', 'read', 'all brews')
+                x += 1
+                if x > r + 15:
+                    break
+            break
     for r, label in b.rows(sh, 'G'):
         if label == 'glt':
             n = F(f'I{r}', 'GLT', 'batches.glt_tank_id', 'num')
@@ -705,7 +718,7 @@ MATERIALS = [  # -> packaging_materials.code (None = no longer used: reported)
     ('kroonkurk', 'crown_cork'), ('kurk', 'cork'), ('musselet', 'muselet'),
     ('blik 33cl', 'can_33'), ('blik 44cl', 'can_44'), ('blik deksel', 'can_lid'),
     ('global keg 20l', None), ('jopen fust 20l', 'jopen_keg_20'), ('jopen fust 30l', 'jopen_keg_30'),
-    ('jopen fust 50l', 'jopen_keg_50'), ('fustdop', 'keg_cap'), ('keykegfustdop', 'keykeg_cap'),
+    ('jopen fust 50l', 'jopen_keg_50'), ('gdv 20l', 'gbr_door_vrouwen_keg_20'), ('fustdop', 'keg_cap'), ('keykegfustdop', 'keykeg_cap'),
     ('keykeg 20l', 'keykeg_20'), ('keykeg 30l', 'keykeg_30'),
 ]
 
