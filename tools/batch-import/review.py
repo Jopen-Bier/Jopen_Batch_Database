@@ -41,8 +41,13 @@ def app_checks(d, app):
     if a['has_data']:
         out.append('batch already has data in the app: not imported (never overwrite)')
     wr = d.get('workbook_recipe')
-    if wr and not a['recipe'].endswith('v' + wr['version']):
+    if wr and wr.get('version') and not a['recipe'].endswith('v' + wr['version']):
         out.append(f'recipe version: workbook v{wr["version"]}, app {a["recipe"]} (app kept)')
+    brews = len(d.get('brews', []))
+    planned = -(-float(a['brew_count'] or 0) // 1)
+    if brews and brews != planned:
+        out.append(f'workbook has {brews} brews, the app brew count is {a["brew_count"]:g} '
+                   f'(stage needs brews ended >= brew count; dosing uses the brew count)')
     for t in d.get('transfers', []):
         to = app.get(t['to_batch_number'])
         if not to:

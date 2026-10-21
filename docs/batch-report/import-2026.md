@@ -156,6 +156,18 @@ grid view, label diff between two workbooks).
   pushing over, start date lagering, lot numbers on Afvulverslag, liters
   "TBV batch / barrel aging" (record as a split).
 
+### Old reports (not generated; batches 26001 to about 26259)
+Same sheets and labels as the generated report (plus "EBU Berekening"),
+but 4.3 MB each: "Gistkaart Invoer" is 16,142 columns wide. The reader
+streams every sheet once, columns A-AN only (about 15 s per workbook).
+Seen in 26001-26005 (21-10): a filling session written only on the
+filling report (26003: made from the report: date, HBT, volume, articles),
+template HBT numbers in empty reading rows (dropped), yeast strain typed
+with a trailing dash ("US-05-", trimmed), file names without a minor
+version ("v4") or without a version. The review flags a workbook whose
+number of brews differs from the app's brew count (26002-26004: 2 brews,
+brew count 1).
+
 ### SQL per chunk (step 5)
 `tools/batch-import/generate_sql.py <reader_out> <app.json> <out_dir> <chunk> [batch ...]`
 writes `import_<chunk>_dry_run.sql` and `import_<chunk>_run.sql`: one DO

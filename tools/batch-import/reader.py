@@ -28,17 +28,52 @@ def norm(s):
     return re.sub(r'\s+', ' ', str(s or '')).strip().lower().rstrip(':').strip()
 
 
+MAX_COL = 40  # nothing is read right of column AN (the old reports are 16000 columns wide)
+
+
+class Cell:
+    __slots__ = ('value',)
+
+    def __init__(self, value):
+        self.value = value
+
+
+class Sheet:
+    """The cells of one sheet, read once (streaming), addressed like openpyxl: ws['B7'].value."""
+
+    def __init__(self, ws):
+        self.cells = {}
+        self.max_row = 0
+        for row in ws.iter_rows(max_col=MAX_COL):
+            for c in row:
+                if c.value is not None and getattr(c, 'coordinate', None):
+                    self.cells[c.coordinate] = c.value
+                    self.max_row = max(self.max_row, c.row)
+
+    def __getitem__(self, ref):
+        return Cell(self.cells.get(ref))
+
+
+def read_sheets(path, data_only):
+    wb = openpyxl.load_workbook(path, read_only=True, data_only=data_only)
+    try:
+        return {ws.title: Sheet(ws) for ws in wb.worksheets}
+    finally:
+        wb.close()
+
+
 class Book:
     """Values (as last calculated) and formulas of one workbook, plus the review."""
 
     def __init__(self, path):
-        self.v = openpyxl.load_workbook(path, data_only=True)
-        self.f = openpyxl.load_workbook(path, data_only=False)
+        self.v = read_sheets(path, True)
+        self.f = read_sheets(path, False)
+        self.v_names = list(self.v)
         self.review = []
         self.warnings = []
 
     def has(self, sheet):
-        return sheet in self.v.sheetnames
+        return sheet in self.v
 
     def raw(self, sheet, ref):
         return self.v[sheet][ref].value
@@ -325,6 +360,8 @@ def read_brewing(b, out):
         if label in YEAST_ROWS:
             key, kind = YEAST_ROWS[label]
             val = F(f'N{r}', b.raw(sh, f'K{r}'), f'batches.{key}', kind, allow_formula=True)
+            if key == 'yeast_strain' and isinstance(val, str):
+                val = val.rstrip(' -') or None  # typed with a trailing dash ("US-05-")
             if val is not None:
                 out['batch'][key] = val[0] if kind == 'people' else val
 
@@ -609,6 +646,12 @@ def read_hbts(b, out, labels, hbt_row):
                 end_reading['co2_target'] = last['co2_target']
             g['readings'].append({k: v for k, v in end_reading.items() if v is not None})
         used = groups.index(g) + 1
+    for g in groups:
+        kept = [r for r in g['readings'] if any(r.get(k) is not None for k in ('level_hl', 'o2_ppb', 'co2_gl', 'comment'))]
+        for i, r in enumerate(kept):
+            r['sort_order'] = i + 1
+        g['readings'] = kept
+    groups = [g for g in groups if g['readings'] or g.get('end')]
     sessions = out.get('processing_sessions', [])
     hbts = []
     for i, g in enumerate(groups):
@@ -756,8 +799,18 @@ def read_filling_report(b, out, sessions, ref):
             continue
         s = by_col.get(i)
         if s is None:
-            b.warn(sh, f'{c}7', 'filling report column without a filling session (Afvullen)')
-            continue
+            # Old reports: a session written only on the filling report.
+            hbt = b.get(sh, f'{c}9')[0]
+            s = {'session_number': len(sessions) + 1, 'filling_date': to_date(date), 'column': i,
+                 'hbt_tank': int(to_num(hbt)) if to_num(hbt) is not None else None, 'measurements': [],
+                 'from_report_only': True}
+            who = people(b.get(sh, f'{c}13')[0])
+            if who:
+                s['filled_by'] = who[0]
+            sessions.append(s)
+            by_col[i] = s
+            b.note(sh, f'{c}7', 'Filling session (filling report only)', date, 'filling_sessions', 'suspicious',
+                   'not on Afvullen: made from the filling report (date, HBT, volume, articles)')
         if to_date(date) != s['filling_date']:
             b.warn(sh, f'{c}7', f'date {to_date(date)} differs from Afvullen ({s["filling_date"]})')
         vol = F(f'{c}11', 'Volume (HL)', 'filling_sessions.volume_hl', 'num')
@@ -971,9 +1024,10 @@ def read_workbook(path, ref):
         if b.has(sh) and b.raw(sh, cell) is not None:
             out['batch_number'] = str(int(to_num(b.raw(sh, cell))))
             break
-    m = re.match(r'^(\d{5})\s+(.*?)\s+v(\d+)\.(\d+)', name)
+    m = re.match(r'^(\d{5})\s+(.*?)(?:\s+v(\d+)(?:\.(\d+))?)?(?:\s+(?:WP|JK))?\.xlsx?$', name, re.I)
     if m:
-        out['workbook_recipe'] = {'name': m.group(2), 'version': f'{m.group(3)}.{m.group(4)}'}
+        ver = f'{m.group(3)}.{m.group(4) or 0}' if m.group(3) else None
+        out['workbook_recipe'] = {'name': m.group(2), 'version': ver}
         if out['batch_number'] and out['batch_number'] != m.group(1):
             b.warn('-', '-', f'file name {m.group(1)} differs from the batch number {out["batch_number"]} in the workbook')
     read_brewing(b, out)
