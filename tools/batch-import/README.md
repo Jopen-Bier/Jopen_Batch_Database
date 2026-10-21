@@ -15,5 +15,14 @@ repo, run Python with `-I`, and pass paths as arguments.
   filled / sampled by, first package check, filling report) found by label;
   writes the unique initials with the matching app user, and where each was
   used. `users.json` = `[{name, initials}]` from the live users table.
+- `reader.py <out_dir> <ref.json> <workbook.xlsx>...`: workbook -> JSON per
+  batch in the app's table / column names (people as initials; tanks, tags,
+  articles, materials as codes), with a review list per cell and warnings.
+  `ref.json` = users, tanks, tags, articles, materials from the live database.
+- `review.py <reader_out_dir> <app.json> <review_dir>`: review workbook per
+  batch (overview + sheet per tab) and `summary.xlsx` over all batches.
+  `app.json` = per batch number: name, status, brew count, recipe, has data.
+- `test_reader.py <workbook_dir> <ref.json>`: checks on the samples 26260,
+  26292, 26293 (skipped without arguments; the workbooks stay out of git).
 - `labeldiff.py <dump_a.tsv> <dump_b.tsv>`: per sheet, which text labels sit
   in the same cell in both workbooks and which moved.
