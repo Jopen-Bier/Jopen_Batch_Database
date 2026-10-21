@@ -11,10 +11,16 @@
 #   ...AfvulOrderBon... -> filling_order
 #   av_<batch>...       -> filling_report
 #   anything else       -> other
+#   several batch numbers ("splits 26009 naar 26050", "26314_is nu_26320"): only
+#   numbers of batches in the app count; an order goes to the last of them, an
+#   "other" document to each of them
+#   "corr" / "correctie" in the name (a correction of an order) -> other, next
+#   to the original (kept as an extra document, so nothing is lost)
+# The same file twice (same content) is uploaded once.
 # A batch gets one file per fixed type: a type that already has a file in the
 # app is skipped, and two files of one fixed type for a batch are both held
 # (reported, not uploaded). An "other" file with the same name is skipped.
-import sys, os, re, json, time, argparse, urllib.request, urllib.parse, urllib.error
+import sys, os, re, json, time, hashlib, argparse, urllib.request, urllib.parse, urllib.error
 
 BUCKET = 'batch-documents'
 MAX_BYTES = 20 * 1024 * 1024          # the app's limit (batch-filling-report.html)
@@ -23,13 +29,20 @@ LABELS = {'production_order': 'Production order', 'filling_order': 'Filling orde
           'filling_report': 'Filling report', 'other': 'Other'}
 
 
+def numbers(name):
+    """All batch numbers in a file name, in order ("splits 25422 naar 26017" -> 25422, 26017)."""
+    return re.findall(r'(?<!\d)(2\d{4})(?!\d)', os.path.basename(name))
+
+
 def classify(name):
     """(batch number, document type) from a file name; batch None if not found."""
     base = os.path.basename(name)
     low = base.lower()
-    m = re.search(r'(?<!\d)(2\d{4})(?!\d)', base)
-    batch = m.group(1) if m else None
-    if 'productiebon' in low:
+    found = numbers(base)
+    batch = found[0] if found else None
+    if re.search(r'\bcorr', low):
+        kind = 'other'   # a correction ("corr bij ...", "Correctie bij afvulling ...")
+    elif 'productiebon' in low:
         kind = 'production_order'
     elif 'afvulorderbon' in low:
         kind = 'filling_order'
@@ -40,15 +53,32 @@ def classify(name):
     return batch, kind
 
 
-def plan(files, batches, existing, only=None):
-    """Decide per file: upload / skip / hold, with the reason."""
-    rows, by_key = [], {}
+def plan(files, batches, existing, only=None, digests=None):
+    """Decide per file and batch: upload / skip / hold, with the reason.
+    digests: path -> content hash (the same file twice is uploaded once per batch)."""
+    targets = []
     for path, size in files:
         name = os.path.basename(path)
         batch, kind = classify(name)
+        # Several numbers ("splits 25422 naar 26017", "26314_is nu_26320"): those in the app count;
+        # an order goes to the last of them (the new number), an "other" document to each.
+        known = list(dict.fromkeys(n for n in numbers(name) if n in batches))
+        for b in (known if kind == 'other' else known[-1:]) or [batch]:
+            targets.append((path, size, b, kind))
+    rows, by_key, seen = [], {}, {}
+    # Shortest name first, so "av_26015.pdf" wins over "av_26015 (1).pdf" for the same content.
+    for path, size, batch, kind in sorted(targets, key=lambda t: (len(os.path.basename(t[0])), t[0], t[2] or '')):
+        name = os.path.basename(path)
         row = {'file': path, 'name': name, 'batch': batch, 'type': kind, 'size': size}
         if only and batch not in only:
             continue
+        digest = (digests or {}).get(path)
+        if digest and (digest, batch) in seen:
+            row.update(action='skip', reason=f'same file as {seen[(digest, batch)]}')
+            rows.append(row)
+            continue
+        if digest:
+            seen[(digest, batch)] = path
         if batch is None:
             row.update(action='hold', reason='no batch number in the file name')
         elif batch not in batches:
@@ -131,7 +161,11 @@ def main():
         u = api.rows('users', 'id,initials', f'&initials=eq.{urllib.parse.quote(a.by.upper())}')
         by = u[0]['id'] if u else None
     only = {x.strip() for x in a.batches.split(',') if x.strip()} or None
-    rows = plan(files, batches, existing, only)
+    digests = {}
+    for path, _ in files:
+        with open(os.path.join(a.folder, path), 'rb') as f:
+            digests[path] = hashlib.sha256(f.read()).hexdigest()
+    rows = plan(files, batches, existing, only, digests)
 
     done = failed = 0
     if a.run:

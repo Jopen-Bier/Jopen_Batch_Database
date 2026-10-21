@@ -248,7 +248,12 @@ The PDFs are in the batch-reports repo, the batch number in the file name
 row, as the Filling report tab does (no file without a row). Run by the
 workflow "Upload documents" in batch-reports-2026 (Actions tab; dry run
 first, then with "Upload" ticked); needs the repo secret
-`SUPABASE_SERVICE_ROLE_KEY`. Held, not uploaded: no batch number, a batch
+`SUPABASE_SERVICE_ROLE_KEY`. Seen in the 1,095 files (21-10): the same
+file uploaded twice (root and "PDF's/") is uploaded once; "corr bij ..." /
+"Correctie bij afvulling ..." are corrections: an "other" document next to
+the original order; split / blend notes ("splits 26009 naar 26050", "samen
+26013 en 26036 naar 26067") go to every batch they name that is in the
+app. Held, not uploaded: no batch number, a batch
 not in the app, larger than 20 MB, two files of one fixed type for a
 batch. Skipped: a fixed type the batch already has, an "other" file with
 the same name. Tested against a local stand-in of the API (upload, row,
