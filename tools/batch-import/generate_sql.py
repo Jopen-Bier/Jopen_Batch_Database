@@ -202,6 +202,9 @@ def main():
         d = json.load(open(p))
         if wanted and d['batch_number'] not in wanted:
             continue
+        if d.get('hold'):
+            print(f'{d["batch_number"]}: held ({d["hold"]}): left out')
+            continue
         a = app.get(d['batch_number'])
         if not a or a['has_data']:
             print(f'{d["batch_number"]}: not in the app or has data: left out')

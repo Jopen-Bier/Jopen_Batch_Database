@@ -184,6 +184,28 @@ the Time 0 row of the fermentation sheet (the app makes it), later
 centrifuge rows, avg temp out, start date lagering, measurement after
 pushing over.
 
+### Workbook types and hold (21-10)
+The reader first decides the type: `generated` / `old` (batch report) or
+`barrel_aging` ("Hout Rijping" sheet); anything else is unknown. Only batch
+reports are read; the rest is **held**: listed in the review with the
+reason, left out of the SQL, never guessed. A workbook that fails to read
+is written as `FAILED_<file>.txt` and the run goes on. Per chunk (a month)
+the review is gone through before any SQL; after a reader change the
+tests run and the imported batches are re-read and compared (a difference
+gets a correction SQL, never a silent change). A major deviation goes to
+Jaap: extend the reader for a recurring type, a one-off SQL after his OK,
+or left for entering by hand.
+
+**Barrel aging** (26058-26064, 26089, 26090; 21-10): sheets Hout Rijping,
+Gistkaart Invoer, " Verwerking", Afvullen, Afvulverslag, Lab uitslag, Ruwe
+data, Etiketsheet. All nine still aging (no emptying date); only Hout
+Rijping is filled: source batch, barreled volume, barrels, fill date,
+treatment, original beer values, additions. The source batches book most
+of them off as "TBV BARREL AGING BATCH" (26042 does not). Proposal to
+Jaap: a split from the source batch at the barrel fill date (brew count
+0), barrel information as a log entry, additions as Addition entries;
+per-barrel data waits for barrel-aging support in the app.
+
 ### SQL per chunk (step 5)
 `tools/batch-import/generate_sql.py <reader_out> <app.json> <out_dir> <chunk> [batch ...]`
 writes `import_<chunk>_dry_run.sql` and `import_<chunk>_run.sql`: one DO

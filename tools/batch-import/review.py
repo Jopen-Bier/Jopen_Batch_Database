@@ -55,7 +55,7 @@ def app_checks(d, app):
         elif float(to['brew_count'] or 0) % 1:
             out.append(f'transfer to {t["to_batch_number"]} ({to["name"]}): its brew count {to["brew_count"]:g} already '
                        f'includes this beer (old workaround); recording the transfer would count it twice')
-    status = 'skip' if (a['has_data']) else 'import'
+    status = 'hold' if d.get('hold') else 'skip' if a['has_data'] else 'import'
     return out, status
 
 
@@ -130,7 +130,7 @@ def main():
     ws = summary.active
     ws.title = 'Summary'
     keys = list(counts({}).keys())
-    ws.append(['Batch', 'Name (app)', 'Recipe (app)', 'Workbook recipe', 'Status (app)', 'Import', 'Warnings',
+    ws.append(['Batch', 'Type', 'Name (app)', 'Recipe (app)', 'Workbook recipe', 'Status (app)', 'Import', 'Warnings',
                'Suspicious cells', 'Not imported cells'] + keys + ['First warnings'])
     allw = summary.create_sheet('Warnings')
     allw.append(['Batch', 'Warning'])
@@ -142,7 +142,7 @@ def main():
         wr = d.get('workbook_recipe') or {}
         warns = extra + d['warnings']
         c = counts(d)
-        ws.append([d['batch_number'], a.get('name'), a.get('recipe'), f'{wr.get("name", "")} v{wr.get("version", "")}',
+        ws.append([d['batch_number'], d.get('type') or 'unknown', a.get('name'), a.get('recipe'), f'{wr.get("name", "")} v{wr.get("version", "")}',
                    a.get('status'), status, len(warns),
                    sum(r['status'] == 'suspicious' for r in d['review']),
                    sum(r['status'] == 'not_imported' for r in d['review'])] + [c[k] for k in keys]

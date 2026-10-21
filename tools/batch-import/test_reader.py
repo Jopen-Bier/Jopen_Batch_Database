@@ -73,6 +73,10 @@ def main():
            [('26321', 104.4, 'LT56')], 'transfer from "End value" without HBT')
         eq(x['transfers'][0]['transferred_at'], '2026-09-29T12:00:00+02:00', 'transfer date from the log')
         eq(x['transfers'][0]['source'], 'Verwerking!E58 + Afvulverslag!D45', 'transfer found on both forms')
+    p = find(d, '26058')
+    if p:
+        x = reader.read_workbook(p, ref)
+        eq((x['type'], x['batch_number'], bool(x.get('hold'))), ('barrel_aging', '26058', True), 'barrel aging held, not guessed')
     print(f'test_reader: {ok} checks passed')
 
 
