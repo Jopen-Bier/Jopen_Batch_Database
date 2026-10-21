@@ -188,6 +188,9 @@ their Excel batch reports, so their stage and data are right in the app.
   changed during 2026, `.xlsm` or `.xlsx`.
 - Review spreadsheet per batch (read / missing / suspicious) for Jaap before
   anything is written; dry run, then import.
+- 21-10: first look at two workbooks done; brief for a separate session in
+  **`import-2026.md`** (all 300+ batches of 2026, for history; recipe
+  version as in the database; initials as text).
 
 ## After phase 8 (separately agreed)
 Excel fallback export filled from report data; stock booking from the report

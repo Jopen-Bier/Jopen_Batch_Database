@@ -26,6 +26,7 @@ Status (19-10-2026): design agreed (mockup), data model agreed. Phase 0
    `Jopen_batch_report_mockup.html` (all boards in one clickable file —
    open in a browser).
 8. **`test-scenarios.md`** — worked examples with expected results.
+9. **`import-2026.md`** — import of the 2026 Excel batch reports (separate session).
 
 Repo-wide rules still apply first: `CLAUDE.md`, `ARCHITECTURE.md`.
 
