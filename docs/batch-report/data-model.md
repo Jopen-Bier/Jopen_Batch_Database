@@ -464,6 +464,17 @@ Built 20-10 (migration `20261020150212_batch_report_filling_report`):
   articles, 29 materials, 53 BOM lines.
 - No new `batch_stages` columns: the balance is computed in the page.
 
+Documents (Jaap, 21-10; migration `20261021061848_batch_documents`):
+`batch_documents`: `id`, `batch_id` (cascade), `document_type`
+(`production_order` | `filling_order` | `filling_report`), `file_name`,
+`storage_path` (unique), `size_bytes`, `uploaded_by`, `uploaded_at`; unique
+(batch_id, document_type): one file per type, replacing updates the row. RLS
+module "batches", audit trail. Files in the private storage bucket
+`batch-documents` (path `<batch_id>/<type>/<time>_<name>`; storage select
+`can_view`, insert / delete `can_edit('batches')`: replacing removes the old
+file). Deleting a batch removes the rows, not the files. `batch_stages`
+appends `documents_uploaded` (number of types uploaded).
+
 Parked columns on `batches` (do not create until Jaap decides):
 `filling_comment`, `mdrank_entered_by`, `mdrank_entered_at`,
 `filling_report_completed_by/_at`, `filling_report_signed_by/_at`.

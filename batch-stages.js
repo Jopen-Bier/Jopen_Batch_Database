@@ -96,6 +96,7 @@ function toBatchRow(batch, stageRow) {
     hbtFormats: (stageRow && stageRow.hbt_formats) || [],
     hbtsFinished: (stageRow && stageRow.hbts_finished) || 0,
     filledVolumeHl: (stageRow && stageRow.filled_volume_hl) ?? null,
+    documentsUploaded: (stageRow && stageRow.documents_uploaded) || 0,
     // the tank the beer is in: the lager tank once it is pushed over, else the fermentation tank
     // (from HBT on: the bright beer tanks)
     tankCode: (['hbt', 'filling', 'filled'].includes(stageRow && stageRow.stage) && stageRow.hbt_codes)
@@ -235,6 +236,11 @@ function tileLines(row, now = new Date()) {
       progress: null,
     };
   }
+  // Filling and Filled tiles also count the documents of the Filling report.
+  const docs = () => {
+    const n = row.documentsUploaded || 0, total = BATCH_DOCUMENT_TYPES.length;
+    return { line3: `${n >= total ? '✓ ' : ''}Documents ${n}/${total}`, line3Ok: n >= total };
+  };
   if (row.stage === 'filling') {
     const total = row.hbtsTotal || 0, finished = row.hbtsFinished || 0;
     return {
@@ -242,6 +248,7 @@ function tileLines(row, now = new Date()) {
       line2: `${finished}/${total} HBT finished`,
       isOk: false,
       progress: total ? Math.min(1, finished / total) : null,
+      ...docs(),
     };
   }
   if (row.stage === 'filled') {
@@ -251,6 +258,7 @@ function tileLines(row, now = new Date()) {
       line2: 'Filling report open',   // phase 7: completed / signed
       isOk: false,
       progress: null,
+      ...docs(),
     };
   }
   return { line1: stageInfo(row.stage).label, line2: '', isOk: false, progress: null };
@@ -275,6 +283,13 @@ function batchTabHref(tabKey, batchId) {
 // The tab a batch opens on from a list: the tab of its current stage once
 // that tab exists, else the Overview.
 const STAGE_TABS = { brewing: 'brewing', fermentation: 'fermentation', lagering: 'fermentation', hbt: 'processing', filling: 'filling', filled: 'filling-report' };
+
+// Documents uploaded on the Filling report (batch_documents.document_type).
+const BATCH_DOCUMENT_TYPES = [
+  { code: 'production_order', label: 'Production order' },
+  { code: 'filling_order', label: 'Filling order' },
+  { code: 'filling_report', label: 'Filling report' },
+];
 
 // Package formats of an HBT (batch_hbts.intended_formats), in this order.
 const PACKAGE_FORMATS = [
@@ -335,7 +350,7 @@ function progressSteps(stage) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    BATCH_TABS, batchTabHref, batchHref, PACKAGE_FORMATS, formatsText, hbtLabel,
+    BATCH_TABS, batchTabHref, batchHref, PACKAGE_FORMATS, BATCH_DOCUMENT_TYPES, formatsText, hbtLabel,
     BATCH_STAGES, ACTIVE_SECTIONS,
     stageInfo, stageOrder, batchYear, tankNumber, versionText, toBatchRow,
     filterBatches, sortBatches, compareByTank, groupActiveBatches, dayMonth, tileLines,
