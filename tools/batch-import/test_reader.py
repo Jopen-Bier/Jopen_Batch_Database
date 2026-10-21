@@ -43,6 +43,8 @@ def main():
         eq(x['filling_sessions'][0]['articles'], [{'code': 'box_24x33_can', 'quantity': 1428.0}], 'articles')
         eq(x['filling_sessions'][1]['filled_by'], 'TW', 'filled by')
         eq(x['batch']['tasting_result'], 'go', 'tasting result')
+        eq({(h.get('avg_pu'), h.get('avg_turbidity_ebc')) for h in x['hbts']}, {(25.0, 9.83)}, 'averages on every HBT')
+        eq(sum('Spoelwater' in c['comment'] for c in x['brew_comments']), 8, 'Mashing "Spoelwater" kept as brew comment')
     p = find(d, '26260')
     if p:
         x = reader.read_workbook(p, ref)
@@ -56,6 +58,7 @@ def main():
         eq([(t['to_batch_number'], t['volume_hl'], t['from_tank']) for t in x['transfers']],
            [('26321', 104.4, 'LT56')], 'transfer from "End value" without HBT')
         eq(x['transfers'][0]['transferred_at'], '2026-09-29T12:00:00+02:00', 'transfer date from the log')
+        eq(x['transfers'][0]['source'], 'Verwerking!E58 + Afvulverslag!D45', 'transfer found on both forms')
     print(f'test_reader: {ok} checks passed')
 
 
