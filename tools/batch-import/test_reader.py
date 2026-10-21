@@ -77,6 +77,21 @@ def main():
     if p:
         x = reader.read_workbook(p, ref)
         eq((x['type'], x['batch_number'], bool(x.get('hold'))), ('barrel_aging', '26058', True), 'barrel aging held, not guessed')
+    p = find(d, '26093')
+    if p:
+        # Splits written on HBT end-value rows (10 + 30 hl = 4000 l on the filling report), and TT60.
+        x = reader.read_workbook(p, ref)
+        eq([(t['to_batch_number'], t['volume_hl'], t['from_tank']) for t in x['transfers']],
+           [('26132', 10.0, 'HBT13'), ('26132', 30.0, 'HBT12'), ('26133', 28.2, 'HBT16')], 'splits from HBTs')
+        eq(not any('Processing' in w and 'filling report' in w for w in x['warnings']), True, 'split volumes match the filling report')
+        eq([(o['tank'], o['volume_hl']) for o in x['other_end_values']], [('TT60', 40.0)], 'TT60 kept apart, not imported')
+    p = find(d, '26285')
+    if p:
+        x = reader.read_workbook(p, ref)
+        eq([t['to_batch_number'] for t in x['transfers']], ['26339', '26340', '26350'], 'splits via LT11 / LT12 / LT56')
+    p = find(d, '26028')
+    if p:
+        eq(reader.read_workbook(p, ref)['batch_number'], '26028', 'batch number when Brouwen N3 holds a date')
     print(f'test_reader: {ok} checks passed')
 
 
