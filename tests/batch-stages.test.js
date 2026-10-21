@@ -135,6 +135,15 @@ assert.strictEqual(s.batchHref('filling', 7), 'batch-filling.html?id=7');
 assert.strictEqual(s.batchHref('filled', 7), 'batch-filling-report.html?id=7');
 assert.strictEqual(s.batchHref('closed', 7), 'batch-overview.html?id=7');
 
+// HBT name: the tank code, "(fill n)" when the batch uses the tank again
+const fills = [{ id: 3, tank_id: 16, sort_order: 3 }, { id: 1, tank_id: 16, sort_order: 1 }, { id: 2, tank_id: 17, sort_order: 2 }];
+const code = (id) => 'HBT' + id;
+assert.deepStrictEqual(fills.map((h) => s.hbtLabel(h, fills, code)), ['HBT16 (fill 2)', 'HBT16 (fill 1)', 'HBT17']);
+const day = { 1: '2026-10-01', 2: '2026-10-01', 3: '2026-10-14' };
+assert.deepStrictEqual(fills.map((h) => s.hbtLabel(h, fills, code, (x) => day[x.id])), ['HBT16 · 14-10', 'HBT16 · 01-10', 'HBT17']);
+const twice = [{ id: 1, tank_id: 16, sort_order: 1 }, { id: 2, tank_id: 16, sort_order: 2 }];
+assert.deepStrictEqual(twice.map((h) => s.hbtLabel(h, twice, code, () => '2026-10-01')), ['HBT16 · 01-10 (1)', 'HBT16 · 01-10 (2)']);
+
 // HBT tiles: formats, release, HBT as tank chip
 assert.strictEqual(s.formatsText(['keg', 'bottle']), 'Bottle + Keg');
 assert.strictEqual(s.formatsText([]), '—');

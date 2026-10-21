@@ -353,12 +353,12 @@ step the tag ticks off when the user chose it (migration
 ### `processing_comments` (new)
 `id`, `batch_id`, `comment_time time`, `comment text not null`.
 
-### `batch_hbts` (new) — one row per HBT used by the batch
+### `batch_hbts` (new) — one row per fill of an HBT by the batch
 | Column | Type | UI |
 |---|---|---|
 | id | bigint identity PK | |
 | batch_id | bigint not null → batches | |
-| tank_id | bigint not null → tanks | unique (batch_id, tank_id) |
+| tank_id | bigint not null → tanks | the same tank can occur twice (refill, 21-10) |
 | intended_formats | text[] | values `bottle`,`can`,`keg` — Intended for |
 | avg_inline_o2_ppb | numeric | Avg. in-line O2 |
 | avg_pu | numeric | Avg. PU |
@@ -375,6 +375,11 @@ its own batch (foreign keys over both columns; deleting a session keeps its
 readings without a session); `batch_hbts` checks released_at and released_by
 together. `batch_stages` adds `first_processing_date`, `hbts_total`,
 `hbts_released`, `hbt_codes`, `hbt_formats`.
+Changed 21-10 (migration `20261021055205_batch_hbts_refill`, Jaap): the
+unique (batch_id, tank_id) is dropped, a plain index (batch_id, tank_id)
+keeps the lookups fast. A tank filled, emptied and filled again over the
+processing days is one row per fill, each with its own readings and end
+value; `hbt_codes` then lists the tank twice.
 
 ### `hbt_readings` (new)
 | Column | Type | UI |

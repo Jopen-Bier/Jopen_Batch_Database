@@ -97,9 +97,19 @@ function cellarLoss({ gltVolumeHl, transfers = [], hbtTankIds = [], hbtEndTotalH
   return { lossHl, splitsHl, negative: lossHl < -1e-9 };
 }
 
+/**
+ * Day an HBT was filled ('YYYY-MM-DD'): the first processing date of the
+ * sessions its readings belong to, else the day the HBT row was made.
+ */
+function hbtFilledOn(hbt, readings, sessions) {
+  const ids = new Set(readings.filter((r) => r.batch_hbt_id === hbt.id).map((r) => r.processing_session_id).filter(Boolean));
+  const dates = sessions.filter((s) => ids.has(s.id) && s.processing_date).map((s) => String(s.processing_date).slice(0, 10)).sort();
+  return dates[0] || (hbt.created_at ? String(hbt.created_at).slice(0, 10) : null);
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    O2_HBT_MAX_PPB, durationMinutes, durationText, hbtEnd,
+    O2_HBT_MAX_PPB, durationMinutes, durationText, hbtEnd, hbtFilledOn,
     co2Spec, co2Status, o2High, turbidityHigh, puOutOfSpec, maturation, cellarLoss,
   };
 }

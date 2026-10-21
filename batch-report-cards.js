@@ -124,8 +124,10 @@ const INCOMING_SELECT = '*, source:batches!batch_transfers_batch_id_fkey(batch_n
  * new batch, transfer, Transfer log entry); onDone(result) after a save.
  * c = the card context (see createTransfersCard).
  */
-function openSplitDialog(c, onDone) {
+function openSplitDialog(card, onDone) {
   document.getElementById('sp-dialog')?.remove();
+  // a tank used for two fills of the batch is one "from" tank
+  const c = { ...card, fromTanks: [...new Map(card.fromTanks.map((t) => [t.id, t])).values()] };
   const fmt1 = (v) => (v === null || v === undefined || v === '' ? '—' : Number(v).toFixed(1));
   const yy = String(new Date().getFullYear()).slice(2);
   const st = {

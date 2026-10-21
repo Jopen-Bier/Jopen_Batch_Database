@@ -120,6 +120,7 @@
     const saveRow = (table, row, patch) => saveRowPatch({ table, row, patch, saveStatus: page.save, renderSoon, userId: page.user.id });
     const insertRow = (table, values, list, opts = {}) => insertBatchRow({ table, values, list, saveStatus: page.save, userId: page.user.id, ...opts });
     const activeSession = () => page.sessions.find((s) => s.id === page.activeSessionId) || null;
+    const hbtName = (h) => hbtLabel(h, page.hbts, tankCode, (x) => hbtFilledOn(x, page.readings, page.sessions));
     const hbtsInOrder = () => page.hbts.slice().sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || a.id - b.id);
     const readingsOf = (hbt) => page.readings.filter((r) => r.batch_hbt_id === hbt.id).sort((a, b) => a.sort_order - b.sort_order || a.id - b.id);
 
@@ -178,7 +179,7 @@
 
     async function deleteHbt(hbt) {
       const readings = readingsOf(hbt);
-      const done = await deleteWithUndo('batch_hbts', hbt, page.hbts, `HBT ${tankCode(hbt.tank_id)} and its readings`, async (again) => {
+      const done = await deleteWithUndo('batch_hbts', hbt, page.hbts, `HBT ${hbtName(hbt)} and its readings`, async (again) => {
         for (const r of readings) {
           const { id, created_at, updated_at, updated_by, ...values } = r;
           await insertRow('hbt_readings', { ...values, batch_hbt_id: again.id }, page.readings);
@@ -200,7 +201,7 @@
 
     async function toggleRelease(hbt) {
       if (hbt.released_at) {
-        const ok = await confirmDialog({ title: `Undo the release of HBT ${tankCode(hbt.tank_id)}?`, text: 'The HBT is then no longer released. This is recorded in the audit trail.', okLabel: 'Undo release' });
+        const ok = await confirmDialog({ title: `Undo the release of HBT ${hbtName(hbt)}?`, text: 'The HBT is then no longer released. This is recorded in the audit trail.', okLabel: 'Undo release' });
         if (!ok) return;
         return saveRow('batch_hbts', hbt, { released_at: null, released_by: null });
       }
@@ -387,19 +388,22 @@
     }
 
     function renderHbts() {
+      // A tank can be used again on the same batch (filled, emptied, filled again).
       const used = new Set(page.hbts.map((h) => h.tank_id));
-      const free = page.tanks.filter((t) => t.tank_type === 'hbt' && t.is_active && !used.has(t.id));
+      const free = page.tanks.filter((t) => t.tank_type === 'hbt' && t.is_active);
       const blocks = hbtsInOrder().map((h) => {
         const rows = readingsOf(h);
         const end = hbtEnd(rows);
         const sessions = [...new Set(rows.map((r) => r.processing_session_id).filter(Boolean))]
           .map((id) => page.sessions.find((s) => s.id === id)).filter(Boolean).sort((a, b) => a.session_number - b.session_number)
           .map((s) => `${s.session_number} · ${sessionDay(s.processing_date)}`);
-        const tankChoices = page.tanks.filter((t) => t.tank_type === 'hbt' && (t.id === h.tank_id || (t.is_active && !used.has(t.id))));
+        const tankChoices = page.tanks.filter((t) => t.tank_type === 'hbt' && (t.id === h.tank_id || t.is_active));
+        const name = hbtName(h);
         return `<div class="pr-hbt" data-hbt-block="${h.id}">
           <div class="pr-hbt-head">
             <div class="br-field pr-field" style="width:120px;"><label class="br-label">HBT</label>
-              <select class="br-input" data-hbt="${h.id}" data-field="tank_id" aria-label="HBT"${dis()}>${tankChoices.map((t) => `<option value="${t.id}"${t.id === h.tank_id ? ' selected' : ''}>${escapeHtml(t.code)}</option>`).join('')}</select></div>
+              <select class="br-input" data-hbt="${h.id}" data-field="tank_id" aria-label="HBT"${dis()}>${tankChoices.map((t) => `<option value="${t.id}"${t.id === h.tank_id ? ' selected' : ''}>${escapeHtml(t.code)}</option>`).join('')}</select>
+              ${name !== tankCode(h.tank_id) ? `<span class="br-note">${escapeHtml(name.slice(tankCode(h.tank_id).length).trim())}</span>` : ''}</div>
             <div class="br-field pr-field"><span class="br-label">Filled in session</span><div class="pr-text">${sessions.join(' + ') || '—'}</div></div>
             <div class="br-field pr-field"><span class="br-label">Intended for</span><div class="br-seg" role="group">
               ${PACKAGE_FORMATS.map((f) => `<button type="button" data-format="${f.code}" data-hbt="${h.id}" class="${h.intended_formats.includes(f.code) ? 'on' : ''}"${dis()}>${f.label}</button>`).join('')}</div></div>
@@ -421,7 +425,7 @@
         <div class="br-head" style="align-items:center;">
           <div class="br-label">Bright beer tanks (HBT)</div>
           ${page.canEdit ? `<select class="br-input" id="pr-add-hbt" style="width:auto;"${free.length ? '' : ' disabled'}>
-            <option value="">${free.length ? '+ Add HBT…' : 'No free HBT'}</option>${free.map((t) => `<option value="${t.id}">${escapeHtml(t.code)} · ${fmt(t.volume_hl)} hl</option>`).join('')}</select>` : ''}
+            <option value="">${free.length ? '+ Add HBT…' : 'No free HBT'}</option>${free.map((t) => `<option value="${t.id}">${escapeHtml(t.code)} · ${fmt(t.volume_hl)} hl${used.has(t.id) ? ' · fill again' : ''}</option>`).join('')}</select>` : ''}
         </div>
         ${blocks || '<div class="br-note">No HBT yet. Add the bright beer tank(s) this batch goes into; the last reading of an HBT is its end value.</div>'}`;
     }
@@ -438,7 +442,7 @@
       const glt = gltVolumeHl();
       const loss = cellarLoss({ gltVolumeHl: glt, transfers: page.transfers, hbtTankIds: page.hbts.map((h) => h.tank_id), hbtEndTotalHl: total, incomingHl: page.ctx.stageRow && page.ctx.stageRow.incoming_volume_hl });
       const avg = (h, field, bad) => `<td><input class="br-in${bad ? ' bad' : ''}" data-hbt="${h.id}" data-field="${field}" value="${val(h[field])}" inputmode="decimal" aria-label="${field}"${dis()}></td>`;
-      const rows = ends.map(({ h, end }) => `<tr><td><b>${escapeHtml(tankCode(h.tank_id))}</b></td><td>${escapeHtml(formatsText(h.intended_formats))}</td>
+      const rows = ends.map(({ h, end }) => `<tr><td><b>${escapeHtml(hbtName(h))}</b></td><td>${escapeHtml(formatsText(h.intended_formats))}</td>
         <td class="cv">${fmt(end && end.level_hl, 1)}</td><td class="cv">${fmt(end && end.o2_ppb)}</td><td class="cv">${fmt(end && end.co2_gl)}</td>
         ${avg(h, 'avg_inline_o2_ppb', o2High(h.avg_inline_o2_ppb))}${avg(h, 'avg_pu', puOutOfSpec(h.avg_pu, page.ferm.pasteurization, toleranceValue(page.ferm.pasteurization_tol)))}
         ${avg(h, 'avg_turbidity_ebc', turbidityHigh(h.avg_turbidity_ebc, page.ferm.turbidity_after_separation))}${avg(h, 'avg_flow_hl_h', false)}</tr>`).join('');
@@ -466,8 +470,8 @@
     // Volume in a tank before transfers: GLT total (+ beer in from splits), HBT end value.
     function tankStartHl(id) {
       if (id === page.ctx.batch.glt_tank_id) return (gltVolumeHl() || 0) + (Number(page.ctx.stageRow && page.ctx.stageRow.incoming_volume_hl) || 0) || null;
-      const h = page.hbts.find((x) => x.tank_id === id);
-      const end = h ? hbtEnd(readingsOf(h)) : null;
+      // the latest fill of that tank with an end value
+      const end = hbtsInOrder().filter((x) => x.tank_id === id).map((x) => hbtEnd(readingsOf(x))).filter(Boolean).pop();
       return end ? Number(end.level_hl) : null;
     }
 
