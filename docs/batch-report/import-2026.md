@@ -110,13 +110,17 @@ grid view, label diff between two workbooks).
 
 ### Reader findings (samples 26260, 26292, 26293; 21-10)
 `tools/batch-import/reader.py` + `review.py`. Choices made, to confirm:
-- **Yeast block** (Brouwen K44-N52) is mostly formulas (recipe values the
-  brewer accepted); imported, marked `formula` in the review. All 2026
-  batches have empty yeast columns in the app.
+- **Yeast block** (Brouwen K44-N52) is mostly formulas referencing the
+  Overview values; imported (Jaap, 21-10: the app's batch report does the
+  same), marked `formula` in the review.
 - **GLT** comes from Brouwen I5 (typed); Gistkaart D4 is a formula copy.
-- **WP brew sheets fill "Spoelwater" and "Eerste afloop"**: imported into
-  `sparge_water_hl` / `first_wort_volume_hl`, which the Brewing tab shows
-  for JK only (the data is kept; the tab hides it for WP).
+- **Brew labels depend on the brewery** (formulas on `LEFT(A1,2)="WP"`):
+  P19 WP "Cumm, Sparging vol," / JK "spoelwater" (-> `sparge_water_hl`),
+  P20 WP "Last run pH" / JK "Spoelafloop" (-> `sparge_runnings_hl`). The
+  reader maps the label as calculated, per section. Fixed rows: P18
+  "Eerste afloop" -> `first_wort_volume_hl` (the Brewing tab shows it for
+  JK only; WP values are kept), P14 "Spoelwater" in Mashing (0.6-0.9 hl at
+  WP) has no column: brew comment until Jaap decides.
 - **Section rows** of the brew sheet (Maischen, Koken: "salts", "520g
   Flex"), text in number cells and text in unit cells become brew comments.
 - **Log entries without an hour** get 12:00 (review: `missing`). Row 13
@@ -125,23 +129,48 @@ grid view, label diff between two workbooks).
 - **Processing**: a block counts only with a date or operator (template
   defaults "Standpijp", losses 1 / 10, "Can" fill the empty ones). Only the
   first centrifuge row has columns (start flow / turbidity); the other rows
-  and "Pasteurised with / avg temp / avg turbidity" go into a processing
-  comment per session. With one session the HBT readings and averages are
-  linked to it; with more, the workbook does not say which fill came from
-  which session (left empty, warning).
+  are not imported. "Pasteurised with" (PU) and "Avg. turbidity" go onto
+  every HBT of the batch, the mean over the sessions (Jaap, 21-10); avg
+  temp out has no column. With one session the HBT readings are linked to
+  it; with more, the workbook does not say which fill came from which
+  session (left empty; Jaap: not important for now).
 - **HBT fills**: readings grouped per fill (an empty row closes a fill);
   "End value HBT" rows match the fills in order and add a last reading.
   Filling sessions of a tank go to its fills in date order; a fill is
   finished once the filled volume reaches its end value (3 %).
 - **Package per filling session** from the articles booked (Afvulverslag),
   else keg when keg CO2 / O2 is measured.
-- **Transfers**: an "End value HBT" without tank but with a batch number
-  ("to 26321", 26293) is a transfer; the date comes from the log entry that
-  names the volume. Receiving batches with a fractional brew count (26321:
-  3.4) already include it (old workaround): the review warns.
+- **Transfers (splits)**: the old way was writing the split on the
+  Processing form ("End value HBT" without tank, comment "to 26321") so the
+  volume reaches the filling report, and booking it off there ("TBV BATCH
+  26321", liters). The reader reads both and checks the volumes; the date
+  comes from the log entry that names the volume (that entry gets the
+  Transfer tag). Jaap (21-10): record these with the new method
+  (`batch_transfers`). The receiving batch: when the transfer volume =
+  its brews x brew volume and its own brew sheet is empty, its whole volume
+  came from the split and nothing was brewed (brew count -> 0, as a split
+  batch in the app). Otherwise: review with Jaap. Transfers are written in
+  a separate chunk once the receiving batches' workbooks are read.
 - Not imported (no column): later centrifuge rows, measurement after
   pushing over, start date lagering, lot numbers on Afvulverslag, liters
   "TBV batch / barrel aging" (record as a split).
+
+### SQL per chunk (step 5)
+`tools/batch-import/generate_sql.py <reader_out> <app.json> <out_dir> <chunk> [batch ...]`
+writes `import_<chunk>_dry_run.sql` and `import_<chunk>_run.sql`: one DO
+block; per batch it checks the batch exists and its tabs are empty (else
+skipped and listed), fills batch columns only where empty, inserts the
+rows (people via `users.initials`, tanks / tags / packaging via codes;
+the operator is `created_by`) and reports rows per table and the stage
+before -> after. Tested on a local Postgres with `supabase/schema.sql`
+(dry run rolls back; a second run skips every batch).
+
+### Documents (Filling report)
+The new repo has a folder per batch: the workbook plus the scans for
+`batch_documents` (production order, filling order, filling report,
+other). Files go to the private bucket `batch-documents`
+(`<batch_id>/<type>/<file>`), which SQL cannot fill: a separate upload
+step, to agree with Jaap once the file names are known.
 
 ### Stages after import
 `batch_stages` follows the data: brews ended → fermentation, lagering step

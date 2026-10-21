@@ -206,7 +206,7 @@ BREW_ROWS = {
     'ph na correctie': ('mash_corrected_ph', 'num'),
     'joodnormaal test ok?': ('is_iodine_test_ok', 'bool'),
     'afwijking maische schema?': ('has_mash_schedule_deviation', 'bool'),
-    'spoelwater': ('sparge_water_hl', 'num'),
+    'spoelafloop': ('sparge_runnings_hl', 'num'),
     'plato 1e wortvolume': ('first_wort_extract', 'num'),
     'extract laatste afloop': ('last_runnings_extract', 'num'),
     'eerste afloop': ('first_wort_volume_hl', 'num'),
@@ -236,7 +236,10 @@ BREW_ROWS = {
 }
 # Labels that differ by section: "Extract" and "pH" under Whirlpool / end of boil.
 BREW_SECTION_ROWS = {('whirlpool', 'extract'): ('whirlpool_extract', 'num'),
-                     ('whirlpool', 'ph'): ('whirlpool_ph', 'num')}
+                     ('whirlpool', 'ph'): ('whirlpool_ph', 'num'),
+                     # JK label of P19 ("Cumm, Sparging vol," at WP); the fixed
+                     # "Spoelwater" row in Mashing has no column (brew comment).
+                     ('filtratie & voorloopvat', 'spoelwater'): ('sparge_water_hl', 'num')}
 # Section header rows (no measured value; text per brew becomes a brew comment).
 BREW_SECTIONS = {'maischen': 'Mashing', 'filtratie & voorloopvat': 'Filtration',
                  'koken': 'Boiling', 'whirlpool/ einde kook': 'Whirlpool'}
@@ -266,7 +269,7 @@ def read_brewing(b, out):
             section = label
         if label.startswith('whirlpool'):
             section = 'whirlpool'
-        target = BREW_SECTION_ROWS.get((section, label)) if section == 'whirlpool' else None
+        target = BREW_SECTION_ROWS.get((section, label))
         if target is None and label in BREW_ROWS:
             target = BREW_ROWS[label]
             if target is None:
@@ -477,15 +480,13 @@ def read_processing(b, out):
                            '-', 'not_imported', 'only the start values have a column')
         rr = next((x for l, x in block.items() if l.startswith('pasteurised with')), None)
         if rr:
-            pu = F(f'D{rr}', 'Pasteurised with (PU)', 'processing_comments', 'num')
-            temp = F(f'J{rr}', 'Avg. temp out', 'processing_comments', 'num')
-            turb = F(f'P{rr}', 'Avg. turbidity', 'processing_comments', 'num')
+            # Averages go onto every HBT (Jaap, 21-10); avg temp out has no column.
+            pu = F(f'D{rr}', 'Pasteurised with (PU)', 'batch_hbts.avg_pu', 'num')
+            turb = F(f'P{rr}', 'Avg. turbidity', 'batch_hbts.avg_turbidity_ebc', 'num')
+            v, st = b.get(sh, f'J{rr}')
+            if v is not None:
+                b.note(sh, f'J{rr}', 'Avg. temp out', v, '-', 'not_imported', 'no column')
             s['_avg'] = {'pu': pu, 'turbidity': turb}
-            parts = [f'{pu:g} PU' if pu is not None else None, f'avg temp out {temp:g} °C' if temp is not None else None,
-                     f'avg turbidity {turb:g} EBC' if turb is not None else None]
-            if any(parts):
-                comments.append({'comment_time': None,
-                                 'comment': f'Session {s["session_number"]}: pasteurised with ' + ', '.join(p for p in parts if p)})
         rr = next((x for l, x in block.items() if l.startswith('time [hh:mm]')), None)
         rt = next((x for l, x in block.items() if l.startswith('comments tasting')), None)
         if rr:
@@ -613,13 +614,12 @@ def read_hbts(b, out, labels, hbt_row):
         h = {'tank': g['tank'], 'sort_order': i + 1, 'intended_formats': sorted(g['formats']),
              'readings': g['readings'], 'end_level_hl': g.get('end')}
         if len(sessions) == 1:
-            # One session: every fill comes from it, and so do its averages.
-            h['processing_session_number'] = 1
-            avg = sessions[0].get('_avg', {})
-            if avg.get('pu') is not None:
-                h['avg_pu'] = avg['pu']
-            if avg.get('turbidity') is not None:
-                h['avg_turbidity_ebc'] = avg['turbidity']
+            h['processing_session_number'] = 1  # one session: every fill comes from it
+        for key, col_ in (('pu', 'avg_pu'), ('turbidity', 'avg_turbidity_ebc')):
+            # The same averages on every HBT: the mean over the sessions (Jaap, 21-10).
+            vals = [x['_avg'][key] for x in sessions if x.get('_avg', {}).get(key) is not None]
+            if vals:
+                h[col_] = round(sum(vals) / len(vals), 2)
         hbts.append(h)
     if len(sessions) > 1 and groups:
         b.warn(sh, f'A{hbt_row}', f'{len(sessions)} sessions: HBT readings are not linked to a session (not in the workbook)')
@@ -771,14 +771,29 @@ def read_filling_report(b, out, sessions, ref):
         if label.startswith('verbruiken'):
             section = 'materials'
             continue
-        if label.startswith('gebruikt tbv samenvoegen') or label.startswith('ingevoerd in mdrank'):
+        if label.startswith('gebruikt tbv samenvoegen'):
+            # The old way of a split: liters booked off "TBV BATCH <number>".
             section = 'skip'
-            for i, c in enumerate(REPORT_COLS):
-                for x in range(r + 1, r + 4):
-                    v = b.get(sh, f'{c}{x}')[0]
-                    if v not in (None, 0):
-                        b.note(sh, f'{c}{x}', b.raw(sh, f'B{x}'), v, 'batch_transfers', 'not_imported',
-                               'liters to another batch: record as a split in the app')
+            for x in range(r + 1, r + 4):
+                name = ' '.join(str(b.raw(sh, f'{c}{x}') or '') for c in ('B', 'C')).strip()
+                m = re.search(r'\b(2\d{4})\b', name)
+                for i, c in enumerate(REPORT_COLS):
+                    v, st = b.get(sh, f'{c}{x}')
+                    if v in (None, 0) or st != 'read':
+                        continue
+                    liters = to_num(v)
+                    if not m:
+                        b.note(sh, f'{c}{x}', name, v, 'batch_transfers', 'not_imported', 'no batch number in the name')
+                        b.warn(sh, f'{c}{x}', f'{liters:g} l "{name}" without a batch number: not imported')
+                        continue
+                    date = b.get(sh, f'{c}7')[0]
+                    out.setdefault('report_transfers', []).append({
+                        'to_batch_number': m.group(1), 'volume_hl': round(liters / 100, 2),
+                        'date': to_date(date) if date else None, 'source': f'{sh}!{c}{x}'})
+                    b.note(sh, f'{c}{x}', name, v, 'batch_transfers.volume_hl', 'read', 'liters / 100')
+            continue
+        if label.startswith('ingevoerd in mdrank'):
+            section = 'skip'
             continue
         if section not in ('articles', 'materials'):
             continue
@@ -857,14 +872,38 @@ def link_hbts(b, out):
             h['intended_formats'] = sorted(x for x in fm if x)
 
 
+def merge_transfers(b, out):
+    """Transfers from the processing form ("End value" without HBT) and from the
+    filling report ("TBV BATCH ..."): one per receiving batch, volumes checked."""
+    ts = out.setdefault('transfers', [])
+    for rt in out.pop('report_transfers', []):
+        t = next((x for x in ts if x['to_batch_number'] == rt['to_batch_number']), None)
+        if t is None:
+            ts.append({'to_batch_number': rt['to_batch_number'], 'volume_hl': rt['volume_hl'], 'comment': None,
+                       'from_tank': out['batch'].get('lt_tank') or out['batch'].get('glt_tank'),
+                       'transferred_at': to_timestamp(rt['date'], '12:00') if rt['date'] else None,
+                       'source': rt['source']})
+            continue
+        t['source'] += ' + ' + rt['source']
+        if abs(t['volume_hl'] - rt['volume_hl']) > 0.05:
+            b.warn('-', '-', f'transfer to {t["to_batch_number"]}: {t["volume_hl"]:g} hl on Processing, '
+                             f'{rt["volume_hl"]:g} hl on the filling report')
+    if not ts:
+        out.pop('transfers')
+
+
 def date_transfers(b, out):
     for t in out.get('transfers', []):
+        if t.get('transferred_at'):
+            continue
         vol = f'{t["volume_hl"]:g}'
         pats = {vol, vol.replace('.', ',')}
         hits = [e for e in out.get('fermentation_log', []) if e.get('comment') and any(p in e['comment'] for p in pats)]
         if hits:
             t['transferred_at'] = hits[-1]['measured_at']
             t['date_from'] = f'log entry: {hits[-1]["comment"][:80]}'
+            if 'transfer' not in hits[-1]['tags']:
+                hits[-1]['tags'].append('transfer')
         else:
             b.warn('-', '-', f'transfer to {t["to_batch_number"]}: no date found (log has no entry with {vol} hl)')
         if t['from_tank'] is None:
@@ -941,6 +980,7 @@ def read_workbook(path, ref):
     read_processing(b, out)
     read_filling(b, out, ref)
     link_hbts(b, out)
+    merge_transfers(b, out)
     date_transfers(b, out)
     check_dates(b, out)
     resolve(b, out, ref)
