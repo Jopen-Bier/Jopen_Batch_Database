@@ -159,6 +159,7 @@ assert.deepStrictEqual(s.tileLines(hbtRow({ stage: 'filling', hbts_finished: 1 }
 assert.strictEqual(hbtRow({ stage: 'filling' }).tankCode, 'HBT12 · HBT14');
 assert.deepStrictEqual(s.tileLines(hbtRow({ stage: 'filled', hbts_finished: 2, filled_volume_hl: 76.8, documents_uploaded: 2 })), { line1: '76.8 hl packaged', line2: 'Filling report open', isOk: false, progress: null, line3: 'Documents 2/3', line3Ok: false });
 assert.deepStrictEqual(s.tileLines(hbtRow({ stage: 'filled', documents_uploaded: 3 })).line3, '✓ Documents 3/3');
+assert.deepStrictEqual(s.tileLines(hbtRow({ stage: 'filling', documents_uploaded: 1, other_documents: 2 })).line3, 'Documents 1/3 · +2 other');
 assert.strictEqual(s.tileLines(hbtRow({ stage: 'hbt' })).line3, undefined, 'documents only on Filling / Filled tiles');
 
 console.log('batch-stages: all tests passed');

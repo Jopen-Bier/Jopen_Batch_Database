@@ -224,9 +224,10 @@ window).
   filling wait for open-questions #8 / #13. Filled batches open on this tab.
 - **Documents** card under the volume balance (Jaap, 21-10): Production
   order, Filling order, Filling report — Upload / Replace (PDF or photo, up
-  to 20 MB), open (signed link), delete (confirm, no undo); who and when.
+  to 20 MB), open (signed link), delete (confirm, no undo); who and when;
+  plus **Other**: any number of files ("+ Add", several at once).
   Active batches: Filling and Filled tiles show "Documents n/3" (green at
-  3/3).
+  3/3) and "· +n other".
 - Settings › Packaging articles (name, package, litres, EAN, Mdrank no.,
   active, bill of materials per article) and › Packaging materials (name,
   unit, Mdrank no., active). Booked articles / used materials can only be

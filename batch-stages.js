@@ -97,6 +97,7 @@ function toBatchRow(batch, stageRow) {
     hbtsFinished: (stageRow && stageRow.hbts_finished) || 0,
     filledVolumeHl: (stageRow && stageRow.filled_volume_hl) ?? null,
     documentsUploaded: (stageRow && stageRow.documents_uploaded) || 0,
+    otherDocuments: (stageRow && stageRow.other_documents) || 0,
     // the tank the beer is in: the lager tank once it is pushed over, else the fermentation tank
     // (from HBT on: the bright beer tanks)
     tankCode: (['hbt', 'filling', 'filled'].includes(stageRow && stageRow.stage) && stageRow.hbt_codes)
@@ -239,7 +240,8 @@ function tileLines(row, now = new Date()) {
   // Filling and Filled tiles also count the documents of the Filling report.
   const docs = () => {
     const n = row.documentsUploaded || 0, total = BATCH_DOCUMENT_TYPES.length;
-    return { line3: `${n >= total ? '✓ ' : ''}Documents ${n}/${total}`, line3Ok: n >= total };
+    const other = row.otherDocuments ? ` · +${row.otherDocuments} other` : '';
+    return { line3: `${n >= total ? '✓ ' : ''}Documents ${n}/${total}${other}`, line3Ok: n >= total };
   };
   if (row.stage === 'filling') {
     const total = row.hbtsTotal || 0, finished = row.hbtsFinished || 0;
@@ -284,7 +286,8 @@ function batchTabHref(tabKey, batchId) {
 // that tab exists, else the Overview.
 const STAGE_TABS = { brewing: 'brewing', fermentation: 'fermentation', lagering: 'fermentation', hbt: 'processing', filling: 'filling', filled: 'filling-report' };
 
-// Documents uploaded on the Filling report (batch_documents.document_type).
+// Documents uploaded on the Filling report (batch_documents.document_type),
+// one file each; 'other' documents (any number) come on top.
 const BATCH_DOCUMENT_TYPES = [
   { code: 'production_order', label: 'Production order' },
   { code: 'filling_order', label: 'Filling order' },

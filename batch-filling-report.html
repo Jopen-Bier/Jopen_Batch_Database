@@ -117,7 +117,8 @@
     async function uploadDocument(type, file) {
       if (!file) return;
       if (file.size > DOCUMENT_MAX_BYTES) { page.save.failed('The file is larger than 20 MB.'); return; }
-      const old = page.documents.find((d) => d.document_type === type) || null;
+      // one file per type is replaced; Other documents are added
+      const old = type === 'other' ? null : page.documents.find((d) => d.document_type === type) || null;
       const path = `${page.ctx.batch.id}/${type}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
       page.save.saving();
       const up = await supabaseClient.storage.from(DOCUMENT_BUCKET).upload(path, file);
@@ -147,7 +148,7 @@
     }
 
     async function deleteDocument(doc) {
-      const label = (BATCH_DOCUMENT_TYPES.find((t) => t.code === doc.document_type) || {}).label || 'document';
+      const label = (BATCH_DOCUMENT_TYPES.find((t) => t.code === doc.document_type) || {}).label || 'other document';
       const ok = await confirmDialog({ title: `Delete the ${label.toLowerCase()} "${doc.file_name}"?`, text: 'The file is removed; this cannot be undone. The deletion is recorded in the audit trail.' });
       if (!ok) return;
       page.save.saving();
@@ -250,13 +251,20 @@
           <td class="fr-doc-actions">${page.canEdit ? `<label class="br-ghost fr-upload">${d ? 'Replace' : 'Upload'}<input type="file" data-upload-document="${t.code}" accept="application/pdf,image/*" hidden></label>` : ''}
             ${page.canDelete && d ? `<button class="br-del" type="button" data-delete-document="${d.id}" aria-label="Delete ${escapeHtml(t.label)}">${TRASH_ICON}</button>` : ''}</td></tr>`;
       }).join('');
-      const n = new Set(page.documents.map((d) => d.document_type)).size;
+      const others = page.documents.filter((d) => d.document_type === 'other').sort((a, b) => new Date(a.uploaded_at) - new Date(b.uploaded_at) || a.id - b.id);
+      const otherRow = `<tr><td style="width:170px; vertical-align:top; padding-top:10px;"><b>Other</b></td>
+        <td>${others.map((d) => `<div class="fr-doc-other"><a href="#" data-open-document="${d.id}">${escapeHtml(d.file_name)}</a>
+            <span class="br-note">${escapeHtml([page.initialsOf(d.uploaded_by), when(d.uploaded_at)].filter(Boolean).join(' · '))}</span>
+            ${page.canDelete ? `<button class="br-del" type="button" data-delete-document="${d.id}" aria-label="Delete ${escapeHtml(d.file_name)}">${TRASH_ICON}</button>` : ''}</div>`).join('')
+          || '<span class="br-note">None · any number of files, e.g. lab reports, photos</span>'}</td>
+        <td class="fr-doc-actions" style="vertical-align:top;">${page.canEdit ? `<label class="br-ghost fr-upload">+ Add<input type="file" data-upload-document="other" accept="application/pdf,image/*" multiple hidden></label>` : ''}</td></tr>`;
+      const n = new Set(page.documents.filter((d) => d.document_type !== 'other').map((d) => d.document_type)).size;
       document.getElementById('fr-documents').innerHTML = `
         <div class="br-head" style="align-items:baseline;">
           <div class="br-label">Documents</div>
-          <span class="br-note">${n} of ${BATCH_DOCUMENT_TYPES.length} uploaded · PDF or photo, up to 20 MB</span>
+          <span class="br-note">${n} of ${BATCH_DOCUMENT_TYPES.length} uploaded${others.length ? ` · ${others.length} other` : ''} · PDF or photo, up to 20 MB</span>
         </div>
-        <table class="br-ing"><tbody>${rows}</tbody></table>`;
+        <table class="br-ing"><tbody>${rows}${otherRow}</tbody></table>`;
     }
 
     function renderBalance() {
@@ -446,7 +454,11 @@
       main.addEventListener('change', (e) => {
         const el = e.target;
         if (transfersCard.handleChange(el)) return;
-        if (el.dataset.uploadDocument) { const file = el.files && el.files[0]; el.value = ''; return uploadDocument(el.dataset.uploadDocument, file); }
+        if (el.dataset.uploadDocument) {
+          const files = [...(el.files || [])];
+          el.value = '';
+          return (async () => { for (const file of files) await uploadDocument(el.dataset.uploadDocument, file); })();
+        }
         if (el.dataset.articleRow) {
           const v = numberOrBad(el);
           if (v === undefined) return;

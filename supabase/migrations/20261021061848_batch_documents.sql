@@ -1,9 +1,10 @@
 -- Batch report: documents on the Filling report (Jaap, 21-10). Three
 -- documents per batch: Production order, Filling order, Filling report
--- (scans / PDFs). Private storage bucket 'batch-documents' (signed URLs from
--- the app, as ingredient-documents) and table batch_documents (one file per
--- batch and type; replacing a file updates the row). batch_stages appends
--- documents_uploaded for the Active batches tiles. Plain ASCII.
+-- (scans / PDFs), one file each (replacing a file updates the row), plus any
+-- number of Other documents. Private storage bucket 'batch-documents'
+-- (signed URLs from the app, as ingredient-documents) and table
+-- batch_documents. batch_stages appends documents_uploaded (of the three)
+-- and other_documents for the Active batches tiles. Plain ASCII.
 -- Deleting a batch removes its rows (cascade); the files stay in storage.
 
 begin;
@@ -30,7 +31,7 @@ create policy batch_documents_delete on storage.objects
 create table if not exists public.batch_documents (
   id            bigint generated always as identity primary key,
   batch_id      bigint not null references public.batches(id) on delete cascade,
-  document_type text not null check (document_type in ('production_order', 'filling_order', 'filling_report')),
+  document_type text not null check (document_type in ('production_order', 'filling_order', 'filling_report', 'other')),
   file_name     text not null,
   storage_path  text not null unique,
   size_bytes    bigint,
@@ -39,10 +40,13 @@ create table if not exists public.batch_documents (
   created_at    timestamptz not null default now(),
   created_by    uuid default auth.uid() references public.users(id),
   updated_at    timestamptz not null default now(),
-  updated_by    uuid references public.users(id),
-  constraint batch_documents_type_key unique (batch_id, document_type)
+  updated_by    uuid references public.users(id)
 );
 
+-- one file per batch and type, except Other (any number)
+create unique index if not exists batch_documents_type_key on public.batch_documents (batch_id, document_type)
+  where document_type <> 'other';
+create index if not exists idx_batch_documents_batch_id on public.batch_documents (batch_id);
 create index if not exists idx_batch_documents_uploaded_by on public.batch_documents (uploaded_by);
 
 drop trigger if exists trg_batch_documents_updated_at on public.batch_documents;
@@ -63,7 +67,7 @@ create policy batch_documents_update on public.batch_documents for update to aut
 create policy batch_documents_delete on public.batch_documents for delete to authenticated using (can_delete('batches'));
 revoke all on public.batch_documents from anon;
 
--- 3. batch_stages: number of document types uploaded (column appended) ----------
+-- 3. batch_stages: documents uploaded (columns appended) -------------------------
 
 create or replace view public.batch_stages
 with (security_invoker = true)
@@ -170,11 +174,13 @@ select
   fs.filled_volume_hl,
   coalesce(b.incoming_volume_hl, 0) as incoming_volume_hl,
   b.first_incoming_at,
-  coalesce(d.documents_uploaded, 0)::integer as documents_uploaded
+  coalesce(d.documents_uploaded, 0)::integer as documents_uploaded,
+  coalesce(d.other_documents, 0)::integer as other_documents
 from base b
 left join plan p on p.batch_id = b.id
 left join lateral (
-  select count(distinct bd.document_type) as documents_uploaded
+  select count(distinct bd.document_type) filter (where bd.document_type <> 'other') as documents_uploaded,
+         count(*) filter (where bd.document_type = 'other') as other_documents
   from public.batch_documents bd
   where bd.batch_id = b.id
 ) d on true

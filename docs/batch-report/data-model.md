@@ -466,14 +466,16 @@ Built 20-10 (migration `20261020150212_batch_report_filling_report`):
 
 Documents (Jaap, 21-10; migration `20261021061848_batch_documents`):
 `batch_documents`: `id`, `batch_id` (cascade), `document_type`
-(`production_order` | `filling_order` | `filling_report`), `file_name`,
-`storage_path` (unique), `size_bytes`, `uploaded_by`, `uploaded_at`; unique
-(batch_id, document_type): one file per type, replacing updates the row. RLS
+(`production_order` | `filling_order` | `filling_report` | `other`),
+`file_name`, `storage_path` (unique), `size_bytes`, `uploaded_by`,
+`uploaded_at`; partial unique index (batch_id, document_type) where the type
+is not `other`: one file per type (replacing updates the row), any number of
+Other documents. RLS
 module "batches", audit trail. Files in the private storage bucket
 `batch-documents` (path `<batch_id>/<type>/<time>_<name>`; storage select
 `can_view`, insert / delete `can_edit('batches')`: replacing removes the old
 file). Deleting a batch removes the rows, not the files. `batch_stages`
-appends `documents_uploaded` (number of types uploaded).
+appends `documents_uploaded` (of the three types) and `other_documents`.
 
 Parked columns on `batches` (do not create until Jaap decides):
 `filling_comment`, `mdrank_entered_by`, `mdrank_entered_at`,
