@@ -170,7 +170,7 @@ this phase (pitched by = chosen user, default the logged-in user).
 | batch_id | bigint not null → batches | |
 | brew_number | integer not null | unique (batch_id, brew_number) |
 | software_order_number | text | Order no. software |
-| brewer_id | uuid → users | Brewer |
+| brewer_id | uuid → users | Brewer start |
 | mash_in_started_at | timestamptz | Start mashing — brew 1 sets the start date and stage Brewing |
 | mash_water_hl | numeric | Mash water |
 | mash_in_ph | numeric | pH after mashing-in |
@@ -201,6 +201,7 @@ this phase (pitched by = chosen user, default the logged-in user).
 | aeration_ppm | numeric | |
 | water_addition_hl | numeric | |
 | brew_volume_hl | numeric | Volume brew |
+| brewer_end_id | uuid → users | Brewer end — a brew can be finished by someone else (migration `20261021064500_batch_brews_brewer_end`, 21-10) |
 | brewing_ended_at | timestamptz | End of brewing — last brew → stage Fermentation, default Time 0 |
 | process_pause | text | JK only (hh:mm) |
 | is_aeration_filter_steamed | boolean | JK only |

@@ -31,7 +31,11 @@ serve(async (req) => {
     const body = await req.json();
     const email: string | undefined = body.email;
     const name: string | undefined = body.name ?? body.naam; // `naam`: pre-2026-10-16 page
-    if (!email || !name) {
+    const resendUserId: string | undefined = body.user_id; // new link for an existing account
+    // Initials as written on the floor; empty = generated from the name (trigger).
+    const initials: string | null = typeof body.initials === "string" && body.initials.trim()
+      ? body.initials.trim().toUpperCase().slice(0, 4) : null;
+    if (!resendUserId && (!email || !name)) {
       return json({ error: "email and name are required" }, 400);
     }
 
@@ -53,6 +57,37 @@ serve(async (req) => {
       return json({ error: "Only admins can invite new colleagues" }, 403);
     }
 
+    const REDIRECT_TO = "https://jopen-bier.github.io/Jopen_Batch_Database/accept-invite.html";
+
+    // New invite link for an account that exists but has never logged in
+    // (accounts made ahead, invite sent later: the first link has expired by
+    // then). Same own-page link as below; see the note on prefetching there.
+    if (resendUserId) {
+      const { data: target, error: targetErr } = await adminClient.auth.admin.getUserById(resendUserId);
+      if (targetErr || !target?.user?.email) return json({ error: "Unknown user" }, 404);
+      if (target.user.last_sign_in_at) {
+        return json({ error: "This colleague has already logged in; use \"Forgot password\" on the login page instead" }, 400);
+      }
+      // An invite link while the account is unconfirmed; once confirmed (an
+      // earlier link was opened but no password set) only a recovery link
+      // works. accept-invite.html handles both types.
+      let type: "invite" | "recovery" = target.user.email_confirmed_at ? "recovery" : "invite";
+      let { data: again, error: againErr } = await adminClient.auth.admin.generateLink({
+        type, email: target.user.email, options: { redirectTo: REDIRECT_TO },
+      });
+      if (againErr && type === "invite") {
+        type = "recovery";
+        ({ data: again, error: againErr } = await adminClient.auth.admin.generateLink({
+          type, email: target.user.email, options: { redirectTo: REDIRECT_TO },
+        }));
+      }
+      if (againErr || !again?.properties?.hashed_token) {
+        return json({ error: `Could not generate invite link: ${againErr?.message ?? "unknown error"}` }, 500);
+      }
+      const link = `${REDIRECT_TO}?token_hash=${encodeURIComponent(again.properties.hashed_token)}&type=${type}`;
+      return json({ success: true, action_link: link, email: target.user.email }, 200);
+    }
+
     // Role: role_id (current page) or a role name (pre-2026-10-16 page).
     let roleId: number | null = body.role_id ? Number(body.role_id) : null;
     if (!roleId && body.rol) {
@@ -65,7 +100,6 @@ serve(async (req) => {
 
     // 3. Uitnodigingslink genereren -- dit maakt de auth-user AL aan, maar
     // stuurt zelf GEEN e-mail (in tegenstelling tot inviteUserByEmail).
-    const REDIRECT_TO = "https://jopen-bier.github.io/Jopen_Batch_Database/accept-invite.html";
     const { data: linkData, error: linkErr } = await adminClient.auth.admin.generateLink({
       type: "invite",
       email,
@@ -82,7 +116,7 @@ serve(async (req) => {
     // 4. Rij in `users` aanmaken, zelfde als invite-user zou doen.
     const { error: insertErr } = await adminClient
       .from("users")
-      .insert({ id: linkData.user.id, name, role_id: roleRow.id, is_active: true });
+      .insert({ id: linkData.user.id, name, role_id: roleRow.id, is_active: true, initials: initials || null });
 
     if (insertErr) {
       return json({ error: `Link generated, but could not create users row: ${insertErr.message}` }, 500);

@@ -52,6 +52,9 @@
         <label for="invite-name">Name</label>
         <input type="text" id="invite-name" required />
 
+        <label for="invite-initials">Initials <span class="jopen-subtitel" style="display:inline;">(optional, empty = from the name)</span></label>
+        <input type="text" id="invite-initials" maxlength="4" style="text-transform:uppercase;" />
+
         <label for="invite-role">Role</label>
         <select id="invite-role" required style="width:100%; padding:8px; border:1px solid #ccc; border-radius:4px;"></select>
 
@@ -157,6 +160,7 @@
     document.getElementById('create-link-btn').addEventListener('click', async () => {
       const email = document.getElementById('invite-email').value.trim();
       const name = document.getElementById('invite-name').value.trim();
+      const initials = document.getElementById('invite-initials').value.trim().toUpperCase();
       const roleId = Number(document.getElementById('invite-role').value);
       const msg = document.getElementById('invite-message');
       const resultDiv = document.getElementById('link-result');
@@ -170,7 +174,7 @@
       resultDiv.style.display = 'none';
 
       const { data, error } = await supabaseClient.functions.invoke('generate-invite-link', {
-        body: { email, name, role_id: roleId },
+        body: { email, name, role_id: roleId, initials: initials || null },
       });
 
       if (error || data?.error) {
@@ -183,17 +187,23 @@
         return;
       }
 
-      const link = data.action_link;
+      setMessage(msg, `Account created for ${email} — use the buttons below to send the invite yourself.`, 'ok');
+      showInviteLink(data.action_link, email, name);
+      loadUserList();
+    });
+
+    // Fills the "Open Email" / "Copy Email content" block for an invite link.
+    function showInviteLink(link, email, name) {
+      const resultDiv = document.getElementById('link-result');
       const subject = "You've been invited to the Jopen Batch Database";
       const inviter = currentUserName || 'An administrator at Jopen Brouwerij';
       const plainText = buildPlainTextVersion(link, name, inviter);
       const emailHtml = buildInviteEmail(link, name, inviter);
 
-      setMessage(msg, `Account created for ${email} — use the buttons below to send the invite yourself.`, 'ok');
       document.getElementById('mailto-link').href =
         `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(plainText)}`;
+      document.getElementById('copy-html-message').textContent = '';
       resultDiv.style.display = 'block';
-      loadUserList();
 
       document.getElementById('copy-html-btn').onclick = async () => {
         const copyMsg = document.getElementById('copy-html-message');
@@ -209,7 +219,33 @@
           copyMsg.textContent = 'Could not copy in this browser — try "Open Email" instead.';
         }
       };
-    });
+    }
+
+    // New invite link for an account that has never logged in (accounts made
+    // ahead; the first link expires within a day).
+    async function newInviteLink(tr) {
+      const id = tr.dataset.id;
+      const name = tr.children[0].textContent;
+      const msg = document.getElementById('invite-message');
+      setMessage(msg, `Generating a new link for ${name}…`);
+      document.getElementById('link-result').style.display = 'none';
+      document.getElementById('invite-form').scrollIntoView({ behavior: 'smooth' });
+
+      const { data, error } = await supabaseClient.functions.invoke('generate-invite-link', {
+        body: { user_id: id },
+      });
+      if (error || data?.error) {
+        let detail = data?.error || error.message;
+        try {
+          const body = await error.context.json();
+          if (body?.error) detail = body.error;
+        } catch (_) { /* no JSON body or no error.context: keep what we have */ }
+        setMessage(msg, 'Could not generate link: ' + detail, 'error');
+        return;
+      }
+      setMessage(msg, `New invite link for ${name} (${data.email}) — use the buttons below to send it.`, 'ok');
+      showInviteLink(data.action_link, data.email, name);
+    }
 
     function formatLastLogin(iso) {
       if (!iso) return '<span class="jopen-subtitel" style="margin:0;">Never</span>';
@@ -268,6 +304,7 @@
               ? `<button class="user-save-btn">Save</button>
                  <span class="user-self">(you)</span>`
               : `<button class="user-save-btn">Save</button>
+                 ${lastLoginByUser[u.id] || loginsResult.error ? '' : '<button class="user-link-btn" title="The account has never logged in: make a fresh invite link">New invite link</button>'}
                  <button class="user-delete-btn">Delete</button>`}
           </td>
         </tr>`;
@@ -282,7 +319,9 @@
       container.querySelectorAll('tr[data-id]').forEach(tr => {
         const saveBtn = tr.querySelector('.user-save-btn');
         const deleteBtn = tr.querySelector('.user-delete-btn');
+        const linkBtn = tr.querySelector('.user-link-btn');
         if (saveBtn) saveBtn.addEventListener('click', () => saveUser(tr));
+        if (linkBtn) linkBtn.addEventListener('click', () => newInviteLink(tr));
         if (deleteBtn) deleteBtn.addEventListener('click', () => deleteUser(tr));
       });
     }
