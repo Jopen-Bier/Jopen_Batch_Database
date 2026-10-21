@@ -63,6 +63,7 @@ Agreed with Jaap. Date = when decided. Do not change without asking.
 | 20-10 | Packaging: no neck labels anymore; the Global Keg is not in the list (Jaap, rooktest phase 7). |
 | 20-10 | Filling page: a good basis, to be fine-tuned with the filling department; fill tube detection checks only for bottles (not keg / can) — later (Jaap). |
 | 20-10 | Filling report: articles, materials and the bill of materials are master data in Settings, seeded with the mockup list; the session volume (Filling tab) is what was taken from the HBT, the booked articles give the packaged litres. SKU in the Summary = packaging article until open-questions #13 is answered. |
+| 21-10 | The Filling report holds three documents per batch: Production order, Filling order, Filling report (one file each), plus any number of Other documents; the Filling and Filled tiles count them (Jaap). |
 | 21-10 | The same HBT can be used more than once on one batch (filled, emptied, filled again over the processing days); a refilled tank is shown with the day it was filled (Jaap). |
 | 13-10 | Processing session = start measurements only (centrifuge in/out, start flow, start turbidity). Lagering block removed. Pasteurised-with / avg temp out / avg turbidity removed from the session. |
 | 13-10 | Per HBT, operator enters averages: in-line O2, PU, turbidity, flow — **one set per HBT**, also when it was filled over two sessions. |

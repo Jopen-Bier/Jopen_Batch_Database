@@ -356,6 +356,9 @@ select.br-in { text-align: left; cursor: pointer; }
 .fr-loss.ok { background: #e1ead9; color: #33473a; }
 .fr-loss.lost { background: #fdf1d8; color: #7a4f17; }
 .fr-loss.short { background: #f8dcd3; color: #8f2909; }
+.fr-upload { display: inline-flex; align-items: center; cursor: pointer; }
+.fr-doc-actions { text-align: right; white-space: nowrap; width: 160px; }
+.fr-doc-other { display: flex; align-items: center; gap: 8px; padding: 2px 0; }
 .fr-summary { max-width: 980px; max-height: calc(100vh - 32px); overflow: auto; gap: 16px; }
 @media print {
   body:has(#fr-summary) > *:not(#fr-summary) { display: none !important; }

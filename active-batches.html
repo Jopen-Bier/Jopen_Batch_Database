@@ -94,6 +94,7 @@
         <div class="br-tile-name">${escapeHtml(row.name)}</div>
         <div class="br-tile-line">${escapeHtml(lines.line1)}</div>
         <div class="br-tile-line${lines.isOk ? ' ok' : ''}">${escapeHtml(lines.line2)}</div>
+        ${lines.line3 ? `<div class="br-tile-line${lines.line3Ok ? ' ok' : ''}">${escapeHtml(lines.line3)}</div>` : ''}
         ${lines.progress !== null ? `<div class="br-tile-bar"><div style="width:${Math.round(lines.progress * 100)}%;"></div></div>` : ''}
         ${issue ? `<div class="br-tile-line alert">${escapeHtml(issue)}</div>` : ''}
       </a>`;

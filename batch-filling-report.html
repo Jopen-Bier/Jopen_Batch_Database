@@ -23,6 +23,7 @@
     <div class="br-message" id="fr-message">Loading batch…</div>
     <div id="fr-content" style="display:none; flex-direction:column; gap:16px;">
       <div class="br-card br-cardpad" id="fr-balance"></div>
+      <div class="br-card br-cardpad" id="fr-documents"></div>
       <div id="fr-sessions" style="display:flex; flex-direction:column; gap:16px;"></div>
       <div class="br-card br-cardpad" id="fr-transfers"></div>
     </div>
@@ -47,7 +48,7 @@
 
     const page = {
       user: null, canEdit: false, canDelete: false, ctx: null, save: null,
-      sessions: [], incoming: [], processingSessions: [], hbts: [], readings: [], transfers: [], brews: [], tanks: [],
+      sessions: [], incoming: [], processingSessions: [], documents: [], initialsOf: () => '', hbts: [], readings: [], transfers: [], brews: [], tanks: [],
       articles: new Map(), materials: new Map(), bom: new Map(), sessionArticles: [], sessionMaterials: [],
       summaryOpen: false,
     };
@@ -98,6 +99,66 @@
       const incoming = await supabaseClient.from('batch_transfers').select(INCOMING_SELECT).eq('to_batch_id', batchId).order('transferred_at').order('id');
       if (incoming.error) throw incoming.error;
       page.incoming = incoming.data;
+      const [documents, users] = await Promise.all([
+        supabaseClient.from('batch_documents').select('*').eq('batch_id', batchId),
+        loadUserInitials(),
+      ]);
+      if (documents.error) throw documents.error;
+      page.documents = documents.data;
+      page.initialsOf = users.initialsOf;
+    }
+
+    // ------------------------------------------------------------ documents
+    // Production order, Filling order, Filling report: one file each in the
+    // private bucket 'batch-documents', opened with a short signed URL.
+    const DOCUMENT_BUCKET = 'batch-documents';
+    const DOCUMENT_MAX_BYTES = 20 * 1024 * 1024;
+
+    async function uploadDocument(type, file) {
+      if (!file) return;
+      if (file.size > DOCUMENT_MAX_BYTES) { page.save.failed('The file is larger than 20 MB.'); return; }
+      // one file per type is replaced; Other documents are added
+      const old = type === 'other' ? null : page.documents.find((d) => d.document_type === type) || null;
+      const path = `${page.ctx.batch.id}/${type}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+      page.save.saving();
+      const up = await supabaseClient.storage.from(DOCUMENT_BUCKET).upload(path, file);
+      if (up.error) { page.save.failed(up.error.message); return; }
+      const values = { file_name: file.name, storage_path: path, size_bytes: file.size, uploaded_by: page.user.id, uploaded_at: new Date().toISOString() };
+      const res = old
+        ? await supabaseClient.from('batch_documents').update({ ...values, updated_by: page.user.id }).eq('id', old.id).select('*').single()
+        : await supabaseClient.from('batch_documents').insert({ ...values, batch_id: page.ctx.batch.id, document_type: type, updated_by: page.user.id }).select('*').single();
+      if (res.error) {
+        await supabaseClient.storage.from(DOCUMENT_BUCKET).remove([path]);   // no file without a record
+        page.save.failed(res.error.message);
+        return;
+      }
+      if (old) {
+        await supabaseClient.storage.from(DOCUMENT_BUCKET).remove([old.storage_path]);   // the replaced file
+        page.documents.splice(page.documents.indexOf(old), 1);
+      }
+      page.documents.push({ ...(old || {}), ...values, ...(res.data || {}), document_type: type });
+      page.save.saved();
+      renderSoon();
+    }
+
+    async function openDocument(doc) {
+      const { data, error } = await supabaseClient.storage.from(DOCUMENT_BUCKET).createSignedUrl(doc.storage_path, 60);
+      if (error || !data) { page.save.failed('Could not open the document: ' + (error ? error.message : 'no link')); return; }
+      window.open(data.signedUrl, '_blank');
+    }
+
+    async function deleteDocument(doc) {
+      const label = (BATCH_DOCUMENT_TYPES.find((t) => t.code === doc.document_type) || {}).label || 'other document';
+      const ok = await confirmDialog({ title: `Delete the ${label.toLowerCase()} "${doc.file_name}"?`, text: 'The file is removed; this cannot be undone. The deletion is recorded in the audit trail.' });
+      if (!ok) return;
+      page.save.saving();
+      const st = await supabaseClient.storage.from(DOCUMENT_BUCKET).remove([doc.storage_path]);
+      if (st.error) { page.save.failed(st.error.message); return; }
+      const { error } = await supabaseClient.from('batch_documents').delete().eq('id', doc.id).select('id').single();
+      if (error) { page.save.failed(error.message); return; }
+      page.documents.splice(page.documents.indexOf(doc), 1);
+      page.save.saved();
+      renderSoon();
     }
 
     // ------------------------------------------------------------ saving
@@ -174,9 +235,36 @@
     // ------------------------------------------------------------ rendering
     function renderAll() {
       renderBalance();
+      renderDocuments();
       renderSessions();
       transfersCard.render();
       renderSummary();
+    }
+
+    function renderDocuments() {
+      const when = (at) => new Date(at).toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+      const rows = BATCH_DOCUMENT_TYPES.map((t) => {
+        const d = page.documents.find((x) => x.document_type === t.code);
+        const by = d ? [page.initialsOf(d.uploaded_by), when(d.uploaded_at)].filter(Boolean).join(' · ') : '';
+        return `<tr><td style="width:170px;"><b>${escapeHtml(t.label)}</b></td>
+          <td>${d ? `<a href="#" data-open-document="${d.id}">${escapeHtml(d.file_name)}</a> <span class="br-note">${escapeHtml(by)}</span>` : '<span class="br-note">Not uploaded</span>'}</td>
+          <td class="fr-doc-actions">${page.canEdit ? `<label class="br-ghost fr-upload">${d ? 'Replace' : 'Upload'}<input type="file" data-upload-document="${t.code}" accept="application/pdf,image/*" hidden></label>` : ''}
+            ${page.canDelete && d ? `<button class="br-del" type="button" data-delete-document="${d.id}" aria-label="Delete ${escapeHtml(t.label)}">${TRASH_ICON}</button>` : ''}</td></tr>`;
+      }).join('');
+      const others = page.documents.filter((d) => d.document_type === 'other').sort((a, b) => new Date(a.uploaded_at) - new Date(b.uploaded_at) || a.id - b.id);
+      const otherRow = `<tr><td style="width:170px; vertical-align:top; padding-top:10px;"><b>Other</b></td>
+        <td>${others.map((d) => `<div class="fr-doc-other"><a href="#" data-open-document="${d.id}">${escapeHtml(d.file_name)}</a>
+            <span class="br-note">${escapeHtml([page.initialsOf(d.uploaded_by), when(d.uploaded_at)].filter(Boolean).join(' · '))}</span>
+            ${page.canDelete ? `<button class="br-del" type="button" data-delete-document="${d.id}" aria-label="Delete ${escapeHtml(d.file_name)}">${TRASH_ICON}</button>` : ''}</div>`).join('')
+          || '<span class="br-note">None · any number of files, e.g. lab reports, photos</span>'}</td>
+        <td class="fr-doc-actions" style="vertical-align:top;">${page.canEdit ? `<label class="br-ghost fr-upload">+ Add<input type="file" data-upload-document="other" accept="application/pdf,image/*" multiple hidden></label>` : ''}</td></tr>`;
+      const n = new Set(page.documents.filter((d) => d.document_type !== 'other').map((d) => d.document_type)).size;
+      document.getElementById('fr-documents').innerHTML = `
+        <div class="br-head" style="align-items:baseline;">
+          <div class="br-label">Documents</div>
+          <span class="br-note">${n} of ${BATCH_DOCUMENT_TYPES.length} uploaded${others.length ? ` · ${others.length} other` : ''} · PDF or photo, up to 20 MB</span>
+        </div>
+        <table class="br-ing"><tbody>${rows}${otherRow}</tbody></table>`;
     }
 
     function renderBalance() {
@@ -366,6 +454,11 @@
       main.addEventListener('change', (e) => {
         const el = e.target;
         if (transfersCard.handleChange(el)) return;
+        if (el.dataset.uploadDocument) {
+          const files = [...(el.files || [])];
+          el.value = '';
+          return (async () => { for (const file of files) await uploadDocument(el.dataset.uploadDocument, file); })();
+        }
         if (el.dataset.articleRow) {
           const v = numberOrBad(el);
           if (v === undefined) return;
@@ -382,6 +475,10 @@
       main.addEventListener('click', (e) => {
         const t = e.target;
         if (transfersCard.handleClick(t)) return;
+        const openDoc = t.closest('a[data-open-document]');
+        if (openDoc) { e.preventDefault(); return openDocument(page.documents.find((d) => d.id === Number(openDoc.dataset.openDocument))); }
+        const delDoc = t.closest('button[data-delete-document]');
+        if (delDoc) return deleteDocument(page.documents.find((d) => d.id === Number(delDoc.dataset.deleteDocument)));
         if (t.closest('#fr-open-summary')) { page.summaryOpen = true; return renderSoon(); }
         const delA = t.closest('button[data-delete-article]');
         if (delA) return deleteWithUndo('filling_session_articles', page.sessionArticles.find((r) => r.id === Number(delA.dataset.deleteArticle)), page.sessionArticles, 'this article');
