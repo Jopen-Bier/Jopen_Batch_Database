@@ -52,6 +52,17 @@ def main():
         eq((x['batch']['glt_tank'], x['batch']['lt_tank']), ('GLT21', 'LT54'), 'GLT / LT')
         eq(x['hbts'][0].get('processing_session_number'), 1, 'one session: readings linked')
         eq(x['batch']['yeast_pitched_by'], 'EVL', 'yeast pitched by')
+    p = find(d, '26003')
+    if p:
+        # Old (not generated) report: 16000 columns wide, a session only on the filling report.
+        x = reader.read_workbook(p, ref)
+        eq([(s['filling_date'], s.get('hbt_tank'), s.get('volume_hl')) for s in x['filling_sessions']],
+           [('2026-02-11', 11, 28.9), ('2026-02-12', 13, 14.0), ('2026-02-12', 13, 6.0)], 'session from the filling report only')
+        eq([s.get('is_hbt_finished', False) for s in x['filling_sessions']], [True, False, True], 'HBT13 finished with 14 + 6 hl')
+        eq([len(h['readings']) for h in x['hbts']], [3, 2], 'pre-filled HBT rows without values dropped')
+    p = find(d, '26001')
+    if p:
+        eq(reader.read_workbook(p, ref)['batch']['yeast_strain'], 'Munich classic', 'trailing dash trimmed')
     p = find(d, '26293')
     if p:
         x = reader.read_workbook(p, ref)
