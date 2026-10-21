@@ -85,10 +85,12 @@ grid view, label diff between two workbooks).
   can_lid, "Omdozen 24x33cl blik - Blanco" → box_24x33_can (material),
   "Jopen Fust 20L" → jopen_keg_20, "Fustdop" → keg_cap. Neck labels and the
   Global Keg were removed (migration `20261020143543`): report if booked.
-- **Same HBT twice** (26292: HBT 16 filled, emptied and filled again; end
-  values 120 and 108.8 hl): `batch_hbts` is unique per (batch, tank), so it
-  cannot be two rows. **Ask Jaap** how to store it (e.g. one HBT row with
-  the readings of both fills in order) before building this part.
+- **Same HBT twice** (26292: HBT 16 filled, emptied and filled again over
+  the processing days; end values 120 and 108.8 hl): this is normal (Jaap,
+  21-10) and the app allows it: one `batch_hbts` row per fill, in order
+  (`sort_order`), each with its own readings and end value. The
+  uniqueness per (batch, tank) is removed in the phase 8 follow-up
+  (check that it is gone in the live database before importing).
 - **Values to flag** (suspicious): outliers such as TPO 563 / HSO 505 in
   26292 session 2, text in number cells, dates outside the batch period,
   totals in the workbook that differ from what the app calculates
@@ -104,7 +106,7 @@ The cellar plan steps are ticked off by the tags of the log entries.
 
 ## Plan
 1. Get access to the workbooks; ask the open points above (where the
-   initials go, HBT twice, completed status).
+   initials go, completed status).
 2. Reader (Python, `tools/batch-import/`): workbook → JSON per batch in the
    app's table / column names, label-anchored where layouts differ. A Node
    or Python test with the two samples.
