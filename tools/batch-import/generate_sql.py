@@ -72,7 +72,10 @@ def batch_sql(d):
            "  elsif exists (select 1 from public.batch_brews where batch_id = v_batch)\n"
            "     or exists (select 1 from public.fermentation_log_entries where batch_id = v_batch)\n"
            "     or exists (select 1 from public.processing_sessions where batch_id = v_batch)\n"
-           "     or exists (select 1 from public.filling_sessions where batch_id = v_batch) then\n"
+           "     or exists (select 1 from public.filling_sessions where batch_id = v_batch)\n"
+           "     or exists (select 1 from public.batch_brew_comments where batch_id = v_batch)\n"
+           "     or exists (select 1 from public.processing_comments where batch_id = v_batch)\n"
+           "     or exists (select 1 from public.batch_hbts where batch_id = v_batch) then\n"
            f"    v_skipped := v_skipped || {lit(n + ' (has data)', 'text')};\n",
            "  else\n    v_proc := '{}';\n    v_hbt := '{}';\n",
            "    select stage into v_before from public.batch_stages where batch_id = v_batch;\n"]
@@ -206,6 +209,10 @@ def main():
     for p in sorted(glob.glob(os.path.join(src, '*.json'))):
         d = json.load(open(p))
         if wanted and d['batch_number'] not in wanted:
+            continue
+        if not any(d.get(k) for k in ('brews', 'brew_comments', 'fermentation_log', 'processing_sessions',
+                                      'processing_comments', 'hbts', 'filling_sessions')):
+            print(f'{d["batch_number"]}: nothing to import (no brews, log, processing or filling read)')
             continue
         if d.get('hold'):
             print(f'{d["batch_number"]}: held ({d["hold"]}): left out')
