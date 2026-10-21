@@ -217,11 +217,19 @@ before -> after. Tested on a local Postgres with `supabase/schema.sql`
 (dry run rolls back; a second run skips every batch).
 
 ### Documents (Filling report)
-The new repo has a folder per batch: the workbook plus the scans for
-`batch_documents` (production order, filling order, filling report,
-other). Files go to the private bucket `batch-documents`
-(`<batch_id>/<type>/<file>`), which SQL cannot fill: a separate upload
-step, to agree with Jaap once the file names are known.
+The PDFs are in the batch-reports repo, the batch number in the file name
+(Jaap, 21-10): `...ProductieBon...` = production order, `...AfvulOrderBon...`
+= filling order, `av_<batch>...` = filling report, anything else = other.
+`tools/batch-import/upload_documents.py` uploads them to the private bucket
+`batch-documents` (`<batch_id>/<type>/<ms>_<file>`) with a `batch_documents`
+row, as the Filling report tab does (no file without a row). Run by the
+workflow "Upload documents" in batch-reports-2026 (Actions tab; dry run
+first, then with "Upload" ticked); needs the repo secret
+`SUPABASE_SERVICE_ROLE_KEY`. Held, not uploaded: no batch number, a batch
+not in the app, larger than 20 MB, two files of one fixed type for a
+batch. Skipped: a fixed type the batch already has, an "other" file with
+the same name. Tested against a local stand-in of the API (upload, row,
+removal of the file when the row fails).
 
 ### Stages after import
 `batch_stages` follows the data: brews ended → fermentation, lagering step
