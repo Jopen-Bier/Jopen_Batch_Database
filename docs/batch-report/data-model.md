@@ -179,6 +179,7 @@ this phase (pitched by = chosen user, default the logged-in user).
 | mash_corrected_ph | numeric | pH after correction |
 | is_iodine_test_ok | boolean | Iodine test OK? |
 | has_mash_schedule_deviation | boolean | Deviation from mash schedule? |
+| mash_rinse_water_hl | numeric | Rinse water ("Spoelwater" in the Excel Mashing block, WP and JK; migration `20261021120000`, 21-10) |
 | first_wort_extract | numeric | Plato first wort (°P) |
 | last_runnings_extract | numeric | Extract last runnings (°P) |
 | cumulative_sparge_volume_hl | numeric | WP only |

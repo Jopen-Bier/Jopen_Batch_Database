@@ -44,7 +44,8 @@ def main():
         eq(x['filling_sessions'][1]['filled_by'], 'TW', 'filled by')
         eq(x['batch']['tasting_result'], 'go', 'tasting result')
         eq({(h.get('avg_pu'), h.get('avg_turbidity_ebc')) for h in x['hbts']}, {(25.0, 9.83)}, 'averages on every HBT')
-        eq(sum('Spoelwater' in c['comment'] for c in x['brew_comments']), 8, 'Mashing "Spoelwater" kept as brew comment')
+        eq([b.get('mash_rinse_water_hl') for b in x['brews']], [0.6, 0.7, 0.6, 0.9, 0.6, 0.6, 0.9, 0.8], 'Mashing "Spoelwater" = rinse water')
+        eq(sum('Spoelwater' in c['comment'] for c in x['brew_comments']), 0, 'no Spoelwater comments')
     p = find(d, '26260')
     if p:
         x = reader.read_workbook(p, ref)
