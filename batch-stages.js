@@ -288,6 +288,27 @@ function formatsText(formats) {
   const set = new Set(formats || []);
   return PACKAGE_FORMATS.filter((f) => set.has(f.code)).map((f) => f.label).join(' + ') || '—';
 }
+/**
+ * Name of an HBT of a batch: the tank code; when the batch uses the tank
+ * more than once (filled, emptied and filled again over the processing
+ * days; Jaap, 21-10) the day it was filled is added, "HBT16 · 01-10", with
+ * "(2)" for a second fill on the same day and "(fill 2)" without a day.
+ * hbts = the batch's batch_hbts rows, tankCode(id) = the tank's code,
+ * filledOn(hbt) = 'YYYY-MM-DD' or null (processing.js hbtFilledOn).
+ */
+function hbtLabel(hbt, hbts, tankCode, filledOn) {
+  const code = tankCode(hbt.tank_id);
+  const same = hbts.filter((h) => h.tank_id === hbt.tank_id)
+    .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || a.id - b.id);
+  if (same.length < 2) return code;
+  const n = same.findIndex((h) => h.id === hbt.id) + 1;
+  const day = filledOn ? filledOn(hbt) : null;
+  if (!day) return `${code} (fill ${n})`;
+  const sameDay = same.filter((h) => filledOn(h) === day);
+  const nth = sameDay.length > 1 ? ` (${sameDay.findIndex((h) => h.id === hbt.id) + 1})` : '';
+  return `${code} · ${day.slice(8, 10)}-${day.slice(5, 7)}${nth}`;
+}
+
 function batchHref(stage, batchId) {
   return batchTabHref(STAGE_TABS[stage], batchId) || batchTabHref('overview', batchId);
 }
@@ -314,7 +335,7 @@ function progressSteps(stage) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    BATCH_TABS, batchTabHref, batchHref, PACKAGE_FORMATS, formatsText,
+    BATCH_TABS, batchTabHref, batchHref, PACKAGE_FORMATS, formatsText, hbtLabel,
     BATCH_STAGES, ACTIVE_SECTIONS,
     stageInfo, stageOrder, batchYear, tankNumber, versionText, toBatchRow,
     filterBatches, sortBatches, compareByTank, groupActiveBatches, dayMonth, tileLines,

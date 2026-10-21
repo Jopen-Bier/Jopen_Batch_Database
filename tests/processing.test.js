@@ -55,4 +55,11 @@ assert.strictEqual(p.cellarLoss({ gltVolumeHl: null, hbtEndTotalHl: 10 }).lossHl
 assert.strictEqual(p.cellarLoss({ gltVolumeHl: 80, incomingHl: 20, hbtEndTotalHl: 98 }).lossHl, 2);
 assert.strictEqual(p.cellarLoss({ gltVolumeHl: null, incomingHl: '25.5', hbtEndTotalHl: 25 }).lossHl, 0.5);
 
+// Day an HBT was filled: first processing date of its readings' sessions, else the row's day
+const sess = [{ id: 1, processing_date: '2026-10-14' }, { id: 2, processing_date: '2026-10-01' }];
+const rd = [{ batch_hbt_id: 5, processing_session_id: 1 }, { batch_hbt_id: 5, processing_session_id: 2 }, { batch_hbt_id: 6, processing_session_id: null }];
+assert.strictEqual(p.hbtFilledOn({ id: 5 }, rd, sess), '2026-10-01');
+assert.strictEqual(p.hbtFilledOn({ id: 6, created_at: '2026-10-20T08:00:00Z' }, rd, sess), '2026-10-20');
+assert.strictEqual(p.hbtFilledOn({ id: 7 }, rd, sess), null);
+
 console.log('processing: all tests passed');

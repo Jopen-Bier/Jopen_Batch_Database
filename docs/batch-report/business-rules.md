@@ -187,6 +187,14 @@ Steps are editable and reorderable in the recipe editor; edited steps get
 - HBT end value = last `hbt_readings` row (by `sort_order`) of that HBT that
   has a level (a new row still being filled in does not count yet).
   Total end volume = Σ end levels.
+- **Same HBT twice** (Jaap, 21-10): a tank can be filled, emptied and filled
+  again for one batch; each fill is its own HBT row. The pages then name it
+  with the day it was filled: "HBT16 · 01-10" (the first processing date of
+  the sessions its readings belong to, else the day the row was made;
+  "(2)" for a second fill that day, "(fill 2)" without a day). A tank used
+  once keeps its plain code. "+ Add HBT" also offers a used tank ("fill
+  again"). In the Split / transfer popup the tank is one "from" tank with
+  the end value of its latest fill.
 - CO2 status per reading: spec by `co2_target` from `recipe_packaging`
   (`co2_bottle_can_spec` ± `co2_bottle_can_tolerance`, keg: `co2_keg_spec` ±
   `co2_keg_tolerance`) → OK / High / Low.

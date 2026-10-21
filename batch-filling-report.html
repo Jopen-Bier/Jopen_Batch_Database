@@ -47,7 +47,7 @@
 
     const page = {
       user: null, canEdit: false, canDelete: false, ctx: null, save: null,
-      sessions: [], incoming: [], hbts: [], readings: [], transfers: [], brews: [], tanks: [],
+      sessions: [], incoming: [], processingSessions: [], hbts: [], readings: [], transfers: [], brews: [], tanks: [],
       articles: new Map(), materials: new Map(), bom: new Map(), sessionArticles: [], sessionMaterials: [],
       summaryOpen: false,
     };
@@ -75,10 +75,11 @@
     async function loadAll(batchId) {
       page.ctx = await loadBatchContext(batchId);
       const byBatch = (table) => supabaseClient.from(table).select('*').eq('batch_id', batchId);
-      const [sessions, hbts, readings, transfers, brews, tanks, articles, materials, bom, sessionArticles, sessionMaterials] = await Promise.all([
+      const [sessions, hbts, readings, processingSessions, transfers, brews, tanks, articles, materials, bom, sessionArticles, sessionMaterials] = await Promise.all([
         byBatch('filling_sessions').order('session_number'),
         byBatch('batch_hbts').order('sort_order').order('id'),
         byBatch('hbt_readings').order('sort_order').order('id'),
+        byBatch('processing_sessions').order('session_number'),
         supabaseClient.from('batch_transfers').select(TRANSFER_SELECT).eq('batch_id', batchId).order('transferred_at').order('id'),
         byBatch('batch_brews').order('brew_number'),
         supabaseClient.from('tanks').select('id, code, tank_type, number, location, volume_hl, is_active').order('number'),
@@ -88,9 +89,9 @@
         byBatch('filling_session_articles').order('id'),
         byBatch('filling_session_materials').order('id'),
       ]);
-      for (const res of [sessions, hbts, readings, transfers, brews, tanks, articles, materials, bom, sessionArticles, sessionMaterials]) if (res.error) throw res.error;
+      for (const res of [sessions, hbts, readings, processingSessions, transfers, brews, tanks, articles, materials, bom, sessionArticles, sessionMaterials]) if (res.error) throw res.error;
       Object.assign(page, {
-        sessions: sessions.data, hbts: hbts.data, readings: readings.data, transfers: transfers.data, brews: brews.data, tanks: tanks.data,
+        sessions: sessions.data, hbts: hbts.data, readings: readings.data, processingSessions: processingSessions.data, transfers: transfers.data, brews: brews.data, tanks: tanks.data,
         articles: new Map(articles.data.map((a) => [a.id, a])), materials: new Map(materials.data.map((m) => [m.id, m])),
         bom: bomByArticle(bom.data), sessionArticles: sessionArticles.data, sessionMaterials: sessionMaterials.data,
       });
@@ -276,7 +277,7 @@
         const hbt = hbtById(s.batch_hbt_id);
         const book = bookOf(s);
         const diff = sessionDifference(book.litres, s.volume_hl);
-        const sub = [dayMonthYear(s.filling_date), hbt ? tankCode(hbt.tank_id) : null, s.package_format ? formatLabel(s.package_format) : null].filter(Boolean).join(' · ');
+        const sub = [dayMonthYear(s.filling_date), hbt ? hbtLabel(hbt, page.hbts, tankCode, (x) => hbtFilledOn(x, page.readings, page.processingSessions)) : null, s.package_format ? formatLabel(s.package_format) : null].filter(Boolean).join(' · ');
         const filled = diff
           ? `Filled <b>${fmt(book.litres)} l</b> of ${fmt(Number(s.volume_hl) * 100)} l · <span class="fr-loss ${diff.ok ? 'ok' : 'lost'}">${signed(diff.diffL)} l</span>`
           : `Filled <b>${fmt(book.litres)} l</b> <span class="br-note">· fill in the session volume on Filling to compare</span>`;
@@ -335,8 +336,9 @@
     // Volume in a tank before transfers: GLT total (+ beer in from splits), HBT end value.
     function tankStartHl(id) {
       if (id === page.ctx.batch.glt_tank_id) return (gltVolumeHl() || 0) + (Number(page.ctx.stageRow && page.ctx.stageRow.incoming_volume_hl) || 0) || null;
-      const h = page.hbts.find((x) => x.tank_id === id);
-      const end = h ? hbtEnd(page.readings.filter((r) => r.batch_hbt_id === h.id)) : null;
+      // the latest fill of that tank with an end value
+      const end = page.hbts.filter((x) => x.tank_id === id).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || a.id - b.id)
+        .map((x) => hbtEnd(page.readings.filter((r) => r.batch_hbt_id === x.id))).filter(Boolean).pop();
       return end ? Number(end.level_hl) : null;
     }
 

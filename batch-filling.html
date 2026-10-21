@@ -58,7 +58,7 @@
 
     const page = {
       user: null, canEdit: false, canDelete: false, ctx: null, save: null,
-      sessions: [], measurements: [], hbts: [], readings: [], tanks: [], users: [], initialsOf: () => '',
+      sessions: [], measurements: [], hbts: [], readings: [], processingSessions: [], tanks: [], users: [], initialsOf: () => '',
       packaging: {}, ferm: {},
     };
     const fmt = (v, digits) => (v === null || v === undefined || v === '' ? '—'
@@ -66,6 +66,7 @@
     const dis = () => (page.canEdit ? '' : ' disabled');
     const val = (v) => escapeHtml(v === null || v === undefined ? '' : String(v));
     const tankCode = (id) => (page.tanks.find((t) => t.id === id) || {}).code || '—';
+    const hbtName = (h) => hbtLabel(h, page.hbts, tankCode, (x) => hbtFilledOn(x, page.readings, page.processingSessions));
     const hbtById = (id) => page.hbts.find((h) => h.id === id) || null;
     const hbtEndHl = (h) => { const end = hbtEnd(page.readings.filter((r) => r.batch_hbt_id === h.id)); return end ? end.level_hl : null; };
     const formatLabel = (code) => (PACKAGE_FORMATS.find((f) => f.code === code) || {}).label || '—';
@@ -83,18 +84,19 @@
       const recipeId = page.ctx.batch.recipe_id;
       const byBatch = (table) => supabaseClient.from(table).select('*').eq('batch_id', batchId);
       const one = (table) => supabaseClient.from(table).select('*').eq('recipe_id', recipeId).maybeSingle();
-      const [sessions, measurements, hbts, readings, tanks, users, packaging, ferm] = await Promise.all([
+      const [sessions, measurements, hbts, readings, processingSessions, tanks, users, packaging, ferm] = await Promise.all([
         byBatch('filling_sessions').order('session_number'),
         byBatch('filling_measurements').order('measured_time', { nullsFirst: false }).order('id'),
         byBatch('batch_hbts').order('sort_order').order('id'),
         byBatch('hbt_readings').order('sort_order').order('id'),
+        byBatch('processing_sessions').order('session_number'),
         supabaseClient.from('tanks').select('id, code, tank_type, number, volume_hl').eq('tank_type', 'hbt').order('number'),
         loadUserInitials(),
         one('recipe_packaging'), one('recipe_fermentation'),
       ]);
-      for (const res of [sessions, measurements, hbts, readings, tanks]) if (res.error) throw res.error;
+      for (const res of [sessions, measurements, hbts, readings, processingSessions, tanks]) if (res.error) throw res.error;
       Object.assign(page, {
-        sessions: sessions.data, measurements: measurements.data, hbts: hbts.data, readings: readings.data, tanks: tanks.data,
+        sessions: sessions.data, measurements: measurements.data, hbts: hbts.data, readings: readings.data, processingSessions: processingSessions.data, tanks: tanks.data,
         users: users.users.filter((u) => u.is_active), initialsOf: users.initialsOf,
         packaging: packaging.data || {}, ferm: ferm.data || {},
       });
@@ -189,7 +191,7 @@
         <div style="display:flex; gap:10px; align-items:center; padding:6px 0;"><span class="br-label">Beer risk</span>
           <span class="br-pill" style="background:${bg}; color:${fg};">${escapeHtml(valueLabel(BEER_RISK_LABELS, page.ferm.beer_risk))}</span></div>
         <div class="br-note">Ready in HBT · from Processing</div>
-        ${statuses.map(({ h, status }) => `<div class="br-kr"><span class="k">${escapeHtml(tankCode(h.tank_id))} · ${escapeHtml(formatsText(h.intended_formats))}</span>
+        ${statuses.map(({ h, status }) => `<div class="br-kr"><span class="k">${escapeHtml(hbtName(h))} · ${escapeHtml(formatsText(h.intended_formats))}</span>
           <span class="c">${fmt(hbtEndHl(h), 1)} hl</span><span class="fi-status ${status}">${STATUS_TEXT[status]}</span></div>`).join('')}
         <div class="br-note" style="padding-top:6px;">${escapeHtml(summary)}</div>
         <div class="br-kr"><span class="k">Day number <span class="br-note">· today</span></span><span class="c">${dayNumber(new Date())}</span></div>`;
@@ -246,13 +248,13 @@
           `<label class="br-check pr-check"><input type="checkbox" data-session="${s.id}" data-field="${f}"${s[f] ? ' checked' : ''}${dis()}><span>${label}</span></label>`).join('');
         return `<div class="pr-hbt fi-session${s.is_hbt_finished ? ' finished' : ''}">
           <div class="pr-hbt-head">
-            <b class="fi-title">Session ${s.session_number}${hbt ? ' · ' + escapeHtml(tankCode(hbt.tank_id)) : ''}${s.package_format ? ' · ' + formatLabel(s.package_format) : ''}</b>
+            <b class="fi-title">Session ${s.session_number}${hbt ? ' · ' + escapeHtml(hbtName(hbt)) : ''}${s.package_format ? ' · ' + formatLabel(s.package_format) : ''}</b>
             ${page.canDelete ? `<button class="br-del" type="button" data-delete-session="${s.id}" aria-label="Delete filling session" style="margin-left:auto;">${TRASH_ICON}</button>` : ''}
           </div>
           <div class="pr-grid">
             ${field(`fi-date-${s.id}`, `Date${s.filling_date ? ` <span class="br-note">· day ${dayNumber(s.filling_date)}</span>` : ''}`, `<input class="br-input" id="fi-date-${s.id}" type="date" data-session="${s.id}" data-field="filling_date" value="${val(s.filling_date)}"${dis()}>`)}
             ${field(`fi-hbt-${s.id}`, 'HBT', `<select class="br-input" id="fi-hbt-${s.id}" data-session="${s.id}" data-field="batch_hbt_id"${dis()}><option value="">Choose HBT</option>
-              ${page.hbts.map((h) => `<option value="${h.id}"${h.id === s.batch_hbt_id ? ' selected' : ''}>${escapeHtml(tankCode(h.tank_id))} · ${fmt(hbtEndHl(h), 1)} hl</option>`).join('')}</select>`)}
+              ${page.hbts.map((h) => `<option value="${h.id}"${h.id === s.batch_hbt_id ? ' selected' : ''}>${escapeHtml(hbtName(h))} · ${fmt(hbtEndHl(h), 1)} hl</option>`).join('')}</select>`)}
             ${field(`fi-pkg-${s.id}`, 'Package', `<select class="br-input" id="fi-pkg-${s.id}" data-session="${s.id}" data-field="package_format"${dis()}><option value="">Choose</option>
               ${[...new Set([...formats, s.package_format].filter(Boolean))].map((c) => `<option value="${c}"${c === s.package_format ? ' selected' : ''}>${formatLabel(c)}</option>`).join('')}</select>`)}
             ${field(`fi-vol-${s.id}`, 'Volume (hl)', `<input class="br-input" id="fi-vol-${s.id}" inputmode="decimal" data-session="${s.id}" data-field="volume_hl" value="${val(s.volume_hl)}"${dis()}>`)}
@@ -263,7 +265,7 @@
           </div>
           <div class="fi-checks">${checks}
             <label class="br-check pr-check fi-finished"><input type="checkbox" data-session="${s.id}" data-field="is_hbt_finished"${s.is_hbt_finished ? ' checked' : ''}${hbt ? dis() : ' disabled title="Choose the HBT first"'}>
-              <span><b>${hbt ? `${escapeHtml(tankCode(hbt.tank_id))} finished?` : 'HBT finished?'}</b> <span class="br-note">tick in the last session of a tank</span></span></label>
+              <span><b>${hbt ? `${escapeHtml(hbtName(hbt))} finished?` : 'HBT finished?'}</b> <span class="br-note">tick in the last session of a tank</span></span></label>
           </div>
           ${measurementTable(s)}
         </div>`;
