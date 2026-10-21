@@ -64,7 +64,8 @@ declare
   r record;
   v_n integer := 0;
 begin
-  if not (can_edit('settings') and can_edit('recipes')) then
+  -- auth.uid() is empty only for the migration owner (below).
+  if auth.uid() is not null and not (can_edit('settings') and can_edit('recipes')) then
     raise exception 'needs edit rights on settings and recipes' using errcode = '42501';
   end if;
   for r in select id from recipes
@@ -73,6 +74,15 @@ begin
     perform generate_recipe_cellar_steps(r.id, true);
     v_n := v_n + 1;
   end loop;
+
+  delete from batch_cellar_steps s
+  using batches b
+  where b.id = s.batch_id and b.status = 'planned'
+    and not exists (select 1 from fermentation_log_entries e where e.batch_id = b.id);
+  perform snapshot_batch_cellar_steps(b.id)
+  from batches b
+  where b.status = 'planned'
+    and not exists (select 1 from batch_cellar_steps s where s.batch_id = b.id);
   return v_n;
 end;
 $$;
@@ -156,6 +166,7 @@ declare
   v_count     integer;
   v_cooled    boolean := false;   -- a cooling step is already planned
   v_cold_hop  boolean := false;   -- a cold dry hop comes before the lagering cooling
+  v_tag       text;               -- tag of the part (Settings › Cellar plan)
 begin
   -- auth.uid() is empty only for the migration owner (backfill below).
   if auth.uid() is not null and not can_edit('recipes') then
@@ -179,13 +190,14 @@ begin
   ) on commit drop;
 
   for v_part in select * from cellar_plan_parts where shows_on = 'cellar_plan' order by sort_order, id loop
+    select t.code into v_tag from cellar_action_tags t where t.id = v_part.tag_id;
 
     if v_part.kind = 'dry_warm' then
       if exists (select 1 from recipe_ingredients where recipe_id = p_recipe_id and addition_type = 'dry_hop'
                  and lower(btrim(timing)) like 'warm%') then
         v_n := v_n + 1;
         insert into _gen_steps
-        select v_n, 'dry_warm', 'dry_warm', 'Dry warm',
+        select v_n, 'dry_warm', v_tag, 'Dry warm',
                nullif(concat_ws(' · ',
                  case when v_ferm.dry_hop_warm_temp is not null then 'at ' || v_ferm.dry_hop_warm_temp::float8 || ' °C' end,
                  nullif(btrim(v_ps.dry_hop_method_warm), ''), nullif(btrim(v_ps.dry_hop_comment_warm), '')), ''),
@@ -212,7 +224,7 @@ begin
         order by 1 desc
       loop
         v_n := v_n + 1;
-        insert into _gen_steps values (v_n, 'cooling_dry_hop:' || v_cold.temp::float8, 'cooling',
+        insert into _gen_steps values (v_n, 'cooling_dry_hop:' || v_cold.temp::float8, v_tag,
           'Cooling to ' || v_cold.temp::float8 || ' °C', null,
           case when v_cooled or v_spec.final_extract is null then 'after_previous' else 'extract' end,
           case when v_cooled then null else v_spec.final_extract end,
@@ -241,7 +253,7 @@ begin
 
     elsif v_part.kind = 'cooling_lagering' then
       v_n := v_n + 1;
-      insert into _gen_steps values (v_n, 'cooling_lagering', 'cooling', 'Cooling to ' || v_lag_label,
+      insert into _gen_steps values (v_n, 'cooling_lagering', v_tag, 'Cooling to ' || v_lag_label,
         nullif(concat_ws(' · ', 'Lagering temperature from recipe',
           case when v_ferm.lagering_time is not null then v_ferm.lagering_time::float8 || ' days' end,
           case when v_cold_hop then 'cool < 24 h after the dry hop' end), ''),
@@ -253,7 +265,7 @@ begin
 
     elsif v_part.kind = 'sample_lab' then
       v_n := v_n + 1;
-      insert into _gen_steps values (v_n, 'sample_lab', 'sample_lab', 'Sample to lab', 'Always after cooling',
+      insert into _gen_steps values (v_n, 'sample_lab', v_tag, 'Sample to lab', 'Always after cooling',
         'after_previous', null, null, null, '{}', false);
 
     elsif v_part.kind = 'dry_hop_at_lagering' then
@@ -269,7 +281,7 @@ begin
         order by 1 desc
       loop
         v_n := v_n + 1;
-        insert into _gen_steps values (v_n, 'dry_hop:' || v_cold.temp::float8, 'dryhopping',
+        insert into _gen_steps values (v_n, 'dry_hop:' || v_cold.temp::float8, v_tag,
           'Dryhopping @' || v_cold.temp::float8 || ' °C',
           nullif(concat_ws(' · ', nullif(btrim(v_ps.dry_hop_method_16c), ''), nullif(btrim(v_ps.dry_hop_comment_16c), '')), ''),
           'after_previous', null, null, null, v_cold.ids, false);
@@ -285,7 +297,7 @@ begin
         order by ri.sort_order, ri.id
       loop
         v_n := v_n + 1;
-        insert into _gen_steps values (v_n, 'addition:' || v_line.id, 'addition', 'Addition · ' || v_line.name,
+        insert into _gen_steps values (v_n, 'addition:' || v_line.id, v_tag, 'Addition · ' || v_line.name,
           nullif(concat_ws(' · ', case when not v_part.on_addition_day then lower(left(v_part.label, 1)) || substr(v_part.label, 2) end,
                                   nullif(btrim(v_line.note), '')), ''),
           case when v_part.on_addition_day and v_ps.cellar_addition_day is not null then 'day' else 'after_previous' end,
@@ -376,22 +388,6 @@ begin
   return v_count;
 end;
 $_$;
-
-
---
--- Name: initials_from_name(text); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.initials_from_name(p_name text) RETURNS text
-    LANGUAGE sql IMMUTABLE
-    SET search_path TO 'public'
-    AS $$
-  select nullif(upper(
-    left(w[1], 1) ||
-    case when cardinality(w) > 1 then left(w[cardinality(w)], 1) else '' end
-  ), '')
-  from regexp_split_to_array(btrim(coalesce(p_name, '')), '\s+') as w
-$$;
 
 
 --
@@ -645,24 +641,25 @@ begin
     and not (id = any (v_keep));
 
   update recipe_ingredients ri
-  set ingredient_id     = (l ->> 'ingredient_id')::bigint,
-      addition_type     = l ->> 'addition_type',
-      quantity          = (l ->> 'quantity')::numeric,
-      unit              = l ->> 'unit',
-      timing            = l ->> 'timing',
-      sort_order        = (l ->> 'sort_order')::integer,
-      note              = l ->> 'note',
-      hop_dosing_tank   = (l ->> 'hop_dosing_tank')::integer,
-      alpha_pct         = (l ->> 'alpha_pct')::numeric,
-      color_ebc         = (l ->> 'color_ebc')::numeric,
-      all_in_first_brew = coalesce((l ->> 'all_in_first_brew')::boolean, false)
+  set ingredient_id          = (l ->> 'ingredient_id')::bigint,
+      addition_type          = l ->> 'addition_type',
+      quantity               = (l ->> 'quantity')::numeric,
+      unit                   = l ->> 'unit',
+      timing                 = l ->> 'timing',
+      sort_order             = (l ->> 'sort_order')::integer,
+      note                   = l ->> 'note',
+      hop_dosing_tank        = (l ->> 'hop_dosing_tank')::integer,
+      alpha_pct              = (l ->> 'alpha_pct')::numeric,
+      color_ebc              = (l ->> 'color_ebc')::numeric,
+      all_in_first_brew      = coalesce((l ->> 'all_in_first_brew')::boolean, false),
+      source_recipe_group_id = (l ->> 'source_recipe_group_id')::uuid
   from jsonb_array_elements(coalesce(p_lines, '[]'::jsonb)) as l
   where ri.id = (l ->> 'id')::bigint
     and ri.id = any (v_keep);
 
   insert into recipe_ingredients (
     recipe_id, ingredient_id, addition_type, quantity, unit, timing, sort_order,
-    note, hop_dosing_tank, alpha_pct, color_ebc, all_in_first_brew)
+    note, hop_dosing_tank, alpha_pct, color_ebc, all_in_first_brew, source_recipe_group_id)
   select p_recipe_id,
          (l ->> 'ingredient_id')::bigint,
          l ->> 'addition_type',
@@ -674,7 +671,8 @@ begin
          (l ->> 'hop_dosing_tank')::integer,
          (l ->> 'alpha_pct')::numeric,
          (l ->> 'color_ebc')::numeric,
-         coalesce((l ->> 'all_in_first_brew')::boolean, false)
+         coalesce((l ->> 'all_in_first_brew')::boolean, false),
+         (l ->> 'source_recipe_group_id')::uuid
   from jsonb_array_elements(coalesce(p_lines, '[]'::jsonb)) with ordinality as t(l, ord)
   where l ->> 'id' is null
      or not ((l ->> 'id')::bigint = any (v_keep))
@@ -707,30 +705,6 @@ CREATE FUNCTION public.set_updated_at() RETURNS trigger
     AS $$
 begin
   new.updated_at := now();
-  return new;
-end;
-$$;
-
-
---
--- Name: set_user_initials(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.set_user_initials() RETURNS trigger
-    LANGUAGE plpgsql
-    SET search_path TO 'public'
-    AS $$
-begin
-  new.initials := nullif(btrim(new.initials), '');
-  if tg_op = 'UPDATE'
-     and new.name is distinct from old.name
-     and new.initials is not distinct from old.initials
-     and old.initials is not distinct from initials_from_name(old.name) then
-    new.initials := null;
-  end if;
-  if new.initials is null then
-    new.initials := initials_from_name(new.name);
-  end if;
   return new;
 end;
 $$;
@@ -797,10 +771,10 @@ begin
   insert into batch_ingredients (
     batch_id, recipe_ingredient_id, ingredient_id, addition_type, timing, unit, sort_order,
     recipe_quantity, quantity, recipe_alpha_pct, alpha_pct, recipe_color_ebc, color_ebc,
-    hop_dosing_tank, all_in_first_brew, note)
+    hop_dosing_tank, all_in_first_brew, note, source_recipe_group_id)
   select b.id, ri.id, ri.ingredient_id, ri.addition_type, ri.timing, ri.unit, ri.sort_order,
          ri.quantity, ri.quantity, ri.alpha_pct, ri.alpha_pct, ri.color_ebc, ri.color_ebc,
-         ri.hop_dosing_tank, ri.all_in_first_brew, ri.note
+         ri.hop_dosing_tank, ri.all_in_first_brew, ri.note, ri.source_recipe_group_id
   from batches b
   join recipe_ingredients ri on ri.recipe_id = b.recipe_id
   where b.id = p_batch_id
@@ -826,6 +800,87 @@ begin
   return null;
 end;
 $$;
+
+
+--
+-- Name: split_batch(bigint, timestamp with time zone, numeric, bigint, text, bigint, bigint, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.split_batch(p_batch_id bigint, p_transferred_at timestamp with time zone, p_volume_hl numeric, p_from_tank_id bigint, p_destination text, p_recipe_id bigint DEFAULT NULL::bigint, p_to_batch_id bigint DEFAULT NULL::bigint, p_reason text DEFAULT NULL::text, p_comment text DEFAULT NULL::text) RETURNS jsonb
+    LANGUAGE plpgsql
+    SET search_path TO 'public'
+    AS $_$
+declare
+  v_to_batch   bigint := p_to_batch_id;
+  v_number     text;
+  v_recipe_id   bigint;
+  v_recipe_name text;
+  v_yy         text := to_char(now() at time zone 'Europe/Amsterdam', 'YY');
+  v_transfer   bigint;
+  v_entry      bigint;
+  v_tank       text;
+  v_text       text;
+  v_dot        text := ' ' || chr(183) || ' ';   -- space, middle dot, space
+begin
+  if auth.uid() is not null and not can_edit('batches') then
+    raise exception 'no edit rights on batches' using errcode = '42501';
+  end if;
+  if p_destination not in ('new', 'batch', 'discard') then
+    raise exception 'destination must be new, batch or discard' using errcode = '22023';
+  end if;
+  if p_volume_hl is null or p_volume_hl <= 0 then
+    raise exception 'the volume must be more than 0 hl' using errcode = '22023';
+  end if;
+  if p_transferred_at is null then
+    raise exception 'the transfer moment is missing' using errcode = '22023';
+  end if;
+
+  if p_destination = 'new' then
+    select id, name into v_recipe_id, v_recipe_name from recipes where id = p_recipe_id;
+    if not found then
+      raise exception 'choose an existing recipe for the new batch' using errcode = '22023';
+    end if;
+    -- next number of this year (YY + 3 digits); two saves at once wait for each other
+    perform pg_advisory_xact_lock(hashtext('next_batch_number'));
+    select (coalesce(max(batch_number::integer), v_yy::integer * 1000) + 1)::text
+    into v_number
+    from batches
+    where batch_number ~ ('^' || v_yy || '[0-9]{3}$');
+    insert into batches (batch_number, recipe_id, brew_count, name, status, created_by)
+    values (v_number, v_recipe_id, 0, v_recipe_name, 'planned', auth.uid())
+    returning id into v_to_batch;
+  elsif p_destination = 'batch' then
+    select batch_number into v_number from batches where id = p_to_batch_id;
+    if not found then
+      raise exception 'the receiving batch does not exist' using errcode = '22023';
+    end if;
+  end if;
+
+  insert into batch_transfers (batch_id, from_tank_id, destination, to_batch_id, volume_hl, transferred_at, reason, comment, updated_by)
+  values (p_batch_id, p_from_tank_id, case when p_destination = 'discard' then 'discard' else 'batch' end,
+          case when p_destination = 'discard' then null else v_to_batch end,
+          p_volume_hl, p_transferred_at, nullif(btrim(p_reason), ''), nullif(btrim(p_comment), ''), auth.uid())
+  returning id into v_transfer;
+
+  select code into v_tank from tanks where id = p_from_tank_id;
+  v_text := 'Transfer' || v_dot || trim(to_char(p_volume_hl, 'FM999990.0')) || ' hl'
+            || coalesce(' from ' || v_tank, '')
+            || case p_destination
+                 when 'new' then ' to new batch ' || v_number || ' (' || v_recipe_name || ')'
+                 when 'batch' then ' to batch ' || v_number
+                 else ' discarded' || coalesce(v_dot || nullif(btrim(p_reason), ''), '')
+               end
+            || coalesce(v_dot || nullif(btrim(p_comment), ''), '');
+  insert into fermentation_log_entries (batch_id, measured_at, comment, updated_by)
+  values (p_batch_id, p_transferred_at, v_text, auth.uid())
+  returning id into v_entry;
+  insert into fermentation_log_entry_tags (entry_id, tag_id, batch_id)
+  select v_entry, t.id, p_batch_id from cellar_action_tags t where t.code = 'transfer';
+
+  return jsonb_build_object('transfer_id', v_transfer, 'to_batch_id', case when p_destination = 'discard' then null else v_to_batch end,
+                            'batch_number', v_number, 'log_entry_id', v_entry);
+end;
+$_$;
 
 
 --
@@ -990,9 +1045,24 @@ CREATE TABLE public.batch_brews (
     created_by uuid DEFAULT auth.uid(),
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_by uuid,
+    brewer_end_id uuid,
     CONSTRAINT batch_brews_brew_number_check CHECK ((brew_number > 0)),
     CONSTRAINT batch_brews_ckt_cip_program_check CHECK ((ckt_cip_program = ANY (ARRAY['lo-de'::text, 'lo-zu-de'::text, 'lo-de-hw'::text, 'lo-zu-de-hw'::text])))
 );
+
+
+--
+-- Name: COLUMN batch_brews.brewer_id; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.batch_brews.brewer_id IS 'Brewer start';
+
+
+--
+-- Name: COLUMN batch_brews.brewer_end_id; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.batch_brews.brewer_end_id IS 'Brewer end';
 
 
 --
@@ -1050,6 +1120,80 @@ ALTER TABLE public.batch_cellar_steps ALTER COLUMN id ADD GENERATED ALWAYS AS ID
 
 
 --
+-- Name: batch_documents; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.batch_documents (
+    id bigint NOT NULL,
+    batch_id bigint NOT NULL,
+    document_type text NOT NULL,
+    file_name text NOT NULL,
+    storage_path text NOT NULL,
+    size_bytes bigint,
+    uploaded_by uuid DEFAULT auth.uid(),
+    uploaded_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid DEFAULT auth.uid(),
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT batch_documents_document_type_check CHECK ((document_type = ANY (ARRAY['production_order'::text, 'filling_order'::text, 'filling_report'::text, 'other'::text])))
+);
+
+
+--
+-- Name: batch_documents_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.batch_documents ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.batch_documents_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: batch_hbts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.batch_hbts (
+    id bigint NOT NULL,
+    batch_id bigint NOT NULL,
+    tank_id bigint NOT NULL,
+    intended_formats text[] DEFAULT '{}'::text[] NOT NULL,
+    avg_inline_o2_ppb numeric,
+    avg_pu numeric,
+    avg_turbidity_ebc numeric,
+    avg_flow_hl_h numeric,
+    released_at timestamp with time zone,
+    released_by uuid,
+    sort_order integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid DEFAULT auth.uid(),
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT batch_hbts_intended_formats_check CHECK ((intended_formats <@ ARRAY['bottle'::text, 'can'::text, 'keg'::text])),
+    CONSTRAINT batch_hbts_released_check CHECK (((released_at IS NULL) = (released_by IS NULL)))
+);
+
+
+--
+-- Name: batch_hbts_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.batch_hbts ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.batch_hbts_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
 -- Name: batch_ingredients; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1078,8 +1222,10 @@ CREATE TABLE public.batch_ingredients (
     created_by uuid DEFAULT auth.uid(),
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_by uuid,
+    source_recipe_group_id uuid,
     CONSTRAINT batch_ingredients_added_has_ingredient CHECK (((NOT is_added) OR (ingredient_id IS NOT NULL))),
-    CONSTRAINT batch_ingredients_addition_type_check CHECK ((addition_type = ANY (ARRAY['malt'::text, 'boil_hop'::text, 'dry_hop'::text, 'brewhouse_addition'::text, 'cellar_addition'::text, 'yeast'::text])))
+    CONSTRAINT batch_ingredients_addition_type_check CHECK ((addition_type = ANY (ARRAY['malt'::text, 'boil_hop'::text, 'dry_hop'::text, 'brewhouse_addition'::text, 'cellar_addition'::text, 'yeast'::text, 'base_beer'::text]))),
+    CONSTRAINT batch_ingredients_base_beer_check CHECK (((addition_type = 'base_beer'::text) = (source_recipe_group_id IS NOT NULL)))
 );
 
 
@@ -1094,6 +1240,32 @@ ALTER TABLE public.batch_ingredients ALTER COLUMN id ADD GENERATED ALWAYS AS IDE
     NO MINVALUE
     NO MAXVALUE
     CACHE 1
+);
+
+
+--
+-- Name: batch_transfers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.batch_transfers (
+    id bigint NOT NULL,
+    batch_id bigint NOT NULL,
+    from_tank_id bigint,
+    destination text NOT NULL,
+    to_batch_id bigint,
+    volume_hl numeric NOT NULL,
+    transferred_at timestamp with time zone NOT NULL,
+    reason text,
+    comment text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid DEFAULT auth.uid(),
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT batch_transfers_destination_check CHECK ((destination = ANY (ARRAY['batch'::text, 'discard'::text]))),
+    CONSTRAINT batch_transfers_discard_reason CHECK (((destination <> 'discard'::text) OR (NULLIF(btrim(reason), ''::text) IS NOT NULL))),
+    CONSTRAINT batch_transfers_not_self CHECK ((to_batch_id IS DISTINCT FROM batch_id)),
+    CONSTRAINT batch_transfers_to_batch_check CHECK (((destination = 'batch'::text) = (to_batch_id IS NOT NULL))),
+    CONSTRAINT batch_transfers_volume_hl_check CHECK ((volume_hl > (0)::numeric))
 );
 
 
@@ -1135,7 +1307,11 @@ CREATE TABLE public.batches (
     glt_tank_id bigint,
     time_zero timestamp with time zone,
     lt_tank_id bigint,
-    CONSTRAINT batches_status_check CHECK ((status = ANY (ARRAY['planned'::text, 'brewing'::text, 'fermenting'::text, 'processing'::text, 'filling'::text, 'completed'::text])))
+    cellar_additions_done boolean DEFAULT false NOT NULL,
+    tasting_comment text,
+    tasting_result text,
+    CONSTRAINT batches_status_check CHECK ((status = ANY (ARRAY['planned'::text, 'brewing'::text, 'fermenting'::text, 'processing'::text, 'filling'::text, 'completed'::text]))),
+    CONSTRAINT batches_tasting_result_check CHECK ((tasting_result = ANY (ARRAY['go'::text, 'no_go'::text])))
 );
 
 
@@ -1168,7 +1344,96 @@ CREATE TABLE public.fermentation_log_entry_tags (
     tag_id bigint NOT NULL,
     batch_id bigint NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    created_by uuid DEFAULT auth.uid()
+    created_by uuid DEFAULT auth.uid(),
+    id bigint NOT NULL,
+    batch_cellar_step_id bigint
+);
+
+
+--
+-- Name: filling_sessions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.filling_sessions (
+    id bigint NOT NULL,
+    batch_id bigint NOT NULL,
+    session_number integer NOT NULL,
+    filling_date date,
+    batch_hbt_id bigint,
+    package_format text,
+    volume_hl numeric,
+    start_time time without time zone,
+    end_time time without time zone,
+    sampled_by uuid,
+    is_first_package_checked boolean,
+    is_fill_tube_checked_first boolean,
+    is_fill_tube_checked_end boolean,
+    are_burst_bottles_controlled boolean,
+    is_hbt_finished boolean DEFAULT false NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid DEFAULT auth.uid(),
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT filling_sessions_package_format_check CHECK ((package_format = ANY (ARRAY['bottle'::text, 'can'::text, 'keg'::text]))),
+    CONSTRAINT filling_sessions_session_number_check CHECK ((session_number > 0)),
+    CONSTRAINT filling_sessions_volume_hl_check CHECK ((volume_hl >= (0)::numeric))
+);
+
+
+--
+-- Name: processing_sessions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.processing_sessions (
+    id bigint NOT NULL,
+    batch_id bigint NOT NULL,
+    session_number integer NOT NULL,
+    started_by uuid,
+    ended_by uuid,
+    processing_date date,
+    start_time time without time zone,
+    end_time time without time zone,
+    tank_id bigint,
+    outlet text,
+    discharge_count integer,
+    discharge_interval_min numeric,
+    centrifuge_in_time time without time zone,
+    centrifuge_in_o2_ppb numeric,
+    centrifuge_in_co2_gl numeric,
+    centrifuge_out_time time without time zone,
+    centrifuge_out_o2_ppb numeric,
+    centrifuge_out_co2_gl numeric,
+    start_flow_hl_h numeric,
+    start_turbidity_ebc numeric,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid DEFAULT auth.uid(),
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT processing_sessions_discharge_count_check CHECK ((discharge_count >= 0)),
+    CONSTRAINT processing_sessions_outlet_check CHECK ((outlet = ANY (ARRAY['standpipe'::text, 'bottom_valve'::text]))),
+    CONSTRAINT processing_sessions_session_number_check CHECK ((session_number > 0))
+);
+
+
+--
+-- Name: tanks; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.tanks (
+    id bigint NOT NULL,
+    code text NOT NULL,
+    tank_type text NOT NULL,
+    number integer NOT NULL,
+    location text NOT NULL,
+    volume_hl numeric NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid DEFAULT auth.uid(),
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT tanks_location_check CHECK ((location = ANY (ARRAY['wp'::text, 'jk'::text]))),
+    CONSTRAINT tanks_tank_type_check CHECK ((tank_type = ANY (ARRAY['ckt'::text, 'glt'::text, 'lt'::text, 'hbt'::text]))),
+    CONSTRAINT tanks_volume_hl_check CHECK ((volume_hl > (0)::numeric))
 );
 
 
@@ -1177,39 +1442,41 @@ CREATE TABLE public.fermentation_log_entry_tags (
 --
 
 CREATE VIEW public.batch_stages WITH (security_invoker='true') AS
- WITH step_state AS (
+ WITH step_link AS (
+         SELECT et.batch_cellar_step_id AS step_id,
+            min(e.measured_at) AS done_at
+           FROM (public.fermentation_log_entry_tags et
+             JOIN public.fermentation_log_entries e ON ((e.id = et.entry_id)))
+          WHERE (et.batch_cellar_step_id IS NOT NULL)
+          GROUP BY et.batch_cellar_step_id
+        ), open_step AS (
+         SELECT bcs.id,
+            bcs.batch_id,
+            bcs.tag_id,
+            row_number() OVER (PARTITION BY bcs.batch_id, bcs.tag_id ORDER BY bcs.sort_order, bcs.id) AS occurrence
+           FROM public.batch_cellar_steps bcs
+          WHERE (NOT (EXISTS ( SELECT 1
+                   FROM step_link l
+                  WHERE (l.step_id = bcs.id))))
+        ), free_tag AS (
+         SELECT et.batch_id,
+            et.tag_id,
+            e.measured_at,
+            row_number() OVER (PARTITION BY et.batch_id, et.tag_id ORDER BY e.measured_at, e.id, et.id) AS occurrence
+           FROM (public.fermentation_log_entry_tags et
+             JOIN public.fermentation_log_entries e ON ((e.id = et.entry_id)))
+          WHERE (et.batch_cellar_step_id IS NULL)
+        ), step_state AS (
          SELECT s.batch_id,
             s.id,
             s.sort_order,
             s.title,
             s.starts_lagering,
-            done.measured_at AS done_at
-           FROM (( SELECT bcs.id,
-                    bcs.batch_id,
-                    bcs.recipe_cellar_step_id,
-                    bcs.sort_order,
-                    bcs.tag_id,
-                    bcs.title,
-                    bcs.description,
-                    bcs.trigger_type,
-                    bcs.trigger_value,
-                    bcs.trigger_tol,
-                    bcs.planned_day,
-                    bcs.recipe_ingredient_ids,
-                    bcs.starts_lagering,
-                    bcs.created_at,
-                    bcs.created_by,
-                    bcs.updated_at,
-                    bcs.updated_by,
-                    row_number() OVER (PARTITION BY bcs.batch_id, bcs.tag_id ORDER BY bcs.sort_order, bcs.id) AS occurrence
-                   FROM public.batch_cellar_steps bcs) s
-             LEFT JOIN LATERAL ( SELECT e.measured_at
-                   FROM (public.fermentation_log_entry_tags et
-                     JOIN public.fermentation_log_entries e ON ((e.id = et.entry_id)))
-                  WHERE ((et.batch_id = s.batch_id) AND (et.tag_id = s.tag_id))
-                  ORDER BY e.measured_at, e.id
-                 OFFSET (s.occurrence - 1)
-                 LIMIT 1) done ON (true))
+            COALESCE(l.done_at, f.measured_at) AS done_at
+           FROM (((public.batch_cellar_steps s
+             LEFT JOIN step_link l ON ((l.step_id = s.id)))
+             LEFT JOIN open_step o ON ((o.id = s.id)))
+             LEFT JOIN free_tag f ON (((f.batch_id = o.batch_id) AND (f.tag_id = o.tag_id) AND (f.occurrence = o.occurrence))))
         ), plan AS (
          SELECT step_state.batch_id,
             count(*) AS steps_total,
@@ -1218,60 +1485,102 @@ CREATE VIEW public.batch_stages WITH (security_invoker='true') AS
             min(step_state.done_at) FILTER (WHERE step_state.starts_lagering) AS lagering_started_at
            FROM step_state
           GROUP BY step_state.batch_id
+        ), incoming AS (
+         SELECT t.to_batch_id AS batch_id,
+            sum(t.volume_hl) AS volume_hl,
+            min(t.transferred_at) AS first_at
+           FROM public.batch_transfers t
+          WHERE (t.to_batch_id IS NOT NULL)
+          GROUP BY t.to_batch_id
+        ), base AS (
+         SELECT b_1.id,
+            b_1.status,
+            b_1.time_zero,
+            b_1.brew_count,
+            (ceil(COALESCE(b_1.brew_count, (0)::numeric)))::integer AS brews_planned,
+            br.brews_started,
+            br.brews_ended,
+            br.first_mash_in_at,
+            br.last_brew_ended_at,
+            inc.volume_hl AS incoming_volume_hl,
+            inc.first_at AS first_incoming_at,
+            (((ceil(COALESCE(b_1.brew_count, (0)::numeric)) > (0)::numeric) AND ((COALESCE(br.brews_ended, (0)::bigint))::numeric >= ceil(b_1.brew_count))) OR ((COALESCE(br.brews_started, (0)::bigint) = 0) AND (inc.first_at IS NOT NULL))) AS is_brewed
+           FROM ((public.batches b_1
+             LEFT JOIN LATERAL ( SELECT count(*) FILTER (WHERE (bb.mash_in_started_at IS NOT NULL)) AS brews_started,
+                    count(*) FILTER (WHERE (bb.brewing_ended_at IS NOT NULL)) AS brews_ended,
+                    min(bb.mash_in_started_at) AS first_mash_in_at,
+                    max(bb.brewing_ended_at) AS last_brew_ended_at
+                   FROM public.batch_brews bb
+                  WHERE (bb.batch_id = b_1.id)) br ON (true))
+             LEFT JOIN incoming inc ON ((inc.batch_id = b_1.id)))
         )
  SELECT b.id AS batch_id,
         CASE
             WHEN (b.status = 'completed'::text) THEN 'closed'::text
-            WHEN ((ceil(COALESCE(b.brew_count, (0)::numeric)) > (0)::numeric) AND ((COALESCE(br.brews_ended, (0)::bigint))::numeric >= ceil(b.brew_count)) AND (p.lagering_started_at IS NOT NULL)) THEN 'lagering'::text
-            WHEN ((ceil(COALESCE(b.brew_count, (0)::numeric)) > (0)::numeric) AND ((COALESCE(br.brews_ended, (0)::bigint))::numeric >= ceil(b.brew_count))) THEN 'fermentation'::text
-            WHEN (COALESCE(br.brews_started, (0)::bigint) > 0) THEN 'brewing'::text
+            WHEN ((COALESCE(h.hbts_total, (0)::bigint) > 0) AND (fs.hbts_finished >= h.hbts_total)) THEN 'filled'::text
+            WHEN (fs.first_filling_date IS NOT NULL) THEN 'filling'::text
+            WHEN (ps.first_processing_date IS NOT NULL) THEN 'hbt'::text
+            WHEN (b.is_brewed AND (p.lagering_started_at IS NOT NULL)) THEN 'lagering'::text
+            WHEN b.is_brewed THEN 'fermentation'::text
+            WHEN (COALESCE(b.brews_started, (0)::bigint) > 0) THEN 'brewing'::text
             ELSE 'raw'::text
         END AS stage,
-    ((br.first_mash_in_at AT TIME ZONE 'Europe/Amsterdam'::text))::date AS start_date,
+    COALESCE(((b.first_mash_in_at AT TIME ZONE 'Europe/Amsterdam'::text))::date,
+        CASE
+            WHEN (COALESCE(b.brews_started, (0)::bigint) = 0) THEN ((b.first_incoming_at AT TIME ZONE 'Europe/Amsterdam'::text))::date
+            ELSE NULL::date
+        END) AS start_date,
     NULL::date AS end_date,
-    (ceil(COALESCE(b.brew_count, (0)::numeric)))::integer AS brews_planned,
-    (COALESCE(br.brews_started, (0)::bigint))::integer AS brews_started,
-    (COALESCE(br.brews_ended, (0)::bigint))::integer AS brews_ended,
-    br.last_brew_ended_at,
-    COALESCE(b.time_zero, br.last_brew_ended_at) AS time_zero,
+    b.brews_planned,
+    (COALESCE(b.brews_started, (0)::bigint))::integer AS brews_started,
+    (COALESCE(b.brews_ended, (0)::bigint))::integer AS brews_ended,
+    b.last_brew_ended_at,
+    COALESCE(b.time_zero, b.last_brew_ended_at,
+        CASE
+            WHEN (COALESCE(b.brews_started, (0)::bigint) = 0) THEN b.first_incoming_at
+            ELSE NULL::timestamp with time zone
+        END) AS time_zero,
     (COALESCE(p.steps_total, (0)::bigint))::integer AS cellar_steps_total,
     (COALESCE(p.steps_done, (0)::bigint))::integer AS cellar_steps_done,
     p.next_step AS next_cellar_step,
-    p.lagering_started_at
-   FROM ((public.batches b
-     LEFT JOIN LATERAL ( SELECT count(*) FILTER (WHERE (bb.mash_in_started_at IS NOT NULL)) AS brews_started,
-            count(*) FILTER (WHERE (bb.brewing_ended_at IS NOT NULL)) AS brews_ended,
-            min(bb.mash_in_started_at) AS first_mash_in_at,
-            max(bb.brewing_ended_at) AS last_brew_ended_at
-           FROM public.batch_brews bb
-          WHERE (bb.batch_id = b.id)) br ON (true))
-     LEFT JOIN plan p ON ((p.batch_id = b.id)));
-
-
---
--- Name: batch_transfers; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.batch_transfers (
-    id bigint NOT NULL,
-    batch_id bigint NOT NULL,
-    from_tank_id bigint,
-    destination text NOT NULL,
-    to_batch_id bigint,
-    volume_hl numeric NOT NULL,
-    transferred_at timestamp with time zone NOT NULL,
-    reason text,
-    comment text,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    created_by uuid DEFAULT auth.uid(),
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_by uuid,
-    CONSTRAINT batch_transfers_destination_check CHECK ((destination = ANY (ARRAY['batch'::text, 'discard'::text]))),
-    CONSTRAINT batch_transfers_discard_reason CHECK (((destination <> 'discard'::text) OR (NULLIF(btrim(reason), ''::text) IS NOT NULL))),
-    CONSTRAINT batch_transfers_not_self CHECK ((to_batch_id IS DISTINCT FROM batch_id)),
-    CONSTRAINT batch_transfers_to_batch_check CHECK (((destination = 'batch'::text) = (to_batch_id IS NOT NULL))),
-    CONSTRAINT batch_transfers_volume_hl_check CHECK ((volume_hl > (0)::numeric))
-);
+    p.lagering_started_at,
+    ps.first_processing_date,
+    (COALESCE(h.hbts_total, (0)::bigint))::integer AS hbts_total,
+    (COALESCE(h.hbts_released, (0)::bigint))::integer AS hbts_released,
+    h.hbt_codes,
+    COALESCE(h.hbt_formats, '{}'::text[]) AS hbt_formats,
+    fs.first_filling_date,
+    (COALESCE(fs.hbts_finished, (0)::bigint))::integer AS hbts_finished,
+    fs.filled_volume_hl,
+    COALESCE(b.incoming_volume_hl, (0)::numeric) AS incoming_volume_hl,
+    b.first_incoming_at,
+    (COALESCE(d.documents_uploaded, (0)::bigint))::integer AS documents_uploaded,
+    (COALESCE(d.other_documents, (0)::bigint))::integer AS other_documents
+   FROM (((((base b
+     LEFT JOIN plan p ON ((p.batch_id = b.id)))
+     LEFT JOIN LATERAL ( SELECT count(DISTINCT bd.document_type) FILTER (WHERE (bd.document_type <> 'other'::text)) AS documents_uploaded,
+            count(*) FILTER (WHERE (bd.document_type = 'other'::text)) AS other_documents
+           FROM public.batch_documents bd
+          WHERE (bd.batch_id = b.id)) d ON (true))
+     LEFT JOIN LATERAL ( SELECT min(s.processing_date) AS first_processing_date
+           FROM public.processing_sessions s
+          WHERE (s.batch_id = b.id)) ps ON (true))
+     LEFT JOIN LATERAL ( SELECT count(*) AS hbts_total,
+            count(bh.released_at) AS hbts_released,
+            string_agg(t.code, ((' '::text || chr(183)) || ' '::text) ORDER BY bh.sort_order, t.number) AS hbt_codes,
+            ARRAY( SELECT DISTINCT f.f
+                   FROM public.batch_hbts x,
+                    LATERAL unnest(x.intended_formats) f(f)
+                  WHERE (x.batch_id = b.id)
+                  ORDER BY f.f) AS hbt_formats
+           FROM (public.batch_hbts bh
+             JOIN public.tanks t ON ((t.id = bh.tank_id)))
+          WHERE (bh.batch_id = b.id)) h ON (true))
+     LEFT JOIN LATERAL ( SELECT min(f.filling_date) AS first_filling_date,
+            count(DISTINCT f.batch_hbt_id) FILTER (WHERE f.is_hbt_finished) AS hbts_finished,
+            sum(f.volume_hl) AS filled_volume_hl
+           FROM public.filling_sessions f
+          WHERE (f.batch_id = b.id)) fs ON (true));
 
 
 --
@@ -1456,6 +1765,7 @@ CREATE TABLE public.cellar_plan_parts (
     created_by uuid DEFAULT auth.uid(),
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_by uuid,
+    tag_id bigint NOT NULL,
     CONSTRAINT cellar_plan_parts_code_check CHECK ((code ~ '^[a-z0-9_]+$'::text)),
     CONSTRAINT cellar_plan_parts_fixed_check CHECK (((kind = 'addition_timing'::text) OR ((code = kind) AND (shows_on = 'cellar_plan'::text) AND is_active))),
     CONSTRAINT cellar_plan_parts_kind_check CHECK ((kind = ANY (ARRAY['dry_warm'::text, 'cold_dry_hop'::text, 'cooling_lagering'::text, 'sample_lab'::text, 'dry_hop_at_lagering'::text, 'addition_timing'::text]))),
@@ -1496,6 +1806,174 @@ CREATE TABLE public.document_types (
 
 ALTER TABLE public.fermentation_log_entries ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
     SEQUENCE NAME public.fermentation_log_entries_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: fermentation_log_entry_tags_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.fermentation_log_entry_tags ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.fermentation_log_entry_tags_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: filling_measurements; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.filling_measurements (
+    id bigint NOT NULL,
+    batch_id bigint NOT NULL,
+    filling_session_id bigint NOT NULL,
+    measured_time time without time zone,
+    tpo_ppb numeric,
+    hso_ppb numeric,
+    do_ppb numeric,
+    headspace_volume numeric,
+    pressure_bar numeric,
+    temp_c numeric,
+    co2_gl numeric,
+    keg_co2_gl numeric,
+    keg_o2_ppb numeric,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid DEFAULT auth.uid(),
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid
+);
+
+
+--
+-- Name: filling_measurements_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.filling_measurements ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.filling_measurements_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: filling_session_articles; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.filling_session_articles (
+    id bigint NOT NULL,
+    batch_id bigint NOT NULL,
+    filling_session_id bigint NOT NULL,
+    article_id bigint NOT NULL,
+    quantity numeric,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid DEFAULT auth.uid(),
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT filling_session_articles_quantity_check CHECK ((quantity >= (0)::numeric))
+);
+
+
+--
+-- Name: filling_session_articles_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.filling_session_articles ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.filling_session_articles_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: filling_session_materials; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.filling_session_materials (
+    id bigint NOT NULL,
+    batch_id bigint NOT NULL,
+    filling_session_id bigint NOT NULL,
+    material_id bigint NOT NULL,
+    quantity numeric,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid DEFAULT auth.uid(),
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT filling_session_materials_quantity_check CHECK ((quantity >= (0)::numeric))
+);
+
+
+--
+-- Name: filling_session_materials_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.filling_session_materials ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.filling_session_materials_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: filling_sessions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.filling_sessions ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.filling_sessions_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: hbt_readings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.hbt_readings (
+    id bigint NOT NULL,
+    batch_id bigint NOT NULL,
+    batch_hbt_id bigint NOT NULL,
+    processing_session_id bigint,
+    sort_order integer NOT NULL,
+    level_hl numeric,
+    o2_ppb numeric,
+    co2_gl numeric,
+    co2_target text,
+    comment text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid DEFAULT auth.uid(),
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT hbt_readings_co2_target_check CHECK ((co2_target = ANY (ARRAY['bottle'::text, 'can'::text, 'keg'::text])))
+);
+
+
+--
+-- Name: hbt_readings_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.hbt_readings ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.hbt_readings_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1628,7 +2106,9 @@ CREATE TABLE public.recipe_ingredients (
     alpha_pct numeric,
     color_ebc numeric,
     all_in_first_brew boolean DEFAULT false NOT NULL,
-    CONSTRAINT recipe_ingredients_addition_type_check CHECK ((addition_type = ANY (ARRAY['malt'::text, 'boil_hop'::text, 'dry_hop'::text, 'brewhouse_addition'::text, 'cellar_addition'::text, 'yeast'::text])))
+    source_recipe_group_id uuid,
+    CONSTRAINT recipe_ingredients_addition_type_check CHECK ((addition_type = ANY (ARRAY['malt'::text, 'boil_hop'::text, 'dry_hop'::text, 'brewhouse_addition'::text, 'cellar_addition'::text, 'yeast'::text, 'base_beer'::text]))),
+    CONSTRAINT recipe_ingredients_base_beer_check CHECK ((((addition_type = 'base_beer'::text) = (source_recipe_group_id IS NOT NULL)) AND ((addition_type <> 'base_beer'::text) OR ((ingredient_id IS NULL) AND (quantity > (0)::numeric) AND (quantity <= (100)::numeric)))))
 );
 
 
@@ -1780,6 +2260,109 @@ ALTER TABLE public.lots ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
 
 
 --
+-- Name: packaging_article_materials; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.packaging_article_materials (
+    id bigint NOT NULL,
+    article_id bigint NOT NULL,
+    material_id bigint NOT NULL,
+    quantity numeric NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid DEFAULT auth.uid(),
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT packaging_article_materials_quantity_check CHECK ((quantity > (0)::numeric))
+);
+
+
+--
+-- Name: packaging_article_materials_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.packaging_article_materials ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.packaging_article_materials_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: packaging_articles; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.packaging_articles (
+    id bigint NOT NULL,
+    code text NOT NULL,
+    name text NOT NULL,
+    package_format text NOT NULL,
+    liters_per_unit numeric NOT NULL,
+    ean text,
+    mdrank_article_number text,
+    sort_order integer DEFAULT 0 NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid DEFAULT auth.uid(),
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT packaging_articles_code_check CHECK ((code ~ '^[a-z0-9_]+$'::text)),
+    CONSTRAINT packaging_articles_liters_per_unit_check CHECK ((liters_per_unit > (0)::numeric)),
+    CONSTRAINT packaging_articles_package_format_check CHECK ((package_format = ANY (ARRAY['bottle'::text, 'can'::text, 'keg'::text])))
+);
+
+
+--
+-- Name: packaging_articles_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.packaging_articles ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.packaging_articles_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: packaging_materials; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.packaging_materials (
+    id bigint NOT NULL,
+    code text NOT NULL,
+    name text NOT NULL,
+    unit text DEFAULT 'pcs'::text NOT NULL,
+    mdrank_article_number text,
+    sort_order integer DEFAULT 0 NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid DEFAULT auth.uid(),
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT packaging_materials_code_check CHECK ((code ~ '^[a-z0-9_]+$'::text))
+);
+
+
+--
+-- Name: packaging_materials_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.packaging_materials ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.packaging_materials_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
 -- Name: permission_modules; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1787,6 +2370,50 @@ CREATE TABLE public.permission_modules (
     module_key text NOT NULL,
     name text NOT NULL,
     sort_order integer DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: processing_comments; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.processing_comments (
+    id bigint NOT NULL,
+    batch_id bigint NOT NULL,
+    comment_time time without time zone,
+    comment text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid DEFAULT auth.uid(),
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid
+);
+
+
+--
+-- Name: processing_comments_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.processing_comments ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.processing_comments_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: processing_sessions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.processing_sessions ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.processing_sessions_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
 );
 
 
@@ -2329,28 +2956,6 @@ ALTER TABLE public.stock_movements ALTER COLUMN id ADD GENERATED ALWAYS AS IDENT
 
 
 --
--- Name: tanks; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.tanks (
-    id bigint NOT NULL,
-    code text NOT NULL,
-    tank_type text NOT NULL,
-    number integer NOT NULL,
-    location text NOT NULL,
-    volume_hl numeric NOT NULL,
-    is_active boolean DEFAULT true NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    created_by uuid DEFAULT auth.uid(),
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_by uuid,
-    CONSTRAINT tanks_location_check CHECK ((location = ANY (ARRAY['wp'::text, 'jk'::text]))),
-    CONSTRAINT tanks_tank_type_check CHECK ((tank_type = ANY (ARRAY['ckt'::text, 'glt'::text, 'lt'::text, 'hbt'::text]))),
-    CONSTRAINT tanks_volume_hl_check CHECK ((volume_hl > (0)::numeric))
-);
-
-
---
 -- Name: tanks_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
@@ -2460,11 +3065,51 @@ ALTER TABLE ONLY public.batch_brews
 
 
 --
+-- Name: batch_cellar_steps batch_cellar_steps_id_batch_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.batch_cellar_steps
+    ADD CONSTRAINT batch_cellar_steps_id_batch_key UNIQUE (id, batch_id);
+
+
+--
 -- Name: batch_cellar_steps batch_cellar_steps_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.batch_cellar_steps
     ADD CONSTRAINT batch_cellar_steps_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: batch_documents batch_documents_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.batch_documents
+    ADD CONSTRAINT batch_documents_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: batch_documents batch_documents_storage_path_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.batch_documents
+    ADD CONSTRAINT batch_documents_storage_path_key UNIQUE (storage_path);
+
+
+--
+-- Name: batch_hbts batch_hbts_id_batch_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.batch_hbts
+    ADD CONSTRAINT batch_hbts_id_batch_key UNIQUE (id, batch_id);
+
+
+--
+-- Name: batch_hbts batch_hbts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.batch_hbts
+    ADD CONSTRAINT batch_hbts_pkey PRIMARY KEY (id);
 
 
 --
@@ -2608,7 +3253,79 @@ ALTER TABLE ONLY public.fermentation_log_entries
 --
 
 ALTER TABLE ONLY public.fermentation_log_entry_tags
-    ADD CONSTRAINT fermentation_log_entry_tags_pkey PRIMARY KEY (entry_id, tag_id);
+    ADD CONSTRAINT fermentation_log_entry_tags_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: filling_measurements filling_measurements_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.filling_measurements
+    ADD CONSTRAINT filling_measurements_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: filling_session_articles filling_session_articles_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.filling_session_articles
+    ADD CONSTRAINT filling_session_articles_key UNIQUE (filling_session_id, article_id);
+
+
+--
+-- Name: filling_session_articles filling_session_articles_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.filling_session_articles
+    ADD CONSTRAINT filling_session_articles_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: filling_session_materials filling_session_materials_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.filling_session_materials
+    ADD CONSTRAINT filling_session_materials_key UNIQUE (filling_session_id, material_id);
+
+
+--
+-- Name: filling_session_materials filling_session_materials_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.filling_session_materials
+    ADD CONSTRAINT filling_session_materials_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: filling_sessions filling_sessions_id_batch_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.filling_sessions
+    ADD CONSTRAINT filling_sessions_id_batch_key UNIQUE (id, batch_id);
+
+
+--
+-- Name: filling_sessions filling_sessions_number_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.filling_sessions
+    ADD CONSTRAINT filling_sessions_number_key UNIQUE (batch_id, session_number);
+
+
+--
+-- Name: filling_sessions filling_sessions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.filling_sessions
+    ADD CONSTRAINT filling_sessions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: hbt_readings hbt_readings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.hbt_readings
+    ADD CONSTRAINT hbt_readings_pkey PRIMARY KEY (id);
 
 
 --
@@ -2684,11 +3401,91 @@ ALTER TABLE ONLY public.lots
 
 
 --
+-- Name: packaging_article_materials packaging_article_materials_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packaging_article_materials
+    ADD CONSTRAINT packaging_article_materials_key UNIQUE (article_id, material_id);
+
+
+--
+-- Name: packaging_article_materials packaging_article_materials_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packaging_article_materials
+    ADD CONSTRAINT packaging_article_materials_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: packaging_articles packaging_articles_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packaging_articles
+    ADD CONSTRAINT packaging_articles_code_key UNIQUE (code);
+
+
+--
+-- Name: packaging_articles packaging_articles_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packaging_articles
+    ADD CONSTRAINT packaging_articles_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: packaging_materials packaging_materials_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packaging_materials
+    ADD CONSTRAINT packaging_materials_code_key UNIQUE (code);
+
+
+--
+-- Name: packaging_materials packaging_materials_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packaging_materials
+    ADD CONSTRAINT packaging_materials_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: permission_modules permission_modules_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.permission_modules
     ADD CONSTRAINT permission_modules_pkey PRIMARY KEY (module_key);
+
+
+--
+-- Name: processing_comments processing_comments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.processing_comments
+    ADD CONSTRAINT processing_comments_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: processing_sessions processing_sessions_id_batch_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.processing_sessions
+    ADD CONSTRAINT processing_sessions_id_batch_key UNIQUE (id, batch_id);
+
+
+--
+-- Name: processing_sessions processing_sessions_number_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.processing_sessions
+    ADD CONSTRAINT processing_sessions_number_key UNIQUE (batch_id, session_number);
+
+
+--
+-- Name: processing_sessions processing_sessions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.processing_sessions
+    ADD CONSTRAINT processing_sessions_pkey PRIMARY KEY (id);
 
 
 --
@@ -2900,6 +3697,13 @@ ALTER TABLE ONLY public.water_settings
 
 
 --
+-- Name: batch_documents_type_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX batch_documents_type_key ON public.batch_documents USING btree (batch_id, document_type) WHERE (document_type <> 'other'::text);
+
+
+--
 -- Name: brew_planning_splits_brew_planning_id_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2925,6 +3729,34 @@ CREATE INDEX idx_batch_brew_comments_batch_id ON public.batch_brew_comments USIN
 --
 
 CREATE INDEX idx_batch_cellar_steps_batch_id ON public.batch_cellar_steps USING btree (batch_id, sort_order);
+
+
+--
+-- Name: idx_batch_documents_batch_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_batch_documents_batch_id ON public.batch_documents USING btree (batch_id);
+
+
+--
+-- Name: idx_batch_documents_uploaded_by; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_batch_documents_uploaded_by ON public.batch_documents USING btree (uploaded_by);
+
+
+--
+-- Name: idx_batch_hbts_batch_tank; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_batch_hbts_batch_tank ON public.batch_hbts USING btree (batch_id, tank_id);
+
+
+--
+-- Name: idx_batch_hbts_tank_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_batch_hbts_tank_id ON public.batch_hbts USING btree (tank_id);
 
 
 --
@@ -3047,6 +3879,13 @@ CREATE INDEX idx_brew_planning_year_week ON public.brew_planning USING btree (is
 
 
 --
+-- Name: idx_cellar_plan_parts_tag_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_cellar_plan_parts_tag_id ON public.cellar_plan_parts USING btree (tag_id);
+
+
+--
 -- Name: idx_fermentation_log_entries_batch_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3061,10 +3900,108 @@ CREATE INDEX idx_fermentation_log_entry_tags_batch_id ON public.fermentation_log
 
 
 --
+-- Name: idx_fermentation_log_entry_tags_entry_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_fermentation_log_entry_tags_entry_id ON public.fermentation_log_entry_tags USING btree (entry_id);
+
+
+--
+-- Name: idx_fermentation_log_entry_tags_step; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_fermentation_log_entry_tags_step ON public.fermentation_log_entry_tags USING btree (batch_cellar_step_id, batch_id);
+
+
+--
 -- Name: idx_fermentation_log_entry_tags_tag_id; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_fermentation_log_entry_tags_tag_id ON public.fermentation_log_entry_tags USING btree (tag_id);
+
+
+--
+-- Name: idx_filling_measurements_batch_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_filling_measurements_batch_id ON public.filling_measurements USING btree (batch_id);
+
+
+--
+-- Name: idx_filling_measurements_session; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_filling_measurements_session ON public.filling_measurements USING btree (filling_session_id, batch_id);
+
+
+--
+-- Name: idx_filling_session_articles_article; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_filling_session_articles_article ON public.filling_session_articles USING btree (article_id);
+
+
+--
+-- Name: idx_filling_session_articles_batch_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_filling_session_articles_batch_id ON public.filling_session_articles USING btree (batch_id);
+
+
+--
+-- Name: idx_filling_session_articles_session; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_filling_session_articles_session ON public.filling_session_articles USING btree (filling_session_id, batch_id);
+
+
+--
+-- Name: idx_filling_session_materials_batch_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_filling_session_materials_batch_id ON public.filling_session_materials USING btree (batch_id);
+
+
+--
+-- Name: idx_filling_session_materials_material; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_filling_session_materials_material ON public.filling_session_materials USING btree (material_id);
+
+
+--
+-- Name: idx_filling_session_materials_session; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_filling_session_materials_session ON public.filling_session_materials USING btree (filling_session_id, batch_id);
+
+
+--
+-- Name: idx_filling_sessions_hbt; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_filling_sessions_hbt ON public.filling_sessions USING btree (batch_hbt_id, batch_id);
+
+
+--
+-- Name: idx_hbt_readings_batch_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_hbt_readings_batch_id ON public.hbt_readings USING btree (batch_id);
+
+
+--
+-- Name: idx_hbt_readings_hbt; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_hbt_readings_hbt ON public.hbt_readings USING btree (batch_hbt_id, batch_id, sort_order);
+
+
+--
+-- Name: idx_hbt_readings_session; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_hbt_readings_session ON public.hbt_readings USING btree (processing_session_id, batch_id);
 
 
 --
@@ -3110,6 +4047,27 @@ CREATE INDEX idx_lots_status ON public.lots USING btree (status);
 
 
 --
+-- Name: idx_packaging_article_materials_material; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_packaging_article_materials_material ON public.packaging_article_materials USING btree (material_id);
+
+
+--
+-- Name: idx_processing_comments_batch_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_processing_comments_batch_id ON public.processing_comments USING btree (batch_id);
+
+
+--
+-- Name: idx_processing_sessions_tank_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_processing_sessions_tank_id ON public.processing_sessions USING btree (tank_id);
+
+
+--
 -- Name: idx_recipe_cellar_steps_recipe_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3128,6 +4086,13 @@ CREATE INDEX idx_recipe_ingredients_ingredient_id ON public.recipe_ingredients U
 --
 
 CREATE INDEX idx_recipe_ingredients_recipe_id ON public.recipe_ingredients USING btree (recipe_id);
+
+
+--
+-- Name: idx_recipe_ingredients_source_group; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_recipe_ingredients_source_group ON public.recipe_ingredients USING btree (source_recipe_group_id) WHERE (source_recipe_group_id IS NOT NULL);
 
 
 --
@@ -3187,6 +4152,13 @@ CREATE UNIQUE INDEX product_sheets_recipe_group_id_active_idx ON public.product_
 
 
 --
+-- Name: users_initials_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX users_initials_key ON public.users USING btree (upper(initials)) WHERE (initials IS NOT NULL);
+
+
+--
 -- Name: batch_brew_comments trg_batch_brew_comments_audit; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -3226,6 +4198,34 @@ CREATE TRIGGER trg_batch_cellar_steps_audit AFTER INSERT OR DELETE OR UPDATE ON 
 --
 
 CREATE TRIGGER trg_batch_cellar_steps_updated_at BEFORE UPDATE ON public.batch_cellar_steps FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: batch_documents trg_batch_documents_audit; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_batch_documents_audit AFTER INSERT OR DELETE OR UPDATE ON public.batch_documents FOR EACH ROW EXECUTE FUNCTION public.log_batch_change();
+
+
+--
+-- Name: batch_documents trg_batch_documents_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_batch_documents_updated_at BEFORE UPDATE ON public.batch_documents FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: batch_hbts trg_batch_hbts_audit; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_batch_hbts_audit AFTER INSERT OR DELETE OR UPDATE ON public.batch_hbts FOR EACH ROW EXECUTE FUNCTION public.log_batch_change();
+
+
+--
+-- Name: batch_hbts trg_batch_hbts_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_batch_hbts_updated_at BEFORE UPDATE ON public.batch_hbts FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
 
 --
@@ -3302,7 +4302,77 @@ CREATE TRIGGER trg_fermentation_log_entries_updated_at BEFORE UPDATE ON public.f
 -- Name: fermentation_log_entry_tags trg_fermentation_log_entry_tags_audit; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER trg_fermentation_log_entry_tags_audit AFTER INSERT OR DELETE OR UPDATE ON public.fermentation_log_entry_tags FOR EACH ROW EXECUTE FUNCTION public.log_batch_change('entry_id', 'tag_id');
+CREATE TRIGGER trg_fermentation_log_entry_tags_audit AFTER INSERT OR DELETE OR UPDATE ON public.fermentation_log_entry_tags FOR EACH ROW EXECUTE FUNCTION public.log_batch_change();
+
+
+--
+-- Name: filling_measurements trg_filling_measurements_audit; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_filling_measurements_audit AFTER INSERT OR DELETE OR UPDATE ON public.filling_measurements FOR EACH ROW EXECUTE FUNCTION public.log_batch_change();
+
+
+--
+-- Name: filling_measurements trg_filling_measurements_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_filling_measurements_updated_at BEFORE UPDATE ON public.filling_measurements FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: filling_session_articles trg_filling_session_articles_audit; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_filling_session_articles_audit AFTER INSERT OR DELETE OR UPDATE ON public.filling_session_articles FOR EACH ROW EXECUTE FUNCTION public.log_batch_change();
+
+
+--
+-- Name: filling_session_articles trg_filling_session_articles_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_filling_session_articles_updated_at BEFORE UPDATE ON public.filling_session_articles FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: filling_session_materials trg_filling_session_materials_audit; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_filling_session_materials_audit AFTER INSERT OR DELETE OR UPDATE ON public.filling_session_materials FOR EACH ROW EXECUTE FUNCTION public.log_batch_change();
+
+
+--
+-- Name: filling_session_materials trg_filling_session_materials_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_filling_session_materials_updated_at BEFORE UPDATE ON public.filling_session_materials FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: filling_sessions trg_filling_sessions_audit; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_filling_sessions_audit AFTER INSERT OR DELETE OR UPDATE ON public.filling_sessions FOR EACH ROW EXECUTE FUNCTION public.log_batch_change();
+
+
+--
+-- Name: filling_sessions trg_filling_sessions_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_filling_sessions_updated_at BEFORE UPDATE ON public.filling_sessions FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: hbt_readings trg_hbt_readings_audit; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_hbt_readings_audit AFTER INSERT OR DELETE OR UPDATE ON public.hbt_readings FOR EACH ROW EXECUTE FUNCTION public.log_batch_change();
+
+
+--
+-- Name: hbt_readings trg_hbt_readings_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_hbt_readings_updated_at BEFORE UPDATE ON public.hbt_readings FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
 
 --
@@ -3310,6 +4380,55 @@ CREATE TRIGGER trg_fermentation_log_entry_tags_audit AFTER INSERT OR DELETE OR U
 --
 
 CREATE TRIGGER trg_ingredients_updated_at BEFORE UPDATE ON public.ingredients FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: packaging_article_materials trg_packaging_article_materials_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_packaging_article_materials_updated_at BEFORE UPDATE ON public.packaging_article_materials FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: packaging_articles trg_packaging_articles_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_packaging_articles_updated_at BEFORE UPDATE ON public.packaging_articles FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: packaging_materials trg_packaging_materials_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_packaging_materials_updated_at BEFORE UPDATE ON public.packaging_materials FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: processing_comments trg_processing_comments_audit; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_processing_comments_audit AFTER INSERT OR DELETE OR UPDATE ON public.processing_comments FOR EACH ROW EXECUTE FUNCTION public.log_batch_change();
+
+
+--
+-- Name: processing_comments trg_processing_comments_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_processing_comments_updated_at BEFORE UPDATE ON public.processing_comments FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: processing_sessions trg_processing_sessions_audit; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_processing_sessions_audit AFTER INSERT OR DELETE OR UPDATE ON public.processing_sessions FOR EACH ROW EXECUTE FUNCTION public.log_batch_change();
+
+
+--
+-- Name: processing_sessions trg_processing_sessions_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_processing_sessions_updated_at BEFORE UPDATE ON public.processing_sessions FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
 
 --
@@ -3331,13 +4450,6 @@ CREATE TRIGGER trg_recipes_updated_at BEFORE UPDATE ON public.recipes FOR EACH R
 --
 
 CREATE TRIGGER trg_tanks_updated_at BEFORE UPDATE ON public.tanks FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
-
-
---
--- Name: users trg_users_initials; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER trg_users_initials BEFORE INSERT OR UPDATE OF name, initials ON public.users FOR EACH ROW EXECUTE FUNCTION public.set_user_initials();
 
 
 --
@@ -3384,6 +4496,14 @@ ALTER TABLE ONLY public.batch_brew_comments
 
 ALTER TABLE ONLY public.batch_brews
     ADD CONSTRAINT batch_brews_batch_id_fkey FOREIGN KEY (batch_id) REFERENCES public.batches(id) ON DELETE CASCADE;
+
+
+--
+-- Name: batch_brews batch_brews_brewer_end_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.batch_brews
+    ADD CONSTRAINT batch_brews_brewer_end_id_fkey FOREIGN KEY (brewer_end_id) REFERENCES public.users(id);
 
 
 --
@@ -3448,6 +4568,78 @@ ALTER TABLE ONLY public.batch_cellar_steps
 
 ALTER TABLE ONLY public.batch_cellar_steps
     ADD CONSTRAINT batch_cellar_steps_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id);
+
+
+--
+-- Name: batch_documents batch_documents_batch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.batch_documents
+    ADD CONSTRAINT batch_documents_batch_id_fkey FOREIGN KEY (batch_id) REFERENCES public.batches(id) ON DELETE CASCADE;
+
+
+--
+-- Name: batch_documents batch_documents_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.batch_documents
+    ADD CONSTRAINT batch_documents_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
+
+
+--
+-- Name: batch_documents batch_documents_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.batch_documents
+    ADD CONSTRAINT batch_documents_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id);
+
+
+--
+-- Name: batch_documents batch_documents_uploaded_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.batch_documents
+    ADD CONSTRAINT batch_documents_uploaded_by_fkey FOREIGN KEY (uploaded_by) REFERENCES public.users(id);
+
+
+--
+-- Name: batch_hbts batch_hbts_batch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.batch_hbts
+    ADD CONSTRAINT batch_hbts_batch_id_fkey FOREIGN KEY (batch_id) REFERENCES public.batches(id) ON DELETE CASCADE;
+
+
+--
+-- Name: batch_hbts batch_hbts_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.batch_hbts
+    ADD CONSTRAINT batch_hbts_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
+
+
+--
+-- Name: batch_hbts batch_hbts_released_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.batch_hbts
+    ADD CONSTRAINT batch_hbts_released_by_fkey FOREIGN KEY (released_by) REFERENCES public.users(id);
+
+
+--
+-- Name: batch_hbts batch_hbts_tank_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.batch_hbts
+    ADD CONSTRAINT batch_hbts_tank_id_fkey FOREIGN KEY (tank_id) REFERENCES public.tanks(id);
+
+
+--
+-- Name: batch_hbts batch_hbts_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.batch_hbts
+    ADD CONSTRAINT batch_hbts_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id);
 
 
 --
@@ -3651,6 +4843,14 @@ ALTER TABLE ONLY public.cellar_plan_parts
 
 
 --
+-- Name: cellar_plan_parts cellar_plan_parts_tag_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cellar_plan_parts
+    ADD CONSTRAINT cellar_plan_parts_tag_id_fkey FOREIGN KEY (tag_id) REFERENCES public.cellar_action_tags(id);
+
+
+--
 -- Name: cellar_plan_parts cellar_plan_parts_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3699,11 +4899,179 @@ ALTER TABLE ONLY public.fermentation_log_entry_tags
 
 
 --
+-- Name: fermentation_log_entry_tags fermentation_log_entry_tags_step_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.fermentation_log_entry_tags
+    ADD CONSTRAINT fermentation_log_entry_tags_step_fkey FOREIGN KEY (batch_cellar_step_id, batch_id) REFERENCES public.batch_cellar_steps(id, batch_id) ON DELETE SET NULL (batch_cellar_step_id);
+
+
+--
 -- Name: fermentation_log_entry_tags fermentation_log_entry_tags_tag_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.fermentation_log_entry_tags
     ADD CONSTRAINT fermentation_log_entry_tags_tag_id_fkey FOREIGN KEY (tag_id) REFERENCES public.cellar_action_tags(id);
+
+
+--
+-- Name: filling_measurements filling_measurements_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.filling_measurements
+    ADD CONSTRAINT filling_measurements_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
+
+
+--
+-- Name: filling_measurements filling_measurements_session_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.filling_measurements
+    ADD CONSTRAINT filling_measurements_session_fkey FOREIGN KEY (filling_session_id, batch_id) REFERENCES public.filling_sessions(id, batch_id) ON DELETE CASCADE;
+
+
+--
+-- Name: filling_measurements filling_measurements_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.filling_measurements
+    ADD CONSTRAINT filling_measurements_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id);
+
+
+--
+-- Name: filling_session_articles filling_session_articles_article_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.filling_session_articles
+    ADD CONSTRAINT filling_session_articles_article_id_fkey FOREIGN KEY (article_id) REFERENCES public.packaging_articles(id);
+
+
+--
+-- Name: filling_session_articles filling_session_articles_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.filling_session_articles
+    ADD CONSTRAINT filling_session_articles_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
+
+
+--
+-- Name: filling_session_articles filling_session_articles_session_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.filling_session_articles
+    ADD CONSTRAINT filling_session_articles_session_fkey FOREIGN KEY (filling_session_id, batch_id) REFERENCES public.filling_sessions(id, batch_id) ON DELETE CASCADE;
+
+
+--
+-- Name: filling_session_articles filling_session_articles_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.filling_session_articles
+    ADD CONSTRAINT filling_session_articles_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id);
+
+
+--
+-- Name: filling_session_materials filling_session_materials_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.filling_session_materials
+    ADD CONSTRAINT filling_session_materials_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
+
+
+--
+-- Name: filling_session_materials filling_session_materials_material_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.filling_session_materials
+    ADD CONSTRAINT filling_session_materials_material_id_fkey FOREIGN KEY (material_id) REFERENCES public.packaging_materials(id);
+
+
+--
+-- Name: filling_session_materials filling_session_materials_session_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.filling_session_materials
+    ADD CONSTRAINT filling_session_materials_session_fkey FOREIGN KEY (filling_session_id, batch_id) REFERENCES public.filling_sessions(id, batch_id) ON DELETE CASCADE;
+
+
+--
+-- Name: filling_session_materials filling_session_materials_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.filling_session_materials
+    ADD CONSTRAINT filling_session_materials_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id);
+
+
+--
+-- Name: filling_sessions filling_sessions_batch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.filling_sessions
+    ADD CONSTRAINT filling_sessions_batch_id_fkey FOREIGN KEY (batch_id) REFERENCES public.batches(id) ON DELETE CASCADE;
+
+
+--
+-- Name: filling_sessions filling_sessions_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.filling_sessions
+    ADD CONSTRAINT filling_sessions_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
+
+
+--
+-- Name: filling_sessions filling_sessions_hbt_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.filling_sessions
+    ADD CONSTRAINT filling_sessions_hbt_fkey FOREIGN KEY (batch_hbt_id, batch_id) REFERENCES public.batch_hbts(id, batch_id) ON DELETE SET NULL (batch_hbt_id);
+
+
+--
+-- Name: filling_sessions filling_sessions_sampled_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.filling_sessions
+    ADD CONSTRAINT filling_sessions_sampled_by_fkey FOREIGN KEY (sampled_by) REFERENCES public.users(id);
+
+
+--
+-- Name: filling_sessions filling_sessions_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.filling_sessions
+    ADD CONSTRAINT filling_sessions_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id);
+
+
+--
+-- Name: hbt_readings hbt_readings_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.hbt_readings
+    ADD CONSTRAINT hbt_readings_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
+
+
+--
+-- Name: hbt_readings hbt_readings_hbt_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.hbt_readings
+    ADD CONSTRAINT hbt_readings_hbt_fkey FOREIGN KEY (batch_hbt_id, batch_id) REFERENCES public.batch_hbts(id, batch_id) ON DELETE CASCADE;
+
+
+--
+-- Name: hbt_readings hbt_readings_session_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.hbt_readings
+    ADD CONSTRAINT hbt_readings_session_fkey FOREIGN KEY (processing_session_id, batch_id) REFERENCES public.processing_sessions(id, batch_id) ON DELETE SET NULL (processing_session_id);
+
+
+--
+-- Name: hbt_readings hbt_readings_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.hbt_readings
+    ADD CONSTRAINT hbt_readings_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id);
 
 
 --
@@ -3792,6 +5160,142 @@ ALTER TABLE ONLY public.lots
 
 ALTER TABLE ONLY public.lots
     ADD CONSTRAINT lots_received_by_fkey FOREIGN KEY (received_by) REFERENCES public.users(id);
+
+
+--
+-- Name: packaging_article_materials packaging_article_materials_article_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packaging_article_materials
+    ADD CONSTRAINT packaging_article_materials_article_id_fkey FOREIGN KEY (article_id) REFERENCES public.packaging_articles(id) ON DELETE CASCADE;
+
+
+--
+-- Name: packaging_article_materials packaging_article_materials_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packaging_article_materials
+    ADD CONSTRAINT packaging_article_materials_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
+
+
+--
+-- Name: packaging_article_materials packaging_article_materials_material_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packaging_article_materials
+    ADD CONSTRAINT packaging_article_materials_material_id_fkey FOREIGN KEY (material_id) REFERENCES public.packaging_materials(id);
+
+
+--
+-- Name: packaging_article_materials packaging_article_materials_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packaging_article_materials
+    ADD CONSTRAINT packaging_article_materials_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id);
+
+
+--
+-- Name: packaging_articles packaging_articles_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packaging_articles
+    ADD CONSTRAINT packaging_articles_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
+
+
+--
+-- Name: packaging_articles packaging_articles_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packaging_articles
+    ADD CONSTRAINT packaging_articles_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id);
+
+
+--
+-- Name: packaging_materials packaging_materials_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packaging_materials
+    ADD CONSTRAINT packaging_materials_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
+
+
+--
+-- Name: packaging_materials packaging_materials_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packaging_materials
+    ADD CONSTRAINT packaging_materials_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id);
+
+
+--
+-- Name: processing_comments processing_comments_batch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.processing_comments
+    ADD CONSTRAINT processing_comments_batch_id_fkey FOREIGN KEY (batch_id) REFERENCES public.batches(id) ON DELETE CASCADE;
+
+
+--
+-- Name: processing_comments processing_comments_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.processing_comments
+    ADD CONSTRAINT processing_comments_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
+
+
+--
+-- Name: processing_comments processing_comments_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.processing_comments
+    ADD CONSTRAINT processing_comments_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id);
+
+
+--
+-- Name: processing_sessions processing_sessions_batch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.processing_sessions
+    ADD CONSTRAINT processing_sessions_batch_id_fkey FOREIGN KEY (batch_id) REFERENCES public.batches(id) ON DELETE CASCADE;
+
+
+--
+-- Name: processing_sessions processing_sessions_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.processing_sessions
+    ADD CONSTRAINT processing_sessions_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
+
+
+--
+-- Name: processing_sessions processing_sessions_ended_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.processing_sessions
+    ADD CONSTRAINT processing_sessions_ended_by_fkey FOREIGN KEY (ended_by) REFERENCES public.users(id);
+
+
+--
+-- Name: processing_sessions processing_sessions_started_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.processing_sessions
+    ADD CONSTRAINT processing_sessions_started_by_fkey FOREIGN KEY (started_by) REFERENCES public.users(id);
+
+
+--
+-- Name: processing_sessions processing_sessions_tank_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.processing_sessions
+    ADD CONSTRAINT processing_sessions_tank_id_fkey FOREIGN KEY (tank_id) REFERENCES public.tanks(id);
+
+
+--
+-- Name: processing_sessions processing_sessions_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.processing_sessions
+    ADD CONSTRAINT processing_sessions_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id);
 
 
 --
@@ -4182,6 +5686,74 @@ CREATE POLICY batch_cellar_steps_update ON public.batch_cellar_steps FOR UPDATE 
 
 
 --
+-- Name: batch_documents; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.batch_documents ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: batch_documents batch_documents_delete; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY batch_documents_delete ON public.batch_documents FOR DELETE TO authenticated USING (public.can_delete('batches'::text));
+
+
+--
+-- Name: batch_documents batch_documents_insert; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY batch_documents_insert ON public.batch_documents FOR INSERT TO authenticated WITH CHECK (public.can_edit('batches'::text));
+
+
+--
+-- Name: batch_documents batch_documents_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY batch_documents_select ON public.batch_documents FOR SELECT TO authenticated USING (public.can_view('batches'::text));
+
+
+--
+-- Name: batch_documents batch_documents_update; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY batch_documents_update ON public.batch_documents FOR UPDATE TO authenticated USING (public.can_edit('batches'::text)) WITH CHECK (public.can_edit('batches'::text));
+
+
+--
+-- Name: batch_hbts; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.batch_hbts ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: batch_hbts batch_hbts_delete; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY batch_hbts_delete ON public.batch_hbts FOR DELETE TO authenticated USING (public.can_delete('batches'::text));
+
+
+--
+-- Name: batch_hbts batch_hbts_insert; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY batch_hbts_insert ON public.batch_hbts FOR INSERT TO authenticated WITH CHECK (public.can_edit('batches'::text));
+
+
+--
+-- Name: batch_hbts batch_hbts_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY batch_hbts_select ON public.batch_hbts FOR SELECT TO authenticated USING (public.can_view('batches'::text));
+
+
+--
+-- Name: batch_hbts batch_hbts_update; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY batch_hbts_update ON public.batch_hbts FOR UPDATE TO authenticated USING (public.can_edit('batches'::text)) WITH CHECK (public.can_edit('batches'::text));
+
+
+--
 -- Name: batch_ingredients; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -4569,6 +6141,176 @@ CREATE POLICY fermentation_log_entry_tags_update ON public.fermentation_log_entr
 
 
 --
+-- Name: filling_measurements; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.filling_measurements ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: filling_measurements filling_measurements_delete; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY filling_measurements_delete ON public.filling_measurements FOR DELETE TO authenticated USING (public.can_delete('batches'::text));
+
+
+--
+-- Name: filling_measurements filling_measurements_insert; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY filling_measurements_insert ON public.filling_measurements FOR INSERT TO authenticated WITH CHECK (public.can_edit('batches'::text));
+
+
+--
+-- Name: filling_measurements filling_measurements_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY filling_measurements_select ON public.filling_measurements FOR SELECT TO authenticated USING (public.can_view('batches'::text));
+
+
+--
+-- Name: filling_measurements filling_measurements_update; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY filling_measurements_update ON public.filling_measurements FOR UPDATE TO authenticated USING (public.can_edit('batches'::text)) WITH CHECK (public.can_edit('batches'::text));
+
+
+--
+-- Name: filling_session_articles; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.filling_session_articles ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: filling_session_articles filling_session_articles_delete; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY filling_session_articles_delete ON public.filling_session_articles FOR DELETE TO authenticated USING (public.can_delete('batches'::text));
+
+
+--
+-- Name: filling_session_articles filling_session_articles_insert; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY filling_session_articles_insert ON public.filling_session_articles FOR INSERT TO authenticated WITH CHECK (public.can_edit('batches'::text));
+
+
+--
+-- Name: filling_session_articles filling_session_articles_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY filling_session_articles_select ON public.filling_session_articles FOR SELECT TO authenticated USING (public.can_view('batches'::text));
+
+
+--
+-- Name: filling_session_articles filling_session_articles_update; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY filling_session_articles_update ON public.filling_session_articles FOR UPDATE TO authenticated USING (public.can_edit('batches'::text)) WITH CHECK (public.can_edit('batches'::text));
+
+
+--
+-- Name: filling_session_materials; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.filling_session_materials ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: filling_session_materials filling_session_materials_delete; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY filling_session_materials_delete ON public.filling_session_materials FOR DELETE TO authenticated USING (public.can_delete('batches'::text));
+
+
+--
+-- Name: filling_session_materials filling_session_materials_insert; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY filling_session_materials_insert ON public.filling_session_materials FOR INSERT TO authenticated WITH CHECK (public.can_edit('batches'::text));
+
+
+--
+-- Name: filling_session_materials filling_session_materials_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY filling_session_materials_select ON public.filling_session_materials FOR SELECT TO authenticated USING (public.can_view('batches'::text));
+
+
+--
+-- Name: filling_session_materials filling_session_materials_update; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY filling_session_materials_update ON public.filling_session_materials FOR UPDATE TO authenticated USING (public.can_edit('batches'::text)) WITH CHECK (public.can_edit('batches'::text));
+
+
+--
+-- Name: filling_sessions; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.filling_sessions ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: filling_sessions filling_sessions_delete; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY filling_sessions_delete ON public.filling_sessions FOR DELETE TO authenticated USING (public.can_delete('batches'::text));
+
+
+--
+-- Name: filling_sessions filling_sessions_insert; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY filling_sessions_insert ON public.filling_sessions FOR INSERT TO authenticated WITH CHECK (public.can_edit('batches'::text));
+
+
+--
+-- Name: filling_sessions filling_sessions_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY filling_sessions_select ON public.filling_sessions FOR SELECT TO authenticated USING (public.can_view('batches'::text));
+
+
+--
+-- Name: filling_sessions filling_sessions_update; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY filling_sessions_update ON public.filling_sessions FOR UPDATE TO authenticated USING (public.can_edit('batches'::text)) WITH CHECK (public.can_edit('batches'::text));
+
+
+--
+-- Name: hbt_readings; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.hbt_readings ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: hbt_readings hbt_readings_delete; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY hbt_readings_delete ON public.hbt_readings FOR DELETE TO authenticated USING (public.can_delete('batches'::text));
+
+
+--
+-- Name: hbt_readings hbt_readings_insert; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY hbt_readings_insert ON public.hbt_readings FOR INSERT TO authenticated WITH CHECK (public.can_edit('batches'::text));
+
+
+--
+-- Name: hbt_readings hbt_readings_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY hbt_readings_select ON public.hbt_readings FOR SELECT TO authenticated USING (public.can_view('batches'::text));
+
+
+--
+-- Name: hbt_readings hbt_readings_update; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY hbt_readings_update ON public.hbt_readings FOR UPDATE TO authenticated USING (public.can_edit('batches'::text)) WITH CHECK (public.can_edit('batches'::text));
+
+
+--
 -- Name: ingredient_categories; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -4759,6 +6501,108 @@ CREATE POLICY lots_update ON public.lots FOR UPDATE USING (public.can_edit('inve
 
 
 --
+-- Name: packaging_article_materials; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.packaging_article_materials ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: packaging_article_materials packaging_article_materials_delete; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY packaging_article_materials_delete ON public.packaging_article_materials FOR DELETE TO authenticated USING (public.can_delete('settings'::text));
+
+
+--
+-- Name: packaging_article_materials packaging_article_materials_insert; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY packaging_article_materials_insert ON public.packaging_article_materials FOR INSERT TO authenticated WITH CHECK (public.can_edit('settings'::text));
+
+
+--
+-- Name: packaging_article_materials packaging_article_materials_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY packaging_article_materials_select ON public.packaging_article_materials FOR SELECT TO authenticated USING (true);
+
+
+--
+-- Name: packaging_article_materials packaging_article_materials_update; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY packaging_article_materials_update ON public.packaging_article_materials FOR UPDATE TO authenticated USING (public.can_edit('settings'::text)) WITH CHECK (public.can_edit('settings'::text));
+
+
+--
+-- Name: packaging_articles; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.packaging_articles ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: packaging_articles packaging_articles_delete; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY packaging_articles_delete ON public.packaging_articles FOR DELETE TO authenticated USING (public.can_delete('settings'::text));
+
+
+--
+-- Name: packaging_articles packaging_articles_insert; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY packaging_articles_insert ON public.packaging_articles FOR INSERT TO authenticated WITH CHECK (public.can_edit('settings'::text));
+
+
+--
+-- Name: packaging_articles packaging_articles_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY packaging_articles_select ON public.packaging_articles FOR SELECT TO authenticated USING (true);
+
+
+--
+-- Name: packaging_articles packaging_articles_update; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY packaging_articles_update ON public.packaging_articles FOR UPDATE TO authenticated USING (public.can_edit('settings'::text)) WITH CHECK (public.can_edit('settings'::text));
+
+
+--
+-- Name: packaging_materials; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.packaging_materials ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: packaging_materials packaging_materials_delete; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY packaging_materials_delete ON public.packaging_materials FOR DELETE TO authenticated USING (public.can_delete('settings'::text));
+
+
+--
+-- Name: packaging_materials packaging_materials_insert; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY packaging_materials_insert ON public.packaging_materials FOR INSERT TO authenticated WITH CHECK (public.can_edit('settings'::text));
+
+
+--
+-- Name: packaging_materials packaging_materials_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY packaging_materials_select ON public.packaging_materials FOR SELECT TO authenticated USING (true);
+
+
+--
+-- Name: packaging_materials packaging_materials_update; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY packaging_materials_update ON public.packaging_materials FOR UPDATE TO authenticated USING (public.can_edit('settings'::text)) WITH CHECK (public.can_edit('settings'::text));
+
+
+--
 -- Name: permission_modules; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -4769,6 +6613,74 @@ ALTER TABLE public.permission_modules ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY permission_modules_select ON public.permission_modules FOR SELECT USING (true);
+
+
+--
+-- Name: processing_comments; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.processing_comments ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: processing_comments processing_comments_delete; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY processing_comments_delete ON public.processing_comments FOR DELETE TO authenticated USING (public.can_delete('batches'::text));
+
+
+--
+-- Name: processing_comments processing_comments_insert; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY processing_comments_insert ON public.processing_comments FOR INSERT TO authenticated WITH CHECK (public.can_edit('batches'::text));
+
+
+--
+-- Name: processing_comments processing_comments_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY processing_comments_select ON public.processing_comments FOR SELECT TO authenticated USING (public.can_view('batches'::text));
+
+
+--
+-- Name: processing_comments processing_comments_update; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY processing_comments_update ON public.processing_comments FOR UPDATE TO authenticated USING (public.can_edit('batches'::text)) WITH CHECK (public.can_edit('batches'::text));
+
+
+--
+-- Name: processing_sessions; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.processing_sessions ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: processing_sessions processing_sessions_delete; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY processing_sessions_delete ON public.processing_sessions FOR DELETE TO authenticated USING (public.can_delete('batches'::text));
+
+
+--
+-- Name: processing_sessions processing_sessions_insert; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY processing_sessions_insert ON public.processing_sessions FOR INSERT TO authenticated WITH CHECK (public.can_edit('batches'::text));
+
+
+--
+-- Name: processing_sessions processing_sessions_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY processing_sessions_select ON public.processing_sessions FOR SELECT TO authenticated USING (public.can_view('batches'::text));
+
+
+--
+-- Name: processing_sessions processing_sessions_update; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY processing_sessions_update ON public.processing_sessions FOR UPDATE TO authenticated USING (public.can_edit('batches'::text)) WITH CHECK (public.can_edit('batches'::text));
 
 
 --
@@ -5536,13 +7448,6 @@ GRANT ALL ON FUNCTION public.generate_recipe_cellar_steps(p_recipe_id bigint, p_
 
 
 --
--- Name: FUNCTION initials_from_name(p_name text); Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON FUNCTION public.initials_from_name(p_name text) TO service_role;
-
-
---
 -- Name: FUNCTION is_admin(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -5621,14 +7526,6 @@ GRANT ALL ON FUNCTION public.set_updated_at() TO service_role;
 
 
 --
--- Name: FUNCTION set_user_initials(); Type: ACL; Schema: public; Owner: -
---
-
-REVOKE ALL ON FUNCTION public.set_user_initials() FROM PUBLIC;
-GRANT ALL ON FUNCTION public.set_user_initials() TO service_role;
-
-
---
 -- Name: FUNCTION snapshot_batch_cellar_steps(p_batch_id bigint); Type: ACL; Schema: public; Owner: -
 --
 
@@ -5652,6 +7549,15 @@ GRANT ALL ON FUNCTION public.snapshot_batch_ingredients(p_batch_id bigint) TO au
 
 REVOKE ALL ON FUNCTION public.snapshot_new_batch() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.snapshot_new_batch() TO service_role;
+
+
+--
+-- Name: FUNCTION split_batch(p_batch_id bigint, p_transferred_at timestamp with time zone, p_volume_hl numeric, p_from_tank_id bigint, p_destination text, p_recipe_id bigint, p_to_batch_id bigint, p_reason text, p_comment text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.split_batch(p_batch_id bigint, p_transferred_at timestamp with time zone, p_volume_hl numeric, p_from_tank_id bigint, p_destination text, p_recipe_id bigint, p_to_batch_id bigint, p_reason text, p_comment text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.split_batch(p_batch_id bigint, p_transferred_at timestamp with time zone, p_volume_hl numeric, p_from_tank_id bigint, p_destination text, p_recipe_id bigint, p_to_batch_id bigint, p_reason text, p_comment text) TO service_role;
+GRANT ALL ON FUNCTION public.split_batch(p_batch_id bigint, p_transferred_at timestamp with time zone, p_volume_hl numeric, p_from_tank_id bigint, p_destination text, p_recipe_id bigint, p_to_batch_id bigint, p_reason text, p_comment text) TO authenticated;
 
 
 --
@@ -5745,6 +7651,40 @@ GRANT ALL ON SEQUENCE public.batch_cellar_steps_id_seq TO service_role;
 
 
 --
+-- Name: TABLE batch_documents; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.batch_documents TO authenticated;
+GRANT ALL ON TABLE public.batch_documents TO service_role;
+
+
+--
+-- Name: SEQUENCE batch_documents_id_seq; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,USAGE ON SEQUENCE public.batch_documents_id_seq TO anon;
+GRANT SELECT,USAGE ON SEQUENCE public.batch_documents_id_seq TO authenticated;
+GRANT ALL ON SEQUENCE public.batch_documents_id_seq TO service_role;
+
+
+--
+-- Name: TABLE batch_hbts; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.batch_hbts TO authenticated;
+GRANT ALL ON TABLE public.batch_hbts TO service_role;
+
+
+--
+-- Name: SEQUENCE batch_hbts_id_seq; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,USAGE ON SEQUENCE public.batch_hbts_id_seq TO anon;
+GRANT SELECT,USAGE ON SEQUENCE public.batch_hbts_id_seq TO authenticated;
+GRANT ALL ON SEQUENCE public.batch_hbts_id_seq TO service_role;
+
+
+--
 -- Name: TABLE batch_ingredients; Type: ACL; Schema: public; Owner: -
 --
 
@@ -5759,6 +7699,14 @@ GRANT ALL ON TABLE public.batch_ingredients TO service_role;
 GRANT SELECT,USAGE ON SEQUENCE public.batch_ingredients_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.batch_ingredients_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.batch_ingredients_id_seq TO service_role;
+
+
+--
+-- Name: TABLE batch_transfers; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.batch_transfers TO authenticated;
+GRANT ALL ON TABLE public.batch_transfers TO service_role;
 
 
 --
@@ -5787,19 +7735,35 @@ GRANT ALL ON TABLE public.fermentation_log_entry_tags TO service_role;
 
 
 --
+-- Name: TABLE filling_sessions; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.filling_sessions TO authenticated;
+GRANT ALL ON TABLE public.filling_sessions TO service_role;
+
+
+--
+-- Name: TABLE processing_sessions; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.processing_sessions TO authenticated;
+GRANT ALL ON TABLE public.processing_sessions TO service_role;
+
+
+--
+-- Name: TABLE tanks; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.tanks TO authenticated;
+GRANT ALL ON TABLE public.tanks TO service_role;
+
+
+--
 -- Name: TABLE batch_stages; Type: ACL; Schema: public; Owner: -
 --
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.batch_stages TO authenticated;
 GRANT ALL ON TABLE public.batch_stages TO service_role;
-
-
---
--- Name: TABLE batch_transfers; Type: ACL; Schema: public; Owner: -
---
-
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.batch_transfers TO authenticated;
-GRANT ALL ON TABLE public.batch_transfers TO service_role;
 
 
 --
@@ -5927,6 +7891,92 @@ GRANT ALL ON SEQUENCE public.fermentation_log_entries_id_seq TO service_role;
 
 
 --
+-- Name: SEQUENCE fermentation_log_entry_tags_id_seq; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,USAGE ON SEQUENCE public.fermentation_log_entry_tags_id_seq TO anon;
+GRANT SELECT,USAGE ON SEQUENCE public.fermentation_log_entry_tags_id_seq TO authenticated;
+GRANT ALL ON SEQUENCE public.fermentation_log_entry_tags_id_seq TO service_role;
+
+
+--
+-- Name: TABLE filling_measurements; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.filling_measurements TO authenticated;
+GRANT ALL ON TABLE public.filling_measurements TO service_role;
+
+
+--
+-- Name: SEQUENCE filling_measurements_id_seq; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,USAGE ON SEQUENCE public.filling_measurements_id_seq TO anon;
+GRANT SELECT,USAGE ON SEQUENCE public.filling_measurements_id_seq TO authenticated;
+GRANT ALL ON SEQUENCE public.filling_measurements_id_seq TO service_role;
+
+
+--
+-- Name: TABLE filling_session_articles; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.filling_session_articles TO authenticated;
+GRANT ALL ON TABLE public.filling_session_articles TO service_role;
+
+
+--
+-- Name: SEQUENCE filling_session_articles_id_seq; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,USAGE ON SEQUENCE public.filling_session_articles_id_seq TO anon;
+GRANT SELECT,USAGE ON SEQUENCE public.filling_session_articles_id_seq TO authenticated;
+GRANT ALL ON SEQUENCE public.filling_session_articles_id_seq TO service_role;
+
+
+--
+-- Name: TABLE filling_session_materials; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.filling_session_materials TO authenticated;
+GRANT ALL ON TABLE public.filling_session_materials TO service_role;
+
+
+--
+-- Name: SEQUENCE filling_session_materials_id_seq; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,USAGE ON SEQUENCE public.filling_session_materials_id_seq TO anon;
+GRANT SELECT,USAGE ON SEQUENCE public.filling_session_materials_id_seq TO authenticated;
+GRANT ALL ON SEQUENCE public.filling_session_materials_id_seq TO service_role;
+
+
+--
+-- Name: SEQUENCE filling_sessions_id_seq; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,USAGE ON SEQUENCE public.filling_sessions_id_seq TO anon;
+GRANT SELECT,USAGE ON SEQUENCE public.filling_sessions_id_seq TO authenticated;
+GRANT ALL ON SEQUENCE public.filling_sessions_id_seq TO service_role;
+
+
+--
+-- Name: TABLE hbt_readings; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.hbt_readings TO authenticated;
+GRANT ALL ON TABLE public.hbt_readings TO service_role;
+
+
+--
+-- Name: SEQUENCE hbt_readings_id_seq; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,USAGE ON SEQUENCE public.hbt_readings_id_seq TO anon;
+GRANT SELECT,USAGE ON SEQUENCE public.hbt_readings_id_seq TO authenticated;
+GRANT ALL ON SEQUENCE public.hbt_readings_id_seq TO service_role;
+
+
+--
 -- Name: TABLE ingredient_categories; Type: ACL; Schema: public; Owner: -
 --
 
@@ -6044,12 +8094,89 @@ GRANT ALL ON SEQUENCE public.lots_id_seq TO service_role;
 
 
 --
+-- Name: TABLE packaging_article_materials; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.packaging_article_materials TO authenticated;
+GRANT ALL ON TABLE public.packaging_article_materials TO service_role;
+
+
+--
+-- Name: SEQUENCE packaging_article_materials_id_seq; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,USAGE ON SEQUENCE public.packaging_article_materials_id_seq TO anon;
+GRANT SELECT,USAGE ON SEQUENCE public.packaging_article_materials_id_seq TO authenticated;
+GRANT ALL ON SEQUENCE public.packaging_article_materials_id_seq TO service_role;
+
+
+--
+-- Name: TABLE packaging_articles; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.packaging_articles TO authenticated;
+GRANT ALL ON TABLE public.packaging_articles TO service_role;
+
+
+--
+-- Name: SEQUENCE packaging_articles_id_seq; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,USAGE ON SEQUENCE public.packaging_articles_id_seq TO anon;
+GRANT SELECT,USAGE ON SEQUENCE public.packaging_articles_id_seq TO authenticated;
+GRANT ALL ON SEQUENCE public.packaging_articles_id_seq TO service_role;
+
+
+--
+-- Name: TABLE packaging_materials; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.packaging_materials TO authenticated;
+GRANT ALL ON TABLE public.packaging_materials TO service_role;
+
+
+--
+-- Name: SEQUENCE packaging_materials_id_seq; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,USAGE ON SEQUENCE public.packaging_materials_id_seq TO anon;
+GRANT SELECT,USAGE ON SEQUENCE public.packaging_materials_id_seq TO authenticated;
+GRANT ALL ON SEQUENCE public.packaging_materials_id_seq TO service_role;
+
+
+--
 -- Name: TABLE permission_modules; Type: ACL; Schema: public; Owner: -
 --
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.permission_modules TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.permission_modules TO authenticated;
 GRANT ALL ON TABLE public.permission_modules TO service_role;
+
+
+--
+-- Name: TABLE processing_comments; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.processing_comments TO authenticated;
+GRANT ALL ON TABLE public.processing_comments TO service_role;
+
+
+--
+-- Name: SEQUENCE processing_comments_id_seq; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,USAGE ON SEQUENCE public.processing_comments_id_seq TO anon;
+GRANT SELECT,USAGE ON SEQUENCE public.processing_comments_id_seq TO authenticated;
+GRANT ALL ON SEQUENCE public.processing_comments_id_seq TO service_role;
+
+
+--
+-- Name: SEQUENCE processing_sessions_id_seq; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,USAGE ON SEQUENCE public.processing_sessions_id_seq TO anon;
+GRANT SELECT,USAGE ON SEQUENCE public.processing_sessions_id_seq TO authenticated;
+GRANT ALL ON SEQUENCE public.processing_sessions_id_seq TO service_role;
 
 
 --
@@ -6274,14 +8401,6 @@ GRANT ALL ON TABLE public.stock_movements TO service_role;
 GRANT SELECT,USAGE ON SEQUENCE public.stock_movements_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.stock_movements_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.stock_movements_id_seq TO service_role;
-
-
---
--- Name: TABLE tanks; Type: ACL; Schema: public; Owner: -
---
-
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.tanks TO authenticated;
-GRANT ALL ON TABLE public.tanks TO service_role;
 
 
 --
