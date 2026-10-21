@@ -13,11 +13,23 @@ dosing). The app's tables are built (phases 0–8 merged, 20-10-2026).
 - **Recipe version: keep what is in the database.** A workbook can name
   another version (26260: workbook Esma Stout v4.0, batch in the app v4.1);
   do not change the batch, mention it in the review.
-- **Initials are written down as text**, not matched to users (EVL, BS, BS1,
-  NS, HL, MP are not users; the users table has `initials`). Not important
-  for historical items; linking to users comes later. Where the text goes
-  (a comment field, or a new text column) is a schema question: propose it
-  to Jaap before changing anything.
+- ~~Initials are written down as text~~ **Changed 21-10: initials are
+  linked to users.** Jaap named every initial in the samples
+  (`tools/batch-import/initials.py` lists them); the people who are not
+  users yet get an account ahead of the invite (Users page, "New invite
+  link" when the invite is sent later). Workbook initials = `users.initials`:
+  EVL = Eric van der Lugt (app initials changed from EL), EL = Eric Loman,
+  BS = Bart Stelleman, BS1 = Bohdan Saveliev, MP = Michel Papavoine,
+  NS = Nick Sweeren, MVG = Matthijs van der Geest. An initial without a user
+  is reported in the review, not guessed. Historical rows get the person as
+  the user column (`brewer_id`, `started_by`, …) and, where the app uses
+  `created_by` as the operator (fermentation log, filling "Filled by"), as
+  `created_by`.
+- **Stages follow the data**; `batches.status` is not changed by the import
+  (Jaap, 21-10).
+- **Brewer start / end** (Jaap, 21-10): the brew sheet's second name next to
+  the brewer (the unit column of the brew pair, row "Naam brouwer") is the
+  brewer who finished the brew → `batch_brews.brewer_end_id`.
 - **History only:** import into batches that exist in the app and whose
   tabs are still empty (no brews, log, processing, filling). Never
   overwrite data entered in the app; report such batches instead.

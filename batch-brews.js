@@ -13,7 +13,7 @@
 const BREW_LOG_ROWS = [
   { kind: 'section', label: 'General' },
   { key: 'software_order_number', label: 'Order no. software', kind: 'text' },
-  { key: 'brewer_id', label: 'Brewer', kind: 'user' },
+  { key: 'brewer_id', label: 'Brewer start', kind: 'user' },
   { key: 'mash_in_started_at', label: 'Start mashing', kind: 'datetime' },
   { kind: 'section', label: 'Mashing' },
   { key: 'mash_water_hl', label: 'Mash water', unit: 'hl', kind: 'num', recipe: 'mash_water' },
@@ -54,6 +54,7 @@ const BREW_LOG_ROWS = [
   { key: 'extract_to_glt', label: 'Extract to GLT', unit: '°P', kind: 'calc', recipe: 'original_extract' },
   { key: 'glt_total', label: 'GLT total so far', kind: 'calc' },
   { kind: 'section', label: 'End' },
+  { key: 'brewer_end_id', label: 'Brewer end', kind: 'user' },
   { key: 'brewing_ended_at', label: 'End of brewing', kind: 'datetime' },
   { key: 'process_pause', label: 'Pause in process (hh:mm)', kind: 'text', only: 'jk' },
   { key: 'total_brewing_h', label: 'Total brewing time', unit: 'h', kind: 'calc' },
