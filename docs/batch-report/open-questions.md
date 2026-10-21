@@ -13,7 +13,7 @@ without the open part and note it in the PR.
 | 17 | ~~Dry hop `cold_2` (cold dry hop at or below the lagering temperature): order of the steps?~~ **Answered 19-10:** cooling to the lagering temperature, sample to lab, then the dry hop. Dry hop timings fixed from the review; Quiet XPA keeps 2 lines without timing for now. | 4 |
 | 6 | Add `stock_movements.batch_ingredient_id` to link consumption exactly to added batch rows? Phase 2 matches lots by ingredient group, which also covers added rows; only needed if the same ingredient appears twice with different lots. | 2 (built without) |
 | 7 | Unused empty columns on `batches` (`operator`, `extract`, `alcohol`, `bitterness`, `color`, `ph`, `total_final_volume`, `brew_date`): drop later, or keep? `brew_date` duplicates brew 1 start. | any (separate cleanup) |
-| 8 | Who signs the filling report; four-eyes (not the person who completed it)? Fields for comments filling / Mdrank entry. (Parked: Jaap talks with the admin.) | 7 |
+| 8 | Who signs the filling report; four-eyes (not the person who completed it)? Fields for comments filling / Mdrank entry. (Parked: Jaap talks with the admin.) The signing block goes at the bottom of the Filling report, after Documents (Jaap, 21-10). | 7 |
 | 9 | ~~Base beer in a recipe: reference the source beer by recipe group (share in %), or as a normal ingredient per beer?~~ **Answered 20-10:** by recipe group (the beer over all its versions), with a share in %; a blend of two beers = two lines. The split form records the volume. | 8 |
 | 10 | "OGW" meaning (Excel). | — |
 | 11 | Keep the checkbox "Do hops smell fresh?"? | 3 |
