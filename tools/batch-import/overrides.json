@@ -1,0 +1,16 @@
+{
+  "26020": {
+    "note": "JK, no processing: 16.5 hl from CKT2 straight into 33 x 50L Jopen kegs for the Jopenkerk on 17-03 (Jaap 21-10: allowed, a one-off; fermentation tanks stay out of the HBT list)",
+    "hbts": [
+      {"tank": "CKT2", "intended_formats": ["keg"], "end_level_hl": 16.5,
+       "readings": [{"sort_order": 1, "level_hl": 16.5, "comment": "direct afgevuld op fust", "co2_target": "keg"}]}
+    ],
+    "filling_sessions": [
+      {"filling_date": "2026-03-17", "hbt_tank": "CKT2", "package_format": "keg", "volume_hl": 16.5,
+       "filled_by": "EVL", "is_hbt_finished": true, "measurements": [],
+       "articles": [{"code": "jopen_keg_50", "quantity": 33}],
+       "materials": [{"code": "jopen_keg_50", "quantity": 33}, {"code": "keg_cap", "quantity": 33}]}
+    ],
+    "drop_other_end_values": true
+  }
+}
