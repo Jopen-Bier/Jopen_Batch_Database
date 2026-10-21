@@ -22,6 +22,7 @@ const BREW_LOG_ROWS = [
   { key: 'mash_corrected_ph', label: 'pH after correction', kind: 'num', recipe: 'ph_mash' },
   { key: 'is_iodine_test_ok', label: 'Iodine test OK?', kind: 'yesno' },
   { key: 'has_mash_schedule_deviation', label: 'Deviation from mash schedule?', kind: 'yesno' },
+  { key: 'mash_rinse_water_hl', label: 'Rinse water', unit: 'hl', kind: 'num' },
   { kind: 'section', label: 'Filtration · mash filter', only: 'wp' },
   { kind: 'section', label: 'Filtration · lauter tun', only: 'jk' },
   { key: 'first_wort_extract', label: 'Plato first wort', unit: '°P', kind: 'num' },

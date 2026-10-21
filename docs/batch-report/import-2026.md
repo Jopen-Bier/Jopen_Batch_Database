@@ -120,7 +120,8 @@ grid view, label diff between two workbooks).
   reader maps the label as calculated, per section. Fixed rows: P18
   "Eerste afloop" -> `first_wort_volume_hl` (the Brewing tab shows it for
   JK only; WP values are kept), P14 "Spoelwater" in Mashing (0.6-0.9 hl at
-  WP) has no column: brew comment until Jaap decides.
+  WP) -> `mash_rinse_water_hl` "Rinse water" (column added 21-10; the
+  samples' comments were moved into it by the migration).
 - **Section rows** of the brew sheet (Maischen, Koken: "salts", "520g
   Flex"), text in number cells and text in unit cells become brew comments.
 - **Log entries without an hour** get 12:00 (review: `missing`). Row 13

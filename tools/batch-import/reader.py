@@ -238,8 +238,9 @@ BREW_ROWS = {
 BREW_SECTION_ROWS = {('whirlpool', 'extract'): ('whirlpool_extract', 'num'),
                      ('whirlpool', 'ph'): ('whirlpool_ph', 'num'),
                      # JK label of P19 ("Cumm, Sparging vol," at WP); the fixed
-                     # "Spoelwater" row in Mashing has no column (brew comment).
-                     ('filtratie & voorloopvat', 'spoelwater'): ('sparge_water_hl', 'num')}
+                     # "Spoelwater" row in Mashing is the rinse water.
+                     ('filtratie & voorloopvat', 'spoelwater'): ('sparge_water_hl', 'num'),
+                     ('maischen', 'spoelwater'): ('mash_rinse_water_hl', 'num')}
 # Section header rows (no measured value; text per brew becomes a brew comment).
 BREW_SECTIONS = {'maischen': 'Mashing', 'filtratie & voorloopvat': 'Filtration',
                  'koken': 'Boiling', 'whirlpool/ einde kook': 'Whirlpool'}
