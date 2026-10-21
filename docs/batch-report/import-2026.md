@@ -206,6 +206,21 @@ Jaap: a split from the source batch at the barrel fill date (brew count
 0), barrel information as a log entry, additions as Addition entries;
 per-barrel data waits for barrel-aging support in the app.
 
+### End values outside an HBT (full scan, 21-10)
+The "End value HBT" rows also hold splits and tank beer:
+- A row with a batch number in the comment is a **split**: from the HBT
+  when the tank is an HBT ("HBT13 10 hl for batch 26132"), otherwise from
+  the batch's own LT / GLT ("LT 51 ... split for batch 26216"; the named
+  tank is where the receiving batch got it). The filling report's "TBV
+  ... <batch>" liters are compared per receiving batch (one transfer can
+  be spread over several HBTs).
+- **TT60** ("TT60 Kerk", 30-61 hl) and a filling-report column "Kerk":
+  tank beer for the Jopenkerk; JK **GLT2** "direct afgevuld op fust":
+  filled from the fermentation tank. Kept in `other_end_values`, not
+  imported: Jaap decides how to record them.
+- A batch number cell with a date (26028 Brouwen N3) is skipped for the
+  next sheet.
+
 ### SQL per chunk (step 5)
 `tools/batch-import/generate_sql.py <reader_out> <app.json> <out_dir> <chunk> [batch ...]`
 writes `import_<chunk>_dry_run.sql` and `import_<chunk>_run.sql`: one DO

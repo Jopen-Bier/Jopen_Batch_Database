@@ -586,6 +586,23 @@ def read_processing(b, out):
                        'the app derives lagering from the cooling tag in the log')
 
 
+def parse_tank(v):
+    """('hbt', number) for an HBT cell (a number or 'HBT 16'); ('other', 'LT51') for any other tank."""
+    if v is None:
+        return 'other', None
+    try:
+        n = to_num(v)
+        if n is not None:
+            return 'hbt', int(n)
+    except ValueError:
+        pass
+    t = re.sub(r'\s+', '', str(v)).upper()
+    m = re.match(r'^HBT(\d+)$', t)
+    if m:
+        return 'hbt', int(m.group(1))
+    return 'other', t or None
+
+
 def read_hbts(b, out, labels, hbt_row):
     sh = 'Verwerking'
     F = Field(b, sh)
@@ -603,11 +620,14 @@ def read_hbts(b, out, labels, hbt_row):
         if tank is None and level is None:
             cur = None  # an empty row closes a fill
             continue
-        try:
-            tank = int(to_num(tank)) if tank is not None else (cur['tank'] if cur else None)
-        except ValueError:
-            b.warn(sh, f'B{r}', f'HBT "{tank}" is not a number')
-            continue
+        if tank is not None:
+            kind, code = parse_tank(tank)
+            if kind != 'hbt':
+                b.warn(sh, f'B{r}', f'HBT "{tank}" is not an HBT: row not imported')
+                continue
+            tank = code
+        else:
+            tank = cur['tank'] if cur else None
         if cur is None or cur['tank'] != tank:
             cur = {'tank': tank, 'readings': [], 'formats': set()}
             groups.append(cur)
@@ -632,26 +652,40 @@ def read_hbts(b, out, labels, hbt_row):
         level = F(f'E{r}', 'End value HBT', 'hbt_readings.level_hl (last)', 'num')
         if tank is None and level is None:
             continue
-        if to_num(tank) is None:
-            note = ' '.join(str(b.raw(sh, f'{c}{r}') or '') for c in ('K', 'L', 'M', 'N')).strip()
-            m = re.search(r'\b(2\d{4})\b', note)
+        note = ' '.join(str(b.raw(sh, f'{c}{r}') or '') for c in ('K', 'L', 'M', 'N')).strip()
+        m = re.search(r'(?<!\d)(2\d{4})(?!\d)', note)
+        kind, code = parse_tank(tank)
+        if kind != 'hbt':
+            # Not an HBT: the beer went elsewhere from the batch's own tank.
             if m and level:
                 out.setdefault('transfers', []).append({
-                    'to_batch_number': m.group(1), 'volume_hl': level, 'comment': note,
+                    'to_batch_number': m.group(1), 'volume_hl': level,
+                    'comment': f'via {code}: {note}' if code else note,
                     'from_tank': out['batch'].get('lt_tank') or out['batch'].get('glt_tank'),
                     'transferred_at': None, 'source': f'{sh}!E{r}'})
-                b.note(sh, f'E{r}', 'End value without HBT', f'{level} ({note})', 'batch_transfers', 'suspicious',
+                b.note(sh, f'E{r}', f'End value {code or "(no tank)"}', f'{level} ({note})', 'batch_transfers', 'suspicious',
                        f'transfer to batch {m.group(1)}: check date and volume')
-            else:
-                b.warn(sh, f'D{r}', f'end value {level} without an HBT number ({note or "no comment"})')
+            elif level:
+                out.setdefault('other_end_values', []).append({'tank': code, 'volume_hl': level, 'comment': note})
+                b.note(sh, f'E{r}', f'End value {code or "(no tank)"}', f'{level} ({note})', '-', 'not_imported',
+                       'beer not in an HBT and not to a batch: ask Jaap')
+                b.warn(sh, f'D{r}', f'end value {level:g} hl in {code or "no tank"} ({note or "no comment"}): not imported, ask Jaap')
             continue
-        tank = int(to_num(tank))
+        tank = code
         g = next((x for x in groups[used:] if x['tank'] == tank and 'end' not in x), None)
         if g is None:
             b.warn(sh, f'D{r}', f'end value for HBT{tank} without readings: new fill made')
             g = {'tank': tank, 'readings': [], 'formats': set()}
             groups.append(g)
         g['end'] = level
+        if m and level:
+            # This fill went to another batch (a split from the HBT).
+            g['split_to'] = m.group(1)
+            out.setdefault('transfers', []).append({
+                'to_batch_number': m.group(1), 'volume_hl': level, 'comment': note,
+                'from_tank': tank, 'from_hbt': True, 'transferred_at': None, 'source': f'{sh}!E{r}'})
+            b.note(sh, f'K{r}', f'HBT{tank} end value to a batch', f'{level} ({note})', 'batch_transfers', 'suspicious',
+                   f'split from HBT{tank} to {m.group(1)}: check date and volume')
         last = g['readings'][-1] if g['readings'] else {}
         end_reading = {'level_hl': level, 'o2_ppb': F(f'G{r}', 'End value O2', 'hbt_readings.o2_ppb', 'num'),
                        'co2_gl': F(f'I{r}', 'End value CO2', 'hbt_readings.co2_gl', 'num')}
@@ -673,6 +707,8 @@ def read_hbts(b, out, labels, hbt_row):
     for i, g in enumerate(groups):
         h = {'tank': g['tank'], 'sort_order': i + 1, 'intended_formats': sorted(g['formats']),
              'readings': g['readings'], 'end_level_hl': g.get('end')}
+        if g.get('split_to'):
+            h['split_to'] = g['split_to']
         if len(sessions) == 1:
             h['processing_session_number'] = 1  # one session: every fill comes from it
         for key, col_ in (('pu', 'avg_pu'), ('turbidity', 'avg_turbidity_ebc')):
@@ -817,6 +853,16 @@ def read_filling_report(b, out, sessions, ref):
         if s is None:
             # Old reports: a session written only on the filling report.
             hbt = b.get(sh, f'{c}9')[0]
+            kind, code = parse_tank(hbt)
+            if hbt is not None and kind != 'hbt':
+                # Not from an HBT (e.g. "TT60" / "Kerk": tank beer for the Jopenkerk).
+                vol = b.get(sh, f'{c}11')[0]
+                out.setdefault('other_end_values', []).append(
+                    {'tank': code, 'volume_hl': to_num(vol) if vol is not None else None, 'comment': f'filling report {to_date(date)}'})
+                b.note(sh, f'{c}9', f'Filling report column {c}', f'{hbt}, {vol} hl', '-', 'not_imported',
+                       'not from an HBT: ask Jaap')
+                b.warn(sh, f'{c}9', f'filling report column {c} ({to_date(date)}): "{hbt}" {vol} hl is not an HBT: not imported, ask Jaap')
+                continue
             s = {'session_number': len(sessions) + 1, 'filling_date': to_date(date), 'column': i,
                  'hbt_tank': int(to_num(hbt)) if to_num(hbt) is not None else None, 'measurements': [],
                  'from_report_only': True}
@@ -935,6 +981,8 @@ def link_hbts(b, out):
             pointer[t] = p + 1
     for i, h in enumerate(hbts):
         end = h.get('end_level_hl')
+        if h.get('split_to') and i in filled:
+            b.warn('Afvullen', '-', f'HBT{h["tank"]} (fill {h["sort_order"]}) went to {h["split_to"]} but also has filling sessions')
         if end and i in filled and filled[i] < end * 0.97:
             b.warn('Afvullen', '-', f'HBT{h["tank"]} (fill {h["sort_order"]}): filled {filled[i]:g} of {end:g} hl, not finished')
         if not h['intended_formats']:
@@ -943,21 +991,28 @@ def link_hbts(b, out):
 
 
 def merge_transfers(b, out):
-    """Transfers from the processing form ("End value" without HBT) and from the
-    filling report ("TBV BATCH ..."): one per receiving batch, volumes checked."""
+    """Transfers from the processing form ("End value" rows) and from the filling
+    report ("TBV ... <batch>"), compared per receiving batch. The processing form
+    can split one transfer over several HBTs (26093: 10 + 30 hl = 4000 l)."""
     ts = out.setdefault('transfers', [])
+    report = {}
     for rt in out.pop('report_transfers', []):
-        t = next((x for x in ts if x['to_batch_number'] == rt['to_batch_number']), None)
-        if t is None:
-            ts.append({'to_batch_number': rt['to_batch_number'], 'volume_hl': rt['volume_hl'], 'comment': None,
+        x = report.setdefault(rt['to_batch_number'], {'volume_hl': 0, 'date': rt['date'], 'source': []})
+        x['volume_hl'] += rt['volume_hl']
+        x['source'].append(rt['source'])
+    for to, rt in report.items():
+        mine = [t for t in ts if t['to_batch_number'] == to]
+        if not mine:
+            ts.append({'to_batch_number': to, 'volume_hl': round(rt['volume_hl'], 2), 'comment': None,
                        'from_tank': out['batch'].get('lt_tank') or out['batch'].get('glt_tank'),
                        'transferred_at': to_timestamp(rt['date'], '12:00') if rt['date'] else None,
-                       'source': rt['source']})
+                       'source': ' + '.join(rt['source'])})
             continue
-        t['source'] += ' + ' + rt['source']
-        if abs(t['volume_hl'] - rt['volume_hl']) > 0.05:
-            b.warn('-', '-', f'transfer to {t["to_batch_number"]}: {t["volume_hl"]:g} hl on Processing, '
-                             f'{rt["volume_hl"]:g} hl on the filling report')
+        total = sum(t['volume_hl'] for t in mine)
+        for t in mine:
+            t['source'] += ' + ' + ' + '.join(rt['source'])
+        if abs(total - rt['volume_hl']) > 0.05:
+            b.warn('-', '-', f'transfer to {to}: {total:g} hl on Processing, {rt["volume_hl"]:g} hl on the filling report')
     if not ts:
         out.pop('transfers')
 
@@ -1012,7 +1067,7 @@ def resolve(b, out, ref):
             s['tank'] = tank_code(s['tank'], ('glt', 'ckt', 'lt'))
     for t in out.get('transfers', []):
         if isinstance(t.get('from_tank'), int):
-            t['from_tank'] = tank_code(t['from_tank'], ('glt', 'ckt', 'lt'))
+            t['from_tank'] = tank_code(t['from_tank'], ('hbt',) if t.get('from_hbt') else ('glt', 'ckt', 'lt'))
     for h in out.get('hbts', []):
         h['tank'] = tank_code(h['tank'], ('hbt',))
     users = {u['initials'].upper() for u in ref['users'] if u.get('initials')}
@@ -1055,9 +1110,12 @@ def read_workbook(path, ref):
         out['review'], out['warnings'] = [], [out['hold']]
         return out
     for sh, cell in (('Brouwen', 'N3'), ('Verwerking', 'L3'), ('Afvullen', 'E3'), ('Afvulverslag', 'H3')):
-        if b.has(sh) and b.raw(sh, cell) is not None:
-            out['batch_number'] = str(int(to_num(b.raw(sh, cell))))
+        v = b.raw(sh, cell) if b.has(sh) else None
+        if isinstance(v, (int, float)) and 20000 <= v < 30000 or isinstance(v, str) and re.fullmatch(r'\s*2\d{4}\s*', v):
+            out['batch_number'] = str(int(to_num(v)))
             break
+        if v is not None:
+            b.warn(sh, cell, f'batch number cell holds "{v}": taken from the next sheet')
     m = re.match(r'^(\d{5})\s+(.*?)(?:\s+v(\d+)(?:\.(\d+))?)?(?:\s+(?:WP|JK))?\.xlsx?$', name, re.I)
     if m:
         ver = f'{m.group(3)}.{m.group(4) or 0}' if m.group(3) else None
