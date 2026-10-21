@@ -172,6 +172,10 @@ popup and incoming beer on the three tabs, the base beer block in the recipe
 editor, dosing on brews + incoming. Fractional batches keep their brew
 count (answer to the open point: no change needed, they have no incoming
 transfers).
+Rooktest fixes 20-10: `split_batch()` to an existing batch or a discard
+failed ('record "v_recipe" is not assigned yet'; migration
+`20261020185451_split_batch_fix`); typing in the popup no longer moves the
+cursor to the start (the fields are not redrawn while typing).
 
 ## Import 2026 batches (after phase 8)
 Agreed 19-10: once all phases are built, the 2026 batches are filled from
