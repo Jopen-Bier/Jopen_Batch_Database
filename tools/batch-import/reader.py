@@ -664,14 +664,22 @@ def read_processing(b, out):
                        'the app derives lagering from the cooling tag in the log')
 
 
+HBT_NUMBERS = set()     # numbers of the HBTs in the app (from ref.json)
+OTHER_TANKS = {}        # number -> code of the other tanks ("53" written for LT53)
+
+
 def parse_tank(v):
-    """('hbt', number) for an HBT cell (a number or 'HBT 16'); ('other', 'LT51') for any other tank."""
+    """('hbt', number) for an HBT cell (a number or 'HBT 16'); ('other', 'LT51') for any other tank.
+    A bare number that is not an HBT but is another tank counts as that tank (26245: "53" = LT53)."""
     if v is None:
         return 'other', None
     try:
         n = to_num(v)
         if n is not None:
-            return 'hbt', int(n)
+            n = int(n)
+            if HBT_NUMBERS and n not in HBT_NUMBERS and n in OTHER_TANKS:
+                return 'other', OTHER_TANKS[n]
+            return 'hbt', n
     except ValueError:
         pass
     t = re.sub(r'\s+', '', str(v)).upper()
@@ -1294,6 +1302,11 @@ def workbook_type(b):
 
 
 def read_workbook(path, ref):
+    HBT_NUMBERS.clear(); OTHER_TANKS.clear()
+    HBT_NUMBERS.update(t['n'] for t in ref['tanks'] if t['type'] == 'hbt')
+    for t in ref['tanks']:
+        if t['type'] in ('lt', 'glt') and t['n'] not in HBT_NUMBERS:
+            OTHER_TANKS.setdefault(t['n'], t['code'])
     b = Book(path)
     name = os.path.basename(path)
     out = {'source': name, 'batch_number': None, 'batch': {}, 'type': workbook_type(b)}
