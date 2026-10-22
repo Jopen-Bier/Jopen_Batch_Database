@@ -3,7 +3,7 @@
 //
 // Laden op ELKE pagina, ná de supabase-js CDN-script-tag, en VÓÓR nav.js:
 //
-//   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+//   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2"></script>
 //   <script src="config.js"></script>
 //   <script src="nav.js"></script>
 //
@@ -23,10 +23,19 @@ const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_
  * The logged-in user with role information, or `null` when nobody is logged
  * in. Shape: { id, name, roleId, roleName, isActive, isAdmin }.
  */
+// The menu and the page both ask for the user while a page loads: one request
+// per page load and user (the session comes from local storage).
+let _currentUserCache = null;   // { userId, promise }
 async function getCurrentUser() {
   const { data: { session } } = await supabaseClient.auth.getSession();
-  if (!session) return null;
+  if (!session) { _currentUserCache = null; return null; }
+  if (_currentUserCache && _currentUserCache.userId === session.user.id) return _currentUserCache.promise;
+  const promise = loadCurrentUser(session);
+  _currentUserCache = { userId: session.user.id, promise };
+  return promise;
+}
 
+async function loadCurrentUser(session) {
   const { data, error } = await supabaseClient
     .from('users')
     .select('id, name, is_active, role_id, roles(name)')

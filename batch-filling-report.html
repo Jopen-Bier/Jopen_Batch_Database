@@ -25,12 +25,13 @@
       <div class="br-card br-cardpad" id="fr-balance"></div>
       <div id="fr-sessions" style="display:flex; flex-direction:column; gap:16px;"></div>
       <div class="br-card br-cardpad" id="fr-transfers"></div>
-      <!-- Documents at the bottom; the signing block (parked, open-questions #8) comes after it -->
+      <!-- Documents at the bottom, then the admin checks (both ticked = batch Closed) -->
       <div class="br-card br-cardpad" id="fr-documents"></div>
+      <div class="br-card br-cardpad" id="fr-checks"></div>
     </div>
   </main>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2"></script>
   <script src="config.js"></script>
   <script src="jopen-utils.js"></script>
   <script src="nav.js"></script>
@@ -75,9 +76,11 @@
 
     // ------------------------------------------------------------ loading
     async function loadAll(batchId) {
-      page.ctx = await loadBatchContext(batchId);
       const byBatch = (table) => supabaseClient.from(table).select('*').eq('batch_id', batchId);
-      const [sessions, hbts, readings, processingSessions, transfers, brews, tanks, articles, materials, bom, sessionArticles, sessionMaterials] = await Promise.all([
+      // Everything at once: nothing here needs the batch row first.
+      const [ctx, sessions, hbts, readings, processingSessions, transfers, brews, tanks, articles, materials, bom, sessionArticles, sessionMaterials,
+        incoming, documents, users] = await Promise.all([
+        loadBatchContext(batchId),
         byBatch('filling_sessions').order('session_number'),
         byBatch('batch_hbts').order('sort_order').order('id'),
         byBatch('hbt_readings').order('sort_order').order('id'),
@@ -90,21 +93,18 @@
         supabaseClient.from('packaging_article_materials').select('article_id, material_id, quantity'),
         byBatch('filling_session_articles').order('id'),
         byBatch('filling_session_materials').order('id'),
+        supabaseClient.from('batch_transfers').select(INCOMING_SELECT).eq('to_batch_id', batchId).order('transferred_at').order('id'),
+        supabaseClient.from('batch_documents').select('*').eq('batch_id', batchId),
+        loadUserInitials(),
       ]);
-      for (const res of [sessions, hbts, readings, processingSessions, transfers, brews, tanks, articles, materials, bom, sessionArticles, sessionMaterials]) if (res.error) throw res.error;
+      for (const res of [sessions, hbts, readings, processingSessions, transfers, brews, tanks, articles, materials, bom, sessionArticles, sessionMaterials, incoming, documents]) if (res.error) throw res.error;
+      page.ctx = ctx;
       Object.assign(page, {
         sessions: sessions.data, hbts: hbts.data, readings: readings.data, processingSessions: processingSessions.data, transfers: transfers.data, brews: brews.data, tanks: tanks.data,
         articles: new Map(articles.data.map((a) => [a.id, a])), materials: new Map(materials.data.map((m) => [m.id, m])),
         bom: bomByArticle(bom.data), sessionArticles: sessionArticles.data, sessionMaterials: sessionMaterials.data,
       });
-      const incoming = await supabaseClient.from('batch_transfers').select(INCOMING_SELECT).eq('to_batch_id', batchId).order('transferred_at').order('id');
-      if (incoming.error) throw incoming.error;
       page.incoming = incoming.data;
-      const [documents, users] = await Promise.all([
-        supabaseClient.from('batch_documents').select('*').eq('batch_id', batchId),
-        loadUserInitials(),
-      ]);
-      if (documents.error) throw documents.error;
       page.documents = documents.data;
       page.initialsOf = users.initialsOf;
     }
@@ -237,9 +237,39 @@
     function renderAll() {
       renderBalance();
       renderDocuments();
+      renderChecks();
       renderSessions();
       transfersCard.render();
       renderSummary();
+    }
+
+    // Admin checks the filling report and books it off in MDrank; both ticked = Closed.
+    const CHECKS = [
+      { key: 'filling_report_checked', label: 'Filling report checked' },
+      { key: 'mdrank_processed', label: 'Processed in MDrank' },
+    ];
+    function renderChecks() {
+      const b = page.ctx.batch;
+      const when = (at) => new Date(at).toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+      const done = CHECKS.every((c) => b[c.key + '_at']);
+      document.getElementById('fr-checks').innerHTML = `
+        <div class="br-label">Checks</div>
+        <div style="display:flex; gap:12px; flex-wrap:wrap; padding-top:6px;">
+          ${CHECKS.map((c) => {
+            const at = b[c.key + '_at'];
+            return `<button type="button" class="${at ? 'br-primary' : 'br-ghost'}" data-check="${c.key}"${dis()} aria-pressed="${at ? 'true' : 'false'}">
+              ${at ? '✓ ' : ''}${escapeHtml(c.label)}${at ? ` <span style="font-weight:400;">· ${escapeHtml([page.initialsOf(b[c.key + '_by']), when(at)].filter(Boolean).join(' · '))}</span>` : '?'}</button>`;
+          }).join('')}
+        </div>
+        <div class="br-note">${done ? 'Both checks done: the batch is closed.' : 'When both are ticked the batch is closed.'} Click a ticked check to undo it.</div>`;
+    }
+
+    async function toggleCheck(key) {
+      const b = page.ctx.batch;
+      const on = !b[key + '_at'];
+      const patch = { [key + '_at']: on ? new Date().toISOString() : null, [key + '_by']: on ? page.user.id : null };
+      // batches has no updated_by column
+      await saveRowPatch({ table: 'batches', row: b, patch, saveStatus: page.save, renderSoon, stampUpdatedBy: false });
     }
 
     function renderDocuments() {
@@ -484,6 +514,8 @@
         if (el.dataset.addMaterial && el.value) return addMaterial(sessionById(Number(el.dataset.addMaterial)), Number(el.value));
       });
       main.addEventListener('click', (e) => {
+        const check = e.target.closest('button[data-check]');
+        if (check) return toggleCheck(check.dataset.check);
         const t = e.target;
         if (transfersCard.handleClick(t)) return;
         const openDoc = t.closest('a[data-open-document]');
@@ -505,20 +537,21 @@
     }
 
     async function initFillingReportPage() {
+      // The batch loads while the user and rights load (RLS guards the data).
+      const batchId = batchIdFromUrl();
+      const loading = batchId ? loadAll(batchId).then(() => null, (err) => err) : null;
       page.user = await getCurrentUser();
       if (!page.user) return; // nav.js redirects to login
       if (!(await magBekijkenModule('batches'))) {
         showMessage('You do not have access to batch reports. Ask an admin for view rights on "Batches & batch reports".');
         return;
       }
-      const batchId = batchIdFromUrl();
       if (!batchId) { showMessage('No batch chosen. Open a batch from All batches or Active batches.', true); return; }
       page.canEdit = await magBewerkenModule('batches');
       page.canDelete = await magVerwijderenModule('batches');
-      try {
-        await loadAll(batchId);
-      } catch (err) {
-        showMessage('Could not load the batch: ' + (err.message || err), true);
+      const loadError = await loading;
+      if (loadError) {
+        showMessage('Could not load the batch: ' + (loadError.message || loadError), true);
         return;
       }
       document.title = `Jopen Brouwerij — ${page.ctx.batch.batch_number} Filling report`;

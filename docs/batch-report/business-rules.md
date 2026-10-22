@@ -10,24 +10,37 @@ Evaluated top-down, first match wins:
 
 | Stage | Rule |
 |---|---|
-| `closed` | `batches.status = 'completed'` (later: filling report signed sets this) |
-| `filled` | the batch has ≥1 `batch_hbts` and every one has a filling session with `is_hbt_finished` |
+| `closed` | `batches.status = 'completed'` (history), or both filling report checks ticked: `filling_report_checked_at` and `mdrank_processed_at` (23-10) |
+| `filled` | the batch has ≥1 `batch_hbts` and every one has a filling session with `is_hbt_finished`; or a transfer out has `empties_tank` ("Tank empty: this was the whole batch", 23-10) |
 | `filling` | a `filling_sessions` row has `filling_date` (as HBT starts with the processing date) |
 | `hbt` | a `processing_sessions` row has `processing_date` (also without brews, e.g. a split batch) |
-| `lagering` | the `batch_cellar_steps` step with `starts_lagering` is done (decision #3: the cooling, not setting an LT) |
+| `barrel` | a log entry has the tag `to_barrels` ("To barrels"), until Processing has a date (23-10) |
+| `lagering` | brewed (as fermentation) and lagering started: the earliest of the cellar-plan step with `starts_lagering`, the first log tag Cooling 16C or Cooling, `batches.lagering_started_at` ("Start lagering now", beer that arrives cold), and for a batch without brews of its own its first incoming transfer (23-10) |
 | `fermentation` | number of brews with `brewing_ended_at` ≥ `batches.brew_count` rounded up (brew counts such as 3.33 occur); or, for a batch without started brews (a split batch), from its first incoming transfer (phase 8) |
 | `brewing` | a brew has `mash_in_started_at` |
 | `raw` | otherwise (batch report exists, not brewed yet) |
 
 UI labels: Raw material preparation · Brewing · Fermentation · Lagering ·
-HBT · Filling · Filled · Closed. Active batches shows Fermentation and
-Lagering as two rows of one "Cellar" block.
+On barrels · HBT · Filling · Filled · Closed. Active batches shows Fermentation and
+Lagering as two rows of one "Cellar" block, and On barrels as its own block
+under Filled.
 
 - **Start date** = earliest `mash_in_started_at` of the batch; a split batch
   (no brew started): its first incoming transfer. Its Time 0 is that moment
   too, unless `batches.time_zero` is set.
-- **End date** = filling report signed (parked). Until then empty; for
-  historical `completed` batches leave empty.
+- **End date** = the later of the two filling report checks. Empty for
+  historical `completed` batches.
+
+## HBT fills
+One `batch_hbts` row = one fill of the tank, from empty to empty. Filling it
+over more days is the same row with more filling sessions; the last session
+ticks "HBT finished". A new row with the same tank only after that (26278).
+Processing warns when "+ Add HBT" picks a tank whose fill is not finished.
+
+## Transfer to another tank (Fermentation log)
+The tag "Transfer" asks the tank the beer goes to (it becomes the batch's
+LT), volume, O2 and CO2: `batch_tank_moves`, linked to the log entry's tag.
+A split to another batch stays the Split / transfer popup (`batch_transfers`).
 
 ## Initials
 Typed by hand on the Users page (required on the invite form), unique

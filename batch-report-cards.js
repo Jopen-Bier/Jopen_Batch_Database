@@ -51,6 +51,8 @@ function createTransfersCard(container, ctx, renderSoon) {
       <td>${t.destination === 'discard' ? 'Discard' : 'To batch'}</td>
       <td>${t.to_batch ? `<a href="batch-overview.html?id=${t.to_batch_id}">${escapeHtml(t.to_batch.batch_number)}</a>` : '—'}</td>
       <td class="small">${escapeHtml([t.reason, t.comment].filter(Boolean).join(' · ') || '—')}</td>
+      <td style="text-align:center;"><input type="checkbox" data-empties-transfer="${t.id}"${t.empties_tank ? ' checked' : ''}${c.canEdit ? '' : ' disabled'}
+        aria-label="Tank empty: this was the whole batch" title="Tank empty: this was the whole batch"></td>
       <td>${c.canDelete ? `<button class="br-del" type="button" data-delete-transfer="${t.id}" aria-label="Delete transfer">${CARD_TRASH_ICON}</button>` : ''}</td></tr>`).join('');
     const incoming = c.incoming || [];
     const inRows = incoming.map((t) => `<tr>
@@ -65,7 +67,7 @@ function createTransfersCard(container, ctx, renderSoon) {
       </div>
       ${c.transfers.length ? `<div class="br-table-wrap"><table class="br-ing" style="min-width:820px;">
         <thead><tr><th style="width:170px;">Date</th><th class="r" style="width:90px;">Volume (hl)</th><th style="width:110px;">From</th>
-          <th style="width:130px;">Destination</th><th style="width:120px;">Batch</th><th>Reason · comment</th><th style="width:34px;"></th></tr></thead>
+          <th style="width:130px;">Destination</th><th style="width:120px;">Batch</th><th>Reason · comment</th><th style="width:90px; text-align:center;">Tank empty</th><th style="width:34px;"></th></tr></thead>
         <tbody>${rows}</tbody></table></div>` : '<div class="br-note">No splits or transfers.</div>'}
       ${saved ? `<div class="br-note sp-saved">Saved${saved.toBatchId ? ` · <a href="batch-overview.html?id=${saved.toBatchId}">batch ${escapeHtml(saved.batchNumber || '')}</a>` : ''} · a Transfer entry is on the fermentation log</div>` : ''}
       ${c.canEdit ? '<div><button class="br-ghost" type="button" id="fl-transfer-add">+ Split / transfer</button></div>' : ''}
@@ -93,7 +95,15 @@ function createTransfersCard(container, ctx, renderSoon) {
     });
   }
 
-  function handleChange() { return false; }
+  // "Tank empty": the whole batch went out with this transfer; the batch then
+  // counts as Filled (view batch_stages) and waits for the filling report checks.
+  function handleChange(el) {
+    if (!el.dataset.emptiesTransfer) return false;
+    const c = ctx();
+    const t = c.transfers.find((x) => x.id === Number(el.dataset.emptiesTransfer));
+    if (t) setEmptiesTank(t, el.checked, c.saveStatus).then(() => { if (c.onSaved) c.onSaved(null); renderSoon(); });
+    return true;
+  }
 
   function handleClick(target) {
     const del = target.closest('button[data-delete-transfer]');
@@ -111,6 +121,15 @@ function createTransfersCard(container, ctx, renderSoon) {
   }
 
   return { render, handleChange, handleClick };
+}
+
+async function setEmptiesTank(transfer, value, saveStatus) {
+  saveStatus.saving();
+  const { error } = await supabaseClient.from('batch_transfers').update({ empties_tank: value }).eq('id', transfer.id).select('id').single();
+  if (error) { saveStatus.failed(error.message); return false; }
+  transfer.empties_tank = value;
+  saveStatus.saved();
+  return true;
 }
 
 // Incoming transfers of a batch with the source batch and its beer.
@@ -132,7 +151,7 @@ function openSplitDialog(card, onDone) {
   const yy = String(new Date().getFullYear()).slice(2);
   const st = {
     at: toDateTimeLocal(new Date()), volume: '', fromTankId: c.fromTanks.length ? String(c.fromTanks[0].id) : '',
-    destination: 'new', recipeId: '', batchNumber: '', reason: '', comment: '', problem: '', saving: false,
+    destination: 'new', recipeId: '', batchNumber: '', reason: '', comment: '', empties: false, problem: '', saving: false,
     recipes: [], lastNumber: null, target: null, targetProblem: '', groupNames: new Map(),
   };
   const overlay = document.createElement('div');
@@ -287,6 +306,8 @@ function openSplitDialog(card, onDone) {
             <input class="br-input" id="sp-batch" value="${escapeHtml(st.batchNumber)}" placeholder="${escapeHtml(yy)}…"></div>`
             : `<div class="br-field"><label class="br-label" for="sp-reason">Reason</label><input class="br-input" id="sp-reason" value="${escapeHtml(st.reason)}" placeholder="e.g. off-flavour, tank bottom"></div>`}
           <div class="br-field"><label class="br-label" for="sp-comment">Comment</label><input class="br-input" id="sp-comment" value="${escapeHtml(st.comment)}"></div>
+          <label class="br-check"><input type="checkbox" id="sp-empties"${st.empties ? ' checked' : ''}> Tank empty: this is the whole batch
+            <span class="br-note">(the batch goes to Filled and waits for the filling report checks)</span></label>
           <div id="sp-after-wrap">${afterHtml()}</div>
           <div class="br-note">Saving adds a log entry with tag <b>Transfer</b> on this batch:</div>
           <div class="sp-log" id="sp-log">${escapeHtml(logText())}</div>
@@ -325,6 +346,10 @@ function openSplitDialog(card, onDone) {
     });
     st.saving = false;
     if (error) { c.saveStatus.failed(error.message); st.problem = error.message; return refresh(); }
+    if (st.empties && data && data.transfer_id) {
+      const { error: e2 } = await supabaseClient.from('batch_transfers').update({ empties_tank: true }).eq('id', data.transfer_id).select('id').single();
+      if (e2) { c.saveStatus.failed('Transfer saved, but "tank empty" was not: ' + e2.message); close(); onDone(data); return; }
+    }
     c.saveStatus.saved();
     close();
     onDone(data);
@@ -350,6 +375,7 @@ function openSplitDialog(card, onDone) {
   });
   overlay.addEventListener('change', (e) => {
     if (e.target.id === 'sp-tank') { st.fromTankId = e.target.value; refresh(); }
+    if (e.target.id === 'sp-empties') st.empties = e.target.checked;
     if (e.target.id === 'sp-recipe') { st.recipeId = e.target.value; refresh(); loadTarget().then(() => refresh()); }
     if (e.target.id === 'sp-batch') loadTarget().then(() => refresh());
   });

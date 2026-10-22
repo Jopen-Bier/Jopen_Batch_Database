@@ -42,7 +42,7 @@
 
   <datalist id="ov-ingredient-list"></datalist>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2"></script>
   <script src="config.js"></script>
   <script src="jopen-utils.js"></script>
   <script src="nav.js"></script>
@@ -92,11 +92,13 @@
 
     // ------------------------------------------------------------ loading
     async function loadAll(batchId) {
-      page.ctx = await loadBatchContext(batchId);
+      // Older batches get their snapshot on first open (idempotent); it runs next to the batch itself.
+      const [ctx, snap] = await Promise.all([
+        loadBatchContext(batchId),
+        supabaseClient.rpc('snapshot_batch_ingredients', { p_batch_id: batchId }),
+      ]);
+      page.ctx = ctx;
       const recipeId = page.ctx.batch.recipe_id;
-
-      // Older batches get their snapshot on first open (idempotent).
-      const snap = await supabaseClient.rpc('snapshot_batch_ingredients', { p_batch_id: batchId });
       if (snap.error) console.error('Snapshot could not be created:', snap.error);
 
       const one = (table) => supabaseClient.from(table).select('*').eq('recipe_id', recipeId).maybeSingle();
@@ -212,7 +214,10 @@
         <div class="br-kr"><span class="k">Recipe</span><span class="c"><a href="receptoverzicht.html?id=${recipe.id}">${escapeHtml(recipe.name || '')} ${escapeHtml(versionText(recipe.version_major, recipe.version_minor))}</a></span></div>
         <div class="br-kr"><span class="k">Beer style</span><span class="c">${escapeHtml(recipe.beer_style || '—')}</span></div>
         <div class="br-kr"><span class="k">Brewery</span><span class="c">${escapeHtml(BREWERY_NAMES[recipe.location] || '—')}</span></div>
-        <div class="br-kr"><span class="k">Number of brews</span><span class="c">${brews === null ? '—' : fmt(brews)}${hl ? ` × ${fmt(hl)} hl` : ''}</span></div>
+        ${page.canEdit
+          ? `<div class="br-kr"><label class="k" for="ov-brew-count">Number of brews</label><span class="c" style="display:flex; align-items:center; gap:6px; justify-content:flex-end;">
+               <input id="ov-brew-count" class="br-in" inputmode="decimal" style="width:64px;" value="${brews === null ? '' : escapeHtml(String(brews))}" aria-label="Number of brews">${hl ? ` × ${fmt(hl)} hl` : ''}</span></div>`
+          : `<div class="br-kr"><span class="k">Number of brews</span><span class="c">${brews === null ? '—' : fmt(brews)}${hl ? ` × ${fmt(hl)} hl` : ''}</span></div>`}
         ${incomingHl ? `<div class="br-kr"><span class="k">From splits</span><span class="c">${fmt(incomingHl)} hl</span></div>
         <div class="br-kr"><span class="k">Batch volume <span class="br-note">· dosing</span></span><span class="c">${fmt(dosingVolumeHl(amountCtx()))} hl</span></div>` : ''}
         <div class="br-kr"><span class="k">Beer risk · beer status</span><span>${pill(BEER_RISK_LABELS, BEER_RISK_COLORS, risk)} ${pill(BEER_STATUS_LABELS, BEER_STATUS_COLORS, status)}</span></div>
@@ -521,6 +526,13 @@
       main.addEventListener('change', (e) => {
         const el = e.target;
         if (el.id === 'ov-pick-date') return saveBatch({ order_picking_date: el.value || null });
+        if (el.id === 'ov-brew-count') {
+          // Fewer brews than planned (26316: 2 planned, 1 made): the totals and the stage follow.
+          const value = num(el.value);
+          if (value === null || value < 0) { el.classList.add('bad'); el.title = 'Not a number'; return; }
+          el.classList.remove('bad');
+          return saveBatch({ brew_count: value });
+        }
         if (el.id === 'ov-picked') {
           return saveBatch(el.checked
             ? { order_picking_completed_at: new Date().toISOString(), order_picking_completed_by: page.user.id }
@@ -557,19 +569,20 @@
     }
 
     async function initOverviewPage() {
+      // The batch loads while the user and rights load (RLS guards the data).
+      const batchId = batchIdFromUrl();
+      const loading = batchId ? loadAll(batchId).then(() => null, (err) => err) : null;
       page.user = await getCurrentUser();
       if (!page.user) return; // nav.js redirects to login
       if (!(await magBekijkenModule('batches'))) {
         showMessage('You do not have access to batch reports. Ask an admin for view rights on "Batches & batch reports".');
         return;
       }
-      const batchId = batchIdFromUrl();
       if (!batchId) { showMessage('No batch chosen. Open a batch from All batches or Active batches.', true); return; }
       page.canEdit = await magBewerkenModule('batches');
-      try {
-        await loadAll(batchId);
-      } catch (err) {
-        showMessage('Could not load the batch: ' + (err.message || err), true);
+      const loadError = await loading;
+      if (loadError) {
+        showMessage('Could not load the batch: ' + (loadError.message || loadError), true);
         return;
       }
       document.title = `Jopen Brouwerij — ${page.ctx.batch.batch_number} Overview`;

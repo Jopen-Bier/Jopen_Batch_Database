@@ -77,7 +77,7 @@ tools/                     translation-layer scripts + ci_guard.py (see tools/RE
 
 ### Script order on every page
 ```html
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2"></script>
 <script src="config.js"></script>
 <script src="jopen-utils.js"></script>
 <script src="nav.js"></script>
@@ -233,7 +233,7 @@ Agreed table and column names per table: `supabase/rename-map.json`.
 | `batch-filling-report.html` | batches | batches, filling_sessions, filling_session_articles, filling_session_materials, packaging_articles/_materials/_article_materials, batch_hbts, hbt_readings, batch_transfers, batch_brews, tanks, incoming batch_transfers, `split_batch()` (Split / transfer popup), recipes, recipe_ingredients / batch_ingredients of the receiving batch, batch_documents + storage bucket `batch-documents` |
 | `batch-filling.html` | batches | batches, filling_sessions, filling_measurements, batch_hbts, hbt_readings, tanks, users, recipe_packaging/_fermentation |
 | `batch-processing.html` | batches | batches, processing_sessions, processing_comments, batch_hbts, hbt_readings, batch_transfers, batch_brews, batch_ingredients, tanks, users, cellar_plan_parts, recipe_fermentation/_packaging/_process_steps, incoming batch_transfers, `split_batch()` (Split / transfer popup), recipes, recipe_ingredients / batch_ingredients of the receiving batch |
-| `batch-fermentation.html` | batches | batches, batch_cellar_steps (`snapshot_batch_cellar_steps()`), fermentation_log_entries, fermentation_log_entry_tags, cellar_action_tags, batch_transfers, batch_brews, batch_ingredients, tanks, users, recipe_specs/_fermentation, incoming batch_transfers, `split_batch()` (Split / transfer popup), recipes, recipe_ingredients / batch_ingredients of the receiving batch |
+| `batch-fermentation.html` | batches | batches, batch_cellar_steps (`snapshot_batch_cellar_steps()`), fermentation_log_entries, fermentation_log_entry_tags, cellar_action_tags, batch_tank_moves, batch_transfers, batch_brews, batch_ingredients, tanks, users, recipe_specs/_fermentation, incoming batch_transfers, `split_batch()` (Split / transfer popup), recipes, recipe_ingredients / batch_ingredients of the receiving batch |
 | `batch-brewing.html` | batches | batches, batch_brews, batch_brew_comments, batch_ingredients, tanks, users, recipe_brewing_specs/_specs/_fermentation/_comments |
 | `batch-overview.html` | batches | batches, batch_ingredients, `snapshot_batch_ingredients()`, recipes + recipe_specs/_fermentation/_brewing_specs/_packaging/_water/_revisions, ingredients, stock_movements, lots |
 | `voorraad-overzicht/inboeken/uitboeken.html` | inventory | lots, stock_movements, ingredients, batches, users |

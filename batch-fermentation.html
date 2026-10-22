@@ -33,7 +33,7 @@
     </div>
   </main>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2"></script>
   <script src="config.js"></script>
   <script src="jopen-utils.js"></script>
   <script src="nav.js"></script>
@@ -50,7 +50,7 @@
 
     const page = {
       user: null, canEdit: false, canDelete: false, ctx: null, save: null,
-      steps: [], entries: [], entryTags: [], tags: [], transfers: [], incoming: [], brews: [], tanks: [],
+      steps: [], entries: [], entryTags: [], tags: [], transfers: [], incoming: [], brews: [], tanks: [], tankMoves: [],
       users: [], initialsOf: () => '', ferm: {}, specs: {}, ingredients: [], names: {},
 
     };
@@ -74,14 +74,14 @@
 
     // ------------------------------------------------------------ loading
     async function loadAll(batchId) {
-      page.ctx = await loadBatchContext(batchId);
-      const recipeId = page.ctx.batch.recipe_id;
-      await Promise.all([
+      [page.ctx] = await Promise.all([
+        loadBatchContext(batchId),
         supabaseClient.rpc('snapshot_batch_ingredients', { p_batch_id: batchId }),
         supabaseClient.rpc('snapshot_batch_cellar_steps', { p_batch_id: batchId }),
       ]);
+      const recipeId = page.ctx.batch.recipe_id;
       const one = (table) => supabaseClient.from(table).select('*').eq('recipe_id', recipeId).maybeSingle();
-      const [steps, entries, entryTags, tags, transfers, brews, tanks, users, ferm, specs, ingredients] = await Promise.all([
+      const [steps, entries, entryTags, tags, transfers, brews, tanks, users, ferm, specs, ingredients, tankMoves, incomingRes] = await Promise.all([
         supabaseClient.from('batch_cellar_steps').select('*').eq('batch_id', batchId).order('sort_order').order('id'),
         supabaseClient.from('fermentation_log_entries').select('*').eq('batch_id', batchId).order('measured_at').order('id'),
         supabaseClient.from('fermentation_log_entry_tags').select('id, entry_id, tag_id, batch_id, batch_cellar_step_id, created_by').eq('batch_id', batchId).order('id'),
@@ -92,15 +92,16 @@
         loadUserInitials(),
         one('recipe_fermentation'), one('recipe_specs'),
         supabaseClient.from('batch_ingredients').select('id, recipe_ingredient_id, ingredient_id, addition_type, unit, quantity, note, is_removed').eq('batch_id', batchId),
+        supabaseClient.from('batch_tank_moves').select('*').eq('batch_id', batchId).order('id'),
+        supabaseClient.from('batch_transfers').select(INCOMING_SELECT).eq('to_batch_id', batchId).order('transferred_at').order('id'),
       ]);
-      for (const res of [steps, entries, entryTags, tags, transfers, brews, tanks, ingredients]) if (res.error) throw res.error;
+      for (const res of [steps, entries, entryTags, tags, transfers, brews, tanks, ingredients, tankMoves, incomingRes]) if (res.error) throw res.error;
+      page.tankMoves = tankMoves.data;
       page.steps = steps.data;
       page.entries = entries.data;
       page.entryTags = entryTags.data;
       page.tags = tags.data;
       page.transfers = transfers.data;
-      const incomingRes = await supabaseClient.from('batch_transfers').select(INCOMING_SELECT).eq('to_batch_id', batchId).order('transferred_at').order('id');
-      if (incomingRes.error) throw incomingRes.error;
       page.incoming = incomingRes.data;
       page.brews = brews.data;
       page.tanks = tanks.data;
@@ -187,11 +188,67 @@
      * is; otherwise the tag ticks off the next open step, as before.
      */
     async function addTagWithChoice(entryId, tagId) {
+      if (tagById(tagId).code === 'transfer') return addTransferTag(entryId, tagId);
       const open = CHOOSE_STEP_TAGS.includes(tagById(tagId).code) ? openStepsForTag(page.steps, page.entries, page.entryTags, tagId) : [];
       if (open.length < 2) return addTag(entryId, tagId);
       const choice = await chooseStepDialog(tagById(tagId).label, open);
       if (choice === undefined) return renderSoon();   // cancelled
       return addTag(entryId, tagId, choice);
+    }
+
+    // "Transfer" = pushing the beer to another tank of this batch: the popup asks
+    // the tank (it becomes the LT), volume, O2 and CO2 (batch_tank_moves).
+    async function addTransferTag(entryId, tagId) {
+      const b = page.ctx.batch;
+      const fromId = b.lt_tank_id || b.glt_tank_id || null;
+      const move = await tankMoveDialog(fromId);
+      if (!move) return renderSoon();   // cancelled: no tag
+      const added = await addTag(entryId, tagId);
+      if (!added) return;
+      const row = await insertRow('batch_tank_moves', { batch_id: b.id, entry_tag_id: added.id, from_tank_id: fromId, to_tank_id: move.toTankId,
+        volume_hl: move.volumeHl, o2_ppb: move.o2Ppb, co2_gl: move.co2Gl }, page.tankMoves);
+      if (row && move.toTankId !== b.lt_tank_id) await saveBatch({ lt_tank_id: move.toTankId });
+      renderSoon();
+    }
+
+    // { toTankId, volumeHl, o2Ppb, co2Gl } or null when cancelled.
+    function tankMoveDialog(fromId) {
+      const from = page.tanks.find((t) => t.id === fromId);
+      return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = 'br-dialog-overlay';
+        overlay.innerHTML = `<div class="br-dialog" role="dialog" aria-modal="true" aria-labelledby="fl-move-title">
+          <div class="br-dialog-title" id="fl-move-title">Transfer${from ? ' from ' + escapeHtml(from.code) : ''} to</div>
+          <div class="br-field" style="padding-top:0;"><label class="br-label" for="fl-move-tank">Tank (becomes the LT)</label>
+            <select id="fl-move-tank" class="br-input">${tankOptions(['lt', 'glt'], null, fromId)}</select></div>
+          <div style="display:flex; gap:10px;">
+            <div class="br-field" style="padding-top:0;"><label class="br-label" for="fl-move-hl">Volume (hl)</label><input id="fl-move-hl" class="br-input" inputmode="decimal"></div>
+            <div class="br-field" style="padding-top:0;"><label class="br-label" for="fl-move-o2">O2 (ppb)</label><input id="fl-move-o2" class="br-input" inputmode="decimal"></div>
+            <div class="br-field" style="padding-top:0;"><label class="br-label" for="fl-move-co2">CO2 (g/l)</label><input id="fl-move-co2" class="br-input" inputmode="decimal"></div>
+          </div>
+          <div class="br-note" id="fl-move-msg"></div>
+          <div class="br-dialog-buttons"><button type="button" class="br-ghost" data-move="cancel">Cancel</button>
+            <button type="button" class="br-primary" data-move="ok">Save transfer</button></div></div>`;
+        const close = (value) => { overlay.remove(); document.removeEventListener('keydown', onKey); resolve(value); };
+        const onKey = (e) => { if (e.key === 'Escape') close(null); };
+        const value = (id) => { const t = overlay.querySelector(id).value.trim(); return t === '' ? null : toNumber(t); };
+        overlay.addEventListener('click', (e) => {
+          const btn = e.target.closest('button[data-move]');
+          if (!btn) { if (e.target === overlay) close(null); return; }
+          if (btn.dataset.move === 'cancel') return close(null);
+          const toTankId = Number(overlay.querySelector('#fl-move-tank').value) || null;
+          const move = { toTankId, volumeHl: value('#fl-move-hl'), o2Ppb: value('#fl-move-o2'), co2Gl: value('#fl-move-co2') };
+          const bad = ['#fl-move-hl', '#fl-move-o2', '#fl-move-co2'].some((id) => overlay.querySelector(id).value.trim() !== '' && value(id) === null);
+          if (!toTankId || bad) {
+            overlay.querySelector('#fl-move-msg').textContent = !toTankId ? 'Choose the tank the beer goes to.' : 'Volume, O2 and CO2 must be numbers.';
+            return;
+          }
+          close(move);
+        });
+        document.addEventListener('keydown', onKey);
+        document.body.appendChild(overlay);
+        overlay.querySelector('#fl-move-tank').focus();
+      });
     }
 
     // Resolves the chosen step id, null for "next open step", undefined when cancelled.
@@ -307,7 +364,30 @@
           <input id="fl-t0" type="datetime-local" class="br-input" style="width:auto;" value="${escapeHtml(toDateTimeLocal(t0))}"${dis()}>
           <span class="br-note">${b.time_zero
             ? `Set by hand${lastBrew ? ` · <button type="button" class="br-linkbtn" id="fl-t0-reset"${dis()}>use end of last brew (${dmy(lastBrew)} ${hm(lastBrew)})</button>` : ''}`
-            : lastBrew ? 'End of the last brew' : 'No brew has ended yet'}</span></div>`;
+            : lastBrew ? 'End of the last brew' : 'No brew has ended yet'}</span></div>
+        ${lageringHtml()}`;
+    }
+
+    async function setLageringStart(at) {
+      if (await saveBatch({ lagering_started_at: at }) === false) return;
+      const { data } = await supabaseClient.from('batch_stages').select('*').eq('batch_id', page.ctx.batch.id).maybeSingle();
+      if (data) { page.ctx.stageRow = data; page.ctx.stage = data.stage; }
+      renderSoon();
+    }
+
+    // Lagering starts at the first Cooling 16C / Cooling tag, for a batch of only
+    // received beer at the first beer in, or by hand (beer that arrives cold).
+    function lageringHtml() {
+      const b = page.ctx.batch, sr = page.ctx.stageRow || {};
+      if (sr.lagering_started_at && !b.lagering_started_at) {
+        return `<div class="br-note" style="padding-top:8px;">Lagering since ${dmy(sr.lagering_started_at)}</div>`;
+      }
+      if (b.lagering_started_at) {
+        return `<div class="br-note" style="padding-top:8px;">Lagering since ${dmy(b.lagering_started_at)} · started by hand${page.canEdit
+          ? ` · <button type="button" class="br-linkbtn" id="fl-lager-undo">undo</button>` : ''}</div>`;
+      }
+      return page.canEdit ? `<div style="padding-top:8px;"><button type="button" class="br-ghost" id="fl-lager-start">Start lagering now</button>
+        <span class="br-note">for beer that arrives cold (no cooling step)</span></div>` : '';
     }
 
     function renderSpecs() {
@@ -419,6 +499,12 @@
       // a chip of a tag that ticks off an Addition step names what was added
       const { stepOfTag } = planProgress(page.steps, page.entries, page.entryTags);
       const chipLabel = (t) => {
+        const move = page.tankMoves.find((m) => m.entry_tag_id === t.id);
+        if (move) {
+          const to = page.tanks.find((x) => x.id === move.to_tank_id);
+          return [`Transfer → ${to ? to.code : '?'}`, move.volume_hl != null ? `${fmt(move.volume_hl, 1)} hl` : null,
+            move.o2_ppb != null ? `O2 ${fmt(move.o2_ppb)}` : null, move.co2_gl != null ? `CO2 ${fmt(move.co2_gl, 2)}` : null].filter(Boolean).join(' · ');
+        }
         const step = stepOfTag.get(t.id);
         const label = tagById(t.tag_id).label;
         return step && step.title.startsWith(label + ' · ') ? step.title : label;
@@ -551,6 +637,8 @@
       });
       main.addEventListener('click', (e) => {
         if (e.target.closest('#fl-t0-reset')) return setTimeZero(null);
+        if (e.target.closest('#fl-lager-start')) return setLageringStart(new Date().toISOString());
+        if (e.target.closest('#fl-lager-undo')) return setLageringStart(null);
         if (e.target.closest('#fl-add-entry')) {
           const now = new Date(); now.setSeconds(0, 0);
           return addEntry({ measured_at: now.toISOString() });
@@ -580,20 +668,21 @@
     }
 
     async function initFermentationPage() {
+      // The batch loads while the user and rights load (RLS guards the data).
+      const batchId = batchIdFromUrl();
+      const loading = batchId ? loadAll(batchId).then(() => null, (err) => err) : null;
       page.user = await getCurrentUser();
       if (!page.user) return; // nav.js redirects to login
       if (!(await magBekijkenModule('batches'))) {
         showMessage('You do not have access to batch reports. Ask an admin for view rights on "Batches & batch reports".');
         return;
       }
-      const batchId = batchIdFromUrl();
       if (!batchId) { showMessage('No batch chosen. Open a batch from All batches or Active batches.', true); return; }
       page.canEdit = await magBewerkenModule('batches');
       page.canDelete = await magVerwijderenModule('batches');
-      try {
-        await loadAll(batchId);
-      } catch (err) {
-        showMessage('Could not load the batch: ' + (err.message || err), true);
+      const loadError = await loading;
+      if (loadError) {
+        showMessage('Could not load the batch: ' + (loadError.message || loadError), true);
         return;
       }
       document.title = `Jopen Brouwerij — ${page.ctx.batch.batch_number} Fermentation log`;

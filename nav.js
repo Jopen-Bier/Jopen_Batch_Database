@@ -79,8 +79,14 @@ function rolLabel(rol) { return JOPEN_ROL_LABELS[rol] || rol; }
 // Admin krijgt dit hardcoded (nooit via de tabel) zodat een fout in
 // role_permissions een admin nooit buiten zijn eigen systeem kan sluiten.
 let _jopenRechtenCache = null;
+let _jopenRightsInFlight = null;   // the request in flight: menu and page share it
 async function jopenHaalRechten() {
   if (_jopenRechtenCache) return _jopenRechtenCache;
+  if (!_jopenRightsInFlight) _jopenRightsInFlight = jopenLoadRights().finally(() => { _jopenRightsInFlight = null; });
+  return _jopenRightsInFlight;
+}
+
+async function jopenLoadRights() {
   const gebruiker = await getCurrentUser();
   if (!gebruiker) { _jopenRechtenCache = {}; return _jopenRechtenCache; }
 
