@@ -71,7 +71,10 @@
   <script src="nav.js"></script>
   <script src="recipe-values.js"></script>
   <script src="batch-stages.js"></script>
+  <script src="batch-report-shell.js"></script>
+  <script src="batch-delete.js"></script>
   <script>
+    const TRASH_ICON = '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2.5 4h9M5.5 4V2.5h3V4M3.5 4l.6 8h5.8l.6-8"></path></svg>';
     const PAGE_SIZE = 15;
     const COLUMNS = [
       { key: 'batchNumber', label: 'Batch', width: '110px', firstDir: -1 },
@@ -83,6 +86,7 @@
     ];
 
     let allRows = [];
+    let canDeleteBatches = false;  // the right "Delete batches" (role matrix)
     const view = { q: '', stage: '', year: '', location: '', sort: 'batchNumber', dir: -1, page: 0 };
 
     function showMessage(text, isError) {
@@ -121,7 +125,7 @@
         const on = view.sort === c.key;
         const arrow = on ? (view.dir > 0 ? ' ▲' : ' ▼') : '';
         return `<th${c.width ? ` style="width:${c.width};"` : ''}><button type="button" class="${on ? 'on' : ''}" data-sort="${c.key}">${c.label}<span aria-hidden="true">${arrow}</span></button></th>`;
-      }).join('');
+      }).join('') + (canDeleteBatches ? '<th style="width:40px;"></th>' : '');
     }
 
     function render() {
@@ -140,6 +144,7 @@
           <td><span class="br-pill" style="background:${st.pill[0]}; color:${st.pill[1]};">${escapeHtml(st.label)}</span></td>
           <td class="${r.startDate ? 'num' : 'muted'}">${escapeHtml(startText(r))}</td>
           <td class="${r.endDate ? 'num' : 'muted'}">${escapeHtml(r.endDate ? formatDate(r.endDate) : '—')}</td>
+          ${canDeleteBatches ? `<td><button class="br-del" type="button" data-delete-batch="${escapeHtml(r.batchNumber)}" aria-label="Delete batch ${escapeHtml(r.batchNumber)}" title="Delete batch">${TRASH_ICON}</button></td>` : ''}
         </tr>`;
       }).join('');
 
@@ -191,6 +196,23 @@
       URL.revokeObjectURL(link.href);
     }
 
+    async function deleteBatchRow(batchNumber) {
+      const row = allRows.find((r) => r.batchNumber === batchNumber);
+      const links = await batchLinks(supabaseClient, batchNumber);
+      if (links.incoming.length || links.stockMovements) { alert(deleteBlockedText(batchNumber, links)); return; }
+      const ok = await confirmDialog({
+        title: `Delete batch ${batchNumber}${row && row.name ? ' · ' + row.name : ''}?`,
+        text: deleteConfirmText(batchNumber, links),
+        okLabel: `Delete batch ${batchNumber}`,
+      });
+      if (!ok) return;
+      const result = await deleteBatch(supabaseClient, batchNumber, links);
+      if (!result.ok) { alert(result.message); return; }
+      allRows = allRows.filter((r) => r.batchNumber !== batchNumber);
+      render();
+      if (result.warning) alert(result.warning);
+    }
+
     function bindControls() {
       document.getElementById('ab-search').addEventListener('input', (e) => { view.q = e.target.value; view.page = 0; render(); });
       document.getElementById('ab-stage').addEventListener('change', (e) => { view.stage = e.target.value; view.page = 0; render(); });
@@ -215,6 +237,10 @@
       document.getElementById('ab-prev').addEventListener('click', () => { view.page -= 1; render(); });
       document.getElementById('ab-next').addEventListener('click', () => { view.page += 1; render(); });
       document.getElementById('ab-export').addEventListener('click', exportToExcel);
+      document.getElementById('ab-body').addEventListener('click', (e) => {
+        const btn = e.target.closest('button[data-delete-batch]');
+        if (btn) deleteBatchRow(btn.dataset.deleteBatch);
+      });
     }
 
     async function initAllBatchesPage() {
@@ -224,6 +250,7 @@
         showMessage('You do not have access to batch reports. Ask an admin for view rights on "Batches & batch reports".');
         return;
       }
+      canDeleteBatches = await magVerwijderenModule('batch_deletion');
       try {
         allRows = await loadBatches();
       } catch (err) {
