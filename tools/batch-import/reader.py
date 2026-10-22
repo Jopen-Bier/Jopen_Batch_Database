@@ -454,6 +454,11 @@ def read_brewing(b, out):
                 val = val.rstrip(' -') or None  # typed with a trailing dash ("US-05-")
             if val is not None:
                 out['batch'][key] = val[0] if kind == 'people' else val
+            else:
+                v = b.raw(sh, f'N{r}')
+                if isinstance(v, str) and v.strip() not in ('', '-') and not b.is_formula(sh, f'N{r}'):
+                    # Text in a yes/no or number cell ("repitch", "80L"): keep it as a comment for all brews.
+                    comments.append({'brew_number': None, 'comment': f'{b.raw(sh, f"K{r}")}: {v.strip()}'})
 
 
 UNITS = {'hl', '°p', '⁰p', 'min', 'liter', 'l', 'ppm', '%', 'uur', 'hl°p', 'kj/s', '°c', 'kg', 'g'}
@@ -759,6 +764,12 @@ def read_hbts(b, out, labels, hbt_row):
         tank = code
         g = next((x for x in groups[used:] if x['tank'] == tank and 'end' not in x), None)
         if g is None:
+            # Readings without a tank number, then the end value names it (26143: HBT13).
+            g = next((x for x in groups[used:] if x['tank'] is None and 'end' not in x), None)
+            if g is not None:
+                g['tank'] = tank
+                b.warn(sh, f'D{r}', f'HBT fill without a tank number: HBT{tank} from its end value')
+        if g is None:
             b.warn(sh, f'D{r}', f'end value for HBT{tank} without readings: new fill made')
             g = {'tank': tank, 'readings': [], 'formats': set()}
             groups.append(g)
@@ -827,7 +838,9 @@ ARTICLES = [  # Dutch name prefix in Afvulverslag column B -> packaging_articles
     ('krat 12x75cl', 'crate_12x75_blank'), ('doos 12x44cl blik', 'box_12x44_can'),
     ('doos 24x44cl blik', 'box_24x44_can'), ('20l keykeg', 'keykeg_20'), ('30l keykeg', 'keykeg_30'),
     ('20l jopen/ku fust', 'jopen_keg_20'), ('30l jopen fust', 'jopen_keg_30'), ('50l jopen fust', 'jopen_keg_50'),
-    ('20l gbr, door vrouwen', 'gbr_door_vrouwen_keg_20'), ('20l global keg', None),
+    ('20l gbr, door vrouwen', 'gbr_door_vrouwen_keg_20'),
+    # kegs of another brewery or owner: 20L other keg, the name goes in the comment (Jaap, 22-10)
+    ('20l global keg', 'other_keg_20'), ('20l warsteiner', 'other_keg_20'), ('20l other keg', 'other_keg_20'),
     # English template
     ('box 24x33cl - blanco', 'box_24x33_blank'), ('box 24x33cl can', 'box_24x33_can'), ('box 24x33cl', 'box_24x33'),
     ('box 12x33cl - blanco', 'box_12x33_blank'), ('box 12x33cl can', 'box_12x33_can'), ('box 12x33cl', 'box_12x33'),
@@ -848,9 +861,11 @@ MATERIALS = [  # -> packaging_materials.code (None = no longer used: reported)
     ('omdozen 6x75cl - bedrukt', 'box_6x75_printed'), ('omdozen 6x75cl - blanco', 'box_6x75_blank'),
     ('kroonkurk', 'crown_cork'), ('kurk', 'cork'), ('musselet', 'muselet'),
     ('blik 33cl', 'can_33'), ('blik 44cl', 'can_44'), ('blik deksel', 'can_lid'),
-    ('global keg 20l', None), ('jopen fust 20l', 'jopen_keg_20'), ('jopen fust 30l', 'jopen_keg_30'),
+    ('global keg 20l', 'other_keg_20'), ('jopen fust 20l', 'jopen_keg_20'), ('jopen fust 30l', 'jopen_keg_30'),
     ('jopen fust 50l', 'jopen_keg_50'), ('gdv 20l', 'gbr_door_vrouwen_keg_20'), ('fustdop', 'keg_cap'), ('keykegfustdop', 'keykeg_cap'),
     ('keykeg 20l', 'keykeg_20'), ('keykeg 30l', 'keykeg_30'),
+    ('fustkraag', 'keg_collar'), ('frustkr', 'keg_collar'), ('keg collar', 'keg_collar'),
+    ('florijn keg 20l', 'other_keg_20'), ('20l warsteiner', 'other_keg_20'), ('warsteiner', 'other_keg_20'),
     # other spellings in the old reports
     ('gdv keg 20l', 'gbr_door_vrouwen_keg_20'), ('gdv fust 20l', 'gbr_door_vrouwen_keg_20'),
     ('ku fust 20l', 'jopen_keg_20'), ('ku 20l', 'jopen_keg_20'), ('kegsunited 20l', 'jopen_keg_20'),
@@ -868,7 +883,7 @@ MATERIALS = [  # -> packaging_materials.code (None = no longer used: reported)
     ('crown cap', 'crown_cork'), ('cork', 'cork'), ('muselet', 'muselet'),
     ('can 33cl', 'can_33'), ('can 44cl', 'can_44'), ('can end', 'can_lid'),
     ('20l ku keg', 'jopen_keg_20'), ('30l jopen keg', 'jopen_keg_30'), ('50l jopen keg', 'jopen_keg_50'),
-    ('20l gebr. door vrouwen keg', 'gbr_door_vrouwen_keg_20'), ('20l other keg', None),
+    ('20l gebr. door vrouwen keg', 'gbr_door_vrouwen_keg_20'), ('20l other keg', 'other_keg_20'),
     ('30l keykeg', 'keykeg_30'), ('keykeg cap', 'keykeg_cap'), ('keg cap', 'keg_cap'),
 ]
 
@@ -988,9 +1003,10 @@ def read_filling_report(b, out, sessions, ref):
                    'not on Afvullen: made from the filling report (date, HBT, volume, articles)')
         if to_date(date) != s['filling_date']:
             b.warn(sh, f'{c}7', f'date {to_date(date)} differs from Afvullen ({s["filling_date"]})')
-        vol = F(f'{c}11', 'Volume (HL)', 'filling_sessions.volume_hl', 'num')
+        # Often a formula (the sum of the articles): its last calculated value is the volume.
+        vol = F(f'{c}11', 'Volume (HL)', 'filling_sessions.volume_hl', 'num', allow_formula=True)
         if vol is not None:
-            s['volume_hl'] = vol
+            s['volume_hl'] = round(vol, 2)
         s['articles'], s['materials'] = [], []
     section = None
     for r, label in b.rows(sh, 'B'):
@@ -1043,7 +1059,18 @@ def read_filling_report(b, out, sessions, ref):
                        'no longer used (removed from Settings)' if known else 'unknown name')
                 b.warn(sh, f'{c}{r}', f'"{b.raw(sh, f"B{r}")}" booked ({q:g}) but {"no longer used" if known else "unknown"}')
                 continue
-            s[section].append({'code': code, 'quantity': q})
+            # Another brewery's keg: the name on the report says which (not for the generic "20L other keg").
+            comment = None
+            if code == 'other_keg_20':
+                comment = re.sub(r'[\s:]+$', '', str(b.raw(sh, f'B{r}'))).strip()
+                comment = None if re.fullmatch(r'(?i)20\s*l\s+other\s+keg', comment) else comment
+            same = next((x for x in s[section] if x['code'] == code), None)
+            if same:  # two report lines on one material (Warsteiner + Florijn): one row, summed
+                same['quantity'] += q
+                if comment:
+                    same['comment'] = ', '.join(x for x in (same.get('comment'), comment) if x)
+                continue
+            s[section].append({'code': code, 'quantity': q, **({'comment': comment} if comment else {})})
     for s in sessions:
         formats = {fmt.get(a['code']) for a in s.get('articles', []) if a['quantity']}
         keg_meas = any('keg_co2_gl' in m or 'keg_o2_ppb' in m for m in s.get('measurements', []))
@@ -1075,7 +1102,7 @@ def tank_beer(b, out):
     session of package "tank" (article tank_jopenkerk, counted in hl). The date
     comes from the filling report entry with that volume (a TT60 / "Kerk"
     column or a "TBV ..." row), else the last processing date. Everything else
-    outside an HBT is reported for Jaap, not imported."""
+    outside an HBT is settled by settle_end_values()."""
     other = out.pop('other_end_values', [])
     used = set()
     for i, e in enumerate(other):
@@ -1118,14 +1145,36 @@ def tank_beer(b, out):
                          'articles': [{'code': 'tank_jopenkerk', 'quantity': vol}], 'materials': []})
         b.note(*e['cell'].split('!'), f'End value {e["tank"]}', f'{vol} ({e["comment"]})', 'filling_sessions (tank)', 'read',
                f'tank beer Jopenkerk, filled {date}' + (f' ({other[match]["cell"]})' if match is not None else ''))
-    for i, e in enumerate(other):
-        if i in used:
-            continue
+    rest = [e for i, e in enumerate(other) if i not in used]
+    if rest:
+        out['other_end_values'] = rest
+
+
+def settle_end_values(b, out):
+    """End values / "TBV" lines that are not an HBT fill, a split with a batch
+    number or tank beer (Jaap, 22-10: the values are right). The same volume as
+    a transfer of the batch is that transfer written again (26009: 112.9 hl =
+    the split to 26050); anything else becomes a processing comment, one per
+    volume, so it stays visible (26160: 7 hl "Non Test"; 26338: 129.9 hl LT56)."""
+    done = []
+    for e in out.pop('other_end_values', []):
         sh, cell = e['cell'].split('!')
-        b.note(sh, cell, f'{e["kind"]}: {e["tank"] or e["comment"]}', f'{e["volume_hl"]} hl ({e["comment"]})', '-',
-               'not_imported', 'not from an HBT and not to a batch: ask Jaap')
-        b.warn(sh, cell, f'{e["volume_hl"]:g} hl {e["tank"] or ""} ({e["comment"] or "no comment"}): not imported, ask Jaap')
-        out.setdefault('other_end_values', []).append(e)
+        vol = e['volume_hl']
+        label = f'{e["kind"]}: {e["tank"] or e["comment"]}'
+        t = next((t for t in out.get('transfers', []) if abs(t['volume_hl'] - vol) <= 0.05), None)
+        if t:
+            b.note(sh, cell, label, f'{vol} hl ({e["comment"]})', 'batch_transfers', 'read',
+                   f'the same beer as the transfer to {t["to_batch_number"]}')
+            continue
+        if any(abs(d - vol) <= 0.05 for d in done):
+            b.note(sh, cell, label, f'{vol} hl ({e["comment"]})', 'processing_comments', 'read', 'already a comment')
+            continue
+        done.append(vol)
+        text = f'End value {vol:g} hl' + (f' {e["tank"]}' if e['tank'] else '') + (f' ({e["comment"]})' if e['comment'] else '')
+        out.setdefault('processing_comments', []).append({'comment_time': None, 'comment': text})
+        b.note(sh, cell, label, f'{vol} hl ({e["comment"]})', 'processing_comments', 'suspicious',
+               'not an HBT, not a split to a batch: kept as a processing comment')
+        b.warn(sh, cell, f'{text}: kept as a processing comment')
 
 
 def apply_overrides(b, out, path=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'overrides.json')):
@@ -1141,9 +1190,13 @@ def apply_overrides(b, out, path=os.path.join(os.path.dirname(os.path.abspath(__
     for s in o.get('filling_sessions', []):
         sessions = out.setdefault('filling_sessions', [])
         sessions.append({**s, 'session_number': len(sessions) + 1})
+    for n, date in o.get('filling_dates', {}).items():  # a mistyped date (session number -> date)
+        for s in out.get('filling_sessions', []):
+            if str(s['session_number']) == n:
+                b.warn('Afvullen', '-', f'session {n}: date {s["filling_date"]} corrected to {date} (overrides.json)')
+                s['filling_date'] = date
     if o.get('drop_other_end_values'):
         out.pop('other_end_values', None)
-        b.warnings[:] = [w for w in b.warnings if 'ask Jaap' not in w]
     b.note('-', '-', 'One-off correction', o.get('note', ''), 'overrides.json', 'read', 'agreed with Jaap')
 
 
@@ -1231,6 +1284,46 @@ def date_transfers(b, out):
             b.warn('-', '-', f'transfer to {t["to_batch_number"]}: from tank unknown')
 
 
+def fix_dates(b, out, today=None):
+    """Typed years (2025 / 2027 / 2028 in a 2026 batch: 26042, 26077, 26319) are
+    set to the batch's year when that lands between the first brew and today.
+    Log rows dated after today are plans written ahead (active batches): not
+    imported."""
+    today = today or datetime.date.today().isoformat()
+    starts = [x.get('mash_in_started_at') for x in out.get('brews', []) if x.get('mash_in_started_at')]
+    first = min(starts)[:10] if starts else None
+    year = first[:4] if first else ('20' + out['batch_number'][:2] if out.get('batch_number') else None)
+    if not year:
+        return
+    lo = first or f'{year}-01-01'
+
+    def fixed(d):
+        if not d or d[:4] == year:
+            return None
+        new = year + d[4:]
+        return new if lo <= new[:10] <= today else None
+
+    for e in out.get('fermentation_log', []):
+        new = fixed(e['measured_at'])
+        if new:
+            b.warn('Gistkaart Invoer', f'J{e["row"]}', f'log date {e["measured_at"][:10]}: year set to {year}')
+            e['measured_at'] = new
+    for key, rows in (('processing_date', out.get('processing_sessions', [])), ('filling_date', out.get('filling_sessions', []))):
+        for s in rows:
+            new = fixed(s.get(key))
+            if new:
+                b.warn('-', '-', f'{key.split("_")[0]} date {s[key]}: year set to {year}')
+                s[key] = new
+    log = out.get('fermentation_log', [])
+    future = [e for e in log if e['measured_at'][:10] > today]
+    if future:
+        out['fermentation_log'] = [e for e in log if e['measured_at'][:10] <= today]
+        for e in future:
+            b.note('Gistkaart Invoer', f'J{e["row"]}', 'Log row dated ahead', e['measured_at'][:10], 'fermentation_log_entries',
+                   'not_imported', 'a plan written ahead, not yet done')
+        b.warn('Gistkaart Invoer', '-', f'{len(future)} log rows dated after {today} (plans): not imported')
+
+
 def check_dates(b, out):
     starts = [x.get('mash_in_started_at') for x in out.get('brews', []) if x.get('mash_in_started_at')]
     if not starts:
@@ -1310,12 +1403,11 @@ def read_workbook(path, ref):
     b = Book(path)
     name = os.path.basename(path)
     out = {'source': name, 'batch_number': None, 'batch': {}, 'type': workbook_type(b)}
-    if out['type'] not in ('generated', 'old', 'generated_en'):
+    if out['type'] not in ('generated', 'old', 'generated_en', 'barrel_aging'):
         # Not a batch report this reader knows: held back, never guessed.
         m = re.match(r'^(\d{5})', name)
         out['batch_number'] = m.group(1) if m else None
-        out['hold'] = ('barrel aging workbook: separate import (see import-2026.md)' if out['type'] == 'barrel_aging'
-                       else 'unknown layout: sheets ' + ', '.join(b.v))
+        out['hold'] = 'unknown layout: sheets ' + ', '.join(b.v)
         out['review'], out['warnings'] = [], [out['hold']]
         return out
     for sh, cell in (('Brouwen', 'N3'), ('Verwerking', 'L3'), ('Afvullen', 'E3'), ('Afvulverslag', 'H3')):
@@ -1331,15 +1423,24 @@ def read_workbook(path, ref):
         out['workbook_recipe'] = {'name': m.group(2), 'version': ver}
         if out['batch_number'] and out['batch_number'] != m.group(1):
             b.warn('-', '-', f'file name {m.group(1)} differs from the batch number {out["batch_number"]} in the workbook')
-    read_brewing(b, out)
-    read_fermentation(b, out)
+    if out['type'] == 'barrel_aging':
+        # Jaap, 22-10: only processing, filling and the filling report; the barrel
+        # sheet (Hout Rijping) and the log are not imported.
+        b.note('-', '-', 'Barrel aging workbook', out['type'], '-', 'not_imported',
+               'Hout Rijping and the log are not imported (Jaap, 22-10)')
+        out['brews'], out['brew_comments'], out['fermentation_log'] = [], [], []
+    else:
+        read_brewing(b, out)
+        read_fermentation(b, out)
     read_processing(b, out)
     read_filling(b, out, ref)
     tank_beer(b, out)
     apply_overrides(b, out)
     link_hbts(b, out)
     merge_transfers(b, out)
+    settle_end_values(b, out)
     date_transfers(b, out)
+    fix_dates(b, out)
     check_dates(b, out)
     resolve(b, out, ref)
     for s in out.get('filling_sessions', []):

@@ -76,7 +76,43 @@ def main():
     p = find(d, '26058')
     if p:
         x = reader.read_workbook(p, ref)
-        eq((x['type'], x['batch_number'], bool(x.get('hold'))), ('barrel_aging', '26058', True), 'barrel aging held, not guessed')
+        eq((x['type'], x['batch_number'], bool(x.get('hold'))), ('barrel_aging', '26058', False), 'barrel aging read (Jaap, 22-10)')
+        eq((x['brews'], x['fermentation_log']), ([], []), 'barrel aging: only processing and filling')
+    # Warning triage (22-10).
+    p = find(d, '26143')
+    if p:
+        x = reader.read_workbook(p, ref)
+        eq([h['tank'] for h in x['hbts']], ['HBT13'], 'fill without a tank number takes the tank of its end value')
+    p = find(d, '26009')
+    if p:
+        x = reader.read_workbook(p, ref)
+        eq((x.get('other_end_values'), x.get('processing_comments', [])), (None, []), 'end value = the split to 26050: not twice')
+    p = find(d, '26160')
+    if p:
+        x = reader.read_workbook(p, ref)
+        eq([c['comment'] for c in x['processing_comments'] if c['comment'].startswith('End value')],
+           ['End value 7 hl (Non Test)'], 'other end value kept once as a processing comment')
+    p = find(d, '26042')
+    if p:
+        x = reader.read_workbook(p, ref)
+        eq(min(e['measured_at'] for e in x['fermentation_log'])[:4], '2026', 'log typed as 2025: year of the brew')
+    p = find(d, '26246')
+    if p:
+        x = reader.read_workbook(p, ref)
+        arts = [a for s in x['filling_sessions'] for a in s['articles'] if a['code'] == 'other_keg_20']
+        eq([(a['quantity'], a.get('comment')) for a in arts][0], (300, '20L WARSTEINER'), 'other keg with its name as comment')
+    p = find(d, '26040')
+    if p:
+        x = reader.read_workbook(p, ref)
+        eq(x['filling_sessions'][0].get('volume_hl'), 30.9, 'filling report volume from its formula')
+    out = {'batch_number': '26999', 'brews': [{'mash_in_started_at': '2026-02-06T05:00:00+01:00'}],
+           'fermentation_log': [{'measured_at': '2025-02-07T12:00:00+01:00', 'row': 9},
+                                {'measured_at': '2026-11-02T12:00:00+01:00', 'row': 30}],
+           'processing_sessions': [{'processing_date': '2027-03-01'}], 'filling_sessions': []}
+    bk = type('B', (), {'warnings': [], 'warn': lambda self, *a: self.warnings.append(a), 'note': lambda self, *a: None})()
+    reader.fix_dates(bk, out, today='2026-10-22')
+    eq(([e['measured_at'][:10] for e in out['fermentation_log']], out['processing_sessions'][0]['processing_date']),
+       (['2026-02-07'], '2026-03-01'), 'typed years fixed, a log row dated ahead left out')
     p = find(d, '26093')
     if p:
         # Splits written on HBT end-value rows (10 + 30 hl = 4000 l on the filling report), and TT60.
