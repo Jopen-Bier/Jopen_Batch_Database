@@ -1046,6 +1046,7 @@ CREATE TABLE public.batch_brews (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_by uuid,
     brewer_end_id uuid,
+    mash_rinse_water_hl numeric,
     CONSTRAINT batch_brews_brew_number_check CHECK ((brew_number > 0)),
     CONSTRAINT batch_brews_ckt_cip_program_check CHECK ((ckt_cip_program = ANY (ARRAY['lo-de'::text, 'lo-zu-de'::text, 'lo-de-hw'::text, 'lo-zu-de-hw'::text])))
 );
@@ -1063,6 +1064,13 @@ COMMENT ON COLUMN public.batch_brews.brewer_id IS 'Brewer start';
 --
 
 COMMENT ON COLUMN public.batch_brews.brewer_end_id IS 'Brewer end';
+
+
+--
+-- Name: COLUMN batch_brews.mash_rinse_water_hl; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.batch_brews.mash_rinse_water_hl IS 'Rinse water (Spoelwater, mashing), hl';
 
 
 --
@@ -1174,7 +1182,7 @@ CREATE TABLE public.batch_hbts (
     created_by uuid DEFAULT auth.uid(),
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_by uuid,
-    CONSTRAINT batch_hbts_intended_formats_check CHECK ((intended_formats <@ ARRAY['bottle'::text, 'can'::text, 'keg'::text])),
+    CONSTRAINT batch_hbts_intended_formats_check CHECK ((intended_formats <@ ARRAY['bottle'::text, 'can'::text, 'keg'::text, 'tank'::text])),
     CONSTRAINT batch_hbts_released_check CHECK (((released_at IS NULL) = (released_by IS NULL)))
 );
 
@@ -1374,7 +1382,7 @@ CREATE TABLE public.filling_sessions (
     created_by uuid DEFAULT auth.uid(),
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_by uuid,
-    CONSTRAINT filling_sessions_package_format_check CHECK ((package_format = ANY (ARRAY['bottle'::text, 'can'::text, 'keg'::text]))),
+    CONSTRAINT filling_sessions_package_format_check CHECK ((package_format = ANY (ARRAY['bottle'::text, 'can'::text, 'keg'::text, 'tank'::text]))),
     CONSTRAINT filling_sessions_session_number_check CHECK ((session_number > 0)),
     CONSTRAINT filling_sessions_volume_hl_check CHECK ((volume_hl >= (0)::numeric))
 );
@@ -1881,6 +1889,7 @@ CREATE TABLE public.filling_session_articles (
     created_by uuid DEFAULT auth.uid(),
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_by uuid,
+    comment text,
     CONSTRAINT filling_session_articles_quantity_check CHECK ((quantity >= (0)::numeric))
 );
 
@@ -1913,6 +1922,7 @@ CREATE TABLE public.filling_session_materials (
     created_by uuid DEFAULT auth.uid(),
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_by uuid,
+    comment text,
     CONSTRAINT filling_session_materials_quantity_check CHECK ((quantity >= (0)::numeric))
 );
 
@@ -1964,7 +1974,7 @@ CREATE TABLE public.hbt_readings (
     created_by uuid DEFAULT auth.uid(),
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_by uuid,
-    CONSTRAINT hbt_readings_co2_target_check CHECK ((co2_target = ANY (ARRAY['bottle'::text, 'can'::text, 'keg'::text])))
+    CONSTRAINT hbt_readings_co2_target_check CHECK ((co2_target = ANY (ARRAY['bottle'::text, 'can'::text, 'keg'::text, 'tank'::text])))
 );
 
 
@@ -2310,7 +2320,7 @@ CREATE TABLE public.packaging_articles (
     updated_by uuid,
     CONSTRAINT packaging_articles_code_check CHECK ((code ~ '^[a-z0-9_]+$'::text)),
     CONSTRAINT packaging_articles_liters_per_unit_check CHECK ((liters_per_unit > (0)::numeric)),
-    CONSTRAINT packaging_articles_package_format_check CHECK ((package_format = ANY (ARRAY['bottle'::text, 'can'::text, 'keg'::text])))
+    CONSTRAINT packaging_articles_package_format_check CHECK ((package_format = ANY (ARRAY['bottle'::text, 'can'::text, 'keg'::text, 'tank'::text])))
 );
 
 
