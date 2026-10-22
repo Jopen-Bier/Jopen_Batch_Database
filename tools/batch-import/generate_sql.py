@@ -179,10 +179,12 @@ def batch_sql(d):
             out.append(insert('filling_measurements', mc))
         for a in s.get('articles', []):
             out.append(insert('filling_session_articles', {'batch_id': 'v_batch', 'filling_session_id': 'v_id',
-                                                           'article_id': ref('articles', a['code']), 'quantity': lit(a['quantity'])}))
+                                                           'article_id': ref('articles', a['code']), 'quantity': lit(a['quantity']),
+                                                           **({'comment': lit(a['comment'])} if a.get('comment') else {})}))
         for a in s.get('materials', []):
             out.append(insert('filling_session_materials', {'batch_id': 'v_batch', 'filling_session_id': 'v_id',
-                                                            'material_id': ref('materials', a['code']), 'quantity': lit(a['quantity'])}))
+                                                            'material_id': ref('materials', a['code']), 'quantity': lit(a['quantity']),
+                                                            **({'comment': lit(a['comment'])} if a.get('comment') else {})}))
     out.append('    select stage into v_after from public.batch_stages where batch_id = v_batch;\n')
     counts = ' || '.join(
         f"' {SHORT[t]} ' || (select count(*) from public.{t} where batch_id = v_batch)" for t in TABLES)
@@ -195,10 +197,12 @@ def merge_duplicate_codes(d):
     """filling_session_articles / _materials are unique per session and code: add up repeats."""
     for s in d.get('filling_sessions', []):
         for key in ('articles', 'materials'):
-            tot = {}
+            tot, notes = {}, {}
             for a in s.get(key, []):
                 tot[a['code']] = tot.get(a['code'], 0) + a['quantity']
-            s[key] = [{'code': c, 'quantity': q} for c, q in tot.items()]
+                if a.get('comment'):
+                    notes[a['code']] = ', '.join(x for x in (notes.get(a['code']), a['comment']) if x)
+            s[key] = [{'code': c, 'quantity': q, 'comment': notes.get(c)} for c, q in tot.items()]
 
 
 def main():

@@ -239,6 +239,36 @@ cleaned ("SB\\", "NS?", "EP\\FH"); JK rows "Beluchtingsfilter gestoomd?",
 "Wortline gesteriliseerd?", "CKT CIP" are read; more spellings of the KU /
 GdV / KeyKeg kegs on the filling report.
 
+### Answers and warning triage (Jaap, 22-10)
+- Initials that are not a user (former employees FI, MM, BST, ...): the
+  field stays empty.
+- Barrel aging: processing, filling and the filling report are imported;
+  the Hout Rijping sheet and the log are not.
+- End values that are no HBT and no split (the values are right): the same
+  volume as a transfer of the batch is that transfer written again (26009,
+  26277); anything else becomes a processing comment (26160 "Non Test",
+  26338 LT56).
+- A fill whose readings have no tank number takes the tank of its end
+  value (26143: HBT13).
+- Typed years (2025 / 2027 / 2028 in a 2026 batch) get the brew's year when
+  that lands between the first brew and today. Log rows dated after the
+  read day are plans in active batches: not imported. 26210 session 6
+  17-06 -> 17-07 (overrides.json).
+- Filling report volume: a formula's last calculated value is used.
+- Text in a yeast-block cell ("repitch", "80L") becomes a brew comment for
+  all brews (text in a brew cell already did).
+- Fustkraag -> material Keg collar. Kegs of another brewery (Warsteiner,
+  Florijn, Global Keg) -> article / material "20L other keg" with the name
+  as comment (migration 20261022090000).
+- Transfers: one SQL after the months (`generate_transfers.py`). No date:
+  first filling of the receiving batch, else last processing of the
+  source, at 12:00, said in the comment. A receiving batch with an empty
+  brew sheet holds only split beer: brew count 0. Receiving batches not in
+  the app are skipped.
+- Skipped: batches without a workbook or not in the app, 26091 and 26135,
+  documents still held. Active batches are imported now and completed in
+  the app at the switch from Excel.
+
 ### SQL per chunk (step 5)
 `tools/batch-import/generate_sql.py <reader_out> <app.json> <out_dir> <chunk> [batch ...]`
 writes `import_<chunk>_dry_run.sql` and `import_<chunk>_run.sql`: one DO

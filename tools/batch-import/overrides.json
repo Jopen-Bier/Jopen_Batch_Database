@@ -12,5 +12,9 @@
        "materials": [{"code": "jopen_keg_50", "quantity": 33}, {"code": "keg_cap", "quantity": 33}]}
     ],
     "drop_other_end_values": true
+  },
+  "26210": {
+    "note": "Filling session 6 is dated 17-06, before the brew (22-06), between the sessions of 17-07: 17-07.",
+    "filling_dates": {"6": "2026-07-17"}
   }
 }
