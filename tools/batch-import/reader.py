@@ -54,10 +54,15 @@ class Sheet:
         return Cell(self.cells.get(ref))
 
 
+SHEET_NAMES = {  # English template (from 26332, Oct 2026) -> the Dutch names used here
+    'Recipe Sheet': 'Recept-voorblad', 'Brew Sheet': 'Brouwen', 'Fermentation Chart': 'Gistkaart Invoer',
+    'Processing': 'Verwerking', 'Filling': 'Afvullen', 'Filling Report': 'Afvulverslag'}
+
+
 def read_sheets(path, data_only):
     wb = openpyxl.load_workbook(path, read_only=True, data_only=data_only)
     try:
-        return {ws.title: Sheet(ws) for ws in wb.worksheets}
+        return {SHEET_NAMES.get(ws.title.strip(), ws.title.strip()): Sheet(ws) for ws in wb.worksheets}
     finally:
         wb.close()
 
@@ -68,6 +73,9 @@ class Book:
     def __init__(self, path):
         self.v = read_sheets(path, True)
         self.f = read_sheets(path, False)
+        wb = openpyxl.load_workbook(path, read_only=True)
+        self.titles = {ws.title.strip() for ws in wb.worksheets}
+        wb.close()
         self.v_names = list(self.v)
         self.review = []
         self.warnings = []
@@ -161,12 +169,14 @@ def to_time(v):
 
 def to_date(v):
     if isinstance(v, datetime.datetime):
-        return v.date().isoformat()
+        return v.date().isoformat() if v.year > 1900 else None
     if isinstance(v, datetime.date):
         return v.isoformat()
-    if v is None:
-        return None
+    if v is None or isinstance(v, datetime.time):
+        return None  # a time only ("00:00:00"): no date
     s = str(v).strip()
+    if re.fullmatch(r'0?0:00(:00)?', s):
+        return None
     m = re.match(r'^(\d{4})-(\d{1,2})-(\d{1,2})', s)  # ISO date typed as text
     if m:
         return datetime.date(int(m.group(1)), int(m.group(2)), int(m.group(3))).isoformat()
@@ -194,10 +204,24 @@ def to_timestamp(v, hour=None):
 
 
 def people(v):
-    """Initials in a cell ('TM/EP', 'BS EL', 'ns') -> ['TM', 'EP']."""
-    if v is None:
+    """Initials in a cell ('TM/EP', 'BS EL', 'ns', 'SB\\', 'NS?') -> ['TM', 'EP']."""
+    if v is None or isinstance(v, (datetime.date, datetime.time, int, float)):
+        if isinstance(v, (int, float, datetime.date, datetime.time)):
+            raise ValueError(v)
         return []
-    return [t.upper() for t in PEOPLE_SPLIT.split(str(v)) if t and t.strip()]
+    out = []
+    for t in PEOPLE_SPLIT.split(str(v).replace('\\', '/')):
+        t = (t or '').strip().strip('.?!,;:').upper()
+        if t:
+            out.append(t)
+    return out
+
+
+def to_cip(v):
+    s = norm(v).replace(' ', '')
+    if s in CIP_PROGRAMS:
+        return s
+    raise ValueError(v)
 
 
 class Field:
@@ -216,7 +240,7 @@ class Field:
         if v is None:
             return None
         try:
-            out = {'num': to_num, 'bool': to_bool, 'time': to_time, 'date': to_date,
+            out = {'num': to_num, 'bool': to_bool, 'time': to_time, 'date': to_date, 'cip': to_cip,
                    'text': lambda x: str(x).strip() or None, 'timestamp': to_timestamp,
                    'people': people}[kind](v)
         except (ValueError, TypeError):
@@ -271,7 +295,50 @@ BREW_ROWS = {
     'einde brouwen (dd-mm uu:mm)': ('brewing_ended_at', 'timestamp'),
     'einde brouwen': ('brewing_ended_at', 'timestamp'),
     'totale tijd brouwen': None,
+    # JK only
+    'beluchtingsfilter gestoomd?': ('is_aeration_filter_steamed', 'bool'),
+    'wortline gesteriliseerd?': ('is_wort_line_sterilized', 'bool'),
+    'ckt cip': ('ckt_cip_program', 'cip'),
+    # English template
+    'order no. software': ('software_order_number', 'text'),
+    'start mash-in (dd-mm hh:mm)': ('mash_in_started_at', 'timestamp'),
+    'mash water': ('mash_water_hl', 'num'),
+    'ph after mash-in': ('mash_in_ph', 'num'),
+    'acid for correction': ('mash_acid_l', 'num'),
+    'ph after correction': ('mash_corrected_ph', 'num'),
+    'iodine test ok?': ('is_iodine_test_ok', 'bool'),
+    'mash schedule deviation?': ('has_mash_schedule_deviation', 'bool'),
+    'rinse water mash tun': ('mash_rinse_water_hl', 'num'),
+    'plato first runnings': ('first_wort_extract', 'num'),
+    'extract last runnings': ('last_runnings_extract', 'num'),
+    'first runnings volume': ('first_wort_volume_hl', 'num'),
+    'cum. sparge vol.': ('cumulative_sparge_volume_hl', 'num'),
+    'last runnings ph': ('last_runnings_ph', 'num'),
+    'sparge water': ('sparge_water_hl', 'num'),
+    'sparge runnings': ('sparge_runnings_hl', 'num'),
+    'filtration time': ('lauter_time_min', 'num'),
+    'ph start boil': ('boil_start_ph', 'num'),
+    'extract start boil': ('boil_start_extract', 'num'),
+    'volume start boil (80°c)': ('boil_start_volume_hl', 'num'),
+    'acid correction': ('boil_acid_l', 'num'),
+    'ph after acid correction / time': ('boil_acid_ph_note', 'text'),
+    'total boil time': ('boil_time_min', 'num'),
+    'evaporation rate': None,
+    'extra additions': ('extra_addition', 'text'),
+    'extract end of boil': ('boil_end_extract', 'num'),
+    'volume whirlpool': ('whirlpool_volume_hl', 'num'),
+    'extract cooled wort': ('whirlpool_extract', 'num'),
+    'actual rest time': ('whirlpool_rest_min', 'num'),
+    'aeration rate': ('aeration_ppm', 'num'),
+    'water addition after whirlpool': ('water_addition_hl', 'num'),
+    'brew volume': ('brew_volume_hl', 'num'),
+    'total volume in glt': None,
+    'extract in glt': None,
+    'end time brew (dd-mm uu:mm)': ('brewing_ended_at', 'timestamp'),
+    'end time brew (dd-mm hh:mm)': ('brewing_ended_at', 'timestamp'),
+    'total brewing time': None,
 }
+CIP_PROGRAMS = {'lo-de', 'lo-zu-de', 'lo-de-hw', 'lo-zu-de-hw'}  # batch_brews_ckt_cip_program_check
 # Labels that differ by section: "Extract" and "pH" under Whirlpool / end of boil.
 BREW_SECTION_ROWS = {('whirlpool', 'extract'): ('whirlpool_extract', 'num'),
                      ('whirlpool', 'ph'): ('whirlpool_ph', 'num'),
@@ -281,13 +348,20 @@ BREW_SECTION_ROWS = {('whirlpool', 'extract'): ('whirlpool_extract', 'num'),
                      ('maischen', 'spoelwater'): ('mash_rinse_water_hl', 'num')}
 # Section header rows (no measured value; text per brew becomes a brew comment).
 BREW_SECTIONS = {'maischen': 'Mashing', 'filtratie & voorloopvat': 'Filtration',
-                 'koken': 'Boiling', 'whirlpool/ einde kook': 'Whirlpool'}
+                 'koken': 'Boiling', 'whirlpool/ einde kook': 'Whirlpool',
+                 'mashing': 'Mashing', 'filtration & vlt': 'Filtration', 'boiling': 'Boiling',
+                 'whirlpool / end of boil': 'Whirlpool'}
 YEAST_ROWS = {
     'temp start': ('yeast_temp_start', 'num'), 'temp max': ('yeast_temp_max', 'num'),
     'giststam': ('yeast_strain', 'text'), 'gerehydrateerd?': ('yeast_rehydrated', 'bool'),
     'gewicht [gram]': ('yeast_weight', 'num'), 'bij 1e brouwsel': ('yeast_with_first_brew', 'bool'),
     'geënt op (datum)': ('yeast_pitched_on', 'date'), 'door': ('yeast_pitched_by', 'people'),
     'programma aan?': ('yeast_program_on', 'bool'),
+    'yeast strain': ('yeast_strain', 'text'), 'rehydrated?': ('yeast_rehydrated', 'bool'),
+    'weight [g]': ('yeast_weight', 'num'), 'pitched in 1st brew?': ('yeast_with_first_brew', 'bool'),
+    'date of pitching': ('yeast_pitched_on', 'date'), 'pitched by': ('yeast_pitched_by', 'people'),
+    'fermentation program started?': ('yeast_program_on', 'bool'),
+    'fermentation program started': ('yeast_program_on', 'bool'),
 }
 
 
@@ -300,7 +374,7 @@ def read_brewing(b, out):
     brews = {n: {'brew_number': n} for n in range(1, BREW_COUNT + 1)}
     comments = []
     section = None
-    first = next((r for r, l in b.rows(sh, 'P') if l.startswith('brouwsel nr')), 3)
+    first = next((r for r, l in b.rows(sh, 'P') if l.startswith(('brouwsel nr', 'brew number'))), 3)
     for r, label in b.rows(sh, 'P'):
         if r <= first:
             continue  # title rows and the brew numbers
@@ -317,7 +391,7 @@ def read_brewing(b, out):
             vc = col(BREW_FIRST_COL, 2 * (n - 1))
             uc = col(vc, 1)
             ref = f'{vc}{r}'
-            if label == 'naam brouwer':
+            if label in ('naam brouwer', 'brewer'):
                 start = F(ref, f'Brewer start · brew {n}', 'batch_brews.brewer_id', 'people')
                 end = F(f'{uc}{r}', f'Brewer end · brew {n}', 'batch_brews.brewer_end_id', 'people')
                 if start:
@@ -355,9 +429,9 @@ def read_brewing(b, out):
     out['brews'] = [x for x in brews.values() if any(k != 'brew_number' for k in x)]
     # Remarks of the batch ("Opmerkingen :" in column A, below the recipe block).
     for r, label in b.rows(sh, 'A'):
-        if label.startswith('opmerkingen'):
+        if label.startswith(('opmerkingen', 'comments')):
             x = r + 1
-            while x <= b.v[sh].max_row and not norm(b.raw(sh, f'K{x}')).startswith('programma'):
+            while x <= b.v[sh].max_row and not norm(b.raw(sh, f'K{x}')).startswith(('programma', 'fermentation program')):
                 v, st = b.get(sh, f'A{x}')
                 if v is not None and st == 'read' and str(v).strip() not in ('', '-', '0'):
                     comments.append({'brew_number': None, 'comment': str(v).strip()})
@@ -420,6 +494,10 @@ def read_fermentation(b, out):
     # Header row with "Datum": columns by label (layout is the same in the samples).
     hdr = {norm(b.raw(sh, f'{get_column_letter(c)}12')): get_column_letter(c) for c in range(1, 24)
            if b.raw(sh, f'{get_column_letter(c)}12')}
+    for en, nl in (('temp top', 'temp hoog'), ('temp bottom', 'temp laag'), ('date', 'datum'), ('time', 'tijd'),
+                   ('action taken', 'actie'), ('comments', 'opmerkingen')):
+        if en in hdr and nl not in hdr:
+            hdr[nl] = hdr[en]
     C = {k: hdr.get(k) for k in ('plato', 'temp hoog', 'temp laag', 'ph', 'datum', 'tijd', 'actie',
                                  'opmerkingen', 'operator')}
     if not C['datum']:
@@ -727,11 +805,11 @@ def read_hbts(b, out, labels, hbt_row):
 
 FILL_COLS = ['M', 'N', 'O', 'P', 'Q', 'R']       # Afvullen
 REPORT_COLS = ['D', 'E', 'F', 'G', 'H', 'I']     # Afvulverslag, same order
-MEAS_ROWS = [  # label prefix in column I -> filling_measurements column
-    ('time', 'measured_time', 'time'), ('tpo', 'tpo_ppb', 'num'), ('hso', 'hso_ppb', 'num'),
-    ('do ', 'do_ppb', 'num'), ('hs vol', 'headspace_volume', 'num'), ('druk', 'pressure_bar', 'num'),
-    ('temp', 'temp_c', 'num'), ('co2 fles', 'co2_gl', 'num'), ('co2 fust', 'keg_co2_gl', 'num'),
-    ('zuurstof fust', 'keg_o2_ppb', 'num'),
+MEAS_ROWS = [  # label prefixes (Dutch, English) in column I -> filling_measurements column
+    (('time',), 'measured_time', 'time'), (('tpo',), 'tpo_ppb', 'num'), (('hso',), 'hso_ppb', 'num'),
+    (('do ',), 'do_ppb', 'num'), (('hs vol',), 'headspace_volume', 'num'), (('druk', 'pressure'), 'pressure_bar', 'num'),
+    (('temp',), 'temp_c', 'num'), (('co2 fles', 'co2 bottle'), 'co2_gl', 'num'), (('co2 fust', 'co2 keg'), 'keg_co2_gl', 'num'),
+    (('zuurstof fust', 'o2 keg'), 'keg_o2_ppb', 'num'),
 ]
 ARTICLES = [  # Dutch name prefix in Afvulverslag column B -> packaging_articles.code
     ('doos 24x33cl - blanco', 'box_24x33_blank'), ('doos 24x33cl blik', 'box_24x33_can'),
@@ -742,6 +820,13 @@ ARTICLES = [  # Dutch name prefix in Afvulverslag column B -> packaging_articles
     ('doos 24x44cl blik', 'box_24x44_can'), ('20l keykeg', 'keykeg_20'), ('30l keykeg', 'keykeg_30'),
     ('20l jopen/ku fust', 'jopen_keg_20'), ('30l jopen fust', 'jopen_keg_30'), ('50l jopen fust', 'jopen_keg_50'),
     ('20l gbr, door vrouwen', 'gbr_door_vrouwen_keg_20'), ('20l global keg', None),
+    # English template
+    ('box 24x33cl - blanco', 'box_24x33_blank'), ('box 24x33cl can', 'box_24x33_can'), ('box 24x33cl', 'box_24x33'),
+    ('box 12x33cl - blanco', 'box_12x33_blank'), ('box 12x33cl can', 'box_12x33_can'), ('box 12x33cl', 'box_12x33'),
+    ('box 6x75cl - blanco', 'box_6x75_blank'), ('box 6x75cl', 'box_6x75'), ('crate 12x75cl', 'crate_12x75_blank'),
+    ('box 12x44cl can', 'box_12x44_can'), ('box 24x44cl can', 'box_24x44_can'),
+    ('20l ku keg', 'jopen_keg_20'), ('30l jopen keg', 'jopen_keg_30'), ('50l jopen keg', 'jopen_keg_50'),
+    ('20l gebr. door vrouwen keg', 'gbr_door_vrouwen_keg_20'), ('20l keykeg', 'keykeg_20'), ('30l keykeg', 'keykeg_30'),
 ]
 MATERIALS = [  # -> packaging_materials.code (None = no longer used: reported)
     ('fles 33cl', 'bottle_33'), ('fles 75cl', 'bottle_75'),
@@ -758,6 +843,25 @@ MATERIALS = [  # -> packaging_materials.code (None = no longer used: reported)
     ('global keg 20l', None), ('jopen fust 20l', 'jopen_keg_20'), ('jopen fust 30l', 'jopen_keg_30'),
     ('jopen fust 50l', 'jopen_keg_50'), ('gdv 20l', 'gbr_door_vrouwen_keg_20'), ('fustdop', 'keg_cap'), ('keykegfustdop', 'keykeg_cap'),
     ('keykeg 20l', 'keykeg_20'), ('keykeg 30l', 'keykeg_30'),
+    # other spellings in the old reports
+    ('gdv keg 20l', 'gbr_door_vrouwen_keg_20'), ('gdv fust 20l', 'gbr_door_vrouwen_keg_20'),
+    ('ku fust 20l', 'jopen_keg_20'), ('ku 20l', 'jopen_keg_20'), ('kegsunited 20l', 'jopen_keg_20'),
+    ('keg united 20l', 'jopen_keg_20'), ('20l keykeg', 'keykeg_20'),
+    # English template
+    ('bottle 33cl', 'bottle_33'), ('bottle 75cl', 'bottle_75'),
+    ('label 33cl can', 'label_33_can'), ('label 44cl can', 'label_44_can'),
+    ('label 33cl - main', 'label_33_main'), ('label 75cl - main', 'label_75_main'),
+    ('label 33cl - neck', None), ('label 75cl - neck', None),
+    ('outer box 24x33cl can', 'box_24x33_can'), ('outer box 12x33cl can', 'box_12x33_can'),
+    ('outer box 24x44cl can', 'box_24x44_can'), ('outer box 12x44cl can', 'box_12x44_can'),
+    ('outer box 24x33cl - printed', 'box_24x33_printed'), ('outer box 24x33cl - blanco', 'box_24x33_blank'),
+    ('outer box 12x33cl - printed', 'box_12x33_printed'), ('outer box 12x33cl - blanco', 'box_12x33_blank'),
+    ('outer box 6x75cl - printed', 'box_6x75_printed'), ('outer box 6x75cl - blanco', 'box_6x75_blank'),
+    ('crown cap', 'crown_cork'), ('cork', 'cork'), ('muselet', 'muselet'),
+    ('can 33cl', 'can_33'), ('can 44cl', 'can_44'), ('can end', 'can_lid'),
+    ('20l ku keg', 'jopen_keg_20'), ('30l jopen keg', 'jopen_keg_30'), ('50l jopen keg', 'jopen_keg_50'),
+    ('20l gebr. door vrouwen keg', 'gbr_door_vrouwen_keg_20'), ('20l other keg', None),
+    ('30l keykeg', 'keykeg_30'), ('keykeg cap', 'keykeg_cap'), ('keg cap', 'keg_cap'),
 ]
 
 
@@ -776,8 +880,12 @@ def read_filling(b, out, ref):
     F = Field(b, sh)
     labels = dict((l, r) for r, l in reversed(b.rows(sh, 'I')))
     row = lambda prefix: next((r for l, r in labels.items() if l.startswith(prefix)), None)
-    r_filled, r_sampled, r_check = row('afgevuld door'), row('monstername door'), row('controle 1e verpakking')
-    r_tube1, r_tube2, r_burst = row('vulpijp-detectiecontrole 1e'), row('vulpijp-detectiecontrole ein'), row('klapfles beheerst')
+    row2 = lambda nl, en: row(nl) or row(en)
+    r_filled, r_sampled = row2('afgevuld door', 'filled by'), row2('monstername door', 'sampled by')
+    r_check = row2('controle 1e verpakking', 'first pack check')
+    r_tube1 = row2('vulpijp-detectiecontrole 1e', 'filling tube detection check first')
+    r_tube2 = row2('vulpijp-detectiecontrole ein', 'filling tube detection check end')
+    r_burst = row2('klapfles beheerst', 'bottle bursts under control')
     meas_starts = [r for r, l in b.rows(sh, 'I') if l == 'time']
     sessions = []
     for i, c in enumerate(FILL_COLS):
@@ -815,10 +923,10 @@ def read_filling(b, out, ref):
         meas = []
         for start in meas_starts:
             m = {}
-            for off, (prefix, key, kind) in enumerate(MEAS_ROWS):
+            for off, (prefixes, key, kind) in enumerate(MEAS_ROWS):
                 lab = norm(b.raw(sh, f'I{start + off}'))
-                if not lab.startswith(prefix.strip()):
-                    b.warn(sh, f'I{start + off}', f'expected "{prefix}", found "{lab}"')
+                if not lab.startswith(tuple(p.strip() for p in prefixes)):
+                    b.warn(sh, f'I{start + off}', f'expected "{prefixes[0]}", found "{lab}"')
                     break
                 v = F(f'{c}{start + off}', f'{b.raw(sh, f"I{start + off}")}', f'filling_measurements.{key}', kind)
                 if v is not None:
@@ -878,13 +986,13 @@ def read_filling_report(b, out, sessions, ref):
         s['articles'], s['materials'] = [], []
     section = None
     for r, label in b.rows(sh, 'B'):
-        if label.startswith('afvul ') or label.startswith('opboeken'):
+        if label.startswith(('afvul ', 'opboeken', 'filled bottles', 'filled cans', 'filled kegs')):
             section = 'articles'
             continue
-        if label.startswith('verbruiken'):
+        if label.startswith(('verbruiken', 'consumption')):
             section = 'materials'
             continue
-        if label.startswith('gebruikt tbv samenvoegen'):
+        if label.startswith(('gebruikt tbv samenvoegen', 'used for blending')):
             # The old way of a split: liters booked off "TBV BATCH <number>".
             section = 'skip'
             for x in range(r + 1, r + 4):
@@ -908,7 +1016,7 @@ def read_filling_report(b, out, sessions, ref):
                         'date': to_date(date) if date else None, 'source': f'{sh}!{c}{x}'})
                     b.note(sh, f'{c}{x}', name, v, 'batch_transfers.volume_hl', 'read', 'liters / 100')
             continue
-        if label.startswith('ingevoerd in mdrank'):
+        if label.startswith(('ingevoerd in mdrank', 'entered in mdrank')):
             section = 'skip'
             continue
         if section not in ('articles', 'materials'):
@@ -1133,6 +1241,8 @@ def resolve(b, out, ref):
     """Tank numbers -> codes; check initials, tags, codes against the app."""
     tanks = ref['tanks']
     def tank_code(n, types):
+        if n in (None, 0):
+            return None  # 0 / empty: no tank
         if isinstance(n, str):
             hits = [t['code'] for t in tanks if t['code'] == n]
             if hits:
@@ -1177,6 +1287,8 @@ def workbook_type(b):
     if 'Hout Rijping' in names:
         return 'barrel_aging'
     if {'Brouwen', 'Gistkaart Invoer', 'Verwerking', 'Afvullen', 'Afvulverslag'} <= names:
+        if 'Fermentation Chart' in b.titles:
+            return 'generated_en'
         return 'old' if 'EBU Berekening' in names else 'generated'
     return None
 
@@ -1185,7 +1297,7 @@ def read_workbook(path, ref):
     b = Book(path)
     name = os.path.basename(path)
     out = {'source': name, 'batch_number': None, 'batch': {}, 'type': workbook_type(b)}
-    if out['type'] not in ('generated', 'old'):
+    if out['type'] not in ('generated', 'old', 'generated_en'):
         # Not a batch report this reader knows: held back, never guessed.
         m = re.match(r'^(\d{5})', name)
         out['batch_number'] = m.group(1) if m else None
