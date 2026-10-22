@@ -65,13 +65,17 @@ def insert(table, cols, returning=None):
 def batch_sql(d):
     n = d['batch_number']
     b = d['batch']
-    out = [f"\n  -- {n} ({d['source']}) " + '-' * 20 + '\n',
+    src = d['source'].encode('ascii', 'replace').decode().replace('*/', '')  # comments stay plain ASCII too
+    out = [f"\n  -- {n} ({src}) " + '-' * 20 + '\n',
            f"  select id into v_batch from public.batches where batch_number = {lit(n)};\n",
            f"  if v_batch is null then\n    v_skipped := v_skipped || {lit(n + ' (not in the app)', 'text')};\n",
            "  elsif exists (select 1 from public.batch_brews where batch_id = v_batch)\n"
            "     or exists (select 1 from public.fermentation_log_entries where batch_id = v_batch)\n"
            "     or exists (select 1 from public.processing_sessions where batch_id = v_batch)\n"
-           "     or exists (select 1 from public.filling_sessions where batch_id = v_batch) then\n"
+           "     or exists (select 1 from public.filling_sessions where batch_id = v_batch)\n"
+           "     or exists (select 1 from public.batch_brew_comments where batch_id = v_batch)\n"
+           "     or exists (select 1 from public.processing_comments where batch_id = v_batch)\n"
+           "     or exists (select 1 from public.batch_hbts where batch_id = v_batch) then\n"
            f"    v_skipped := v_skipped || {lit(n + ' (has data)', 'text')};\n",
            "  else\n    v_proc := '{}';\n    v_hbt := '{}';\n",
            "    select stage into v_before from public.batch_stages where batch_id = v_batch;\n"]
@@ -136,6 +140,10 @@ def batch_sql(d):
         out.append(insert('processing_comments', {'batch_id': 'v_batch', 'comment_time': lit(c.get('comment_time'), 'time'),
                                                   'comment': lit(c['comment'])}))
     for i, h in enumerate(d.get('hbts', [])):
+        if not h.get('tank'):
+            # A fill without a known tank cannot be stored (tank_id is required): left out, reported.
+            out.append(f"    v_lines := v_lines || {lit(n + ': HBT fill ' + str(h['sort_order']) + ' without a tank left out', 'text')};\n")
+            continue
         cols = {'batch_id': 'v_batch', 'tank_id': ref('tanks', h['tank']), 'sort_order': lit(h['sort_order']),
                 'intended_formats': lit(h.get('intended_formats') or [])}
         for k in ('avg_pu', 'avg_turbidity_ebc'):
@@ -201,6 +209,10 @@ def main():
     for p in sorted(glob.glob(os.path.join(src, '*.json'))):
         d = json.load(open(p))
         if wanted and d['batch_number'] not in wanted:
+            continue
+        if not any(d.get(k) for k in ('brews', 'brew_comments', 'fermentation_log', 'processing_sessions',
+                                      'processing_comments', 'hbts', 'filling_sessions')):
+            print(f'{d["batch_number"]}: nothing to import (no brews, log, processing or filling read)')
             continue
         if d.get('hold'):
             print(f'{d["batch_number"]}: held ({d["hold"]}): left out')
