@@ -20,6 +20,27 @@ SECTIONS = [  # title above the header row -> addition_type
 STOP = re.compile(r'^(totaal|total|hop totaal|hop total|target water)', re.I)
 
 
+# Old workbooks use Dutch names, the app English ones (Jaap, 23-10 dry run: Pilsmout,
+# Havervlokken, Melkzuur, ...). Applied to the name before it is reduced to a key.
+DUTCH = [('oranjeschillen zoet', 'sweet orange peel'), ('oranjeschillen', 'orange peel'), ('gemberpoeder', 'ginger powder'),
+         ('melkzuur', 'lactic acid'), ('fosforzuur', 'phosphoric acid'), ('zuurmout', 'acidulated malt'),
+         ('gemoute ', 'malted '), ('vlokken', ' flakes'), ('mout', ' malt'), ('tarwe', 'wheat '), ('haver', 'oat '),
+         ('gerste', 'barley '), ('rogge', 'rye '), ('maïs', 'corn '), ('mais', 'corn ')]
+
+
+def key(name):
+    """The name without a unit in brackets, letters and digits only (as in the SQL)."""
+    n = re.sub(r'\s*\([^)]*\)\s*$', '', str(name)).lower()
+    return re.sub(r'[^a-z0-9]', '', n)
+
+
+def english_key(name):
+    n = re.sub(r'\s*\([^)]*\)\s*$', '', str(name)).lower()
+    for nl, en in DUTCH:
+        n = n.replace(nl, en)
+    return re.sub(r'[^a-z0-9]', '', n)
+
+
 def lot_text(v):
     if v is None:
         return None
@@ -86,23 +107,31 @@ def sql(src, dest):
     for p in sorted(glob.glob(os.path.join(src, '*.json'))):
         d = json.load(open(p))
         for x in d.get('lots', []):
-            rows.append((d['batch_number'], x['type'], x['name'], x['lot']))
-    values = ',\n    '.join(f'({lit(b)}, {lit(t)}, {lit(n)}, {lit(l)})' for b, t, n, l in rows)
+            rows.append((d['batch_number'], x['type'], x['name'], x['lot'], key(x['name']), english_key(x['name'])))
+    values = ',\n    '.join(f'({lit(b)}, {lit(t)}, {lit(n)}, {lit(l)}, {lit(k)}, {lit(a)})' for b, t, n, l, k, a in rows)
     body = f"""do $$
 declare
   r record;
   v_snap int := 0;
   v_set int := 0;
   v_n int;
+  v_lines text[] := '{{}}';
   v_unmatched text;
   v_result text;
 begin
-  create temp table _lots (batch_number text, addition_type text, name text, lot text) on commit drop;
+  create temp table _lots (batch_number text, addition_type text, name text, lot text, key text, alt text) on commit drop;
   insert into _lots values
     {values};
-  alter table _lots add column key text;
-  -- the name without a unit in brackets, letters and digits only ("Calcium Chloride (g/brew)" = "calciumchloride")
-  update _lots set key = regexp_replace(lower(regexp_replace(name, '\\s*\\([^)]*\\)\\s*$', '')), '[^a-z0-9]', '', 'g');
+  alter table _lots add column family text;
+  update _lots set family = case when addition_type in ('boil_hop', 'dry_hop') then 'hop' else addition_type end;
+  create temp table _bi on commit drop as
+    select bi.id, b.batch_number, bi.ingredient_id, bi.addition_type,
+           case when bi.addition_type in ('boil_hop', 'dry_hop') then 'hop' else bi.addition_type end as family,
+           regexp_replace(lower(regexp_replace(i.name, '\\s*\\([^)]*\\)\\s*$', '')), '[^a-z0-9]', '', 'g') as key
+    from public.batch_ingredients bi
+    join public.batches b on b.id = bi.batch_id
+    join public.ingredients i on i.id = bi.ingredient_id
+    where false;
 
   -- 1. ingredient snapshot for batches that have none yet (as opening the Overview does)
   for r in select distinct b.id from _lots l join public.batches b on b.batch_number = l.batch_number
@@ -110,36 +139,51 @@ begin
     perform public.snapshot_batch_ingredients(r.id);
     v_snap := v_snap + 1;
   end loop;
+  insert into _bi
+    select bi.id, b.batch_number, bi.ingredient_id, bi.addition_type,
+           case when bi.addition_type in ('boil_hop', 'dry_hop') then 'hop' else bi.addition_type end,
+           regexp_replace(lower(regexp_replace(i.name, '\\s*\\([^)]*\\)\\s*$', '')), '[^a-z0-9]', '', 'g')
+    from public.batch_ingredients bi
+    join public.batches b on b.id = bi.batch_id and b.batch_number in (select batch_number from _lots)
+    join public.ingredients i on i.id = bi.ingredient_id
+    where not bi.is_removed;
 
-  -- 2. same name and same type, then same name within the family (boil and dry hop are one family)
-  for v_n in 1..2 loop
+  -- 2. passes, each only on rows without a lot: same name and type, same name in the family
+  --    (boil and dry hop are one family), the English name, and last a unique prefix in the
+  --    family ("Citra" = "Citra T45" when the batch has only one Citra)
+  for v_n in 1..5 loop
     with m as (
-      select distinct on (bi.id) bi.id, l.lot
+      select distinct on (x.id) x.id, l.lot
       from _lots l
-      join public.batches b on b.batch_number = l.batch_number
-      join public.batch_ingredients bi on bi.batch_id = b.id and not bi.is_removed and bi.lot_number is null
-      join public.ingredients i on i.id = bi.ingredient_id
-      where regexp_replace(lower(regexp_replace(i.name, '\\s*\\([^)]*\\)\\s*$', '')), '[^a-z0-9]', '', 'g') = l.key
-        and (case when v_n = 1 then bi.addition_type = l.addition_type
-                  else (case when bi.addition_type in ('boil_hop', 'dry_hop') then 'hop' else bi.addition_type end)
-                     = (case when l.addition_type in ('boil_hop', 'dry_hop') then 'hop' else l.addition_type end) end)
-      order by bi.id, (bi.addition_type = l.addition_type) desc)
+      join _bi x on x.batch_number = l.batch_number
+      join public.batch_ingredients bi on bi.id = x.id and bi.lot_number is null
+      where case v_n
+              when 1 then x.key = l.key and x.addition_type = l.addition_type
+              when 2 then x.key = l.key and x.family = l.family
+              when 3 then x.key = l.alt and x.addition_type = l.addition_type
+              when 4 then x.key = l.alt and x.family = l.family
+              else x.family = l.family and length(l.key) >= 4
+                   and (x.key like l.key || '%' or x.key like l.alt || '%' or l.key like x.key || '%')
+                   and (select count(distinct y.ingredient_id) from _bi y where y.batch_number = l.batch_number and y.family = l.family
+                          and (y.key like l.key || '%' or y.key like l.alt || '%' or l.key like y.key || '%')) = 1
+            end
+      order by x.id, (x.addition_type = l.addition_type) desc)
     update public.batch_ingredients bi set lot_number = m.lot from m where bi.id = m.id;
-    get diagnostics v_n = row_count;
-    v_set := v_set + v_n;
+    get diagnostics v_set = row_count;
+    v_lines := v_lines || ('pass ' || v_n || ': ' || v_set);
   end loop;
 
-  -- 3. workbook lots that found no ingredient row (by name: how often)
+  -- 3. workbook lots that are on no ingredient row of their batch and family (by name: how often)
   select string_agg(name || ' x' || n, '; ' order by n desc, name) into v_unmatched
   from (select l.name, count(*) n from _lots l
-        join public.batches b on b.batch_number = l.batch_number
-        where not exists (select 1 from public.batch_ingredients bi join public.ingredients i on i.id = bi.ingredient_id
-                          where bi.batch_id = b.id and bi.lot_number = l.lot
-                            and regexp_replace(lower(regexp_replace(i.name, '\\s*\\([^)]*\\)\\s*$', '')), '[^a-z0-9]', '', 'g') = l.key)
+        where not exists (select 1 from _bi x join public.batch_ingredients bi on bi.id = x.id
+                          where x.batch_number = l.batch_number and x.family = l.family and bi.lot_number = l.lot)
         group by l.name order by count(*) desc, l.name limit 80) x;
-  v_result := format('%s lots in the workbooks, %s ingredient rows got a lot, %s batches got their ingredient snapshot.'
+  v_result := format('%s lots in the workbooks, %s ingredient rows got a lot (%s), %s batches got their ingredient snapshot.'
                      || chr(10) || 'Not matched: %s',
-                     (select count(*) from _lots), v_set, v_snap, coalesce(v_unmatched, 'none'));
+                     (select count(*) from _lots),
+                     (select count(*) from _bi x join public.batch_ingredients bi on bi.id = x.id where bi.lot_number is not null),
+                     array_to_string(v_lines, ', '), v_snap, coalesce(v_unmatched, 'none'));
   --END--
 end $$;
 """
