@@ -4,10 +4,15 @@
 #
 # Rules (Jaap, 22-10):
 # - a transfer without a date gets the receiving batch's first filling date,
-#   else the source's last processing date (12:00); the comment says so;
-# - a receiving batch whose brew sheet is empty holds only split beer: its
-#   brew count becomes 0;
+#   else the source's last processing date (12:00), else the source's last
+#   log entry; the comment says so;
+# - a receiving batch that was filled while its brew sheet is empty holds only
+#   split beer: its brew count becomes 0;
 # - receiving batches that are not in the app are skipped (26259, 25392);
+#   splits into barrel aging are kept (they are on the source's filling report),
+#   the barrel aging batch itself is not changed;
+# - a pair in both directions keeps the one from the brewed batch (the other is
+#   the receiving batch's "from #..." end value);
 # - rerun-safe: a transfer with the same batches and volume is not added twice.
 import sys, os, json, glob, datetime
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # python -I leaves the script folder out
@@ -44,16 +49,33 @@ def plan(books, app):
                     when, note = to_timestamp(fill, '12:00'), f'date assumed: first filling of {to}'
                 elif proc:
                     when, note = to_timestamp(proc[-1], '12:00'), f'date assumed: last processing of {src}'
+                elif d.get('fermentation_log'):
+                    when = max(e['measured_at'] for e in d['fermentation_log'])
+                    note = f'date assumed: last log entry of {src}'
                 else:
                     skipped.append(f'{tag}: no date (receiving batch not filled, source not processed)')
                     continue
             comment = '; '.join(x for x in (t.get('comment'), note, f'import 2026 ({t["source"]})') if x)
             rows.append({'from': src, 'to': to, 'volume_hl': t['volume_hl'], 'tank': t.get('from_tank'),
                          'at': when, 'comment': comment})
+    # A pair in both directions: the receiving batch's end value says "from #26093"
+    # and was read as a split out. Keep the direction from the batch with brews to
+    # the batch with an empty brew sheet.
+    pairs = {(r['from'], r['to']) for r in rows}
+    def brewed(n):
+        return bool((books.get(n) or {}).get('brews'))
+    keep = []
+    for r in rows:
+        if (r['to'], r['from']) in pairs and not brewed(r['from']) and brewed(r['to']):
+            skipped.append(f'{r["from"]} -> {r["to"]} {r["volume_hl"]:g} hl: the reverse of the split {r["to"]} -> {r["from"]}')
+            continue
+        keep.append(r)
+    rows = keep
     receiving = {r['to'] for r in rows}
     zero = sorted(n for n in receiving
                   if n in books and not books[n].get('hold') and books[n].get('type') != 'barrel_aging'
-                  and not books[n].get('brews') and float(app[n]['brew_count'] or 0) != 0)
+                  and not books[n].get('brews') and books[n].get('filling_sessions')
+                  and float(app[n]['brew_count'] or 0) != 0)
     return rows, zero, skipped
 
 

@@ -456,7 +456,7 @@ def read_brewing(b, out):
                 out['batch'][key] = val[0] if kind == 'people' else val
             else:
                 v = b.raw(sh, f'N{r}')
-                if isinstance(v, str) and v.strip() not in ('', '-') and not b.is_formula(sh, f'N{r}'):
+                if isinstance(v, str) and re.search(r'\w', v) and not b.is_formula(sh, f'N{r}'):
                     # Text in a yes/no or number cell ("repitch", "80L"): keep it as a comment for all brews.
                     comments.append({'brew_number': None, 'comment': f'{b.raw(sh, f"K{r}")}: {v.strip()}'})
 
