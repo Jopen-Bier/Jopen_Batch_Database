@@ -5,7 +5,8 @@
 // alginate). Needs: config.js, jopen-utils.js, batch-report-shell.js,
 // fermentation-log.js (nagardoDose, alginateDose), splits.js and
 // batch-ingredients.js (the split popup), batch-stages.js (stageInfo,
-// versionText); styles in batch-report.css.
+// versionText), dosing-checks.js (the addition tick boxes); styles in
+// batch-report.css.
 // ============================================================================
 
 const TRANSFER_SELECT = '*, to_batch:batches!batch_transfers_to_batch_id_fkey(batch_number)';
@@ -23,6 +24,52 @@ async function insertBatchRow({ table, values, list, saveStatus, userId, stampUp
   if (list) list.push(data);
   saveStatus.saved();
   return data;
+}
+
+/**
+ * Tick boxes for additions per brew / per HBT (batch_dosing_checks; helpers
+ * in dosing-checks.js). ctx() returns { batchId, checks, userId, canEdit,
+ * saveStatus, initialsOf }. cellHtml(line, kind 'brew'|'hbt', targetId, note) is
+ * one table cell (note: small text under the box, e.g. the amount); handleChange(el) saves a tick (insert) or untick (delete) and
+ * returns true when it handled the element.
+ */
+function createDosingChecks(ctx, renderSoon) {
+  function cellHtml(line, kind, targetId, note) {
+    const c = ctx();
+    const check = dosingCheck(c.checks, line.id, kind, targetId);
+    const title = check ? `Added · ${dosingTitle(check, c.initialsOf)}` : 'Not added yet';
+    return `<td class="bd-check"><input type="checkbox" data-dosing-line="${line.id}" data-dosing-kind="${kind}" data-dosing-target="${targetId}"
+      aria-label="${escapeHtml(title)}" title="${escapeHtml(title)}"${check ? ' checked' : ''}${c.canEdit ? '' : ' disabled'}>${note ? `<div class="bd-amount">${escapeHtml(note)}</div>` : ''}</td>`;
+  }
+
+  async function save(el) {
+    const c = ctx();
+    const lineId = Number(el.dataset.dosingLine), kind = el.dataset.dosingKind, targetId = Number(el.dataset.dosingTarget);
+    const field = kind === 'brew' ? 'batch_brew_id' : 'batch_hbt_id';
+    const check = dosingCheck(c.checks, lineId, kind, targetId);
+    if (el.checked && !check) {
+      const row = await insertBatchRow({
+        table: 'batch_dosing_checks', list: c.checks, saveStatus: c.saveStatus, userId: c.userId, stampUpdatedBy: false,
+        values: { batch_id: c.batchId, batch_ingredient_id: lineId, [field]: targetId, checked_by: c.userId, checked_at: new Date().toISOString() },
+      });
+      if (!row) el.checked = false;
+    } else if (!el.checked && check) {
+      c.saveStatus.saving();
+      const { error } = await supabaseClient.from('batch_dosing_checks').delete().eq('id', check.id).select('id').single();
+      if (error) { el.checked = true; c.saveStatus.failed(error.message); return; }
+      c.checks.splice(c.checks.indexOf(check), 1);
+      c.saveStatus.saved();
+    }
+    renderSoon();
+  }
+
+  function handleChange(el) {
+    if (!el.dataset || !el.dataset.dosingLine) return false;
+    save(el);
+    return true;
+  }
+
+  return { cellHtml, handleChange };
 }
 
 /**

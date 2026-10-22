@@ -77,6 +77,18 @@ Use `brew-calculations.js` with the **batch** values (`alpha_pct`,
 volume from `recipe_brewing_specs`. Same formulas as `recept-invoer.html`.
 EBU total compared with `recipe_specs.bitterness` ± `bitterness_tol`.
 
+## Additions ticked per brew / per HBT (Jaap, 22-10)
+- Brewing tab, **Additions brewers**: a column per brew of the batch (Brew
+  1, Brew 2 …, appears when a brew is added) with a tick box per addition
+  line; a line "all in the first brew" has a box in Brew 1 only ("—"
+  elsewhere). Processing: a column per HBT (refilled tank: "HBT16 · 01-10").
+- A tick = a `batch_dosing_checks` row (who, when: the box's tooltip);
+  untick deletes it. Edit rights for both. Deleting the addition line, the
+  brew or the HBT deletes its ticks. Module `dosing-checks.js` (+ test);
+  saving in `batch-report-cards.js` (`createDosingChecks`).
+- `batch_ingredients.is_added` is something else: a line added to the batch
+  versus the recipe.
+
 ## Brewing (per brew, grey/calculated)
 - Evaporation % = (boil_end_extract − boil_start_extract) /
   boil_start_extract × 100 (extract-based, as in the mockup; compare with
@@ -193,8 +205,11 @@ Steps are editable and reorderable in the recipe editor; edited steps get
   `recipe_fermentation.lagering_time`. Not ticked while lagering has not
   started or the recipe has no lagering time.
 - Cellar additions with a timing that shows on Processing (Settings › Cellar
-  plan) are listed under "From recipe" in Comments processing, with the
-  batch amount, next to `recipe_process_steps.processing_comment`.
+  plan) are in the card **Additions processing · per HBT** (22-10; before:
+  bullets under "From recipe", which keeps
+  `recipe_process_steps.processing_comment`): rate, timing, batch amount and
+  a tick box per HBT (`batch_dosing_checks`); under each box the amount for
+  that HBT (rate × its end level) when the rate is per hl / l. "n/m added".
 - The calculators (Nagardo, PGA / alginate) are also on Processing; "Save as
   comment" adds a processing comment.
 - HBT end value = last `hbt_readings` row (by `sort_order`) of that HBT that

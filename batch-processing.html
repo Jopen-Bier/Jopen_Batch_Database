@@ -32,6 +32,7 @@
         <div class="br-card br-cardpad" id="pr-tasting"></div>
       </div>
       <div class="br-card br-cardpad" id="pr-hbts"></div>
+      <div class="br-card br-cardpad" id="pr-additions"></div>
       <div class="br-card br-cardpad" id="pr-totals"></div>
       <div class="br-card br-cardpad" id="pr-transfers"></div>
     </div>
@@ -48,6 +49,7 @@
   <script src="fermentation-log.js"></script>
   <script src="processing.js"></script>
   <script src="splits.js"></script>
+  <script src="dosing-checks.js"></script>
   <script src="batch-report-shell.js"></script>
   <script src="batch-report-cards.js"></script>
   <script>
@@ -85,7 +87,7 @@
       const recipeId = page.ctx.batch.recipe_id;
       const one = (table) => supabaseClient.from(table).select('*').eq('recipe_id', recipeId).maybeSingle();
       const byBatch = (table) => supabaseClient.from(table).select('*').eq('batch_id', batchId);
-      const [sessions, comments, hbts, readings, transfers, brews, tanks, users, ferm, packaging, processSteps, ingredients, timings, fills, incoming] = await Promise.all([
+      const [sessions, comments, hbts, readings, transfers, brews, tanks, users, ferm, packaging, processSteps, ingredients, timings, fills, incoming, dosingChecks] = await Promise.all([
         byBatch('processing_sessions').order('session_number'),
         byBatch('processing_comments').order('comment_time', { nullsFirst: false }).order('id'),
         byBatch('batch_hbts').order('sort_order').order('id'),
@@ -99,9 +101,11 @@
         supabaseClient.from('cellar_plan_parts').select('code, label, shows_on').eq('kind', 'addition_timing'),
         supabaseClient.from('filling_sessions').select('id, batch_hbt_id, is_hbt_finished').eq('batch_id', batchId),
         supabaseClient.from('batch_transfers').select(INCOMING_SELECT).eq('to_batch_id', batchId).order('transferred_at').order('id'),
+        supabaseClient.from('batch_dosing_checks').select('*').eq('batch_id', batchId).not('batch_hbt_id', 'is', null),
       ]);
       page.fills = fills.error ? [] : fills.data;
-      for (const res of [sessions, comments, hbts, readings, transfers, brews, tanks, ingredients]) if (res.error) throw res.error;
+      for (const res of [sessions, comments, hbts, readings, transfers, brews, tanks, ingredients, dosingChecks]) if (res.error) throw res.error;
+      page.dosingChecks = dosingChecks.data;
       Object.assign(page, {
         sessions: sessions.data, comments: comments.data, hbts: hbts.data, readings: readings.data, transfers: transfers.data,
         brews: brews.data, tanks: tanks.data, users: users.users.filter((u) => u.is_active), initialsOf: users.initialsOf,
@@ -120,6 +124,10 @@
 
     // ------------------------------------------------------------ saving
     const renderSoon = createRenderer(() => renderAll());
+    const dosing = createDosingChecks(() => ({
+      batchId: page.ctx.batch.id, checks: page.dosingChecks, userId: page.user.id, canEdit: page.canEdit,
+      saveStatus: page.save, initialsOf: page.initialsOf,
+    }), renderSoon);
     const saveBatch = (patch) => saveRowPatch({ table: 'batches', row: page.ctx.batch, patch, saveStatus: page.save, renderSoon, stampUpdatedBy: false });
     const saveRow = (table, row, patch) => saveRowPatch({ table, row, patch, saveStatus: page.save, renderSoon, userId: page.user.id });
     const insertRow = (table, values, list, opts = {}) => insertBatchRow({ table, values, list, saveStatus: page.save, userId: page.user.id, ...opts });
@@ -244,6 +252,7 @@
       renderComments();
       renderTasting();
       renderHbts();
+      renderAdditions();
       renderTotals();
       transfersCard.render();
     }
@@ -346,18 +355,14 @@
           </tbody></table></div>`;
     }
 
-    function processingAdditions() {
+    // Cellar additions with a timing that shows on Processing (Settings › Cellar plan).
+    function processingAdditionLines() {
       const processingCodes = new Set(page.timings.filter((t) => t.shows_on === 'processing').map((t) => t.code));
-      const label = (code) => (page.timings.find((t) => t.code === code) || {}).label || code;
-      const ctx = amountContext(page.ctx.batch, page.ctx.recipe, page.ctx.stageRow);
-      return page.ingredients.filter((r) => r.addition_type === 'cellar_addition' && processingCodes.has(r.timing)).map((r) => {
-        const amount = batchAmount(r.addition_type, r.unit, r.quantity, ctx);
-        return `${label(r.timing)}: ${page.names[r.ingredient_id] || r.note || '(no ingredient)'}${amount ? ' ' + formatAmount(amount) : ''}${r.note && page.names[r.ingredient_id] ? ` (${r.note})` : ''}`;
-      });
+      return page.ingredients.filter((r) => r.addition_type === 'cellar_addition' && processingCodes.has(r.timing));
     }
 
     function renderComments() {
-      const recipeNotes = [page.processSteps.processing_comment, ...processingAdditions()].filter((x) => String(x || '').trim());
+      const recipeNotes = [page.processSteps.processing_comment].filter((x) => String(x || '').trim());
       const row = (c) => `<tr>
         <td style="width:96px;"><input class="br-in l" type="time" data-comment="${c.id}" data-field="comment_time" value="${val((c.comment_time || '').slice(0, 5))}" aria-label="Time"${dis()}></td>
         <td><textarea class="br-in l br-textarea" rows="1" data-comment="${c.id}" data-field="comment" aria-label="Comment"${dis()}>${escapeHtml(c.comment)}</textarea></td>
@@ -372,6 +377,40 @@
         <table class="br-ing"><thead><tr><th>Time</th><th>Comment</th><th>Op.</th><th></th></tr></thead>
           <tbody>${page.comments.map(row).join('')}${draft}${page.comments.length || page.commentDraft ? '' : '<tr><td colspan="4" class="small">No comments yet.</td></tr>'}</tbody></table>
         ${page.canEdit ? '<div><button class="br-ghost" type="button" id="pr-add-comment">+ Comment</button></div>' : ''}`;
+    }
+
+    // Processing additions: a tick box per HBT (batch_dosing_checks); under the
+    // box the amount for that HBT when the dosing is per hl / l.
+    function renderAdditions() {
+      const el = document.getElementById('pr-additions');
+      const lines = processingAdditionLines();
+      el.style.display = lines.length ? '' : 'none';
+      if (!lines.length) { el.innerHTML = ''; return; }
+      const label = (code) => (page.timings.find((t) => t.code === code) || {}).label || code;
+      const ctx = amountContext(page.ctx.batch, page.ctx.recipe, page.ctx.stageRow);
+      const hbts = hbtsInOrder();
+      const levelOf = (h) => { const end = hbtEnd(readingsOf(h)); return end ? Number(end.level_hl) : null; };
+      const perHbt = (r, h) => {
+        const basis = amountBasis(r.addition_type, r.unit), level = levelOf(h);
+        if (!basis || !['hl', 'l'].includes(basis.per) || !level) return '';
+        return formatAmount(batchAmount(r.addition_type, r.unit, r.quantity, { brewCount: 0, brewVolumeHl: 0, incomingHl: level }));
+      };
+      const progress = dosingProgress(lines, 'hbt', () => hbts.map((h) => h.id), page.dosingChecks);
+      const rows = lines.map((r) => {
+        const amount = batchAmount(r.addition_type, r.unit, r.quantity, ctx);
+        return `<tr><td><b>${escapeHtml(page.names[r.ingredient_id] || r.note || '(no ingredient)')}</b>${r.note && page.names[r.ingredient_id] ? ` <span class="br-note">${escapeHtml(r.note)}</span>` : ''}</td>
+          <td class="small">${escapeHtml(label(r.timing))}</td>
+          <td class="c">${escapeHtml(String(r.quantity ?? ''))} ${escapeHtml(r.unit || '')}${amount ? ` <span class="br-note">· batch ${escapeHtml(formatAmount(amount))}</span>` : ''}</td>
+          ${hbts.map((h) => dosing.cellHtml(r, 'hbt', h.id, perHbt(r, h))).join('')}</tr>`;
+      }).join('');
+      el.innerHTML = `
+        <div class="br-head" style="align-items:baseline;"><div class="br-label">Additions processing · per HBT</div>
+          <span class="br-note${progress.total && progress.done === progress.total ? ' bd-done' : ''}">${progress.total ? `${progress.done}/${progress.total} added · ` : ''}tick when it is added to the HBT</span></div>
+        <div class="br-table-wrap"><table class="br-ing" style="min-width:${480 + hbts.length * 90}px;">
+          <thead><tr><th>Addition</th><th style="width:140px;">Timing</th><th class="r" style="width:190px;">Dosing</th>
+            ${hbts.map((h) => `<th class="bd-check">${escapeHtml(hbtName(h))}</th>`).join('')}</tr></thead>
+          <tbody>${rows}</tbody></table></div>
+        ${hbts.length ? '' : '<div class="br-note">A tick column appears for every HBT you add.</div>'}`;
     }
 
     function renderTasting() {
@@ -518,6 +557,7 @@
       main.addEventListener('change', (e) => {
         const el = e.target;
         if (transfersCard.handleChange(el)) return;
+        if (dosing.handleChange(el)) return;
         if (el.id === 'pr-adds-done') return saveBatch({ cellar_additions_done: el.checked });
         if (el.id === 'pr-tasting-comment') return saveBatch({ tasting_comment: el.value.trim() || null });
         if (el.id === 'pr-add-hbt') { if (el.value) addHbt(Number(el.value)); return; }
