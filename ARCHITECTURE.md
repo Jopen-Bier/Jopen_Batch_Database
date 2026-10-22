@@ -212,6 +212,9 @@ Agreed table and column names per table: `supabase/rename-map.json`.
   `magBekijkenModule / magBewerkenModule / magVerwijderenModule` (in `nav.js`)
   hide or disable controls. The UI is a convenience; RLS is the real guard.
 - Users, user roles and the status page are admin-only (`isAdmin`).
+- Deleting a **whole batch** is its own right: module `batch_deletion`
+  ("Delete batches", one tick in the role matrix; admin only by default).
+  `batches` DELETE uses it; rows inside a batch report stay on `batches`.
 
 ---
 
@@ -227,8 +230,8 @@ Agreed table and column names per table: `supabase/rename-map.json`.
 | `productsheet.html`, `productsheet-invoer.html` | product_sheets | product_sheets, product_sheet_revisions, product_sheet_status (view), recipes |
 | `brouwplanning.html` | brewing_planning | brew_planning, brew_planning_splits, brew_capacity, brew_planning_history_detailed (view), recipes, users |
 | `verbruiksprognose.html` | brewing_planning (via menu) | ingredients, brew_planning, recipe_ingredients (via `voorraad-forecast.js`) |
-| `batchcreation.html` | batches | batches, recipes, recipe_fermentation (+ batch report via `batchrapport-vullen.js`) |
-| `all-batches.html` | batches | batches, recipes, batch_stages (view) |
+| `batchcreation.html` | batches; delete: batch_deletion | batches, recipes, recipe_fermentation (+ batch report via `batchrapport-vullen.js`); delete via `batch-delete.js` |
+| `all-batches.html` | batches; delete: batch_deletion | batches, recipes, batch_stages (view); delete a whole batch via `batch-delete.js` (+ storage bucket `batch-documents`) |
 | `active-batches.html` | batches | batches, recipes, tanks, batch_stages (view) |
 | `batch-filling-report.html` | batches | batches, filling_sessions, filling_session_articles, filling_session_materials, packaging_articles/_materials/_article_materials, batch_hbts, hbt_readings, batch_transfers, batch_brews, tanks, incoming batch_transfers, `split_batch()` (Split / transfer popup), recipes, recipe_ingredients / batch_ingredients of the receiving batch, batch_documents + storage bucket `batch-documents` |
 | `batch-filling.html` | batches | batches, filling_sessions, filling_measurements, batch_hbts, hbt_readings, tanks, users, recipe_packaging/_fermentation |

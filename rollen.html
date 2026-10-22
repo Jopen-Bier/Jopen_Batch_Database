@@ -68,6 +68,9 @@
     // Modules that are never configurable: always admin-only, whatever
     // role_permissions says. Their cells are shown locked for every role.
     const RL_LOCKED_MODULES = ['user_management', 'role_management'];
+    // Modules that are one right, not view/edit/delete: one tick ("Allowed").
+    // batch_deletion = deleting a whole batch (All batches, Batch creation).
+    const RL_SINGLE_RIGHT_MODULES = ['batch_deletion'];
 
     async function loadRoleMatrix() {
       const container = document.getElementById('rl-matrix-container');
@@ -95,6 +98,15 @@
           const row = permissionMap[`${role.id}|${m.module_key}`] || { can_view: isAdminRole, can_edit: isAdminRole, can_delete: isAdminRole };
           const checked = { view: isAdminRole || row.can_view, edit: isAdminRole || row.can_edit, delete: isAdminRole || row.can_delete };
           const disabledAttr = locked ? 'disabled' : '';
+          if (RL_SINGLE_RIGHT_MODULES.includes(m.module_key)) {
+            return `
+            <td>
+              <div class="rl-cell" data-role-id="${role.id}" data-module-key="${escapeHtml(m.module_key)}">
+                <label><input type="checkbox" class="rl-check" data-field="can_delete" ${checked.delete ? 'checked' : ''} ${disabledAttr} /> Allowed</label>
+                <span class="rl-inline-msg"></span>
+              </div>
+            </td>`;
+          }
           return `
             <td>
               <div class="rl-cell" data-role-id="${role.id}" data-module-key="${escapeHtml(m.module_key)}">
@@ -166,11 +178,14 @@
       const moduleKey = cell.dataset.moduleKey;
       const msg = cell.querySelector('.rl-inline-msg');
 
-      const values = {
-        can_view: cell.querySelector('[data-field="can_view"]').checked,
-        can_edit: cell.querySelector('[data-field="can_edit"]').checked,
-        can_delete: cell.querySelector('[data-field="can_delete"]').checked,
-      };
+      const allowed = cell.querySelector('[data-field="can_delete"]').checked;
+      const values = RL_SINGLE_RIGHT_MODULES.includes(moduleKey)
+        ? { can_view: allowed, can_edit: allowed, can_delete: allowed }
+        : {
+          can_view: cell.querySelector('[data-field="can_view"]').checked,
+          can_edit: cell.querySelector('[data-field="can_edit"]').checked,
+          can_delete: allowed,
+        };
       // Edit/Delete without View is confusing (editing something you cannot
       // see), so ticking Edit or Delete also ticks View.
       if ((values.can_edit || values.can_delete) && !values.can_view) {
