@@ -4,10 +4,10 @@ const s = require('../batch-stages.js');
 
 // Stage codes must match view batch_stages (business-rules.md, "Stage of a batch").
 assert.deepStrictEqual(s.BATCH_STAGES.map((x) => x.code),
-  ['raw', 'brewing', 'fermentation', 'lagering', 'hbt', 'filling', 'filled', 'closed']);
+  ['raw', 'brewing', 'fermentation', 'lagering', 'barrel', 'hbt', 'filling', 'filled', 'closed']);
 // every stage except closed appears in exactly one Active batches block
 const inSections = s.ACTIVE_SECTIONS.flatMap((x) => x.stages);
-assert.deepStrictEqual(inSections, ['raw', 'brewing', 'fermentation', 'lagering', 'hbt', 'filling', 'filled']);
+assert.deepStrictEqual(inSections, ['raw', 'brewing', 'fermentation', 'lagering', 'hbt', 'filling', 'filled', 'barrel']);
 assert.strictEqual(s.stageInfo('hbt').label, 'HBT');
 assert.strictEqual(s.stageInfo('unknown').label, 'unknown');
 assert.ok(s.stageOrder('closed') > s.stageOrder('raw'));
@@ -157,7 +157,12 @@ assert.strictEqual(hbtRow({ hbt_codes: null }).tankCode, 'GLT7');
 // Filling and Filled tiles
 assert.deepStrictEqual(s.tileLines(hbtRow({ stage: 'filling', hbts_finished: 1 })), { line1: 'Bottle + Can + Keg', line2: '1/2 HBT finished', isOk: false, progress: 0.5, line3: 'Documents 0/3', line3Ok: false });
 assert.strictEqual(hbtRow({ stage: 'filling' }).tankCode, 'HBT12 · HBT14');
-assert.deepStrictEqual(s.tileLines(hbtRow({ stage: 'filled', hbts_finished: 2, filled_volume_hl: 76.8, documents_uploaded: 2 })), { line1: '76.8 hl packaged', line2: 'Filling report open', isOk: false, progress: null, line3: 'Documents 2/3', line3Ok: false });
+assert.deepStrictEqual(s.tileLines(hbtRow({ stage: 'filled', hbts_finished: 2, filled_volume_hl: 76.8, documents_uploaded: 2 })), { line1: '76.8 hl packaged', line2: 'Filling report to check', isOk: false, progress: null, line3: 'Documents 2/3', line3Ok: false });
+// filled by transferring the whole batch, one of the two checks done
+assert.deepStrictEqual(s.tileLines(s.toBatchRow({ id: 1, batch_number: '26277' }, { stage: 'filled', emptied_at: '2026-09-25T10:00:00Z', filling_report_checked_at: '2026-10-23T09:00:00Z' })).line1 + ' | '
+  + s.tileLines(s.toBatchRow({ id: 1, batch_number: '26277' }, { stage: 'filled', emptied_at: '2026-09-25T10:00:00Z', filling_report_checked_at: '2026-10-23T09:00:00Z' })).line2,
+  'Whole batch transferred | Filling report: ✓ checked');
+assert.strictEqual(s.batchHref('barrel', 5), 'batch-fermentation.html?id=5');
 assert.deepStrictEqual(s.tileLines(hbtRow({ stage: 'filled', documents_uploaded: 3 })).line3, '✓ Documents 3/3');
 assert.deepStrictEqual(s.tileLines(hbtRow({ stage: 'filling', documents_uploaded: 1, other_documents: 2 })).line3, 'Documents 1/3 · +2 other');
 assert.strictEqual(s.tileLines(hbtRow({ stage: 'hbt' })).line3, undefined, 'documents only on Filling / Filled tiles');

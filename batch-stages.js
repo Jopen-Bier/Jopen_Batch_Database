@@ -15,6 +15,7 @@ const BATCH_STAGES = [
   { code: 'brewing',      label: 'Brewing',                  short: 'Brewing',      pill: ['#fdf1d8', '#7a4f17'] },
   { code: 'fermentation', label: 'Fermentation',             short: 'Fermentation', pill: ['#fbe3c8', '#7a4011'] },
   { code: 'lagering',     label: 'Lagering',                 short: 'Lagering',     pill: ['#dde7f0', '#244766'] },
+  { code: 'barrel',       label: 'On barrels',               short: 'Barrels',      pill: ['#ead9c6', '#5a3a1c'] },
   { code: 'hbt',          label: 'HBT',                      short: 'HBT',          pill: ['#e3def0', '#3f2f6b'] },
   { code: 'filling',      label: 'Filling',                  short: 'Filling',      pill: ['#d6ebe6', '#1f5448'] },
   { code: 'filled',       label: 'Filled',                   short: 'Filled',       pill: ['#e1ead9', '#33473a'] },
@@ -34,7 +35,9 @@ const ACTIVE_SECTIONS = [
   { key: 'filling', title: 'Filling', stages: ['filling'],
     rule: 'First filling input · until every HBT is finished' },
   { key: 'filled',  title: 'Filled', stages: ['filled'],
-    rule: 'All HBTs finished · until the filling report is closed' },
+    rule: 'All HBTs finished, or the whole batch transferred · until the filling report is checked and processed in MDrank' },
+  { key: 'barrel',  title: 'On barrels', stages: ['barrel'],
+    rule: 'Tagged “To barrels” · until Processing has a date' },
 ];
 
 function stageInfo(code) {
@@ -98,6 +101,9 @@ function toBatchRow(batch, stageRow) {
     filledVolumeHl: (stageRow && stageRow.filled_volume_hl) ?? null,
     documentsUploaded: (stageRow && stageRow.documents_uploaded) || 0,
     otherDocuments: (stageRow && stageRow.other_documents) || 0,
+    emptiedAt: (stageRow && stageRow.emptied_at) || null,
+    fillingReportChecked: !!(stageRow && stageRow.filling_report_checked_at),
+    mdrankProcessed: !!(stageRow && stageRow.mdrank_processed_at),
     // the tank the beer is in: the lager tank once it is pushed over, else the fermentation tank
     // (from HBT on: the bright beer tanks)
     tankCode: (['hbt', 'filling', 'filled'].includes(stageRow && stageRow.stage) && stageRow.hbt_codes)
@@ -253,11 +259,22 @@ function tileLines(row, now = new Date()) {
       ...docs(),
     };
   }
+  if (row.stage === 'barrel') {
+    const days = row.timeZero ? (new Date(now) - new Date(row.timeZero)) / 86400000 : null;
+    return {
+      line1: days !== null ? `Day ${Math.max(0, days).toFixed(0)}` : 'On barrels',
+      line2: row.nextCellarStep ? `Next: ${row.nextCellarStep}` : '',
+      isOk: false,
+      progress: null,
+    };
+  }
   if (row.stage === 'filled') {
     const hl = Number(row.filledVolumeHl);
+    const checks = [row.fillingReportChecked && 'checked', row.mdrankProcessed && 'MDrank'].filter(Boolean);
     return {
-      line1: Number.isFinite(hl) && row.filledVolumeHl !== null ? `${hl.toLocaleString('en-GB', { maximumFractionDigits: 1 })} hl packaged` : 'Packaged',
-      line2: 'Filling report open',   // phase 7: completed / signed
+      line1: row.emptiedAt && !row.hbtsTotal ? 'Whole batch transferred'
+        : Number.isFinite(hl) && row.filledVolumeHl !== null ? `${hl.toLocaleString('en-GB', { maximumFractionDigits: 1 })} hl packaged` : 'Packaged',
+      line2: checks.length ? `Filling report: ✓ ${checks.join(' · ✓ ')}` : 'Filling report to check',
       isOk: false,
       progress: null,
       ...docs(),
@@ -284,7 +301,7 @@ function batchTabHref(tabKey, batchId) {
 
 // The tab a batch opens on from a list: the tab of its current stage once
 // that tab exists, else the Overview.
-const STAGE_TABS = { brewing: 'brewing', fermentation: 'fermentation', lagering: 'fermentation', hbt: 'processing', filling: 'filling', filled: 'filling-report' };
+const STAGE_TABS = { brewing: 'brewing', fermentation: 'fermentation', lagering: 'fermentation', barrel: 'fermentation', hbt: 'processing', filling: 'filling', filled: 'filling-report' };
 
 // Documents uploaded on the Filling report (batch_documents.document_type),
 // one file each; 'other' documents (any number) come on top.

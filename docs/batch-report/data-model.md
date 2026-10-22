@@ -522,6 +522,21 @@ Built 20-10 (migration `20261020151500_batch_report_splits`):
 
 ---
 
+## Lifecycle after the 2026 import (23-10, `20261023090000_batch_lifecycle`)
+- `batch_transfers.empties_tank` boolean not null default false: "Tank empty:
+  this was the whole batch" (Split popup and the transfers table). The
+  source batch counts as Filled (`batch_stages.emptied_at`).
+- `batches.filling_report_checked_at` / `_by`, `mdrank_processed_at` / `_by`:
+  the two checks at the bottom of the Filling report; both = Closed.
+- `batches.lagering_started_at`: "Start lagering now" by hand.
+- `cellar_action_tags` row `to_barrels` ("To barrels"): stage `barrel`.
+- `batch_tank_moves` (new): `id`, `batch_id`, `entry_tag_id` (unique, the
+  "Transfer" tag on a log entry, cascade), `from_tank_id`, `to_tank_id`,
+  `volume_hl`, `o2_ppb`, `co2_gl`, created_/updated_. RLS on `batches`.
+- `batch_stages` appends `emptied_at`, `on_barrels`,
+  `filling_report_checked_at`, `mdrank_processed_at`; `end_date` = the later
+  check; rules in `business-rules.md`.
+
 ## RLS summary
 | Tables | select | insert / update | delete |
 |---|---|---|---|

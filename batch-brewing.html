@@ -42,7 +42,7 @@
     </div>
   </main>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2"></script>
   <script src="config.js"></script>
   <script src="jopen-utils.js"></script>
   <script src="nav.js"></script>
@@ -75,9 +75,11 @@
 
     // ------------------------------------------------------------ loading
     async function loadAll(batchId) {
-      page.ctx = await loadBatchContext(batchId);
+      [page.ctx] = await Promise.all([
+        loadBatchContext(batchId),
+        supabaseClient.rpc('snapshot_batch_ingredients', { p_batch_id: batchId }),
+      ]);
       const recipeId = page.ctx.batch.recipe_id;
-      await supabaseClient.rpc('snapshot_batch_ingredients', { p_batch_id: batchId });
       const one = (table) => supabaseClient.from(table).select('*').eq('recipe_id', recipeId).maybeSingle();
       const [brews, comments, users, tanks, brewing, specs, ferm, recipeComments, ingredients] = await Promise.all([
         supabaseClient.from('batch_brews').select('*').eq('batch_id', batchId).order('brew_number'),
@@ -471,20 +473,21 @@
     }
 
     async function initBrewingPage() {
+      // The batch loads while the user and rights load (RLS guards the data).
+      const batchId = batchIdFromUrl();
+      const loading = batchId ? loadAll(batchId).then(() => null, (err) => err) : null;
       page.user = await getCurrentUser();
       if (!page.user) return; // nav.js redirects to login
       if (!(await magBekijkenModule('batches'))) {
         showMessage('You do not have access to batch reports. Ask an admin for view rights on "Batches & batch reports".');
         return;
       }
-      const batchId = batchIdFromUrl();
       if (!batchId) { showMessage('No batch chosen. Open a batch from All batches or Active batches.', true); return; }
       page.canEdit = await magBewerkenModule('batches');
       page.canDelete = await magVerwijderenModule('batches');
-      try {
-        await loadAll(batchId);
-      } catch (err) {
-        showMessage('Could not load the batch: ' + (err.message || err), true);
+      const loadError = await loading;
+      if (loadError) {
+        showMessage('Could not load the batch: ' + (loadError.message || loadError), true);
         return;
       }
       document.title = `Jopen Brouwerij — ${page.ctx.batch.batch_number} Brewing`;

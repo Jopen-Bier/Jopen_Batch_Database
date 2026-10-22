@@ -37,7 +37,7 @@
     </div>
   </main>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2"></script>
   <script src="config.js"></script>
   <script src="jopen-utils.js"></script>
   <script src="nav.js"></script>
@@ -78,12 +78,14 @@
 
     // ------------------------------------------------------------ loading
     async function loadAll(batchId) {
-      page.ctx = await loadBatchContext(batchId);
+      [page.ctx] = await Promise.all([
+        loadBatchContext(batchId),
+        supabaseClient.rpc('snapshot_batch_ingredients', { p_batch_id: batchId }),
+      ]);
       const recipeId = page.ctx.batch.recipe_id;
-      await supabaseClient.rpc('snapshot_batch_ingredients', { p_batch_id: batchId });
       const one = (table) => supabaseClient.from(table).select('*').eq('recipe_id', recipeId).maybeSingle();
       const byBatch = (table) => supabaseClient.from(table).select('*').eq('batch_id', batchId);
-      const [sessions, comments, hbts, readings, transfers, brews, tanks, users, ferm, packaging, processSteps, ingredients, timings] = await Promise.all([
+      const [sessions, comments, hbts, readings, transfers, brews, tanks, users, ferm, packaging, processSteps, ingredients, timings, fills, incoming] = await Promise.all([
         byBatch('processing_sessions').order('session_number'),
         byBatch('processing_comments').order('comment_time', { nullsFirst: false }).order('id'),
         byBatch('batch_hbts').order('sort_order').order('id'),
@@ -95,7 +97,10 @@
         one('recipe_fermentation'), one('recipe_packaging'), one('recipe_process_steps'),
         supabaseClient.from('batch_ingredients').select('id, ingredient_id, addition_type, unit, quantity, timing, note, is_removed').eq('batch_id', batchId),
         supabaseClient.from('cellar_plan_parts').select('code, label, shows_on').eq('kind', 'addition_timing'),
+        supabaseClient.from('filling_sessions').select('id, batch_hbt_id, is_hbt_finished').eq('batch_id', batchId),
+        supabaseClient.from('batch_transfers').select(INCOMING_SELECT).eq('to_batch_id', batchId).order('transferred_at').order('id'),
       ]);
+      page.fills = fills.error ? [] : fills.data;
       for (const res of [sessions, comments, hbts, readings, transfers, brews, tanks, ingredients]) if (res.error) throw res.error;
       Object.assign(page, {
         sessions: sessions.data, comments: comments.data, hbts: hbts.data, readings: readings.data, transfers: transfers.data,
@@ -103,7 +108,6 @@
         ferm: ferm.data || {}, packaging: packaging.data || {}, processSteps: processSteps.data || {},
         ingredients: ingredients.data.filter((r) => !r.is_removed), timings: timings.data || [],
       });
-      const incoming = await supabaseClient.from('batch_transfers').select(INCOMING_SELECT).eq('to_batch_id', batchId).order('transferred_at').order('id');
       if (incoming.error) throw incoming.error;
       page.incoming = incoming.data;
       const ids = [...new Set(page.ingredients.map((r) => r.ingredient_id).filter(Boolean))];
@@ -170,6 +174,19 @@
     }
 
     async function addHbt(tankId) {
+      // One HBT row = one fill, from empty to empty. Filling over more days is the
+      // same fill; a new row with the same tank only after it was emptied (26278).
+      const open = page.hbts.filter((h) => h.tank_id === tankId)
+        .filter((h) => !(page.fills || []).some((f) => f.batch_hbt_id === h.id && f.is_hbt_finished));
+      if (open.length) {
+        const code = (page.tanks.find((t) => t.id === tankId) || {}).code || 'This HBT';
+        const ok = await confirmDialog({
+          title: `${code} is not finished yet`,
+          text: `${code} has a fill on this batch that is not finished (no filling session ticked "HBT finished"). Filling over more days is the same HBT: add a reading there. Only start a new fill when ${code} was emptied and is filled again.`,
+          okLabel: 'Start a new fill',
+        });
+        if (!ok) return renderSoon();
+      }
       const hbt = await insertRow('batch_hbts', {
         batch_id: page.ctx.batch.id, tank_id: tankId, intended_formats: [], sort_order: Math.max(0, ...page.hbts.map((h) => h.sort_order || 0)) + 1,
       }, page.hbts);
@@ -592,20 +609,21 @@
     }
 
     async function initProcessingPage() {
+      // The batch loads while the user and rights load (RLS guards the data).
+      const batchId = batchIdFromUrl();
+      const loading = batchId ? loadAll(batchId).then(() => null, (err) => err) : null;
       page.user = await getCurrentUser();
       if (!page.user) return; // nav.js redirects to login
       if (!(await magBekijkenModule('batches'))) {
         showMessage('You do not have access to batch reports. Ask an admin for view rights on "Batches & batch reports".');
         return;
       }
-      const batchId = batchIdFromUrl();
       if (!batchId) { showMessage('No batch chosen. Open a batch from All batches or Active batches.', true); return; }
       page.canEdit = await magBewerkenModule('batches');
       page.canDelete = await magVerwijderenModule('batches');
-      try {
-        await loadAll(batchId);
-      } catch (err) {
-        showMessage('Could not load the batch: ' + (err.message || err), true);
+      const loadError = await loading;
+      if (loadError) {
+        showMessage('Could not load the batch: ' + (loadError.message || loadError), true);
         return;
       }
       document.title = `Jopen Brouwerij — ${page.ctx.batch.batch_number} Processing`;
