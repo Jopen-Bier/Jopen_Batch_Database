@@ -212,6 +212,9 @@ Agreed table and column names per table: `supabase/rename-map.json`.
   `magBekijkenModule / magBewerkenModule / magVerwijderenModule` (in `nav.js`)
   hide or disable controls. The UI is a convenience; RLS is the real guard.
 - Users, user roles and the status page are admin-only (`isAdmin`).
+- Policies call the helpers wrapped as `(select can_view('module'))` so the
+  check runs once per query, not per row (23-10: `batch_stages` 630 → 27 ms
+  for a normal user). Write new policies the same way.
 - Deleting a **whole batch** is its own right: module `batch_deletion`
   ("Delete batches", one tick in the role matrix; admin only by default).
   `batches` DELETE uses it; rows inside a batch report stay on `batches`.
