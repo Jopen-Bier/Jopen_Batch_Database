@@ -81,7 +81,11 @@
     const orderPicked = () => !!page.ctx.batch.order_picking_completed_at;
     const visibleRows = (types) => page.rows.filter((r) => types.includes(r.addition_type) && !r.is_removed);
     const ingredientName = (r) => page.names[r.ingredient_id] || r.note || '(no ingredient)';
-    const lotText = (r) => page.lotsByGroup[page.groupOf[r.ingredient_id]] || '—';
+    // Lot numbers are typed in by hand for now (Jaap, 23-10: stock comes later);
+    // a lot booked out in stock shows as the placeholder.
+    const stockLot = (r) => page.lotsByGroup[page.groupOf[r.ingredient_id]] || '';
+    const lotText = (r) => r.lot_number || stockLot(r) || '—';
+    const lotCell = (r) => textInput(r, 'lot_number', r.lot_number, 'Lot number', stockLot(r) || 'Lot number');
 
     function showMessage(text, isError) {
       const el = document.getElementById('ov-message');
@@ -354,7 +358,7 @@
           <td class="n" style="width:100px;">${batch ? fmt(batch.q, 1) : '—'}</td>
           <td style="width:80px;">${numberInput(r, 'color_ebc', r.color_ebc, colorDiffers(r), 'EBC')}</td>
           <td class="c" style="width:70px;">${totalKg && kg !== null ? (kg / totalKg * 100).toFixed(1) + '%' : '—'}</td>
-          <td class="small" style="width:220px;">${escapeHtml(lotText(r))}</td>
+          <td style="width:220px;">${lotCell(r)}</td>
           <td style="width:34px;">${deleteCell(r)}</td></tr>`;
       }).join('');
       const colour = calculatedColour();
@@ -399,7 +403,7 @@
           <td class="cv" style="width:92px;">${util !== null ? util.toFixed(1) + '%' : '—'}</td>
           <td class="cv" style="width:60px; font-weight:700;">${ebu !== null ? ebu.toFixed(1) : '—'}</td>
           <td class="small" style="width:46px;">${isBoil ? (r.hop_dosing_tank ? 'Yes' : 'No') : '—'}</td>
-          <td class="small" style="width:200px;">${escapeHtml(lotText(r))}</td>
+          <td style="width:200px;">${lotCell(r)}</td>
           <td style="width:34px;">${deleteCell(r)}</td></tr>`;
       }).join('');
       const spec = num(page.specs.bitterness);
@@ -446,7 +450,7 @@
           <td class="n" style="width:140px;">${escapeHtml(formatAmount(amount))}</td>
           ${perBrew ? `<td class="small" style="width:90px;">${r.all_in_first_brew ? 'Yes' : 'No'}</td>` : ''}
           <td style="width:160px;">${r.is_added ? textInput(r, 'timing', r.timing, 'Timing', 'e.g. Boil') : escapeHtml(r.timing || '—')}</td>
-          <td class="small" style="width:200px;">${escapeHtml(lotText(r))}</td>
+          <td style="width:200px;">${lotCell(r)}</td>
           <td style="width:34px;">${deleteCell(r)}</td></tr>`;
       }).join('');
       const cols = perBrew ? 8 : 7;
@@ -480,7 +484,7 @@
       const list = deviationList(page.rows, amountCtx(), {
         orderPickingComplete: orderPicked(),
         names: page.names,
-        lots: Object.fromEntries(page.rows.map((r) => [r.ingredient_id, page.lotsByGroup[page.groupOf[r.ingredient_id]]])),
+        lots: Object.fromEntries(page.rows.map((r) => [r.ingredient_id, lotText(r) === '—' ? '' : lotText(r)])),
       });
       const picked = orderPicked();
       const missing = list.filter((d) => d.needsReason).length;
@@ -546,7 +550,7 @@
           if (el.value.trim() !== '' && value === null) { el.classList.add('bad'); el.title = 'Not a number'; return; }
           el.classList.remove('bad');
           saveRow(id, { [field]: value });
-        } else if (field === 'deviation_reason' || field === 'timing') {
+        } else if (field === 'deviation_reason' || field === 'timing' || field === 'lot_number') {
           saveRow(id, { [field]: el.value.trim() || null });
         } else if (field === 'unit') {
           saveRow(id, { unit: el.value });

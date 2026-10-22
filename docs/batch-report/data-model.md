@@ -537,6 +537,11 @@ Built 20-10 (migration `20261020151500_batch_report_splits`):
   `filling_report_checked_at`, `mdrank_processed_at`; `end_date` = the later
   check; rules in `business-rules.md`.
 
+## Lot numbers by hand (23-10, `20261023130000_batch_ingredient_lot_number`)
+- `batch_ingredients.lot_number` text: typed per ingredient on the Overview,
+  as in the Excel report. The stock link (`lots`, `stock_movements`) comes
+  later; a lot booked out in stock only shows as the placeholder.
+
 ## RLS summary
 | Tables | select | insert / update | delete |
 |---|---|---|---|
