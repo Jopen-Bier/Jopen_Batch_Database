@@ -322,3 +322,10 @@ The cellar plan steps are ticked off by the tags of the log entries.
    after, no existing data touched), Jaap runs it, then the RUN; verify on
    production after each chunk.
 6. Afterwards: link the initials to users (later), update `phases.md`.
+
+**Status 22-10: done.** All month chunks (2026-01 to 2026-10, 321 batches)
+and the transfers file were run on production by Jaap after their dry runs;
+production matches the local test (stages: closed 258, filled 35,
+fermentation 29, filling 15, lagering 7, brewing 2, raw 8 = batches without
+a workbook or not yet brewed). A later re-import is not needed: every file
+is rerun-safe (a batch with data, or an existing transfer, is skipped).
