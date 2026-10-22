@@ -85,6 +85,8 @@ their own screen). Filters: search, status, year (default all years), WP/JK.
 - Target water profile (recipe, read-only).
 
 ## Brewing (`mockup/Brewing.dc.html`)
+- Additions brewers · per brew: a tick column per brew (22-10), see
+  business-rules "Additions ticked per brew / per HBT".
 - Brew day card: brewhouse (from recipe), recipe name software (WP/JK
   column of `recipe_brewing_specs`), special bin, "Recipe number Braukon"
   (`batches.brewhouse_recipe_number`), brews, GLT, date first brew; recipe
@@ -159,6 +161,8 @@ steps. An "On day" step without a day blocks the save (message in the save
 window).
 
 ## Processing (`mockup/Processing.dc.html`)
+- Additions processing · per HBT (card under the HBTs, 22-10): a tick
+  column per HBT with the amount for that HBT.
 - Check before processing (beer risk, minimum maturation auto-check,
   "Cellar adds completed"), Specifications (turbidity after centrifuge,
   pasteurisation, O2 in HBT, CO2 per format).

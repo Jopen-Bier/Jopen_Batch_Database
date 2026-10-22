@@ -336,6 +336,13 @@ select.br-in { text-align: left; cursor: pointer; }
 .br-ing td.fi-cpk.warn { color: #96601f; }
 .br-ing td.fi-cpk.bad, .br-ing td.fi-low { color: var(--br-alert-text); font-weight: 700; }
 
+/* Addition tick boxes per brew / per HBT (dosing-checks.js) */
+.br-ing th.bd-check, .br-ing td.bd-check { text-align: center; width: 80px; }
+.br-ing td.bd-check input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--br-hop); cursor: pointer; }
+.br-ing td.bd-check input:disabled { cursor: default; }
+.bd-amount { font-size: 11px; color: var(--br-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.br-note.bd-done { color: var(--br-hop-dark); font-weight: 700; }
+
 /* Filling report (batch-filling-report.html) */
 .fr-balance { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr)); gap: 12px 28px; align-items: start; }
 .br-ing tr.fr-sub td { background: #f6f4ee; font-weight: 700; }

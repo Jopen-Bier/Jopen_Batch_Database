@@ -150,6 +150,14 @@ exact matching of added rows (open-questions).
 
 ---
 
+## Ticks per brew / per HBT (22-10, migration `20261023150000_batch_dosing_checks`)
+`batch_dosing_checks`: `id`, `batch_id` (cascade), `batch_ingredient_id`,
+`batch_brew_id` or `batch_hbt_id` (exactly one), `checked_at`,
+`checked_by`. Foreign keys over (id, batch_id) to `batch_ingredients`,
+`batch_brews`, `batch_hbts` (cascade; both tables got unique (id, batch_id)
+for it); unique (line, brew) and (line, HBT). RLS module "batches" (select
+view, insert / delete edit, checked once per query); audit trail.
+
 ## Phase 3 — Brewing
 
 ### `batches` (new column)

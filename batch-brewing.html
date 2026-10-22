@@ -50,7 +50,9 @@
   <script src="batch-stages.js"></script>
   <script src="batch-ingredients.js"></script>
   <script src="batch-brews.js"></script>
+  <script src="dosing-checks.js"></script>
   <script src="batch-report-shell.js"></script>
+  <script src="batch-report-cards.js"></script>
   <script>
     const BREWERY_NAMES = { wp: 'Waarderpolder', jk: 'Jopenkerk' };
     const TRASH_ICON = '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2.5 4h9M5.5 4V2.5h3V4M3.5 4l.6 8h5.8l.6-8"></path></svg>';
@@ -58,7 +60,7 @@
     const page = {
       user: null, canEdit: false, canDelete: false, ctx: null, save: null,
       brews: [], comments: [], users: [], initialsOf: () => '', tanks: [],
-      brewing: {}, specs: {}, ferm: {}, recipeComments: [], ingredients: [], names: {},
+      brewing: {}, specs: {}, ferm: {}, recipeComments: [], ingredients: [], names: {}, dosingChecks: [],
       commentDraft: false,
     };
     const location_ = () => page.ctx.recipe.location;
@@ -81,7 +83,7 @@
       ]);
       const recipeId = page.ctx.batch.recipe_id;
       const one = (table) => supabaseClient.from(table).select('*').eq('recipe_id', recipeId).maybeSingle();
-      const [brews, comments, users, tanks, brewing, specs, ferm, recipeComments, ingredients] = await Promise.all([
+      const [brews, comments, users, tanks, brewing, specs, ferm, recipeComments, ingredients, dosingChecks] = await Promise.all([
         supabaseClient.from('batch_brews').select('*').eq('batch_id', batchId).order('brew_number'),
         supabaseClient.from('batch_brew_comments').select('*').eq('batch_id', batchId).order('comment_time', { nullsFirst: false }).order('id'),
         loadUserInitials(),
@@ -89,8 +91,10 @@
         one('recipe_brewing_specs'), one('recipe_specs'), one('recipe_fermentation'), one('recipe_comments'),
         supabaseClient.from('batch_ingredients').select('*').eq('batch_id', batchId)
           .in('addition_type', ['boil_hop', 'brewhouse_addition', 'yeast']).eq('is_removed', false).order('sort_order').order('id'),
+        supabaseClient.from('batch_dosing_checks').select('*').eq('batch_id', batchId).not('batch_brew_id', 'is', null),
       ]);
-      for (const res of [brews, comments, tanks, ingredients]) if (res.error) throw res.error;
+      for (const res of [brews, comments, tanks, ingredients, dosingChecks]) if (res.error) throw res.error;
+      page.dosingChecks = dosingChecks.data;
       page.brews = brews.data;
       page.comments = comments.data;
       page.users = users.users.filter((u) => u.is_active);
@@ -111,6 +115,10 @@
 
     // ------------------------------------------------------------ saving
     const renderSoon = createRenderer(() => renderAll());
+    const dosing = createDosingChecks(() => ({
+      batchId: page.ctx.batch.id, checks: page.dosingChecks, userId: page.user.id, canEdit: page.canEdit,
+      saveStatus: page.save, initialsOf: page.initialsOf,
+    }), renderSoon);
     const saveBatch = (patch) => saveRowPatch({ table: 'batches', row: page.ctx.batch, patch, saveStatus: page.save, renderSoon, stampUpdatedBy: false });
     const saveBrew = (row, patch) => saveRowPatch({ table: 'batch_brews', row, patch, saveStatus: page.save, renderSoon, userId: page.user.id });
     const saveComment = (row, patch) => saveRowPatch({ table: 'batch_brew_comments', row, patch, saveStatus: page.save, renderSoon, userId: page.user.id });
@@ -248,13 +256,20 @@
             || '<tr><td colspan="4" class="small">No boil hops.</td></tr>'}</tbody></table>`;
       const ctx = amountContext(page.ctx.batch, page.ctx.recipe, page.ctx.stageRow);
       const adds = page.ingredients.filter((r) => r.addition_type === 'brewhouse_addition');
+      // a tick box per brew (batch_dosing_checks); a line "brew 1 only" has one in brew 1
+      const brews = page.brews.slice().sort((a, b) => a.brew_number - b.brew_number);
+      const progress = dosingProgress(adds, 'brew', (r) => brewColumns(r, brews).filter((c) => c.applies).map((c) => c.brew.id), page.dosingChecks);
       document.getElementById('bw-additions').innerHTML = `
-        <div class="br-label">Additions brewers · per brew</div>
-        <table class="br-ing"><thead><tr><th>Addition</th><th class="r" style="width:120px;">Amount</th><th style="width:150px;">Moment</th></tr></thead>
+        <div class="br-head" style="align-items:baseline;"><div class="br-label">Additions brewers · per brew</div>
+          ${progress.total ? `<span class="br-note${progress.done === progress.total ? ' bd-done' : ''}">${progress.done}/${progress.total} added</span>` : ''}</div>
+        <div class="br-table-wrap"><table class="br-ing" style="min-width:${420 + brews.length * 70}px;"><thead><tr><th>Addition</th><th class="r" style="width:120px;">Amount</th><th style="width:150px;">Moment</th>
+          ${brews.map((b) => `<th class="bd-check">Brew ${b.brew_number}</th>`).join('')}</tr></thead>
           <tbody>${adds.map((r) => {
             const amount = r.all_in_first_brew ? batchAmount(r.addition_type, r.unit, r.quantity, ctx) : brewAmount(r.addition_type, r.unit, r.quantity, ctx);
-            return `<tr><td>${escapeHtml(name(r))}</td><td class="n">${escapeHtml(formatAmount(amount))}${r.all_in_first_brew ? ' <span class="br-note">brew 1 only</span>' : ''}</td><td>${escapeHtml(r.timing || '—')}</td></tr>`;
-          }).join('') || '<tr><td colspan="3" class="small">No brewing additions.</td></tr>'}</tbody></table>`;
+            return `<tr><td>${escapeHtml(name(r))}</td><td class="n">${escapeHtml(formatAmount(amount))}${r.all_in_first_brew ? ' <span class="br-note">brew 1 only</span>' : ''}</td><td>${escapeHtml(r.timing || '—')}</td>
+              ${brewColumns(r, brews).map((c) => (c.applies ? dosing.cellHtml(r, 'brew', c.brew.id) : '<td class="bd-check small">—</td>')).join('')}</tr>`;
+          }).join('') || `<tr><td colspan="${3 + brews.length}" class="small">No brewing additions.</td></tr>`}</tbody></table></div>
+        ${adds.length && !brews.length ? '<div class="br-note">A tick column appears for every brew you add.</div>' : ''}`;
     }
 
     function yesNo(id, value) {
@@ -424,6 +439,7 @@
       const main = document.querySelector('main');
       main.addEventListener('change', (e) => {
         const el = e.target;
+        if (dosing.handleChange(el)) return;
         const b = page.ctx.batch;
         if (el.id === 'bw-glt') return saveBatch({ glt_tank_id: el.value ? Number(el.value) : null });
         if (el.id === 'bw-braukon') return saveBatch({ brewhouse_recipe_number: el.value.trim() || null });

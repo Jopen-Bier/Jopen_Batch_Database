@@ -54,6 +54,7 @@ batch-report-cards.js      shared batch-tab cards: splits / transfers (+ incomin
 splits.js                  Split / transfer popup: next batch number, log text, tank after transfer, base beer check (has a test)
 recipe-base-beer.js        Base beer block of the recipe editor (source beer by recipe group, share %)
 filling.js                 Filling tab: spec limits, Cpk / process capability, HBT filling status, day number (has a test)
+dosing-checks.js           tick boxes for additions per brew / per HBT: which brews apply, tick, progress (has a test)
 filling-report.js          Filling report tab: book in / out per session (BOM expected, loss), volume balance, pie chart (has a test)
 batch-report-shell.js      shared frame of the batch tabs: header, tabs, autosave, confirm dialog, undo toast
 batch-report.css           shared styles of the batch-report screens (load after jopen-shared.css)
@@ -238,9 +239,9 @@ Agreed table and column names per table: `supabase/rename-map.json`.
 | `active-batches.html` | batches | batches, recipes, tanks, batch_stages (view) |
 | `batch-filling-report.html` | batches | batches, filling_sessions, filling_session_articles, filling_session_materials, packaging_articles/_materials/_article_materials, batch_hbts, hbt_readings, batch_transfers, batch_brews, tanks, incoming batch_transfers, `split_batch()` (Split / transfer popup), recipes, recipe_ingredients / batch_ingredients of the receiving batch, batch_documents + storage bucket `batch-documents` |
 | `batch-filling.html` | batches | batches, filling_sessions, filling_measurements, batch_hbts, hbt_readings, tanks, users, recipe_packaging/_fermentation |
-| `batch-processing.html` | batches | batches, processing_sessions, processing_comments, batch_hbts, hbt_readings, batch_transfers, batch_brews, batch_ingredients, tanks, users, cellar_plan_parts, recipe_fermentation/_packaging/_process_steps, incoming batch_transfers, `split_batch()` (Split / transfer popup), recipes, recipe_ingredients / batch_ingredients of the receiving batch |
+| `batch-processing.html` | batches | batches, processing_sessions, processing_comments, batch_hbts, hbt_readings, batch_transfers, batch_brews, batch_ingredients, tanks, users, cellar_plan_parts, recipe_fermentation/_packaging/_process_steps, incoming batch_transfers, `split_batch()` (Split / transfer popup), recipes, recipe_ingredients / batch_ingredients of the receiving batch, batch_dosing_checks |
 | `batch-fermentation.html` | batches | batches, batch_cellar_steps (`snapshot_batch_cellar_steps()`), fermentation_log_entries, fermentation_log_entry_tags, cellar_action_tags, batch_tank_moves, batch_transfers, batch_brews, batch_ingredients, tanks, users, recipe_specs/_fermentation, incoming batch_transfers, `split_batch()` (Split / transfer popup), recipes, recipe_ingredients / batch_ingredients of the receiving batch |
-| `batch-brewing.html` | batches | batches, batch_brews, batch_brew_comments, batch_ingredients, tanks, users, recipe_brewing_specs/_specs/_fermentation/_comments |
+| `batch-brewing.html` | batches | batches, batch_brews, batch_brew_comments, batch_ingredients, tanks, users, recipe_brewing_specs/_specs/_fermentation/_comments, batch_dosing_checks |
 | `batch-overview.html` | batches | batches, batch_ingredients, `snapshot_batch_ingredients()`, recipes + recipe_specs/_fermentation/_brewing_specs/_packaging/_water/_revisions, ingredients, stock_movements, lots |
 | `voorraad-overzicht/inboeken/uitboeken.html` | inventory | lots, stock_movements, ingredients, batches, users |
 | `statistics.html` | statistics | ingredients, ingredient_documents, document_types |
