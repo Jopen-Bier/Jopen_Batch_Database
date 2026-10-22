@@ -35,7 +35,7 @@ const ACTIVE_SECTIONS = [
   { key: 'filling', title: 'Filling', stages: ['filling'],
     rule: 'First filling input · until every HBT is finished' },
   { key: 'filled',  title: 'Filled', stages: ['filled'],
-    rule: 'All HBTs finished, or the whole batch transferred · until the filling report is checked and processed in MDrank' },
+    rule: 'All HBTs finished, or the whole batch transferred · until the filling report is checked and processed in MDrank, or all 3 documents are uploaded' },
   { key: 'barrel',  title: 'On barrels', stages: ['barrel'],
     rule: 'Tagged “To barrels” · until Processing has a date' },
 ];

@@ -10,7 +10,7 @@ Evaluated top-down, first match wins:
 
 | Stage | Rule |
 |---|---|
-| `closed` | `batches.status = 'completed'` (history), or both filling report checks ticked: `filling_report_checked_at` and `mdrank_processed_at` (23-10) |
+| `closed` | `batches.status = 'completed'` (history), or both filling report checks ticked: `filling_report_checked_at` and `mdrank_processed_at` (23-10), or all three documents uploaded on the Filling report: production order, filling order, filling report (23-10, `20261023140000_close_by_documents`) |
 | `filled` | the batch has ≥1 `batch_hbts` and every one has a filling session with `is_hbt_finished`; or a transfer out has `empties_tank` ("Tank empty: this was the whole batch", 23-10) |
 | `filling` | a `filling_sessions` row has `filling_date` (as HBT starts with the processing date) |
 | `hbt` | a `processing_sessions` row has `processing_date` (also without brews, e.g. a split batch) |

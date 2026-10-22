@@ -261,7 +261,7 @@
               ${at ? '✓ ' : ''}${escapeHtml(c.label)}${at ? ` <span style="font-weight:400;">· ${escapeHtml([page.initialsOf(b[c.key + '_by']), when(at)].filter(Boolean).join(' · '))}</span>` : '?'}</button>`;
           }).join('')}
         </div>
-        <div class="br-note">${done ? 'Both checks done: the batch is closed.' : 'When both are ticked the batch is closed.'} Click a ticked check to undo it.</div>`;
+        <div class="br-note">${done ? 'Both checks done: the batch is closed.' : 'The batch is closed when both are ticked, or when all three documents above are uploaded.'} Click a ticked check to undo it.</div>`;
     }
 
     async function toggleCheck(key) {
