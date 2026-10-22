@@ -443,9 +443,14 @@ Master data (RLS: select all logged-in, write via `settings`):
 
 Per filling session:
 - `filling_session_articles`: `id`, `batch_id`, `filling_session_id`,
-  `article_id`, `quantity`.
+  `article_id`, `quantity`, `comment`.
 - `filling_session_materials`: `id`, `batch_id`, `filling_session_id`,
-  `material_id`, `quantity` (used, booked out).
+  `material_id`, `quantity` (used, booked out), `comment`.
+- `comment` (22-10, `20261022090000_keg_collar_other_keg`): which keg a
+  "20L other keg" row was (Warsteiner, Florijn, Global Keg). The filling
+  report shows the field on other-keg rows and on any row with a comment.
+  Same migration: material `keg_collar` (Fustkraag, no BOM) and
+  `other_keg_20` as article (keg, 20 l) and material (BOM: keg + keg cap).
 
 Built 20-10 (migration `20261020150212_batch_report_filling_report`):
 - Master data also has `sort_order` and the created_/updated_ columns;
