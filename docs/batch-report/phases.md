@@ -191,6 +191,14 @@ their Excel batch reports, so their stage and data are right in the app.
 - 21-10: first look at two workbooks done; brief for a separate session in
   **`import-2026.md`** (all 300+ batches of 2026, for history; recipe
   version as in the database; initials as text).
+- **Done 22-10.** 321 batches imported on production from 347 workbooks
+  (10 month chunks plus one transfers file, each dry run then run by Jaap):
+  704 brews, 3,954 log entries, 310 processing sessions, 439 HBT fills,
+  532 filling sessions, 91 transfers; 1,035 documents uploaded to the
+  Filling report. Not imported: barrel aging sheets (empty), batches without
+  a workbook or not in the app, 26091 / 26135, former employees' initials.
+  Active batches are completed in the app at the switch from Excel. Details
+  and decisions: `import-2026.md`.
 
 ## After phase 8 (separately agreed)
 Excel fallback export filled from report data; stock booking from the report
