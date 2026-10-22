@@ -60,21 +60,20 @@
       el.style.display = text ? '' : 'none';
     }
 
+    // Stages and batches in one round: batches that are not 'completed' (the
+    // stage list then drops the ones closed by the filling report checks).
     async function loadActiveBatches() {
-      const stages = await fetchAllRows(supabaseClient.from('batch_stages')
+      const [stages, batches] = await Promise.all([fetchAllRows(supabaseClient.from('batch_stages')
         .select('batch_id, stage, start_date, end_date, brews_planned, brews_started, brews_ended, last_brew_ended_at, time_zero, cellar_steps_total, cellar_steps_done, next_cellar_step, hbts_total, hbts_released, hbt_codes, hbt_formats, hbts_finished, filled_volume_hl, documents_uploaded, other_documents, emptied_at, filling_report_checked_at, mdrank_processed_at')
         .neq('stage', 'closed')
-        .order('batch_id'));
-      if (stages.error) throw stages.error;
-      if (!stages.data.length) return [];
-      const ids = stages.data.map((s) => s.batch_id);
-      const batches = await fetchAllRows(supabaseClient.from('batches')
+        .order('batch_id')),
+      fetchAllRows(supabaseClient.from('batches')
         .select('id, batch_number, name, brew_count, order_picking_date, order_picking_completed_at, glt_tank:tanks!batches_glt_tank_id_fkey(code), lt_tank:tanks!batches_lt_tank_id_fkey(code), recipes(name, version_major, version_minor, location)')
-        .in('id', ids)
-        .order('id'));
-      if (batches.error) throw batches.error;
+        .or('status.is.null,status.neq.completed')
+        .order('id'))]);
+      if (stages.error || batches.error) throw (stages.error || batches.error);
       const stageById = new Map(stages.data.map((s) => [s.batch_id, s]));
-      return batches.data.map((b) => toBatchRow(b, stageById.get(b.id)));
+      return batches.data.filter((b) => stageById.has(b.id)).map((b) => toBatchRow(b, stageById.get(b.id)));
     }
 
     function tileHtml(row) {
@@ -139,18 +138,20 @@
     }
 
     async function initActiveBatchesPage() {
+      // The batches load while the user and rights load (RLS guards the data).
+      const loading = loadActiveBatches().then((rows) => ({ rows }), (err) => ({ err }));
       const user = await getCurrentUser();
       if (!user) return; // nav.js redirects to login
       if (!(await magBekijkenModule('batches'))) {
         showMessage('You do not have access to batch reports. Ask an admin for view rights on "Batches & batch reports".');
         return;
       }
-      try {
-        allRows = await loadActiveBatches();
-      } catch (err) {
-        showMessage('Could not load batches: ' + (err.message || err), true);
+      const loaded = await loading;
+      if (loaded.err) {
+        showMessage('Could not load batches: ' + (loaded.err.message || loaded.err), true);
         return;
       }
+      allRows = loaded.rows;
       showMessage('');
       document.getElementById('ac-toolbar').style.display = '';
       bindControls();
