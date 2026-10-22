@@ -312,11 +312,17 @@
         </div>`;
     }
 
+    // A booked "other keg" row says which keg it was; any row that has a comment shows it.
+    function commentInput(table, row, item) {
+      if (!row || !((item && item.code === 'other_keg_20') || row.comment)) return '';
+      return `<input class="br-input" style="margin-top:4px; font-size:12px;" data-comment-table="${table}" data-comment-row="${row.id}" value="${val(row.comment)}" placeholder="Which keg?" aria-label="Comment"${dis()}>`;
+    }
+
     function articleTable(s, book) {
       const booked = new Set(articlesOf(s).map((r) => r.article_id));
       const options = [...page.articles.values()].filter((a) => a.is_active && !booked.has(a.id) && (!s.package_format || a.package_format === s.package_format)).sort(byOrder);
       const rows = book.articles.map(({ row, article, litres }) => `<tr>
-        <td><b>${escapeHtml(article ? article.name : '?')}</b></td>
+        <td><b>${escapeHtml(article ? article.name : '?')}</b>${commentInput('filling_session_articles', row, article)}</td>
         <td class="small">${escapeHtml((article && article.ean) || '—')}</td>
         <td><input class="br-in" inputmode="numeric" data-article-row="${row.id}" value="${val(row.quantity)}" aria-label="Count"${dis()}></td>
         <td class="c">${fmt(litres)}</td>
@@ -338,7 +344,7 @@
       const rows = book.materials.map((m) => {
         const mat = page.materials.get(m.material_id);
         return `<tr>
-          <td><b>${escapeHtml(mat ? mat.name : '?')}</b></td>
+          <td><b>${escapeHtml(mat ? mat.name : '?')}</b>${commentInput('filling_session_materials', m.row, mat)}</td>
           <td><input class="br-in" inputmode="numeric" data-material-session="${s.id}" data-material="${m.material_id}" value="${val(m.row ? m.row.quantity : '')}" aria-label="Used"${dis()}></td>
           <td class="c">${fmt(m.expected)}</td>
           <td style="text-align:center;"><span class="fr-loss ${materialLossClass(m.loss)}">${m.loss === null ? '—' : signed(m.loss)}</span></td>
@@ -464,6 +470,10 @@
           const v = numberOrBad(el);
           if (v === undefined) return;
           return saveRow('filling_session_articles', page.sessionArticles.find((r) => r.id === Number(el.dataset.articleRow)), { quantity: v });
+        }
+        if (el.dataset.commentRow) {
+          const list = el.dataset.commentTable === 'filling_session_articles' ? page.sessionArticles : page.sessionMaterials;
+          return saveRow(el.dataset.commentTable, list.find((r) => r.id === Number(el.dataset.commentRow)), { comment: el.value.trim() || null });
         }
         if (el.dataset.materialSession) {
           const v = numberOrBad(el);
