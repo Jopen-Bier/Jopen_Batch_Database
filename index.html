@@ -92,13 +92,18 @@
       </div>
     </div>
 
-    <!-- Alleen zichtbaar met view-recht op de module 'statistics' (rollenmatrix). -->
-    <div class="jopen-groep" id="groep-statistics" style="display:none;">
-      <h2 class="jopen-groep-titel">Statistics</h2>
+    <!-- Alleen zichtbaar met view-recht op de module 'analytics' (rollenmatrix). -->
+    <div class="jopen-groep" id="groep-analytics" style="display:none;">
+      <h2 class="jopen-groep-titel">Analytics</h2>
       <div class="jopen-tegels">
-        <a class="jopen-tegel" href="statistics.html">
+        <a class="jopen-tegel" href="analytics.html">
           <div class="jopen-tegel-titel">QA overview</div>
           <p class="jopen-tegel-omschrijving">Ingredient product sheet status and allergen declarations at a glance.</p>
+          <span class="jopen-tegel-status actief">Active</span>
+        </a>
+        <a class="jopen-tegel" href="recipe-analytics.html">
+          <div class="jopen-tegel-titel">Recipe analytics</div>
+          <p class="jopen-tegel-omschrijving">Losses per recipe over its closed batches · compare recipes.</p>
           <span class="jopen-tegel-status actief">Active</span>
         </a>
       </div>
@@ -135,8 +140,8 @@
 
     document.addEventListener('DOMContentLoaded', async () => {
       const gebruiker = await getCurrentUser();
-      if (gebruiker && await magBekijkenModule('statistics')) {
-        document.getElementById('groep-statistics').style.display = '';
+      if (gebruiker && await magBekijkenModule('analytics')) {
+        document.getElementById('groep-analytics').style.display = '';
       }
       if (gebruiker && await magBekijkenModule('batches')) {
         document.getElementById('group-batch-reports').style.display = '';

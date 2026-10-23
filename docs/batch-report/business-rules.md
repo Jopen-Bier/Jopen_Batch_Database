@@ -288,6 +288,36 @@ remainder.
 - Summary: produced per SKU (= per packaging article, open-questions #13),
   the splits, totals, and the materials over all sessions.
 
+## Recipe analytics — Losses
+Page `recipe-analytics.html` (Analytics › Recipe analytics), module
+`recipe-losses.js`, test `tests/recipe-losses.test.js` (Jaap, 23-10).
+- Per batch the volume balance of the Filling report (above), from the view
+  `batch_volume_balance` (one row per batch, same rules as `volumeBalance()`).
+  Only **closed** batches (`batch_stages.stage = 'closed'`) count.
+- **Processed** = into GLT + received from splits − splits from GLT / LT.
+  Cellar loss, filling loss and total loss are shares of the processed
+  volume, so cellar % + filling % = total %. Over several batches the loss
+  is **pooled** (Σ lost hl ÷ Σ processed hl), not a mean of percentages.
+- Brewhouse loss is not included: losses start at the GLT. (Later: extract
+  loss, once every malt has its extract in the database.)
+- A recipe = all its versions (`recipes.recipe_group_id`); a split recipe
+  (e.g. Mooie Nel Guava Passionfruit Split) is a recipe of its own.
+- **Data checks** (in this order; tolerance 0.5 hl):
+  - *No brew volume*: nothing into the GLT and no beer received.
+  - Nothing packaged and nothing split from the HBT: *fully split* when the
+    splits from GLT / LT are ≥ 80 % of what went in (a base beer: not
+    counted, no warning), *more out than in* when the splits are more than
+    went in, else *not packaged, not split*.
+  - *More packaged than in the HBT*: packaged + splits from the HBT more than
+    the HBT end levels, or an HBT without an end level.
+  - *More out than in*: negative cellar loss.
+  - *Loss over 30 %* of the processed volume.
+  Batches with a warning are left out unless "Include batches with a data
+  warning" is ticked; the Data checks tab lists them with a link to the batch
+  tab where the data is fixed.
+- Filters: year (from the batch number, `26xxx` = 2026), batch size (1–3
+  brews, 4+ brews, from splits = 0 brews).
+
 ## Transfers (splits)
 - A transfer reduces the source volume and adds an incoming line on the
   receiving batch from `transferred_at`.

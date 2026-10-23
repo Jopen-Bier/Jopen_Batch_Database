@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Jopen — Statistics</title>
+<title>Jopen — Analytics</title>
 <link rel="icon" href="favicon.ico" sizes="any">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
@@ -109,7 +109,7 @@
 <div id="jopen-nav"></div>
 
 <main class="st-main">
-  <div class="st-kop"><h1>Statistics</h1></div>
+  <div class="st-kop"><h1>Analytics</h1></div>
   <p class="st-sub">Dashboards per department — see at a glance what is missing or needs attention.</p>
 
   <div id="st-toegang" class="st-melding">Checking access…</div>
@@ -170,10 +170,10 @@
 <script src="nav.js"></script>
 <script>
 // ============================================================================
-// statistics.html — dashboards per afdeling.
+// analytics.html — dashboards per afdeling (was statistics.html).
 // Nieuw tabblad toevoegen? Voeg een entry toe aan ST_TABS + een <section>
 // met id "st-tab-<key>" in de HTML hierboven.
-// Toegang via de rechtenmodule 'statistics' (rollenmatrix).
+// Toegang via de rechtenmodule 'analytics' (rollenmatrix).
 // ============================================================================
 
 const ST_TABS = [
@@ -544,13 +544,13 @@ function renderTabs() {
   }));
 }
 
-async function initStatistics() {
+async function initAnalytics() {
   const gebruiker = await getCurrentUser();
   if (!gebruiker) return; // nav.js stuurt door naar login
-  const magZien = await magBekijkenModule('statistics');
+  const magZien = await magBekijkenModule('analytics');
   const toegang = document.getElementById('st-toegang');
   if (!magZien) {
-    toegang.textContent = 'Access denied — you do not have permission to view Statistics. Redirecting…';
+    toegang.textContent = 'Access denied — you do not have permission to view Analytics. Redirecting…';
     setTimeout(() => { window.location.href = 'index.html'; }, 1500);
     return;
   }
@@ -580,7 +580,7 @@ async function initStatistics() {
   renderAlles();
 }
 
-document.addEventListener('DOMContentLoaded', initStatistics);
+document.addEventListener('DOMContentLoaded', initAnalytics);
 </script>
 </body>
 </html>
