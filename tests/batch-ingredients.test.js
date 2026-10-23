@@ -113,4 +113,17 @@ assert.strictEqual(b.formatAmount({ q: 2.75, unit: 'g' }), '2.75 g');
 assert.strictEqual(b.formatAmount({ q: 1500, unit: 'ml' }), '1.5 l');
 assert.strictEqual(b.formatAmount(null), '—');
 
+// Zinc sulphate: 4 ml × hl per brew × brews on the first day, all in brew 1
+assert.ok(b.isZincSulphate('Zinksulfaat') && b.isZincSulphate('Zinksulfaat (g/brew)') && b.isZincSulphate('zinc sulphate'));
+assert.ok(!b.isZincSulphate('Calciumchloride') && !b.isZincSulphate(''));
+assert.deepStrictEqual(b.zincSulphateDose(40, 4), { ml: 640, text: 'Calculated on brew day: 4 ml × 40 hl × 4 brews = 640 ml' });
+assert.strictEqual(b.zincSulphateDose('40', '1').ml, 160);
+assert.strictEqual(b.zincSulphateDose(40, ''), null);
+assert.strictEqual(b.zincSulphateDose(40, 1.5), null);
+assert.strictEqual(b.zincSulphateDose(null, 4), null);
+const zl = b.zincLast([{ n: 'Zinksulfaat' }, { n: 'CaCl2' }, { n: 'Gips' }], (r) => r.n).map((r) => r.n);
+assert.deepStrictEqual(zl, ['CaCl2', 'Gips', 'Zinksulfaat']);
+// stored as a batch total in ml, brew 1 only: Brewing and Overview show 640 ml
+assert.deepStrictEqual(b.batchAmount('brewhouse_addition', 'ml', 640, { brewCount: 8, brewVolumeHl: 40 }), { q: 640, unit: 'ml' });
+
 console.log('batch-ingredients: all tests passed');

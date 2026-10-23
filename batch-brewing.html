@@ -149,6 +149,11 @@
       });
     }
 
+    // The calculated total goes on the batch line (also shown on the Overview):
+    // ml for the whole batch, all in the first brew; the calculation is its reason.
+    const applyZinc = (row, dose) => saveRowPatch({ table: 'batch_ingredients', row, saveStatus: page.save, renderSoon, userId: page.user.id,
+      patch: { unit: 'ml', quantity: dose.ml, all_in_first_brew: true, deviation_reason: dose.text } });
+
     async function addBrew() {
       const brew = await insertRow('batch_brews', { batch_id: page.ctx.batch.id, brew_number: nextBrewNumber(page.brews), brewer_id: page.user.id }, page.brews);
       if (brew) renderSoon(`[data-brew="${brew.id}"][data-field="software_order_number"]`);
@@ -255,18 +260,22 @@
             <td class="n">${fmt(r.quantity, 0)}</td><td class="small">${r.hop_dosing_tank ? 'HDT ' + r.hop_dosing_tank : 'No'}</td></tr>`).join('')
             || '<tr><td colspan="4" class="small">No boil hops.</td></tr>'}</tbody></table>`;
       const ctx = amountContext(page.ctx.batch, page.ctx.recipe, page.ctx.stageRow);
-      const adds = page.ingredients.filter((r) => r.addition_type === 'brewhouse_addition');
+      // zinc sulphate always last, under a thick line, with its calculator (Jaap, 23-10)
+      const adds = zincLast(page.ingredients.filter((r) => r.addition_type === 'brewhouse_addition'), name);
+      const firstZinc = adds.find((r) => isZincSulphate(name(r)));
       // a tick box per brew (batch_dosing_checks); a line "brew 1 only" has one in brew 1
       const brews = page.brews.slice().sort((a, b) => a.brew_number - b.brew_number);
       const progress = dosingProgress(adds, 'brew', (r) => brewColumns(r, brews).filter((c) => c.applies).map((c) => c.brew.id), page.dosingChecks);
       document.getElementById('bw-additions').innerHTML = `
         <div class="br-head" style="align-items:baseline;"><div class="br-label">Additions brewers · per brew</div>
           ${progress.total ? `<span class="br-note${progress.done === progress.total ? ' bd-done' : ''}">${progress.done}/${progress.total} added</span>` : ''}</div>
-        <div class="br-table-wrap"><table class="br-ing" style="min-width:${420 + brews.length * 70}px;"><thead><tr><th>Addition</th><th class="r" style="width:120px;">Amount</th><th style="width:150px;">Moment</th>
+        <div class="br-table-wrap"><table class="br-ing" style="min-width:${480 + brews.length * 70}px;"><thead><tr><th>Addition</th><th class="r" style="width:150px;">Amount</th><th style="width:150px;">Moment</th>
           ${brews.map((b) => `<th class="bd-check">Brew ${b.brew_number}</th>`).join('')}</tr></thead>
           <tbody>${adds.map((r) => {
             const amount = r.all_in_first_brew ? batchAmount(r.addition_type, r.unit, r.quantity, ctx) : brewAmount(r.addition_type, r.unit, r.quantity, ctx);
-            return `<tr><td>${escapeHtml(name(r))}</td><td class="n">${escapeHtml(formatAmount(amount))}${r.all_in_first_brew ? ' <span class="br-note">brew 1 only</span>' : ''}</td><td>${escapeHtml(r.timing || '—')}</td>
+            const zinc = isZincSulphate(name(r));
+            const calc = zinc && page.canEdit ? ` <button type="button" class="br-ghost bw-calc" data-zinc-calc="${r.id}" title="Calculate zinc sulphate">Calculate</button>` : '';
+            return `<tr${r === firstZinc && adds[0] !== r ? ' class="bw-zinc"' : ''}><td>${escapeHtml(name(r))}${calc}</td><td class="n">${escapeHtml(formatAmount(amount))}${r.all_in_first_brew ? ' <span class="br-note">brew 1 only</span>' : ''}</td><td>${escapeHtml(r.timing || '—')}</td>
               ${brewColumns(r, brews).map((c) => (c.applies ? dosing.cellHtml(r, 'brew', c.brew.id) : '<td class="bd-check small">—</td>')).join('')}</tr>`;
           }).join('') || `<tr><td colspan="${3 + brews.length}" class="small">No brewing additions.</td></tr>`}</tbody></table></div>
         ${adds.length && !brews.length ? '<div class="br-note">A tick column appears for every brew you add.</div>' : ''}`;
@@ -480,6 +489,11 @@
         const yn = e.target.closest('button[data-yesno]');
         if (yn) return saveBatch({ [yn.dataset.yesno]: page.ctx.batch[yn.dataset.yesno] === (yn.dataset.value === 'true') ? null : yn.dataset.value === 'true' });
         if (e.target.closest('#bw-add-brew')) return addBrew();
+        const zincCalc = e.target.closest('button[data-zinc-calc]');
+        if (zincCalc) {
+          const row = page.ingredients.find((x) => x.id === Number(zincCalc.dataset.zincCalc));
+          return openZincCalculator({ brewVolumeHl: page.ctx.recipe.brew_volume_hl, onApply: (dose) => applyZinc(row, dose) });
+        }
         if (e.target.closest('#bw-add-comment')) { page.commentDraft = true; return renderSoon('#bw-draft-comment'); }
         const delBrew = e.target.closest('button[data-delete-brew]');
         if (delBrew) {

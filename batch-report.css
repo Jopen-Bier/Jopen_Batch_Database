@@ -181,6 +181,8 @@ a.br-tile:hover { border-color: var(--br-hop-dark); background: #fff; }
 .br-ing td.cv { text-align: right; font-variant-numeric: tabular-nums; color: var(--br-hop-dark); background: #f5f5f3; }
 .br-ing td.small { font-size: 12px; color: var(--br-muted); }
 .br-ing tr.first td { border-top: 3px solid var(--br-hop-dark); }
+.br-ing tr.bw-zinc td { border-top: 3px solid var(--br-hop-dark); }
+.bw-calc { margin-left: 8px; vertical-align: middle; }
 .br-ing tr.dry td { background: #fbfaf6; }
 .br-ing tr.tot td { border-top: 2px solid #d8d2c4; border-bottom: 0; font-weight: 700; }
 .br-ing tr.tot td.cv.ok { background: #e1ead9; }
