@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jopen — Recipe analytics</title>
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="stylesheet" href="jopen-shared.css" />
+  <style>
+    /* ------------------------------------------------------------------
+       Recipe analytics: sidebar with analyses (as on Settings), the chosen
+       analysis on the right. New analysis? Add it to RA_ANALYSES in the
+       script and a <section class="ra-analysis" id="ra-<key>"> below.
+       ------------------------------------------------------------------ */
+    :root { --ra-cellar: #4c6b4f; --ra-filling: #b4772c; --ra-muted: #6b6355; --ra-line: #ddd; --ra-warn: #a33f2c; --ra-left-out: #e7e2d8; }
+    main.ra-main { max-width: 1240px; margin: 0 auto; padding: 24px; }
+    .ra-layout { display: flex; gap: 24px; align-items: flex-start; }
+    .ra-sidebar {
+      width: 210px; flex-shrink: 0; background: #fff; border: 1px solid var(--ra-line); border-radius: 8px;
+      padding: 8px; position: sticky; top: calc(var(--jopen-nav-h, 0px) + 20px);
+    }
+    .ra-sidebar h3 { font-size: 0.72em; text-transform: uppercase; letter-spacing: .06em; color: var(--ra-muted); margin: 10px 12px 4px; }
+    .ra-sidebar button {
+      display: block; width: 100%; text-align: left; padding: 9px 12px; margin-bottom: 2px;
+      background: transparent; border: none; border-radius: 6px; cursor: pointer; font-size: 0.92em; color: #1f1f1f;
+    }
+    .ra-sidebar button:hover { background: var(--jopen-red-tint); }
+    .ra-sidebar button.actief { background: var(--jopen-red); color: #fff; font-weight: 600; }
+    .ra-inhoud { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+    .ra-analysis { display: none; flex-direction: column; gap: 16px; }
+    .ra-analysis.actief { display: flex; }
+    .ra-view { display: flex; flex-direction: column; gap: 16px; }
+
+    .ra-tabs { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 2px solid var(--jopen-red-dark); }
+    .ra-tab { padding: 9px 18px; border: 1px solid var(--ra-line); border-bottom: none; border-radius: 6px 6px 0 0; background: #ece8e4; color: #555; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .ra-tab.actief { background: var(--jopen-red-dark); border-color: var(--jopen-red-dark); color: #fff; }
+    .ra-tab .ra-count { font-weight: 400; opacity: .85; }
+    .ra-toolbar { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; background: #fff; border: 1px solid var(--ra-line); border-radius: 8px; padding: 10px 16px; font-size: 13px; }
+    .ra-toolbar label { display: flex; align-items: center; gap: 6px; color: #555; }
+    .ra-toolbar select, .ra-toolbar input[type=search] { font: inherit; padding: 5px 8px; border: 1px solid #ccc; border-radius: 4px; background: #fff; max-width: 100%; }
+    .ra-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .ra-chip { padding: 4px 11px; border-radius: 14px; border: 1px solid #ccc; background: #fff; font-size: 12.5px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+    .ra-chip.actief { background: var(--jopen-red); border-color: var(--jopen-red); color: #fff; }
+    .ra-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+
+    .ra-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+    .ra-kpi { background: #fff; border: 1px solid var(--ra-line); border-radius: 8px; padding: 12px 16px; }
+    .ra-kpi .l { font-size: 12px; color: var(--ra-muted); }
+    .ra-kpi .v { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: 2px; }
+    .ra-kpi .v small { font-size: 13px; font-weight: 400; color: var(--ra-muted); margin-left: 4px; }
+    .ra-card { background: #fff; border: 1px solid var(--ra-line); border-radius: 8px; padding: 16px 20px; min-width: 0; }
+    .ra-card h2 { font-size: 1.05em; margin: 0 0 4px; }
+    .ra-card .ra-note { color: var(--ra-muted); font-size: 12.5px; margin: 0 0 12px; }
+    .ra-legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--ra-muted); margin: 0 0 6px; }
+    .ra-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+    .ra-chart { position: relative; }
+    .ra-chart svg { display: block; width: 100%; height: auto; }
+    .ra-chart text { font-size: 11px; fill: var(--ra-muted); }
+    .ra-tip { position: absolute; pointer-events: none; background: #fff; border: 1px solid var(--ra-line); border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.12); padding: 6px 9px; font-size: 12px; white-space: nowrap; z-index: 3; }
+
+    .ra-tw { overflow: auto; max-height: 560px; }
+    table.ra-table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+    table.ra-table th, table.ra-table td { padding: 7px 9px; border-bottom: 1px solid #eee; text-align: right; white-space: nowrap; }
+    table.ra-table th.t, table.ra-table td.t { text-align: left; }
+    table.ra-table thead th { position: sticky; top: 0; background: #faf8f3; color: #444; font-weight: 700; z-index: 1; }
+    table.ra-table thead th.sort { cursor: pointer; }
+    table.ra-table tbody tr:hover td { background: #faf9f6; }
+    table.ra-table tr.ra-out td { color: #9a9387; }
+    table.ra-table a { color: var(--jopen-red-dark); font-weight: 600; }
+    .ra-link { color: var(--jopen-red-dark); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; background: none; border: 0; font: inherit; padding: 0; }
+    .ra-pct { display: inline-flex; align-items: center; gap: 8px; justify-content: flex-end; }
+    .ra-bar { display: inline-flex; width: 90px; height: 9px; background: #f0ece4; border-radius: 5px; overflow: hidden; }
+    .ra-bar.wide { width: 100%; height: 14px; border-radius: 3px; }
+    .ra-bar b { display: block; height: 100%; }
+    .ra-flag { display: inline-block; font-size: 11px; color: var(--ra-warn); border: 1px solid #e6c3bb; background: #fbf0ed; border-radius: 9px; padding: 0 7px; white-space: nowrap; }
+    .ra-ok { font-size: 11px; color: var(--ra-cellar); }
+    .ra-muted { color: var(--ra-muted); }
+    .ra-empty { color: var(--ra-muted); font-size: 13px; padding: 20px 0; }
+    .ra-later { color: var(--ra-muted); }
+    .ra-melding { padding: 40px; text-align: center; color: var(--ra-muted); }
+    .ra-fout { background: #fdecea; border: 1px solid #e0a39b; color: #a33f2c; padding: 12px 16px; border-radius: 8px; }
+    .ra-analysis, .ra-view { min-width: 0; }
+    @media (max-width: 760px) {
+      .ra-layout { flex-direction: column; align-items: stretch; }
+      .ra-inhoud { width: 100%; }
+      .ra-sidebar { width: 100%; position: static; box-sizing: border-box; display: flex; flex-wrap: wrap; gap: 4px; }
+      .ra-sidebar h3 { width: 100%; }
+      .ra-sidebar button { width: auto; margin: 0; }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="jopen-nav"></div>
+
+  <main class="jopen-pagina ra-main">
+    <h1>Recipe analytics</h1>
+    <p class="jopen-subtitel">Analyses per recipe over all its batches. Pick an analysis on the left.</p>
+
+    <div id="ra-toegang" class="ra-melding">Checking access…</div>
+
+    <div id="ra-content" class="ra-layout" style="display:none;">
+      <nav class="ra-sidebar" id="ra-sidebar" aria-label="Analyses"></nav>
+
+      <div class="ra-inhoud">
+        <div id="ra-fout" class="ra-fout" style="display:none;"></div>
+
+        <!-- Losses -->
+        <section class="ra-analysis" id="ra-losses">
+          <p class="ra-muted" style="margin:0;font-size:13px;">Cellar loss (GLT to HBT) and filling loss (HBT to package) of closed batches, calculated as on the Filling report. Losses are a share of the beer the batch processed itself: into the GLT plus beer received, minus splits before processing.</p>
+          <div class="ra-tabs" role="tablist" id="ra-loss-tabs"></div>
+          <div class="ra-toolbar">
+            <label>Year <select id="ra-year"></select></label>
+            <label>Batch size <select id="ra-size">
+              <option value="">All</option>
+              <option value="small">1–3 brews</option>
+              <option value="large">4+ brews</option>
+              <option value="split">From splits (0 brews)</option>
+            </select></label>
+            <label><input type="checkbox" id="ra-warnings"> Include batches with a data warning</label>
+          </div>
+          <div id="ra-loss-view" class="ra-view"></div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2"></script>
+  <script src="config.js"></script>
+  <script src="jopen-utils.js"></script>
+  <script src="nav.js"></script>
+  <script src="batch-stages.js"></script>
+  <script src="filling-report.js"></script>
+  <script src="recipe-losses.js"></script>
+  <script>
+// ============================================================================
+// recipe-analytics.html — analyses per recipe. Access: module 'analytics'
+// (view only). Losses reads the view batch_volume_balance; the calculation is
+// in recipe-losses.js (test: tests/recipe-losses.test.js).
+// ============================================================================
+
+// Sidebar, grouped. A new analysis: an entry here + its <section id="ra-<key>">.
+const RA_ANALYSES = [
+  { group: 'Production', key: 'losses', label: 'Losses' },
+];
+
+const RA_LOSS_TABS = [
+  { key: 'all', label: 'All recipes' },
+  { key: 'one', label: 'One recipe' },
+  { key: 'compare', label: 'Compare' },
+  { key: 'checks', label: 'Data checks' },
+];
+
+const RA_COMPARE_COLORS = ['#E0001D', '#2f5d8a', '#4c6b4f', '#b4772c', '#6d4c8c', '#1c8a8a'];
+
+const ra = {
+  losses: [],        // batchLoss() of every closed batch
+  recipes: [],
+  tab: 'all', recipe: null, compare: [], year: null, size: '', warnings: false,
+  sort: ['batches', -1], search: '', check: '',
+};
+
+const pct = (x) => (x === null || x === undefined || !Number.isFinite(x) ? '—' : (100 * x).toFixed(1) + '%');
+const hl1 = (x) => (x === null || x === undefined || !Number.isFinite(x) ? '—' : x.toFixed(1));
+const hl0 = (x) => (x === null || x === undefined || !Number.isFinite(x) ? '—' : Math.round(x).toLocaleString('en'));
+
+// --------------------------------------------------------------- filters
+function sizeMatches(loss) {
+  const n = Number(loss.row.brew_count) || 0;
+  if (ra.size === 'small') return n >= 1 && n <= 3;
+  if (ra.size === 'large') return n >= 4;
+  if (ra.size === 'split') return n === 0;
+  return true;
+}
+const inYear = (loss) => !ra.year || Number(loss.row.batch_year) === ra.year;
+const filtered = () => ra.losses.filter((l) => inYear(l) && sizeMatches(l));
+const recipeGroups = () => lossesByRecipe(filtered(), ra.recipes).map((g) => ({ ...g, pooled: pooledLoss(g.losses, ra.warnings) }));
+const groupById = (id) => recipeGroups().find((g) => g.groupId === id);
+
+function stackBar(cel, fil, max, wide) {
+  const w = (v) => Math.max(0, (v || 0) / max * 100);
+  return `<span class="ra-bar${wide ? ' wide' : ''}"><b style="width:${w(cel)}%;background:var(--ra-cellar)"></b><b style="width:${w(fil)}%;background:var(--ra-filling)"></b></span>`;
+}
+function kpis(p, label) {
+  return `<div class="ra-kpis">
+    <div class="ra-kpi"><div class="l">${escapeHtml(label)}</div><div class="v">${pct(p.lossShare)}</div></div>
+    <div class="ra-kpi"><div class="l">Cellar loss</div><div class="v">${pct(p.cellarShare)}</div></div>
+    <div class="ra-kpi"><div class="l">Filling loss</div><div class="v">${pct(p.fillingShare)}</div></div>
+    <div class="ra-kpi"><div class="l">Beer lost</div><div class="v">${hl0(p.lostHl)}<small>hl</small></div></div>
+    <div class="ra-kpi"><div class="l">Batches counted</div><div class="v">${p.batches}<small>of ${p.total}</small></div></div>
+  </div>`;
+}
+const legend = (extra = '') => `<div class="ra-legend"><span><i style="background:var(--ra-cellar)"></i>Cellar loss</span><span><i style="background:var(--ra-filling)"></i>Filling loss</span>${extra}</div>`;
+const tabLabel = (key) => (BATCH_TABS.find((t) => t.key === key) || {}).label || '';
+const batchLink = (loss, tab = 'filling-report') => `<a href="${batchTabHref(tab, loss.row.batch_id)}">${escapeHtml(loss.row.batch_number)}</a>`;
+const checkCell = (loss) => (loss.check === 'ok' ? '<span class="ra-ok">OK</span>'
+  : `<span class="ra-flag" title="${escapeHtml(LOSS_CHECKS[loss.check].hint || '')}">${escapeHtml(LOSS_CHECKS[loss.check].label)}</span>`);
+
+// --------------------------------------------------------------- views
+function viewAll() {
+  const groups = recipeGroups().filter((g) => g.pooled.batches > 0);
+  const [key, dir] = ra.sort;
+  const val = (g) => (key === 'name' ? g.name : key === 'batches' ? g.pooled.batches : g.pooled[key]);
+  groups.sort((a, b) => (key === 'name' ? a.name.localeCompare(b.name) : (val(a) ?? -1) - (val(b) ?? -1)) * dir || a.name.localeCompare(b.name));
+  const max = Math.max(0.25, ...groups.map((g) => g.pooled.lossShare || 0));
+  const q = ra.search.trim().toLowerCase();
+  const th = (k, label, cls = '') => `<th class="sort ${cls}" data-sort="${k}" aria-sort="${ra.sort[0] === k ? (ra.sort[1] > 0 ? 'ascending' : 'descending') : 'none'}">${label}${ra.sort[0] === k ? (ra.sort[1] > 0 ? ' ▲' : ' ▼') : ''}</th>`;
+  return `${kpis(pooledLoss(filtered(), ra.warnings), 'Brewery-wide loss')}
+  <section class="ra-card">
+    <h2>Loss per recipe</h2>
+    <p class="ra-note">Click a recipe to open it, or tick two or more to compare them. All versions of a recipe count together; splits are recipes of their own.</p>
+    <div class="ra-toolbar" style="border:0;padding:0 0 10px;">
+      <input type="search" id="ra-search" placeholder="Search recipe" aria-label="Search recipe" value="${escapeHtml(ra.search)}">
+      <span class="ra-chips">${ra.compare.length
+        ? ra.compare.map((id) => `<span class="ra-chip actief">${escapeHtml((groupById(id) || {}).name || '?')}</span>`).join('') + (ra.compare.length > 1 ? `<button type="button" class="ra-chip" id="ra-go-compare">Compare ${ra.compare.length} →</button>` : '')
+        : '<span class="ra-muted">Tick recipes to compare them</span>'}</span>
+    </div>
+    <div class="ra-tw"><table class="ra-table">
+      <thead><tr><th class="t"></th>${th('name', 'Recipe', 't')}${th('batches', 'Batches')}${th('processedHl', 'Processed hl')}${th('lossShare', 'Total loss')}${th('cellarShare', 'Cellar')}${th('fillingShare', 'Filling')}</tr></thead>
+      <tbody>${groups.filter((g) => !q || g.name.toLowerCase().includes(q)).map((g) => `<tr>
+        <td class="t"><input type="checkbox" data-compare="${escapeHtml(g.groupId)}" ${ra.compare.includes(g.groupId) ? 'checked' : ''} aria-label="Compare ${escapeHtml(g.name)}"></td>
+        <td class="t"><button type="button" class="ra-link" data-open="${escapeHtml(g.groupId)}">${escapeHtml(g.name)}</button></td>
+        <td>${g.pooled.batches}${g.pooled.batches < g.pooled.total ? `<span class="ra-muted"> /${g.pooled.total}</span>` : ''}</td>
+        <td>${hl0(g.pooled.processedHl)}</td>
+        <td><span class="ra-pct">${pct(g.pooled.lossShare)} ${stackBar(g.pooled.cellarShare, g.pooled.fillingShare, max)}</span></td>
+        <td>${pct(g.pooled.cellarShare)}</td><td>${pct(g.pooled.fillingShare)}</td></tr>`).join('')}</tbody>
+    </table></div>
+    ${legend('<span>“/n”: batches not counted (data warning or fully split)</span>')}
+  </section>`;
+}
+
+function recipePicker(id, selected, placeholder) {
+  const groups = lossesByRecipe(ra.losses.filter(inYear), ra.recipes).sort((a, b) => a.name.localeCompare(b.name));
+  return `<select id="${id}" aria-label="${escapeHtml(placeholder)}"><option value="">${escapeHtml(placeholder)}</option>${groups.map((g) =>
+    `<option value="${escapeHtml(g.groupId)}" ${g.groupId === selected ? 'selected' : ''}>${escapeHtml(g.name)} (${g.losses.length})</option>`).join('')}</select>`;
+}
+
+function viewOne() {
+  const g = ra.recipe && groupById(ra.recipe);
+  const head = `<div class="ra-toolbar"><label>Recipe ${recipePicker('ra-pick-one', ra.recipe, 'Choose a recipe')}</label>
+    ${g ? `<span class="ra-chips">Versions: ${g.versions.map((v) => `<span class="ra-chip actief">v${escapeHtml(v)}</span>`).join('')}</span>
+    <button type="button" class="ra-chip" id="ra-add-compare">+ Compare with…</button>` : ''}</div>`;
+  if (!g) return head + '<div class="ra-card ra-empty">Choose a recipe to see its losses per batch.</div>';
+  const list = g.losses.slice().sort((a, b) => String(a.row.batch_number).localeCompare(String(b.row.batch_number)));
+  return `${head}${kpis(g.pooled, 'Total loss, GLT to package')}
+  <section class="ra-card"><h2>Loss per batch</h2>
+    <p class="ra-note">Share of the beer the batch processed itself. Dashed line: brewery-wide ${pct(pooledLoss(filtered(), ra.warnings).lossShare)}.</p>
+    ${legend('<span><i style="background:var(--ra-left-out)"></i>Not counted</span>')}
+    <div class="ra-chart" id="ra-chart-one"></div></section>
+  <section class="ra-card"><h2>Batches</h2><p class="ra-note">The batch number opens its Filling report.</p><div class="ra-tw"><table class="ra-table">
+    <thead><tr><th class="t">Batch</th><th class="t">Version</th><th>Brews</th><th>Processed hl</th><th>Splits hl</th><th>In HBT hl</th><th>Packaged hl</th><th>Cellar hl</th><th>Filling hl</th><th>Total</th><th class="t">Data check</th></tr></thead>
+    <tbody>${list.map((l) => { const r = ra.recipes.find((x) => x.id === l.row.recipe_id);
+      return `<tr class="${lossCounts(l, ra.warnings) ? '' : 'ra-out'}"><td class="t">${batchLink(l)}</td><td class="t">${r ? 'v' + escapeHtml(`${r.version_major}.${r.version_minor}`) : ''}</td>
+      <td>${escapeHtml(String(l.row.brew_count ?? ''))}</td><td>${hl1(l.processedHl)}</td><td>${hl1(l.balance.splitsPreHl + l.balance.splitsPostHl)}</td><td>${hl1(l.balance.inHbtHl)}</td>
+      <td>${hl1(l.balance.packagedTotalHl)}</td><td>${hl1(l.cellarLossHl)}</td><td>${hl1(l.fillingLossHl)}</td><td>${pct(l.lossShare)}</td><td class="t">${checkCell(l)}</td></tr>`; }).join('')}</tbody>
+  </table></div></section>`;
+}
+
+function viewCompare() {
+  const groups = ra.compare.map(groupById).filter(Boolean);
+  const head = `<div class="ra-toolbar"><span class="ra-chips">${groups.map((g, i) => `<button type="button" class="ra-chip" data-remove="${escapeHtml(g.groupId)}" title="Remove"><span class="ra-dot" style="background:${RA_COMPARE_COLORS[i % RA_COMPARE_COLORS.length]}"></span>${escapeHtml(g.name)} ×</button>`).join('')}</span>
+    <label>${recipePicker('ra-pick-compare', '', '+ Add recipe')}</label></div>`;
+  if (groups.length < 2) return head + '<div class="ra-card ra-empty">Add at least two recipes to compare. You can also tick them in the All recipes list.</div>';
+  const max = Math.max(0.25, ...groups.map((g) => g.pooled.lossShare || 0));
+  return `${head}
+  <section class="ra-card"><h2>Loss side by side</h2><p class="ra-note">Pooled over each recipe's counted batches, on one scale.</p>${legend()}
+    <div class="ra-tw"><table class="ra-table"><thead><tr><th class="t">Recipe</th><th>Batches</th><th>Processed hl</th><th class="t" style="width:38%">Total loss</th><th>Cellar</th><th>Filling</th><th>Range per batch</th></tr></thead><tbody>
+    ${groups.map((g, i) => `<tr><td class="t"><span class="ra-dot" style="background:${RA_COMPARE_COLORS[i % RA_COMPARE_COLORS.length]};margin-right:6px"></span>${escapeHtml(g.name)}</td>
+      <td>${g.pooled.batches}</td><td>${hl0(g.pooled.processedHl)}</td>
+      <td class="t"><span style="display:flex;align-items:center;gap:8px">${stackBar(g.pooled.cellarShare, g.pooled.fillingShare, max, true)}<b>${pct(g.pooled.lossShare)}</b></span></td>
+      <td>${pct(g.pooled.cellarShare)}</td><td>${pct(g.pooled.fillingShare)}</td>
+      <td>${g.pooled.minShare === null ? '—' : pct(g.pooled.minShare) + ' – ' + pct(g.pooled.maxShare)}</td></tr>`).join('')}
+    </tbody></table></div></section>
+  <section class="ra-card"><h2>Every batch, per recipe</h2><p class="ra-note">One dot per counted batch (total loss); the black tick is the recipe's pooled loss.</p><div class="ra-chart" id="ra-chart-compare"></div></section>`;
+}
+
+function viewChecks() {
+  const inScope = ra.losses.filter(inYear);
+  const warnings = inScope.filter((l) => LOSS_CHECKS[l.check].warning);
+  const split = inScope.filter((l) => l.check === 'fully_split').length;
+  const codes = Object.keys(LOSS_CHECKS).filter((k) => LOSS_CHECKS[k].warning);
+  const shown = warnings.filter((l) => !ra.check || l.check === ra.check)
+    .sort((a, b) => codes.indexOf(a.check) - codes.indexOf(b.check) || String(a.row.batch_number).localeCompare(String(b.row.batch_number)));
+  const nameOf = (l) => { const r = ra.recipes.find((x) => x.id === l.row.recipe_id); return r ? r.name : ''; };
+  return `<section class="ra-card"><h2>Data checks</h2>
+    <p class="ra-note">Closed batches whose volumes do not add up, so they are left out of the losses. Fix the data on the batch tab the link opens; the batch drops off this list by itself.
+    ${split ? `${split} batch${split === 1 ? ' was' : 'es were'} split entirely to other batches: not counted, nothing to fix.` : ''}</p>
+    <div class="ra-chips" style="margin-bottom:10px">
+      <button type="button" class="ra-chip${ra.check ? '' : ' actief'}" data-check="">All warnings (${warnings.length})</button>
+      ${codes.map((c) => { const n = warnings.filter((l) => l.check === c).length; return n ? `<button type="button" class="ra-chip${ra.check === c ? ' actief' : ''}" data-check="${c}">${escapeHtml(LOSS_CHECKS[c].label)} (${n})</button>` : ''; }).join('')}
+    </div>
+    ${ra.check ? `<p class="ra-note"><b>${escapeHtml(LOSS_CHECKS[ra.check].label)}:</b> ${escapeHtml(LOSS_CHECKS[ra.check].hint)}</p>` : '<p class="ra-note">Pick a check above to see what to look at, or hover a check label.</p>'}
+    ${shown.length ? `<div class="ra-tw"><table class="ra-table"><thead><tr><th class="t">Batch</th><th class="t">Recipe</th><th class="t">Check</th><th>Into GLT hl</th><th>Splits hl</th><th>In HBT hl</th><th>Packaged hl</th><th class="t">Fix on</th></tr></thead><tbody>
+      ${shown.map((l) => `<tr><td class="t">${batchLink(l, LOSS_CHECKS[l.check].tab)}</td><td class="t">${escapeHtml(nameOf(l))}</td><td class="t">${checkCell(l)}</td>
+        <td>${hl1(l.balance.startHl)}</td><td>${hl1(l.balance.splitsPreHl + l.balance.splitsPostHl)}</td><td>${hl1(l.balance.inHbtHl)}</td><td>${hl1(l.balance.packagedTotalHl)}</td>
+        <td class="t">${escapeHtml(tabLabel(LOSS_CHECKS[l.check].tab))}</td></tr>`).join('')}
+    </tbody></table></div>` : '<div class="ra-empty">No data warnings. Every closed batch adds up.</div>'}
+  </section>`;
+}
+
+// --------------------------------------------------------------- charts
+function drawOneChart() {
+  const box = document.getElementById('ra-chart-one');
+  const g = box && groupById(ra.recipe);
+  if (!g) return;
+  const list = g.losses.filter((l) => l.processedHl > 0 && l.lossShare !== null)
+    .sort((a, b) => String(a.row.batch_number).localeCompare(String(b.row.batch_number)));
+  if (!list.length) { box.innerHTML = '<div class="ra-empty">No batch with a volume to show.</div>'; return; }
+  const W = Math.max(320, box.clientWidth), H = 240, m = { t: 10, r: 8, b: 48, l: 40 };
+  const top = Math.min(0.6, Math.max(0.2, ...list.map((l) => l.lossShare))) * 1.1;
+  const y = (v) => H - m.b - Math.max(0, Math.min(top, v)) / top * (H - m.t - m.b);
+  const bw = (W - m.l - m.r) / list.length, w = Math.min(28, bw * 0.7);
+  const step = top > 0.3 ? 0.1 : 0.05;
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Loss per batch">`;
+  for (let t = 0; t <= top + 1e-9; t += step) s += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(t)}" y2="${y(t)}" stroke="#eee"/><text x="${m.l - 6}" y="${y(t) + 4}" text-anchor="end">${Math.round(t * 100)}%</text>`;
+  const every = Math.ceil(list.length / Math.max(1, Math.floor((W - m.l - m.r) / 26)));
+  list.forEach((l, i) => {
+    const x = m.l + i * bw + (bw - w) / 2;
+    const c = Math.max(0, l.cellarShare || 0), f = Math.max(0, l.fillingShare || 0);
+    if (lossCounts(l, ra.warnings)) {
+      s += `<rect x="${x}" width="${w}" y="${y(c)}" height="${y(0) - y(c)}" fill="var(--ra-cellar)"/>`;
+      s += `<rect x="${x}" width="${w}" y="${y(c + f)}" height="${y(0) - y(f)}" fill="var(--ra-filling)"/>`;
+    } else {
+      s += `<rect x="${x}" width="${w}" y="${y(Math.max(0, l.lossShare))}" height="${y(0) - y(Math.max(0, l.lossShare))}" fill="var(--ra-left-out)"/>`;
+    }
+    if (i % every === 0) s += `<text transform="translate(${x + w / 2},${H - m.b + 12}) rotate(-45)" text-anchor="end">${escapeHtml(l.row.batch_number)}</text>`;
+    s += `<rect x="${m.l + i * bw}" width="${bw}" y="${m.t}" height="${H - m.t - m.b}" fill="transparent" data-i="${i}"/>`;
+  });
+  const avg = pooledLoss(filtered(), ra.warnings).lossShare;
+  if (avg !== null) s += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(avg)}" y2="${y(avg)}" stroke="#555" stroke-dasharray="4 3"/>`;
+  box.innerHTML = s + '</svg><div class="ra-tip" style="display:none"></div>';
+  const tip = box.querySelector('.ra-tip');
+  box.querySelectorAll('rect[data-i]').forEach((el) => {
+    el.addEventListener('mousemove', (ev) => {
+      const l = list[Number(el.dataset.i)];
+      tip.innerHTML = `<b>${escapeHtml(l.row.batch_number)}</b> · ${escapeHtml(String(l.row.brew_count ?? 0))} brews<br>Cellar ${pct(l.cellarShare)} · Filling ${pct(l.fillingShare)} · Total ${pct(l.lossShare)}`
+        + (l.check !== 'ok' ? `<br><span style="color:var(--ra-warn)">${escapeHtml(LOSS_CHECKS[l.check].label)}</span>` : '');
+      tip.style.display = 'block';
+      const rc = box.getBoundingClientRect();
+      tip.style.left = Math.max(0, Math.min(rc.width - tip.offsetWidth, ev.clientX - rc.left + 12)) + 'px';
+      tip.style.top = Math.max(0, ev.clientY - rc.top - 54) + 'px';
+    });
+    el.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
+  });
+}
+
+function drawCompareChart() {
+  const box = document.getElementById('ra-chart-compare');
+  if (!box) return;
+  const groups = ra.compare.map(groupById).filter(Boolean);
+  const W = Math.max(320, box.clientWidth), rowH = 34, m = { l: Math.min(200, W * 0.35), r: 16, t: 6, b: 22 };
+  const H = groups.length * rowH + m.t + m.b;
+  const counted = (g) => g.losses.filter((l) => lossCounts(l, ra.warnings) && l.lossShare !== null);
+  const top = Math.max(0.3, ...groups.flatMap((g) => counted(g).map((l) => l.lossShare)));
+  const x = (v) => m.l + Math.max(0, Math.min(top, v)) / top * (W - m.l - m.r);
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Loss of every batch per recipe">`;
+  for (let t = 0; t <= top + 1e-9; t += 0.05) s += `<line x1="${x(t)}" x2="${x(t)}" y1="${m.t}" y2="${H - m.b}" stroke="#eee"/><text x="${x(t)}" y="${H - 6}" text-anchor="middle">${Math.round(t * 100)}%</text>`;
+  groups.forEach((g, i) => {
+    const cy = m.t + i * rowH + rowH / 2, col = RA_COMPARE_COLORS[i % RA_COMPARE_COLORS.length];
+    const name = g.name.length > 28 ? g.name.slice(0, 27) + '…' : g.name;
+    s += `<text x="${m.l - 8}" y="${cy + 4}" text-anchor="end" style="fill:#1f1f1f">${escapeHtml(name)}</text>`;
+    counted(g).forEach((l) => { s += `<circle cx="${x(l.lossShare)}" cy="${cy}" r="5" fill="${col}" fill-opacity=".55" stroke="${col}"><title>${escapeHtml(l.row.batch_number)}: ${pct(l.lossShare)}</title></circle>`; });
+    if (g.pooled.lossShare !== null) s += `<line x1="${x(g.pooled.lossShare)}" x2="${x(g.pooled.lossShare)}" y1="${cy - 11}" y2="${cy + 11}" stroke="#1f1f1f" stroke-width="2"/>`;
+  });
+  box.innerHTML = s + '</svg>';
+}
+
+// --------------------------------------------------------------- render
+function renderLossTabs() {
+  const warnings = ra.losses.filter((l) => inYear(l) && LOSS_CHECKS[l.check].warning).length;
+  document.getElementById('ra-loss-tabs').innerHTML = RA_LOSS_TABS.map((t) =>
+    `<button type="button" role="tab" class="ra-tab${ra.tab === t.key ? ' actief' : ''}" aria-selected="${ra.tab === t.key}" data-tab="${t.key}">${escapeHtml(t.label)}${t.key === 'checks' && warnings ? ` <span class="ra-count">(${warnings})</span>` : ''}</button>`).join('');
+  document.querySelectorAll('#ra-loss-tabs .ra-tab').forEach((b) => b.addEventListener('click', () => { ra.tab = b.dataset.tab; renderLosses(); }));
+}
+
+function renderLosses() {
+  renderLossTabs();
+  const view = document.getElementById('ra-loss-view');
+  view.innerHTML = ra.tab === 'all' ? viewAll() : ra.tab === 'one' ? viewOne() : ra.tab === 'compare' ? viewCompare() : viewChecks();
+  if (ra.tab === 'one') drawOneChart();
+  if (ra.tab === 'compare') drawCompareChart();
+  const params = new URLSearchParams();
+  params.set('tab', ra.tab);
+  if (ra.tab === 'one' && ra.recipe) params.set('recipe', ra.recipe);
+  if (ra.tab === 'compare' && ra.compare.length) params.set('compare', ra.compare.join(','));
+  history.replaceState(null, '', '?' + params.toString());
+
+  view.querySelectorAll('th[data-sort]').forEach((th) => th.addEventListener('click', () => {
+    const k = th.dataset.sort;
+    ra.sort = [k, ra.sort[0] === k ? -ra.sort[1] : (k === 'name' ? 1 : -1)];
+    renderLosses();
+  }));
+  view.querySelectorAll('[data-open]').forEach((b) => b.addEventListener('click', () => { ra.recipe = b.dataset.open; ra.tab = 'one'; renderLosses(); }));
+  view.querySelectorAll('[data-compare]').forEach((c) => c.addEventListener('change', () => {
+    const id = c.dataset.compare;
+    ra.compare = c.checked ? [...new Set([...ra.compare, id])] : ra.compare.filter((x) => x !== id);
+    renderLosses();
+  }));
+  view.querySelectorAll('[data-remove]').forEach((b) => b.addEventListener('click', () => { ra.compare = ra.compare.filter((x) => x !== b.dataset.remove); renderLosses(); }));
+  view.querySelectorAll('[data-check]').forEach((b) => b.addEventListener('click', () => { ra.check = b.dataset.check; renderLosses(); }));
+  const search = view.querySelector('#ra-search');
+  if (search) search.addEventListener('input', () => {
+    ra.search = search.value;
+    const pos = search.selectionStart;
+    renderLosses();
+    const again = document.getElementById('ra-search');
+    again.focus();
+    again.setSelectionRange(pos, pos);
+  });
+  const go = view.querySelector('#ra-go-compare');
+  if (go) go.addEventListener('click', () => { ra.tab = 'compare'; renderLosses(); });
+  const pickOne = view.querySelector('#ra-pick-one');
+  if (pickOne) pickOne.addEventListener('change', () => { ra.recipe = pickOne.value || null; renderLosses(); });
+  const addCompare = view.querySelector('#ra-add-compare');
+  if (addCompare) addCompare.addEventListener('click', () => { ra.compare = [...new Set([ra.recipe, ...ra.compare])]; ra.tab = 'compare'; renderLosses(); });
+  const pickCompare = view.querySelector('#ra-pick-compare');
+  if (pickCompare) pickCompare.addEventListener('change', () => { if (pickCompare.value) { ra.compare = [...new Set([...ra.compare, pickCompare.value])]; renderLosses(); } });
+}
+
+function renderSidebar() {
+  const groups = [...new Set(RA_ANALYSES.map((a) => a.group))];
+  const sidebar = document.getElementById('ra-sidebar');
+  sidebar.innerHTML = groups.map((g) => `<h3>${escapeHtml(g)}</h3>` + RA_ANALYSES.filter((a) => a.group === g).map((a) =>
+    `<button type="button" data-id="${a.key}" class="${a.key === 'losses' ? 'actief' : ''}">${escapeHtml(a.label)}</button>`).join('')).join('');
+  sidebar.querySelectorAll('button').forEach((btn) => btn.addEventListener('click', () => {
+    sidebar.querySelectorAll('button').forEach((b) => b.classList.toggle('actief', b === btn));
+    document.querySelectorAll('.ra-analysis').forEach((s) => s.classList.toggle('actief', s.id === 'ra-' + btn.dataset.id));
+  }));
+  document.getElementById('ra-losses').classList.add('actief');
+}
+
+async function loadLosses() {
+  const [balance, recipeRes] = await Promise.all([
+    fetchAllRows(supabaseClient.from('batch_volume_balance').select('*').eq('stage', 'closed').order('batch_number')),
+    fetchAllRows(supabaseClient.from('recipes').select('id, name, version_major, version_minor, recipe_group_id').order('id')),
+  ]);
+  if (balance.error) throw balance.error;
+  if (recipeRes.error) throw recipeRes.error;
+  const rows = balance.data;
+  ra.recipes = recipeRes.data;
+  ra.losses = rows.map(batchLoss);
+  const years = [...new Set(rows.map((r) => Number(r.batch_year)).filter(Boolean))].sort((a, b) => b - a);
+  ra.year = years[0] || null;
+  document.getElementById('ra-year').innerHTML = years.map((y) => `<option value="${y}">${y}</option>`).join('') || '<option value="">—</option>';
+}
+
+async function initRecipeAnalytics() {
+  const user = await getCurrentUser();
+  if (!user) return;   // nav.js redirects to login
+  const access = document.getElementById('ra-toegang');
+  if (!(await magBekijkenModule('analytics'))) {
+    access.textContent = 'Access denied — you do not have permission to view Analytics. Redirecting…';
+    setTimeout(() => { window.location.href = 'index.html'; }, 1500);
+    return;
+  }
+  access.textContent = 'Loading…';
+  renderSidebar();
+  try {
+    await loadLosses();
+  } catch (e) {
+    const err = document.getElementById('ra-fout');
+    err.textContent = 'Could not load the losses: ' + (e.message || e);
+    err.style.display = 'block';
+  }
+  const params = new URLSearchParams(window.location.search);
+  if (RA_LOSS_TABS.some((t) => t.key === params.get('tab'))) ra.tab = params.get('tab');
+  if (params.get('recipe')) ra.recipe = params.get('recipe');
+  if (params.get('compare')) ra.compare = params.get('compare').split(',').filter(Boolean);
+  if (!ra.compare.length) ra.compare = recipeGroups().filter((g) => g.pooled.batches > 0).sort((a, b) => b.pooled.batches - a.pooled.batches).slice(0, 3).map((g) => g.groupId);
+  if (!ra.recipe) ra.recipe = ra.compare[0] || null;
+
+  document.getElementById('ra-year').addEventListener('change', (e) => { ra.year = Number(e.target.value) || null; renderLosses(); });
+  document.getElementById('ra-size').addEventListener('change', (e) => { ra.size = e.target.value; renderLosses(); });
+  document.getElementById('ra-warnings').addEventListener('change', (e) => { ra.warnings = e.target.checked; renderLosses(); });
+  let resizeTimer;
+  window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { if (ra.tab === 'one') drawOneChart(); if (ra.tab === 'compare') drawCompareChart(); }, 150); });
+
+  access.style.display = 'none';
+  document.getElementById('ra-content').style.display = '';
+  renderLosses();
+}
+
+document.addEventListener('DOMContentLoaded', initRecipeAnalytics);
+  </script>
+</body>
+</html>
