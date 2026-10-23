@@ -171,11 +171,14 @@ function compareByTank(a, b) {
  * Section counts are after filtering; `summary` counts per stage use the
  * location filter only, like the mockup.
  */
-function groupActiveBatches(rows, { q = '', location = '', attentionOnly = false } = {}) {
+function groupActiveBatches(rows, { q = '', location = '', attentionOnly = false, stages = [] } = {}) {
   const active = rows.filter((r) => r.stage !== 'closed' && matchesLocation(r, location));
   const visible = active.filter((r) => matchesSearch(r, q, true) && (!attentionOnly || r.attention.length > 0));
-  const sections = ACTIVE_SECTIONS.map((sec) => {
-    const groups = sec.stages.map((code) => {
+  // stage pills (Jaap, 23-10): none chosen = every block; else only the chosen
+  // stages (a block with several stages, Cellar, keeps only the chosen ones)
+  const chosen = (code) => !stages.length || stages.includes(code);
+  const sections = ACTIVE_SECTIONS.filter((sec) => sec.stages.some(chosen)).map((sec) => {
+    const groups = sec.stages.filter(chosen).map((code) => {
       const items = visible.filter((r) => r.stage === code).sort(compareByTank);
       return { stage: code, label: sec.stages.length > 1 ? stageInfo(code).label : '', items };
     });
@@ -183,7 +186,7 @@ function groupActiveBatches(rows, { q = '', location = '', attentionOnly = false
     return { ...sec, groups, count: items.length, attentionCount: items.filter((r) => r.attention.length).length };
   });
   const summary = BATCH_STAGES.filter((s) => s.code !== 'closed')
-    .map((s) => ({ stage: s.code, label: s.short, count: active.filter((r) => r.stage === s.code).length }));
+    .map((s) => ({ stage: s.code, label: s.short, count: active.filter((r) => r.stage === s.code).length, on: stages.includes(s.code) }));
   return {
     sections,
     summary,

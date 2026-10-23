@@ -103,6 +103,7 @@ Agreed with Jaap. Date = when decided. Do not change without asking.
 | 13-10 | Active batches: full-width blocks per stage (Raw material prep., Brewing, Cellar [Fermentation + Lagering], HBT, Filling, Filled), compact tiles sorted by **tank number**. Each tile always shows two status lines; an issue adds a red "!" badge plus a third line explaining it. |
 | 13-10 | Stage rules: see business-rules.md. |
 | 14-10 | All batches: table with batch number, name, version, status (stage), start date, end date. |
+| 23-10 | Active batches: the stage pills at the top are filters, several at once; only the chosen blocks show (Jaap). |
 | 19-10 | All batches always shows all batches (no Active/Closed toggle); active batches are on Active batches. |
 
 ## Parked (do not build yet)

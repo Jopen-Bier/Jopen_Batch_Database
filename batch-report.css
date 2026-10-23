@@ -78,7 +78,11 @@ body.br-page { background: var(--br-paper); }
 
 /* Active batches: summary, sections, tiles */
 .br-summary { display: flex; gap: 6px; flex-wrap: wrap; }
-.br-summary span { font-size: 12.5px; background: #fff; border: 1px solid var(--br-line); border-radius: 14px; padding: 4px 10px; color: var(--br-hop-dark); }
+.br-summary span, .br-summary button { font: inherit; font-size: 12.5px; background: #fff; border: 1px solid var(--br-line); border-radius: 14px; padding: 4px 10px; color: var(--br-hop-dark); }
+.br-summary button { cursor: pointer; }
+.br-summary button:hover { border-color: var(--br-hop-dark); }
+.br-summary button.on { background: var(--br-hop-dark); border-color: var(--br-hop-dark); color: #fff; }
+.br-summary button.br-summary-clear { background: none; border-color: transparent; text-decoration: underline; color: var(--br-muted); }
 .br-summary b { font-variant-numeric: tabular-nums; margin-left: 4px; }
 .br-attention-btn { border: 1px solid var(--br-line); background: #fff; color: var(--br-alert-text); border-radius: 20px; padding: 7px 14px; font: inherit; font-size: 13px; cursor: pointer; min-height: 40px; display: inline-flex; gap: 6px; align-items: center; }
 .br-attention-btn.on { background: var(--br-alert); border-color: var(--br-alert); color: #fff; font-weight: 700; }

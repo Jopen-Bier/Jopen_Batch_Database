@@ -42,6 +42,10 @@ creation**, **Active batches** (count active, count "!"), **All batches**
   block: name, count, "! n" when issues, stage rule text.
 - Top: summary chips per stage, search (beer, batch, tank), "Needs attention
   · n" toggle, WP/JK filter.
+- The stage chips are filters (23-10): click to show only that block; several
+  can be on at once ("Show all" clears them). In Cellar only the chosen
+  stage (Fermentation / Lagering) shows. The counts on the chips stay the
+  totals per stage.
 - Compact tiles, **sorted by tank number** (no tank: by batch number). Tile:
   tank chip, batch number, JK label, beer name, **two status lines**, small
   progress bar where relevant; an issue adds a red "!" badge and a red third
