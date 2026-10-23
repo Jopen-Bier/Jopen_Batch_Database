@@ -65,14 +65,14 @@ const recipes = [
   { id: 673, name: 'Mooie Nel', version_major: 12, version_minor: 1, recipe_group_id: 'mn' },
   { id: 363, name: 'Mooie Nel Guava Passionfruit Split', version_major: 2, version_minor: 1, recipe_group_id: 'guava' },
 ];
-const g = r.lossesByRecipe([
+const g = r.groupByRecipe([
   r.batchLoss(row({ recipe_id: 361, recipe_group_id: 'mn', glt_hl: 120, in_hbt_hl: 108, can_hl: 104 })),
   r.batchLoss(row({ recipe_id: 673, recipe_group_id: 'mn', glt_hl: 120, in_hbt_hl: 106, can_hl: 101 })),
   r.batchLoss(row({ recipe_id: 363, recipe_group_id: 'guava', incoming_hl: 60, in_hbt_hl: 60, can_hl: 56.2 })),
 ], recipes);
 assert.strictEqual(g.length, 2);
 const mn = g.find((x) => x.groupId === 'mn');
-assert.strictEqual(mn.losses.length, 2);
+assert.strictEqual(mn.items.length, 2);
 assert.deepStrictEqual(mn.versions, ['12.1', '11.1']);
 assert.strictEqual(g.find((x) => x.groupId === 'guava').name, 'Mooie Nel Guava Passionfruit Split');
 

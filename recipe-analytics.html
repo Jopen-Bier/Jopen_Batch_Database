@@ -16,7 +16,7 @@
     /* ------------------------------------------------------------------
        Recipe analytics: sidebar with analyses (as on Settings), the chosen
        analysis on the right. New analysis? Add it to RA_ANALYSES in the
-       script and a <section class="ra-analysis" id="ra-<key>"> below.
+       script: its loader, pooled figures, data checks and four views.
        ------------------------------------------------------------------ */
     :root { --ra-cellar: #4c6b4f; --ra-filling: #b4772c; --ra-muted: #6b6355; --ra-line: #ddd; --ra-warn: #a33f2c; --ra-left-out: #e7e2d8; }
     main.ra-main { max-width: 1240px; margin: 0 auto; padding: 24px; }
@@ -33,8 +33,6 @@
     .ra-sidebar button:hover { background: var(--jopen-red-tint); }
     .ra-sidebar button.actief { background: var(--jopen-red); color: #fff; font-weight: 600; }
     .ra-inhoud { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
-    .ra-analysis { display: none; flex-direction: column; gap: 16px; }
-    .ra-analysis.actief { display: flex; }
     .ra-view { display: flex; flex-direction: column; gap: 16px; }
 
     .ra-tabs { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 2px solid var(--jopen-red-dark); }
@@ -85,7 +83,7 @@
     .ra-later { color: var(--ra-muted); }
     .ra-melding { padding: 40px; text-align: center; color: var(--ra-muted); }
     .ra-fout { background: #fdecea; border: 1px solid #e0a39b; color: #a33f2c; padding: 12px 16px; border-radius: 8px; }
-    .ra-analysis, .ra-view { min-width: 0; }
+    .ra-view { min-width: 0; }
     @media (max-width: 760px) {
       .ra-layout { flex-direction: column; align-items: stretch; }
       .ra-inhoud { width: 100%; }
@@ -111,22 +109,19 @@
       <div class="ra-inhoud">
         <div id="ra-fout" class="ra-fout" style="display:none;"></div>
 
-        <!-- Losses -->
-        <section class="ra-analysis" id="ra-losses">
-          <p class="ra-muted" style="margin:0;font-size:13px;">Cellar loss (GLT to HBT) and filling loss (HBT to package) of closed batches, calculated as on the Filling report. Losses are a share of the beer the batch processed itself: into the GLT plus beer received, minus splits before processing.</p>
-          <div class="ra-tabs" role="tablist" id="ra-loss-tabs"></div>
-          <div class="ra-toolbar">
-            <label>Year <select id="ra-year"></select></label>
-            <label>Batch size <select id="ra-size">
-              <option value="">All</option>
-              <option value="small">1–3 brews</option>
-              <option value="large">4+ brews</option>
-              <option value="split">From splits (0 brews)</option>
-            </select></label>
-            <label><input type="checkbox" id="ra-warnings"> Include batches with a data warning</label>
-          </div>
-          <div id="ra-loss-view" class="ra-view"></div>
-        </section>
+        <p class="ra-muted" id="ra-intro" style="margin:0;font-size:13px;"></p>
+        <div class="ra-tabs" role="tablist" id="ra-tabs"></div>
+        <div class="ra-toolbar">
+          <label>Year <select id="ra-year"></select></label>
+          <label>Batch size <select id="ra-size">
+            <option value="">All</option>
+            <option value="small">1–3 brews</option>
+            <option value="large">4+ brews</option>
+            <option value="split">From splits (0 brews)</option>
+          </select></label>
+          <label><input type="checkbox" id="ra-warnings"> Include data warnings</label>
+        </div>
+        <div id="ra-view" class="ra-view"></div>
       </div>
     </div>
   </main>
@@ -138,19 +133,21 @@
   <script src="batch-stages.js"></script>
   <script src="filling-report.js"></script>
   <script src="recipe-losses.js"></script>
+  <script src="batch-ingredients.js"></script>
+  <script src="brewhouse-efficiency.js"></script>
   <script>
 // ============================================================================
 // recipe-analytics.html — analyses per recipe. Access: module 'analytics'
-// (view only). Losses reads the view batch_volume_balance; the calculation is
-// in recipe-losses.js (test: tests/recipe-losses.test.js).
+// (view only). Every analysis has the same tabs (All recipes, One recipe,
+// Compare, Data checks) and filters; RA_ANALYSES says how it loads its items
+// and draws its views. An item has .row (recipe_id, recipe_group_id,
+// batch_id, batch_number, batch_year, brew_count) and .check.
+// - Losses: view batch_volume_balance, recipe-losses.js (tests/recipe-losses.test.js)
+// - Brewhouse efficiency: batch_brews + batch_ingredients, brewhouse-efficiency.js
+//   (tests/brewhouse-efficiency.test.js)
 // ============================================================================
 
-// Sidebar, grouped. A new analysis: an entry here + its <section id="ra-<key>">.
-const RA_ANALYSES = [
-  { group: 'Production', key: 'losses', label: 'Losses' },
-];
-
-const RA_LOSS_TABS = [
+const RA_TABS = [
   { key: 'all', label: 'All recipes' },
   { key: 'one', label: 'One recipe' },
   { key: 'compare', label: 'Compare' },
@@ -160,60 +157,57 @@ const RA_LOSS_TABS = [
 const RA_COMPARE_COLORS = ['#E0001D', '#2f5d8a', '#4c6b4f', '#b4772c', '#6d4c8c', '#1c8a8a'];
 
 const ra = {
-  losses: [],        // batchLoss() of every closed batch
+  analysis: 'losses',
+  items: {},         // per analysis key: its items, once loaded
   recipes: [],
   tab: 'all', recipe: null, compare: [], year: null, size: '', warnings: false,
-  sort: ['batches', -1], search: '', check: '',
+  sort: ['count', -1], search: '', check: '',
 };
 
 const pct = (x) => (x === null || x === undefined || !Number.isFinite(x) ? '—' : (100 * x).toFixed(1) + '%');
 const hl1 = (x) => (x === null || x === undefined || !Number.isFinite(x) ? '—' : x.toFixed(1));
 const hl0 = (x) => (x === null || x === undefined || !Number.isFinite(x) ? '—' : Math.round(x).toLocaleString('en'));
+const tabLabel = (key) => (BATCH_TABS.find((t) => t.key === key) || {}).label || '';
+const batchLink = (item, tab) => `<a href="${batchTabHref(tab, item.row.batch_id)}">${escapeHtml(item.row.batch_number)}</a>`;
+const recipeName = (item) => { const r = ra.recipes.find((x) => x.id === item.row.recipe_id); return r ? r.name : ''; };
+const versionOf = (item) => { const r = ra.recipes.find((x) => x.id === item.row.recipe_id); return r ? `v${r.version_major}.${r.version_minor}` : ''; };
 
 // --------------------------------------------------------------- filters
-function sizeMatches(loss) {
-  const n = Number(loss.row.brew_count) || 0;
+const A = () => RA_ANALYSES.find((a) => a.key === ra.analysis);
+const allItems = () => ra.items[ra.analysis] || [];
+function sizeMatches(item) {
+  const n = Number(item.row.brew_count) || 0;
   if (ra.size === 'small') return n >= 1 && n <= 3;
   if (ra.size === 'large') return n >= 4;
   if (ra.size === 'split') return n === 0;
   return true;
 }
-const inYear = (loss) => !ra.year || Number(loss.row.batch_year) === ra.year;
-const filtered = () => ra.losses.filter((l) => inYear(l) && sizeMatches(l));
-const recipeGroups = () => lossesByRecipe(filtered(), ra.recipes).map((g) => ({ ...g, pooled: pooledLoss(g.losses, ra.warnings) }));
+const inYear = (item) => !ra.year || Number(item.row.batch_year) === ra.year;
+const filtered = () => allItems().filter((i) => inYear(i) && sizeMatches(i));
+const recipeGroups = () => groupByRecipe(filtered(), ra.recipes).map((g) => ({ ...g, pooled: A().pool(g.items) }));
 const groupById = (id) => recipeGroups().find((g) => g.groupId === id);
+const checkCell = (item) => {
+  const c = A().checks[item.check];
+  return item.check === 'ok' ? '<span class="ra-ok">OK</span>' : `<span class="ra-flag" title="${escapeHtml(c.hint || '')}">${escapeHtml(c.label)}</span>`;
+};
 
-function stackBar(cel, fil, max, wide) {
-  const w = (v) => Math.max(0, (v || 0) / max * 100);
-  return `<span class="ra-bar${wide ? ' wide' : ''}"><b style="width:${w(cel)}%;background:var(--ra-cellar)"></b><b style="width:${w(fil)}%;background:var(--ra-filling)"></b></span>`;
+function kpiRow(tiles) {
+  return `<div class="ra-kpis">${tiles.map(([label, value, unit]) =>
+    `<div class="ra-kpi"><div class="l">${escapeHtml(label)}</div><div class="v">${value}${unit ? `<small>${unit}</small>` : ''}</div></div>`).join('')}</div>`;
 }
-function kpis(p, label) {
-  return `<div class="ra-kpis">
-    <div class="ra-kpi"><div class="l">${escapeHtml(label)}</div><div class="v">${pct(p.lossShare)}</div></div>
-    <div class="ra-kpi"><div class="l">Cellar loss</div><div class="v">${pct(p.cellarShare)}</div></div>
-    <div class="ra-kpi"><div class="l">Filling loss</div><div class="v">${pct(p.fillingShare)}</div></div>
-    <div class="ra-kpi"><div class="l">Beer lost</div><div class="v">${hl0(p.lostHl)}<small>hl</small></div></div>
-    <div class="ra-kpi"><div class="l">Batches counted</div><div class="v">${p.batches}<small>of ${p.total}</small></div></div>
-  </div>`;
-}
-const legend = (extra = '') => `<div class="ra-legend"><span><i style="background:var(--ra-cellar)"></i>Cellar loss</span><span><i style="background:var(--ra-filling)"></i>Filling loss</span>${extra}</div>`;
-const tabLabel = (key) => (BATCH_TABS.find((t) => t.key === key) || {}).label || '';
-const batchLink = (loss, tab = 'filling-report') => `<a href="${batchTabHref(tab, loss.row.batch_id)}">${escapeHtml(loss.row.batch_number)}</a>`;
-const checkCell = (loss) => (loss.check === 'ok' ? '<span class="ra-ok">OK</span>'
-  : `<span class="ra-flag" title="${escapeHtml(LOSS_CHECKS[loss.check].hint || '')}">${escapeHtml(LOSS_CHECKS[loss.check].label)}</span>`);
 
-// --------------------------------------------------------------- views
+// --------------------------------------------------------------- shared views
 function viewAll() {
-  const groups = recipeGroups().filter((g) => g.pooled.batches > 0);
+  const a = A();
+  const groups = recipeGroups().filter((g) => g.pooled.count > 0);
   const [key, dir] = ra.sort;
-  const val = (g) => (key === 'name' ? g.name : key === 'batches' ? g.pooled.batches : g.pooled[key]);
-  groups.sort((a, b) => (key === 'name' ? a.name.localeCompare(b.name) : (val(a) ?? -1) - (val(b) ?? -1)) * dir || a.name.localeCompare(b.name));
-  const max = Math.max(0.25, ...groups.map((g) => g.pooled.lossShare || 0));
+  const val = (g) => (key === 'name' ? g.name : g.pooled[key]);
+  groups.sort((x, y) => (key === 'name' ? x.name.localeCompare(y.name) : (val(x) ?? -1) - (val(y) ?? -1)) * dir || x.name.localeCompare(y.name));
   const q = ra.search.trim().toLowerCase();
   const th = (k, label, cls = '') => `<th class="sort ${cls}" data-sort="${k}" aria-sort="${ra.sort[0] === k ? (ra.sort[1] > 0 ? 'ascending' : 'descending') : 'none'}">${label}${ra.sort[0] === k ? (ra.sort[1] > 0 ? ' ▲' : ' ▼') : ''}</th>`;
-  return `${kpis(pooledLoss(filtered(), ra.warnings), 'Brewery-wide loss')}
+  return `${a.kpis(a.pool(filtered()), true)}
   <section class="ra-card">
-    <h2>Loss per recipe</h2>
+    <h2>${escapeHtml(a.label)} per recipe</h2>
     <p class="ra-note">Click a recipe to open it, or tick two or more to compare them. All versions of a recipe count together; splits are recipes of their own.</p>
     <div class="ra-toolbar" style="border:0;padding:0 0 10px;">
       <input type="search" id="ra-search" placeholder="Search recipe" aria-label="Search recipe" value="${escapeHtml(ra.search)}">
@@ -222,23 +216,20 @@ function viewAll() {
         : '<span class="ra-muted">Tick recipes to compare them</span>'}</span>
     </div>
     <div class="ra-tw"><table class="ra-table">
-      <thead><tr><th class="t"></th>${th('name', 'Recipe', 't')}${th('batches', 'Batches')}${th('processedHl', 'Processed hl')}${th('lossShare', 'Total loss')}${th('cellarShare', 'Cellar')}${th('fillingShare', 'Filling')}</tr></thead>
+      <thead><tr><th class="t"></th>${th('name', 'Recipe', 't')}${a.columns.map((c) => th(c.key, c.label)).join('')}</tr></thead>
       <tbody>${groups.filter((g) => !q || g.name.toLowerCase().includes(q)).map((g) => `<tr>
         <td class="t"><input type="checkbox" data-compare="${escapeHtml(g.groupId)}" ${ra.compare.includes(g.groupId) ? 'checked' : ''} aria-label="Compare ${escapeHtml(g.name)}"></td>
         <td class="t"><button type="button" class="ra-link" data-open="${escapeHtml(g.groupId)}">${escapeHtml(g.name)}</button></td>
-        <td>${g.pooled.batches}${g.pooled.batches < g.pooled.total ? `<span class="ra-muted"> /${g.pooled.total}</span>` : ''}</td>
-        <td>${hl0(g.pooled.processedHl)}</td>
-        <td><span class="ra-pct">${pct(g.pooled.lossShare)} ${stackBar(g.pooled.cellarShare, g.pooled.fillingShare, max)}</span></td>
-        <td>${pct(g.pooled.cellarShare)}</td><td>${pct(g.pooled.fillingShare)}</td></tr>`).join('')}</tbody>
+        ${a.columns.map((c) => `<td>${c.cell(g, groups)}</td>`).join('')}</tr>`).join('')}</tbody>
     </table></div>
-    ${legend('<span>“/n”: batches not counted (data warning or fully split)</span>')}
+    ${a.legend ? a.legend() : ''}
   </section>`;
 }
 
 function recipePicker(id, selected, placeholder) {
-  const groups = lossesByRecipe(ra.losses.filter(inYear), ra.recipes).sort((a, b) => a.name.localeCompare(b.name));
+  const groups = groupByRecipe(allItems().filter(inYear), ra.recipes).sort((x, y) => x.name.localeCompare(y.name));
   return `<select id="${id}" aria-label="${escapeHtml(placeholder)}"><option value="">${escapeHtml(placeholder)}</option>${groups.map((g) =>
-    `<option value="${escapeHtml(g.groupId)}" ${g.groupId === selected ? 'selected' : ''}>${escapeHtml(g.name)} (${g.losses.length})</option>`).join('')}</select>`;
+    `<option value="${escapeHtml(g.groupId)}" ${g.groupId === selected ? 'selected' : ''}>${escapeHtml(g.name)} (${g.items.length})</option>`).join('')}</select>`;
 }
 
 function viewOne() {
@@ -246,20 +237,8 @@ function viewOne() {
   const head = `<div class="ra-toolbar"><label>Recipe ${recipePicker('ra-pick-one', ra.recipe, 'Choose a recipe')}</label>
     ${g ? `<span class="ra-chips">Versions: ${g.versions.map((v) => `<span class="ra-chip actief">v${escapeHtml(v)}</span>`).join('')}</span>
     <button type="button" class="ra-chip" id="ra-add-compare">+ Compare with…</button>` : ''}</div>`;
-  if (!g) return head + '<div class="ra-card ra-empty">Choose a recipe to see its losses per batch.</div>';
-  const list = g.losses.slice().sort((a, b) => String(a.row.batch_number).localeCompare(String(b.row.batch_number)));
-  return `${head}${kpis(g.pooled, 'Total loss, GLT to package')}
-  <section class="ra-card"><h2>Loss per batch</h2>
-    <p class="ra-note">Share of the beer the batch processed itself. Dashed line: brewery-wide ${pct(pooledLoss(filtered(), ra.warnings).lossShare)}.</p>
-    ${legend('<span><i style="background:var(--ra-left-out)"></i>Not counted</span>')}
-    <div class="ra-chart" id="ra-chart-one"></div></section>
-  <section class="ra-card"><h2>Batches</h2><p class="ra-note">The batch number opens its Filling report.</p><div class="ra-tw"><table class="ra-table">
-    <thead><tr><th class="t">Batch</th><th class="t">Version</th><th>Brews</th><th>Processed hl</th><th>Splits hl</th><th>In HBT hl</th><th>Packaged hl</th><th>Cellar hl</th><th>Filling hl</th><th>Total</th><th class="t">Data check</th></tr></thead>
-    <tbody>${list.map((l) => { const r = ra.recipes.find((x) => x.id === l.row.recipe_id);
-      return `<tr class="${lossCounts(l, ra.warnings) ? '' : 'ra-out'}"><td class="t">${batchLink(l)}</td><td class="t">${r ? 'v' + escapeHtml(`${r.version_major}.${r.version_minor}`) : ''}</td>
-      <td>${escapeHtml(String(l.row.brew_count ?? ''))}</td><td>${hl1(l.processedHl)}</td><td>${hl1(l.balance.splitsPreHl + l.balance.splitsPostHl)}</td><td>${hl1(l.balance.inHbtHl)}</td>
-      <td>${hl1(l.balance.packagedTotalHl)}</td><td>${hl1(l.cellarLossHl)}</td><td>${hl1(l.fillingLossHl)}</td><td>${pct(l.lossShare)}</td><td class="t">${checkCell(l)}</td></tr>`; }).join('')}</tbody>
-  </table></div></section>`;
+  if (!g) return head + `<div class="ra-card ra-empty">Choose a recipe to see its ${escapeHtml(A().label.toLowerCase())}.</div>`;
+  return head + A().one(g);
 }
 
 function viewCompare() {
@@ -267,80 +246,91 @@ function viewCompare() {
   const head = `<div class="ra-toolbar"><span class="ra-chips">${groups.map((g, i) => `<button type="button" class="ra-chip" data-remove="${escapeHtml(g.groupId)}" title="Remove"><span class="ra-dot" style="background:${RA_COMPARE_COLORS[i % RA_COMPARE_COLORS.length]}"></span>${escapeHtml(g.name)} ×</button>`).join('')}</span>
     <label>${recipePicker('ra-pick-compare', '', '+ Add recipe')}</label></div>`;
   if (groups.length < 2) return head + '<div class="ra-card ra-empty">Add at least two recipes to compare. You can also tick them in the All recipes list.</div>';
-  const max = Math.max(0.25, ...groups.map((g) => g.pooled.lossShare || 0));
-  return `${head}
-  <section class="ra-card"><h2>Loss side by side</h2><p class="ra-note">Pooled over each recipe's counted batches, on one scale.</p>${legend()}
-    <div class="ra-tw"><table class="ra-table"><thead><tr><th class="t">Recipe</th><th>Batches</th><th>Processed hl</th><th class="t" style="width:38%">Total loss</th><th>Cellar</th><th>Filling</th><th>Range per batch</th></tr></thead><tbody>
-    ${groups.map((g, i) => `<tr><td class="t"><span class="ra-dot" style="background:${RA_COMPARE_COLORS[i % RA_COMPARE_COLORS.length]};margin-right:6px"></span>${escapeHtml(g.name)}</td>
-      <td>${g.pooled.batches}</td><td>${hl0(g.pooled.processedHl)}</td>
-      <td class="t"><span style="display:flex;align-items:center;gap:8px">${stackBar(g.pooled.cellarShare, g.pooled.fillingShare, max, true)}<b>${pct(g.pooled.lossShare)}</b></span></td>
-      <td>${pct(g.pooled.cellarShare)}</td><td>${pct(g.pooled.fillingShare)}</td>
-      <td>${g.pooled.minShare === null ? '—' : pct(g.pooled.minShare) + ' – ' + pct(g.pooled.maxShare)}</td></tr>`).join('')}
-    </tbody></table></div></section>
-  <section class="ra-card"><h2>Every batch, per recipe</h2><p class="ra-note">One dot per counted batch (total loss); the black tick is the recipe's pooled loss.</p><div class="ra-chart" id="ra-chart-compare"></div></section>`;
+  return head + A().compare(groups);
 }
 
 function viewChecks() {
-  const inScope = ra.losses.filter(inYear);
-  const warnings = inScope.filter((l) => LOSS_CHECKS[l.check].warning);
-  const split = inScope.filter((l) => l.check === 'fully_split').length;
-  const codes = Object.keys(LOSS_CHECKS).filter((k) => LOSS_CHECKS[k].warning);
-  const shown = warnings.filter((l) => !ra.check || l.check === ra.check)
-    .sort((a, b) => codes.indexOf(a.check) - codes.indexOf(b.check) || String(a.row.batch_number).localeCompare(String(b.row.batch_number)));
-  const nameOf = (l) => { const r = ra.recipes.find((x) => x.id === l.row.recipe_id); return r ? r.name : ''; };
+  const a = A();
+  const inScope = allItems().filter(inYear);
+  const warnings = inScope.filter((i) => a.checks[i.check].warning);
+  const codes = Object.keys(a.checks).filter((k) => a.checks[k].warning);
+  if (ra.check && !codes.includes(ra.check)) ra.check = '';
+  const shown = warnings.filter((i) => !ra.check || i.check === ra.check)
+    .sort((x, y) => codes.indexOf(x.check) - codes.indexOf(y.check) || String(x.row.batch_number).localeCompare(String(y.row.batch_number)) || (x.brewNumber || 0) - (y.brewNumber || 0));
   return `<section class="ra-card"><h2>Data checks</h2>
-    <p class="ra-note">Closed batches whose volumes do not add up, so they are left out of the losses. Fix the data on the batch tab the link opens; the batch drops off this list by itself.
-    ${split ? `${split} batch${split === 1 ? ' was' : 'es were'} split entirely to other batches: not counted, nothing to fix.` : ''}</p>
+    <p class="ra-note">${escapeHtml(a.checksIntro)} Fix the data on the batch tab the link opens; it drops off this list by itself. ${a.checksExtra ? a.checksExtra(inScope) : ''}</p>
     <div class="ra-chips" style="margin-bottom:10px">
       <button type="button" class="ra-chip${ra.check ? '' : ' actief'}" data-check="">All warnings (${warnings.length})</button>
-      ${codes.map((c) => { const n = warnings.filter((l) => l.check === c).length; return n ? `<button type="button" class="ra-chip${ra.check === c ? ' actief' : ''}" data-check="${c}">${escapeHtml(LOSS_CHECKS[c].label)} (${n})</button>` : ''; }).join('')}
+      ${codes.map((c) => { const n = warnings.filter((i) => i.check === c).length; return n ? `<button type="button" class="ra-chip${ra.check === c ? ' actief' : ''}" data-check="${c}">${escapeHtml(a.checks[c].label)} (${n})</button>` : ''; }).join('')}
     </div>
-    ${ra.check ? `<p class="ra-note"><b>${escapeHtml(LOSS_CHECKS[ra.check].label)}:</b> ${escapeHtml(LOSS_CHECKS[ra.check].hint)}</p>` : '<p class="ra-note">Pick a check above to see what to look at, or hover a check label.</p>'}
-    ${shown.length ? `<div class="ra-tw"><table class="ra-table"><thead><tr><th class="t">Batch</th><th class="t">Recipe</th><th class="t">Check</th><th>Into GLT hl</th><th>Splits hl</th><th>In HBT hl</th><th>Packaged hl</th><th class="t">Fix on</th></tr></thead><tbody>
-      ${shown.map((l) => `<tr><td class="t">${batchLink(l, LOSS_CHECKS[l.check].tab)}</td><td class="t">${escapeHtml(nameOf(l))}</td><td class="t">${checkCell(l)}</td>
-        <td>${hl1(l.balance.startHl)}</td><td>${hl1(l.balance.splitsPreHl + l.balance.splitsPostHl)}</td><td>${hl1(l.balance.inHbtHl)}</td><td>${hl1(l.balance.packagedTotalHl)}</td>
-        <td class="t">${escapeHtml(tabLabel(LOSS_CHECKS[l.check].tab))}</td></tr>`).join('')}
-    </tbody></table></div>` : '<div class="ra-empty">No data warnings. Every closed batch adds up.</div>'}
+    ${ra.check ? `<p class="ra-note"><b>${escapeHtml(a.checks[ra.check].label)}:</b> ${escapeHtml(a.checks[ra.check].hint)}</p>` : '<p class="ra-note">Pick a check above to see what to look at, or hover a check label.</p>'}
+    ${shown.length ? `<div class="ra-tw"><table class="ra-table"><thead><tr>${a.checkColumns.map((c) => `<th class="${c.t ? 't' : ''}">${c.label}</th>`).join('')}<th class="t">Fix on</th></tr></thead><tbody>
+      ${shown.map((i) => `<tr>${a.checkColumns.map((c) => `<td class="${c.t ? 't' : ''}">${c.cell(i)}</td>`).join('')}<td class="t">${escapeHtml(tabLabel(a.checks[i.check].tab))}</td></tr>`).join('')}
+    </tbody></table></div>` : `<div class="ra-empty">${escapeHtml(a.noWarnings)}</div>`}
   </section>`;
 }
 
 // --------------------------------------------------------------- charts
-function drawOneChart() {
-  const box = document.getElementById('ra-chart-one');
-  const g = box && groupById(ra.recipe);
-  if (!g) return;
-  const list = g.losses.filter((l) => l.processedHl > 0 && l.lossShare !== null)
-    .sort((a, b) => String(a.row.batch_number).localeCompare(String(b.row.batch_number)));
-  if (!list.length) { box.innerHTML = '<div class="ra-empty">No batch with a volume to show.</div>'; return; }
+// Bars per item in order (Losses: per batch). parts(item) = [[share, colour], …], stacked.
+function drawBars(boxId, items, parts, opts) {
+  const box = document.getElementById(boxId);
+  if (!box) return;
+  if (!items.length) { box.innerHTML = '<div class="ra-empty">Nothing to show.</div>'; return; }
   const W = Math.max(320, box.clientWidth), H = 240, m = { t: 10, r: 8, b: 48, l: 40 };
-  const top = Math.min(0.6, Math.max(0.2, ...list.map((l) => l.lossShare))) * 1.1;
+  const top = Math.min(0.6, Math.max(0.2, ...items.map((i) => opts.total(i) || 0))) * 1.1;
   const y = (v) => H - m.b - Math.max(0, Math.min(top, v)) / top * (H - m.t - m.b);
-  const bw = (W - m.l - m.r) / list.length, w = Math.min(28, bw * 0.7);
+  const bw = (W - m.l - m.r) / items.length, w = Math.min(28, bw * 0.7);
   const step = top > 0.3 ? 0.1 : 0.05;
-  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Loss per batch">`;
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${escapeHtml(opts.label)}">`;
   for (let t = 0; t <= top + 1e-9; t += step) s += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(t)}" y2="${y(t)}" stroke="#eee"/><text x="${m.l - 6}" y="${y(t) + 4}" text-anchor="end">${Math.round(t * 100)}%</text>`;
-  const every = Math.ceil(list.length / Math.max(1, Math.floor((W - m.l - m.r) / 26)));
-  list.forEach((l, i) => {
+  const every = Math.ceil(items.length / Math.max(1, Math.floor((W - m.l - m.r) / 26)));
+  items.forEach((item, i) => {
     const x = m.l + i * bw + (bw - w) / 2;
-    const c = Math.max(0, l.cellarShare || 0), f = Math.max(0, l.fillingShare || 0);
-    if (lossCounts(l, ra.warnings)) {
-      s += `<rect x="${x}" width="${w}" y="${y(c)}" height="${y(0) - y(c)}" fill="var(--ra-cellar)"/>`;
-      s += `<rect x="${x}" width="${w}" y="${y(c + f)}" height="${y(0) - y(f)}" fill="var(--ra-filling)"/>`;
-    } else {
-      s += `<rect x="${x}" width="${w}" y="${y(Math.max(0, l.lossShare))}" height="${y(0) - y(Math.max(0, l.lossShare))}" fill="var(--ra-left-out)"/>`;
-    }
-    if (i % every === 0) s += `<text transform="translate(${x + w / 2},${H - m.b + 12}) rotate(-45)" text-anchor="end">${escapeHtml(l.row.batch_number)}</text>`;
+    let base = 0;
+    parts(item).forEach(([v, colour]) => { const h = Math.max(0, v || 0); s += `<rect x="${x}" width="${w}" y="${y(base + h)}" height="${y(base) - y(base + h)}" fill="${colour}"/>`; base += h; });
+    if (i % every === 0) s += `<text transform="translate(${x + w / 2},${H - m.b + 12}) rotate(-45)" text-anchor="end">${escapeHtml(opts.xLabel(item))}</text>`;
     s += `<rect x="${m.l + i * bw}" width="${bw}" y="${m.t}" height="${H - m.t - m.b}" fill="transparent" data-i="${i}"/>`;
   });
-  const avg = pooledLoss(filtered(), ra.warnings).lossShare;
-  if (avg !== null) s += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(avg)}" y2="${y(avg)}" stroke="#555" stroke-dasharray="4 3"/>`;
+  if (opts.average !== null) s += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(opts.average)}" y2="${y(opts.average)}" stroke="#555" stroke-dasharray="4 3"/>`;
   box.innerHTML = s + '</svg><div class="ra-tip" style="display:none"></div>';
+  attachTips(box, 'rect[data-i]', items, opts.tip);
+}
+
+// Dots per item in order on a lo–hi scale (Brewhouse efficiency: per brew), with reference lines.
+function drawDots(boxId, items, opts) {
+  const box = document.getElementById(boxId);
+  if (!box) return;
+  if (!items.length) { box.innerHTML = '<div class="ra-empty">Nothing to show.</div>'; return; }
+  const W = Math.max(320, box.clientWidth), H = 240, m = { t: 10, r: 8, b: 48, l: 40 };
+  const vals = items.map(opts.value).filter((v) => v !== null);
+  const lo = Math.min(opts.lo, ...vals), hi = Math.max(opts.hi, ...vals);
+  const y = (v) => H - m.b - (v - lo) / (hi - lo) * (H - m.t - m.b);
+  const bw = (W - m.l - m.r) / items.length;
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${escapeHtml(opts.label)}">`;
+  for (let t = Math.ceil(lo * 20) / 20; t <= hi + 1e-9; t += 0.05) s += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(t)}" y2="${y(t)}" stroke="#eee"/><text x="${m.l - 6}" y="${y(t) + 4}" text-anchor="end">${Math.round(t * 100)}%</text>`;
+  (opts.lines || []).forEach(([v, colour]) => { if (v !== null) s += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="${colour}" stroke-dasharray="4 3"/>`; });
+  let lastBatch = null;
+  const labelEvery = Math.ceil(items.length / Math.max(1, Math.floor((W - m.l - m.r) / 26)));
+  let shown = 0;
+  items.forEach((item, i) => {
+    const cx = m.l + i * bw + bw / 2, v = opts.value(item);
+    if (item.row.batch_number !== lastBatch) {
+      if (i > 0) s += `<line x1="${m.l + i * bw}" x2="${m.l + i * bw}" y1="${m.t}" y2="${H - m.b}" stroke="#f3efe8"/>`;
+      if (shown++ % labelEvery === 0) s += `<text transform="translate(${cx},${H - m.b + 12}) rotate(-45)" text-anchor="end">${escapeHtml(item.row.batch_number)}</text>`;
+      lastBatch = item.row.batch_number;
+    }
+    if (v !== null) s += `<circle cx="${cx}" cy="${y(Math.max(lo, Math.min(hi, v)))}" r="${Math.min(5, Math.max(3, bw / 3))}" fill="${opts.colour(item)}"/>`;
+    s += `<rect x="${m.l + i * bw}" width="${bw}" y="${m.t}" height="${H - m.t - m.b}" fill="transparent" data-i="${i}"/>`;
+  });
+  box.innerHTML = s + '</svg><div class="ra-tip" style="display:none"></div>';
+  attachTips(box, 'rect[data-i]', items, opts.tip);
+}
+
+function attachTips(box, selector, items, tipHtml) {
   const tip = box.querySelector('.ra-tip');
-  box.querySelectorAll('rect[data-i]').forEach((el) => {
+  box.querySelectorAll(selector).forEach((el) => {
     el.addEventListener('mousemove', (ev) => {
-      const l = list[Number(el.dataset.i)];
-      tip.innerHTML = `<b>${escapeHtml(l.row.batch_number)}</b> · ${escapeHtml(String(l.row.brew_count ?? 0))} brews<br>Cellar ${pct(l.cellarShare)} · Filling ${pct(l.fillingShare)} · Total ${pct(l.lossShare)}`
-        + (l.check !== 'ok' ? `<br><span style="color:var(--ra-warn)">${escapeHtml(LOSS_CHECKS[l.check].label)}</span>` : '');
+      tip.innerHTML = tipHtml(items[Number(el.dataset.i)]);
       tip.style.display = 'block';
       const rc = box.getBoundingClientRect();
       tip.style.left = Math.max(0, Math.min(rc.width - tip.offsetWidth, ev.clientX - rc.left + 12)) + 'px';
@@ -350,42 +340,235 @@ function drawOneChart() {
   });
 }
 
-function drawCompareChart() {
-  const box = document.getElementById('ra-chart-compare');
+// One row per recipe, one dot per counted item, a tick at the recipe's pooled value.
+function drawCompareDots(boxId, groups, opts) {
+  const box = document.getElementById(boxId);
   if (!box) return;
-  const groups = ra.compare.map(groupById).filter(Boolean);
   const W = Math.max(320, box.clientWidth), rowH = 34, m = { l: Math.min(200, W * 0.35), r: 16, t: 6, b: 22 };
   const H = groups.length * rowH + m.t + m.b;
-  const counted = (g) => g.losses.filter((l) => lossCounts(l, ra.warnings) && l.lossShare !== null);
-  const top = Math.max(0.3, ...groups.flatMap((g) => counted(g).map((l) => l.lossShare)));
-  const x = (v) => m.l + Math.max(0, Math.min(top, v)) / top * (W - m.l - m.r);
-  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Loss of every batch per recipe">`;
-  for (let t = 0; t <= top + 1e-9; t += 0.05) s += `<line x1="${x(t)}" x2="${x(t)}" y1="${m.t}" y2="${H - m.b}" stroke="#eee"/><text x="${x(t)}" y="${H - 6}" text-anchor="middle">${Math.round(t * 100)}%</text>`;
+  const vals = groups.flatMap((g) => g.items.filter(opts.counted).map(opts.value)).filter((v) => v !== null);
+  const lo = Math.min(opts.lo, ...vals), hi = Math.max(opts.hi, ...vals);
+  const x = (v) => m.l + (Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo) * (W - m.l - m.r);
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${escapeHtml(opts.label)}">`;
+  for (let t = Math.ceil(lo * 20) / 20; t <= hi + 1e-9; t += 0.05) s += `<line x1="${x(t)}" x2="${x(t)}" y1="${m.t}" y2="${H - m.b}" stroke="#eee"/><text x="${x(t)}" y="${H - 6}" text-anchor="middle">${Math.round(t * 100)}%</text>`;
   groups.forEach((g, i) => {
     const cy = m.t + i * rowH + rowH / 2, col = RA_COMPARE_COLORS[i % RA_COMPARE_COLORS.length];
     const name = g.name.length > 28 ? g.name.slice(0, 27) + '…' : g.name;
     s += `<text x="${m.l - 8}" y="${cy + 4}" text-anchor="end" style="fill:#1f1f1f">${escapeHtml(name)}</text>`;
-    counted(g).forEach((l) => { s += `<circle cx="${x(l.lossShare)}" cy="${cy}" r="5" fill="${col}" fill-opacity=".55" stroke="${col}"><title>${escapeHtml(l.row.batch_number)}: ${pct(l.lossShare)}</title></circle>`; });
-    if (g.pooled.lossShare !== null) s += `<line x1="${x(g.pooled.lossShare)}" x2="${x(g.pooled.lossShare)}" y1="${cy - 11}" y2="${cy + 11}" stroke="#1f1f1f" stroke-width="2"/>`;
+    g.items.filter(opts.counted).forEach((item) => { const v = opts.value(item); if (v !== null) s += `<circle cx="${x(v)}" cy="${cy}" r="5" fill="${col}" fill-opacity=".55" stroke="${col}"><title>${escapeHtml(opts.title(item))}</title></circle>`; });
+    const p = opts.pooled(g);
+    if (p !== null) s += `<line x1="${x(p)}" x2="${x(p)}" y1="${cy - 11}" y2="${cy + 11}" stroke="#1f1f1f" stroke-width="2"/>`;
   });
   box.innerHTML = s + '</svg>';
 }
 
-// --------------------------------------------------------------- render
-function renderLossTabs() {
-  const warnings = ra.losses.filter((l) => inYear(l) && LOSS_CHECKS[l.check].warning).length;
-  document.getElementById('ra-loss-tabs').innerHTML = RA_LOSS_TABS.map((t) =>
-    `<button type="button" role="tab" class="ra-tab${ra.tab === t.key ? ' actief' : ''}" aria-selected="${ra.tab === t.key}" data-tab="${t.key}">${escapeHtml(t.label)}${t.key === 'checks' && warnings ? ` <span class="ra-count">(${warnings})</span>` : ''}</button>`).join('');
-  document.querySelectorAll('#ra-loss-tabs .ra-tab').forEach((b) => b.addEventListener('click', () => { ra.tab = b.dataset.tab; renderLosses(); }));
+function stackBar(cel, fil, max, wide) {
+  const w = (v) => Math.max(0, (v || 0) / max * 100);
+  return `<span class="ra-bar${wide ? ' wide' : ''}"><b style="width:${w(cel)}%;background:var(--ra-cellar)"></b><b style="width:${w(fil)}%;background:var(--ra-filling)"></b></span>`;
+}
+// Bar from lo to hi (efficiency): the value's position on that range.
+function rangeBar(v, lo, hi, wide) {
+  const w = v === null ? 0 : Math.max(0, Math.min(1, (v - lo) / (hi - lo))) * 100;
+  return `<span class="ra-bar${wide ? ' wide' : ''}"><b style="width:${w}%;background:var(--ra-cellar)"></b></span>`;
 }
 
-function renderLosses() {
-  renderLossTabs();
-  const view = document.getElementById('ra-loss-view');
+// --------------------------------------------------------------- Losses
+const lossLegend = (extra = '') => `<div class="ra-legend"><span><i style="background:var(--ra-cellar)"></i>Cellar loss</span><span><i style="background:var(--ra-filling)"></i>Filling loss</span>${extra}</div>`;
+
+const LOSSES = {
+  group: 'Production', key: 'losses', label: 'Losses',
+  intro: 'Cellar loss (GLT to HBT) and filling loss (HBT to package) of closed batches, calculated as on the Filling report. Losses are a share of the beer the batch processed itself: into the GLT plus beer received, minus splits before processing.',
+  checks: LOSS_CHECKS,
+  async load() {
+    const res = await fetchAllRows(supabaseClient.from('batch_volume_balance').select('*').eq('stage', 'closed').order('batch_number'));
+    if (res.error) throw res.error;
+    return res.data.map(batchLoss);
+  },
+  pool(items) { const p = pooledLoss(items, ra.warnings); return { ...p, count: p.batches }; },
+  kpis(p, wide) {
+    return kpiRow([[wide ? 'Brewery-wide loss' : 'Total loss, GLT to package', pct(p.lossShare)], ['Cellar loss', pct(p.cellarShare)], ['Filling loss', pct(p.fillingShare)],
+      ['Beer lost', hl0(p.lostHl), 'hl'], ['Batches counted', p.batches, `of ${p.total}`]]);
+  },
+  columns: [
+    { key: 'count', label: 'Batches', cell: (g) => `${g.pooled.batches}${g.pooled.batches < g.pooled.total ? `<span class="ra-muted"> /${g.pooled.total}</span>` : ''}` },
+    { key: 'processedHl', label: 'Processed hl', cell: (g) => hl0(g.pooled.processedHl) },
+    { key: 'lossShare', label: 'Total loss', cell: (g, all) => `<span class="ra-pct">${pct(g.pooled.lossShare)} ${stackBar(g.pooled.cellarShare, g.pooled.fillingShare, Math.max(0.25, ...all.map((x) => x.pooled.lossShare || 0)))}</span>` },
+    { key: 'cellarShare', label: 'Cellar', cell: (g) => pct(g.pooled.cellarShare) },
+    { key: 'fillingShare', label: 'Filling', cell: (g) => pct(g.pooled.fillingShare) },
+  ],
+  legend: () => lossLegend('<span>“/n”: batches not counted (data warning or fully split)</span>'),
+  one(g) {
+    const list = g.items.slice().sort((x, y) => String(x.row.batch_number).localeCompare(String(y.row.batch_number)));
+    return `${this.kpis(g.pooled)}
+    <section class="ra-card"><h2>Loss per batch</h2>
+      <p class="ra-note">Share of the beer the batch processed itself. Dashed line: brewery-wide ${pct(pooledLoss(filtered(), ra.warnings).lossShare)}.</p>
+      ${lossLegend('<span><i style="background:var(--ra-left-out)"></i>Not counted</span>')}
+      <div class="ra-chart" id="ra-chart-one"></div></section>
+    <section class="ra-card"><h2>Batches</h2><p class="ra-note">The batch number opens its Filling report.</p><div class="ra-tw"><table class="ra-table">
+      <thead><tr><th class="t">Batch</th><th class="t">Version</th><th>Brews</th><th>Processed hl</th><th>Splits hl</th><th>In HBT hl</th><th>Packaged hl</th><th>Cellar hl</th><th>Filling hl</th><th>Total</th><th class="t">Data check</th></tr></thead>
+      <tbody>${list.map((l) => `<tr class="${lossCounts(l, ra.warnings) ? '' : 'ra-out'}"><td class="t">${batchLink(l, 'filling-report')}</td><td class="t">${escapeHtml(versionOf(l))}</td>
+        <td>${escapeHtml(String(l.row.brew_count ?? ''))}</td><td>${hl1(l.processedHl)}</td><td>${hl1(l.balance.splitsPreHl + l.balance.splitsPostHl)}</td><td>${hl1(l.balance.inHbtHl)}</td>
+        <td>${hl1(l.balance.packagedTotalHl)}</td><td>${hl1(l.cellarLossHl)}</td><td>${hl1(l.fillingLossHl)}</td><td>${pct(l.lossShare)}</td><td class="t">${checkCell(l)}</td></tr>`).join('')}</tbody>
+    </table></div></section>`;
+  },
+  drawOne(g) {
+    const list = g.items.filter((l) => l.processedHl > 0 && l.lossShare !== null)
+      .sort((x, y) => String(x.row.batch_number).localeCompare(String(y.row.batch_number)));
+    drawBars('ra-chart-one', list,
+      (l) => (lossCounts(l, ra.warnings) ? [[l.cellarShare, 'var(--ra-cellar)'], [l.fillingShare, 'var(--ra-filling)']] : [[l.lossShare, 'var(--ra-left-out)']]),
+      { label: 'Loss per batch', total: (l) => l.lossShare, xLabel: (l) => l.row.batch_number, average: pooledLoss(filtered(), ra.warnings).lossShare,
+        tip: (l) => `<b>${escapeHtml(l.row.batch_number)}</b> · ${escapeHtml(String(l.row.brew_count ?? 0))} brews<br>Cellar ${pct(l.cellarShare)} · Filling ${pct(l.fillingShare)} · Total ${pct(l.lossShare)}`
+          + (l.check !== 'ok' ? `<br><span style="color:var(--ra-warn)">${escapeHtml(LOSS_CHECKS[l.check].label)}</span>` : '') });
+  },
+  compare(groups) {
+    const max = Math.max(0.25, ...groups.map((g) => g.pooled.lossShare || 0));
+    return `<section class="ra-card"><h2>Loss side by side</h2><p class="ra-note">Pooled over each recipe's counted batches, on one scale.</p>${lossLegend()}
+      <div class="ra-tw"><table class="ra-table"><thead><tr><th class="t">Recipe</th><th>Batches</th><th>Processed hl</th><th class="t" style="width:38%">Total loss</th><th>Cellar</th><th>Filling</th><th>Range per batch</th></tr></thead><tbody>
+      ${groups.map((g, i) => `<tr><td class="t"><span class="ra-dot" style="background:${RA_COMPARE_COLORS[i % RA_COMPARE_COLORS.length]};margin-right:6px"></span>${escapeHtml(g.name)}</td>
+        <td>${g.pooled.batches}</td><td>${hl0(g.pooled.processedHl)}</td>
+        <td class="t"><span style="display:flex;align-items:center;gap:8px">${stackBar(g.pooled.cellarShare, g.pooled.fillingShare, max, true)}<b>${pct(g.pooled.lossShare)}</b></span></td>
+        <td>${pct(g.pooled.cellarShare)}</td><td>${pct(g.pooled.fillingShare)}</td>
+        <td>${g.pooled.minShare === null ? '—' : pct(g.pooled.minShare) + ' – ' + pct(g.pooled.maxShare)}</td></tr>`).join('')}
+      </tbody></table></div></section>
+    <section class="ra-card"><h2>Every batch, per recipe</h2><p class="ra-note">One dot per counted batch (total loss); the black tick is the recipe's pooled loss.</p><div class="ra-chart" id="ra-chart-compare"></div></section>`;
+  },
+  drawCompare(groups) {
+    drawCompareDots('ra-chart-compare', groups, { label: 'Loss of every batch per recipe', lo: 0, hi: 0.3,
+      counted: (l) => lossCounts(l, ra.warnings) && l.lossShare !== null, value: (l) => l.lossShare, pooled: (g) => g.pooled.lossShare,
+      title: (l) => `${l.row.batch_number}: ${pct(l.lossShare)}` });
+  },
+  checksIntro: 'Closed batches whose volumes do not add up, so they are left out of the losses.',
+  checksExtra(inScope) { const n = inScope.filter((l) => l.check === 'fully_split').length; return n ? `${n} batch${n === 1 ? ' was' : 'es were'} split entirely to other batches: not counted, nothing to fix.` : ''; },
+  noWarnings: 'No data warnings. Every closed batch adds up.',
+  checkColumns: [
+    { label: 'Batch', t: true, cell: (l) => batchLink(l, LOSS_CHECKS[l.check].tab) },
+    { label: 'Recipe', t: true, cell: (l) => escapeHtml(recipeName(l)) },
+    { label: 'Check', t: true, cell: (l) => checkCell(l) },
+    { label: 'Into GLT hl', cell: (l) => hl1(l.balance.startHl) },
+    { label: 'Splits hl', cell: (l) => hl1(l.balance.splitsPreHl + l.balance.splitsPostHl) },
+    { label: 'In HBT hl', cell: (l) => hl1(l.balance.inHbtHl) },
+    { label: 'Packaged hl', cell: (l) => hl1(l.balance.packagedTotalHl) },
+  ],
+};
+
+// --------------------------------------------------------------- Brewhouse efficiency
+const EFFICIENCY_LO = 0.70, EFFICIENCY_HI = 1.00;
+
+const EFFICIENCY = {
+  group: 'Production', key: 'efficiency', label: 'Brewhouse efficiency',
+  intro: 'Extract in the wort (Volume brew × whirlpool °P) against the extract the malt could give (malt kg × extract % of the CoA), per finished brew. Extract from brewhouse sugars is taken out first, so recipes with and without sugar compare on one scale.',
+  checks: EFFICIENCY_CHECKS,
+  async load() {
+    const [brews, batches, lines] = await Promise.all([
+      fetchAllRows(supabaseClient.from('batch_brews').select('id, batch_id, brew_number, brew_volume_hl, whirlpool_extract, brewing_ended_at').not('brewing_ended_at', 'is', null).order('id')),
+      fetchAllRows(supabaseClient.from('batches').select('id, batch_number, recipe_id, brew_count').order('id')),
+      fetchAllRows(supabaseClient.from('batch_ingredients').select('id, batch_id, addition_type, unit, quantity, is_removed, ingredient:ingredients(name, extract_pct)')
+        .in('addition_type', ['malt', 'brewhouse_addition', 'boil_hop']).order('id')),
+    ]);
+    for (const r of [brews, batches, lines]) if (r.error) throw r.error;
+    const batchById = new Map(batches.data.map((b) => [b.id, b]));
+    const recipeById = new Map(ra.recipes.map((r) => [r.id, r]));
+    const linesOf = new Map();
+    lines.data.forEach((l) => { if (!linesOf.has(l.batch_id)) linesOf.set(l.batch_id, []); linesOf.get(l.batch_id).push(l); });
+    const fermentablesOf = new Map();
+    return brews.data.filter((b) => batchById.has(b.batch_id)).map((b) => {
+      const batch = batchById.get(b.batch_id), recipe = recipeById.get(batch.recipe_id) || {};
+      if (!fermentablesOf.has(batch.id)) fermentablesOf.set(batch.id, brewFermentables(linesOf.get(batch.id) || [], recipe.brew_volume_hl, batch.brew_count));
+      const f = fermentablesOf.get(batch.id);
+      return { row: { batch_id: batch.id, batch_number: batch.batch_number, recipe_id: batch.recipe_id, recipe_group_id: recipe.recipe_group_id,
+          brew_count: batch.brew_count, batch_year: batchYear(batch.batch_number) },
+        brewNumber: b.brew_number, volumeHl: b.brew_volume_hl, plato: b.whirlpool_extract, fermentables: f, ...brewEfficiency(b, f) };
+    }).sort((x, y) => String(x.row.batch_number).localeCompare(String(y.row.batch_number)) || x.brewNumber - y.brewNumber);
+  },
+  pool(items) { const p = pooledEfficiency(items, ra.warnings); return { ...p, count: p.brews }; },
+  kpis(p, wide) {
+    return kpiRow([[wide ? 'Brewery-wide efficiency' : 'Brewhouse efficiency', pct(p.efficiency)], ['Spread per brew (SD)', p.sd === null ? '—' : '±' + (100 * p.sd).toFixed(1), 'pt'],
+      ['Range per brew', p.min === null ? '—' : `${(100 * p.min).toFixed(0)}–${(100 * p.max).toFixed(0)}%`], ['Sugar share of extract', pct(p.sugarShare)], ['Brews counted', p.brews, `of ${p.total}`]]);
+  },
+  columns: [
+    { key: 'count', label: 'Brews', cell: (g) => `${g.pooled.brews}${g.pooled.brews < g.pooled.total ? `<span class="ra-muted"> /${g.pooled.total}</span>` : ''}` },
+    { key: 'efficiency', label: 'Efficiency', cell: (g) => `<span class="ra-pct">${pct(g.pooled.efficiency)} ${rangeBar(g.pooled.efficiency, 0.6, EFFICIENCY_HI)}</span>` },
+    { key: 'sd', label: 'Spread (SD)', cell: (g) => (g.pooled.sd === null ? '—' : '±' + (100 * g.pooled.sd).toFixed(1)) },
+    { key: 'min', label: 'Lowest', cell: (g) => pct(g.pooled.min) },
+    { key: 'max', label: 'Highest', cell: (g) => pct(g.pooled.max) },
+    { key: 'sugarShare', label: 'Sugar share', cell: (g) => (g.pooled.sugarShare ? pct(g.pooled.sugarShare) : '—') },
+  ],
+  legend: () => '<div class="ra-legend"><span>Bar: efficiency from 60% (empty) to 100% (full)</span><span>“/n”: brews not counted (data warning)</span></div>',
+  one(g) {
+    const list = g.items;
+    return `${this.kpis(g.pooled)}
+    <section class="ra-card"><h2>Efficiency per brew</h2>
+      <p class="ra-note">One dot per brew, in batch order. Dashed lines: this recipe ${pct(g.pooled.efficiency)} (red), brewery-wide ${pct(pooledEfficiency(filtered(), ra.warnings).efficiency)} (grey).</p>
+      <div class="ra-legend"><span><i style="background:var(--ra-cellar);border-radius:50%"></i>Counted</span><span><i style="background:var(--ra-left-out);border-radius:50%"></i>Data warning</span></div>
+      <div class="ra-chart" id="ra-chart-one"></div></section>
+    <section class="ra-card"><h2>Brews</h2><p class="ra-note">The batch number opens its Brewing tab. Malt and sugar are per brew.</p><div class="ra-tw"><table class="ra-table">
+      <thead><tr><th class="t">Batch</th><th>Brew</th><th class="t">Version</th><th>Volume brew hl</th><th>Whirlpool °P</th><th>Extract in wort kg</th><th>Malt kg</th><th>Malt potential kg</th><th>Sugar extract kg</th><th>Efficiency</th><th class="t">Data check</th></tr></thead>
+      <tbody>${list.map((e) => `<tr class="${effCounts(e, ra.warnings) ? '' : 'ra-out'}"><td class="t">${batchLink(e, 'brewing')}</td><td>${e.brewNumber}</td><td class="t">${escapeHtml(versionOf(e))}</td>
+        <td>${hl1(Number(e.volumeHl))}</td><td>${e.plato === null || e.plato === undefined ? '—' : Number(e.plato).toFixed(2)}</td><td>${hl0(e.wortExtractKg)}</td><td>${hl0(e.maltKg)}</td><td>${hl0(e.maltPotentialKg)}</td>
+        <td>${e.sugarExtractKg ? hl0(e.sugarExtractKg) : '—'}</td><td>${pct(e.efficiency)}</td><td class="t">${checkCell(e)}</td></tr>`).join('')}</tbody>
+    </table></div></section>`;
+  },
+  drawOne(g) {
+    drawDots('ra-chart-one', g.items, { label: 'Efficiency per brew', lo: EFFICIENCY_LO, hi: EFFICIENCY_HI,
+      value: (e) => e.efficiency, colour: (e) => (effCounts(e, ra.warnings) ? 'var(--ra-cellar)' : 'var(--ra-left-out)'),
+      lines: [[g.pooled.efficiency, 'var(--jopen-red)'], [pooledEfficiency(filtered(), ra.warnings).efficiency, '#777']],
+      tip: (e) => `<b>${escapeHtml(e.row.batch_number)}</b> · brew ${e.brewNumber}<br>${hl1(Number(e.volumeHl))} hl at ${e.plato === null ? '—' : Number(e.plato).toFixed(2)} °P · efficiency ${pct(e.efficiency)}`
+        + (e.sugarExtractKg ? `<br>Sugar ${hl0(e.sugarExtractKg)} kg extract` : '')
+        + (e.check !== 'ok' ? `<br><span style="color:var(--ra-warn)">${escapeHtml(EFFICIENCY_CHECKS[e.check].label)}</span>` : '') });
+  },
+  compare(groups) {
+    return `<section class="ra-card"><h2>Efficiency side by side</h2><p class="ra-note">Pooled over each recipe's counted brews.</p>
+      <div class="ra-tw"><table class="ra-table"><thead><tr><th class="t">Recipe</th><th>Brews</th><th class="t" style="width:34%">Efficiency</th><th>Spread (SD)</th><th>Lowest</th><th>Highest</th><th>Sugar share</th></tr></thead><tbody>
+      ${groups.map((g, i) => `<tr><td class="t"><span class="ra-dot" style="background:${RA_COMPARE_COLORS[i % RA_COMPARE_COLORS.length]};margin-right:6px"></span>${escapeHtml(g.name)}</td><td>${g.pooled.brews}</td>
+        <td class="t"><span style="display:flex;align-items:center;gap:8px">${rangeBar(g.pooled.efficiency, 0.6, EFFICIENCY_HI, true)}<b>${pct(g.pooled.efficiency)}</b></span></td>
+        <td>${g.pooled.sd === null ? '—' : '±' + (100 * g.pooled.sd).toFixed(1)}</td><td>${pct(g.pooled.min)}</td><td>${pct(g.pooled.max)}</td><td>${g.pooled.sugarShare ? pct(g.pooled.sugarShare) : '—'}</td></tr>`).join('')}
+      </tbody></table></div><div class="ra-legend" style="margin-top:8px"><span>Bar: efficiency from 60% (empty) to 100% (full)</span></div></section>
+    <section class="ra-card"><h2>Every brew, per recipe</h2><p class="ra-note">One dot per counted brew; the black tick is the recipe's pooled efficiency.</p><div class="ra-chart" id="ra-chart-compare"></div></section>`;
+  },
+  drawCompare(groups) {
+    drawCompareDots('ra-chart-compare', groups, { label: 'Efficiency of every brew per recipe', lo: 0.75, hi: EFFICIENCY_HI,
+      counted: (e) => effCounts(e, ra.warnings), value: (e) => e.efficiency, pooled: (g) => g.pooled.efficiency,
+      title: (e) => `${e.row.batch_number} brew ${e.brewNumber}: ${pct(e.efficiency)}` });
+  },
+  checksIntro: 'Finished brews whose efficiency cannot be calculated or is outside 70–100%, so they are left out.',
+  noWarnings: 'No data warnings. Every finished brew can be calculated.',
+  checkColumns: [
+    { label: 'Batch', t: true, cell: (e) => batchLink(e, EFFICIENCY_CHECKS[e.check].tab) },
+    { label: 'Brew', cell: (e) => e.brewNumber },
+    { label: 'Recipe', t: true, cell: (e) => escapeHtml(recipeName(e)) },
+    { label: 'Check', t: true, cell: (e) => checkCell(e) },
+    { label: 'Detail', t: true, cell: (e) => escapeHtml(
+      e.check === 'malt_without_extract' ? [...new Set(e.fermentables.maltsWithoutExtract)].join(', ')
+        : e.check === 'sugar_without_weight' ? [...new Set(e.fermentables.sugarsNotWeighed)].join(', ')
+          : e.check === 'out_of_range' ? `${pct(e.efficiency)} · ${hl0(e.maltKg)} kg malt for ${hl1(Number(e.volumeHl))} hl at ${Number(e.plato).toFixed(1)} °P`
+            : e.check === 'no_brew_data' ? `Volume ${e.volumeHl ?? '—'} hl · °P ${e.plato ?? '—'}` : '') },
+  ],
+};
+
+// Sidebar, grouped. A new analysis: an object like LOSSES above, added here.
+const RA_ANALYSES = [LOSSES, EFFICIENCY];
+
+// --------------------------------------------------------------- render
+function renderTabs() {
+  const a = A();
+  const warnings = allItems().filter((i) => inYear(i) && a.checks[i.check].warning).length;
+  document.getElementById('ra-tabs').innerHTML = RA_TABS.map((t) =>
+    `<button type="button" role="tab" class="ra-tab${ra.tab === t.key ? ' actief' : ''}" aria-selected="${ra.tab === t.key}" data-tab="${t.key}">${escapeHtml(t.label)}${t.key === 'checks' && warnings ? ` <span class="ra-count">(${warnings})</span>` : ''}</button>`).join('');
+  document.querySelectorAll('#ra-tabs .ra-tab').forEach((b) => b.addEventListener('click', () => { ra.tab = b.dataset.tab; render(); }));
+}
+
+function render() {
+  const a = A();
+  document.getElementById('ra-intro').textContent = a.intro;
+  document.querySelectorAll('#ra-sidebar button').forEach((b) => b.classList.toggle('actief', b.dataset.id === a.key));
+  renderTabs();
+  const view = document.getElementById('ra-view');
+  if (!ra.items[a.key]) { view.innerHTML = '<div class="ra-card ra-empty">Loading…</div>'; return; }
   view.innerHTML = ra.tab === 'all' ? viewAll() : ra.tab === 'one' ? viewOne() : ra.tab === 'compare' ? viewCompare() : viewChecks();
-  if (ra.tab === 'one') drawOneChart();
-  if (ra.tab === 'compare') drawCompareChart();
+  if (ra.tab === 'one') { const g = ra.recipe && groupById(ra.recipe); if (g) a.drawOne(g); }
+  if (ra.tab === 'compare') { const gs = ra.compare.map(groupById).filter(Boolean); if (gs.length > 1) a.drawCompare(gs); }
   const params = new URLSearchParams();
+  params.set('analysis', a.key);
   params.set('tab', ra.tab);
   if (ra.tab === 'one' && ra.recipe) params.set('recipe', ra.recipe);
   if (ra.tab === 'compare' && ra.compare.length) params.set('compare', ra.compare.join(','));
@@ -394,60 +577,69 @@ function renderLosses() {
   view.querySelectorAll('th[data-sort]').forEach((th) => th.addEventListener('click', () => {
     const k = th.dataset.sort;
     ra.sort = [k, ra.sort[0] === k ? -ra.sort[1] : (k === 'name' ? 1 : -1)];
-    renderLosses();
+    render();
   }));
-  view.querySelectorAll('[data-open]').forEach((b) => b.addEventListener('click', () => { ra.recipe = b.dataset.open; ra.tab = 'one'; renderLosses(); }));
+  view.querySelectorAll('[data-open]').forEach((b) => b.addEventListener('click', () => { ra.recipe = b.dataset.open; ra.tab = 'one'; render(); }));
   view.querySelectorAll('[data-compare]').forEach((c) => c.addEventListener('change', () => {
     const id = c.dataset.compare;
     ra.compare = c.checked ? [...new Set([...ra.compare, id])] : ra.compare.filter((x) => x !== id);
-    renderLosses();
+    render();
   }));
-  view.querySelectorAll('[data-remove]').forEach((b) => b.addEventListener('click', () => { ra.compare = ra.compare.filter((x) => x !== b.dataset.remove); renderLosses(); }));
-  view.querySelectorAll('[data-check]').forEach((b) => b.addEventListener('click', () => { ra.check = b.dataset.check; renderLosses(); }));
+  view.querySelectorAll('[data-remove]').forEach((b) => b.addEventListener('click', () => { ra.compare = ra.compare.filter((x) => x !== b.dataset.remove); render(); }));
+  view.querySelectorAll('[data-check]').forEach((b) => b.addEventListener('click', () => { ra.check = b.dataset.check; render(); }));
   const search = view.querySelector('#ra-search');
   if (search) search.addEventListener('input', () => {
     ra.search = search.value;
     const pos = search.selectionStart;
-    renderLosses();
+    render();
     const again = document.getElementById('ra-search');
     again.focus();
     again.setSelectionRange(pos, pos);
   });
   const go = view.querySelector('#ra-go-compare');
-  if (go) go.addEventListener('click', () => { ra.tab = 'compare'; renderLosses(); });
+  if (go) go.addEventListener('click', () => { ra.tab = 'compare'; render(); });
   const pickOne = view.querySelector('#ra-pick-one');
-  if (pickOne) pickOne.addEventListener('change', () => { ra.recipe = pickOne.value || null; renderLosses(); });
+  if (pickOne) pickOne.addEventListener('change', () => { ra.recipe = pickOne.value || null; render(); });
   const addCompare = view.querySelector('#ra-add-compare');
-  if (addCompare) addCompare.addEventListener('click', () => { ra.compare = [...new Set([ra.recipe, ...ra.compare])]; ra.tab = 'compare'; renderLosses(); });
+  if (addCompare) addCompare.addEventListener('click', () => { ra.compare = [...new Set([ra.recipe, ...ra.compare])]; ra.tab = 'compare'; render(); });
   const pickCompare = view.querySelector('#ra-pick-compare');
-  if (pickCompare) pickCompare.addEventListener('change', () => { if (pickCompare.value) { ra.compare = [...new Set([...ra.compare, pickCompare.value])]; renderLosses(); } });
+  if (pickCompare) pickCompare.addEventListener('change', () => { if (pickCompare.value) { ra.compare = [...new Set([...ra.compare, pickCompare.value])]; render(); } });
+}
+
+function showError(text) {
+  const err = document.getElementById('ra-fout');
+  err.textContent = text;
+  err.style.display = text ? 'block' : 'none';
+}
+
+// Load an analysis once, then fill the year list from all loaded items.
+async function openAnalysis(key) {
+  ra.analysis = key;
+  if (ra.sort[0] !== 'name' && ra.sort[0] !== 'count') ra.sort = ['count', -1];
+  render();
+  const a = A();
+  if (ra.items[key]) return;
+  try {
+    ra.items[key] = await a.load();
+    showError('');
+  } catch (e) {
+    ra.items[key] = [];
+    showError(`Could not load ${a.label.toLowerCase()}: ${e.message || e}`);
+  }
+  const years = [...new Set(Object.values(ra.items).flat().map((i) => Number(i.row.batch_year)).filter(Boolean))].sort((x, y) => y - x);
+  if (!ra.year || !years.includes(ra.year)) ra.year = years[0] || null;
+  document.getElementById('ra-year').innerHTML = years.map((y) => `<option value="${y}" ${y === ra.year ? 'selected' : ''}>${y}</option>`).join('') || '<option value="">—</option>';
+  if (!ra.compare.length) ra.compare = recipeGroups().filter((g) => g.pooled.count > 0).sort((x, y) => y.pooled.count - x.pooled.count).slice(0, 3).map((g) => g.groupId);
+  if (!ra.recipe) ra.recipe = ra.compare[0] || null;
+  if (ra.analysis === key) render();
 }
 
 function renderSidebar() {
   const groups = [...new Set(RA_ANALYSES.map((a) => a.group))];
   const sidebar = document.getElementById('ra-sidebar');
   sidebar.innerHTML = groups.map((g) => `<h3>${escapeHtml(g)}</h3>` + RA_ANALYSES.filter((a) => a.group === g).map((a) =>
-    `<button type="button" data-id="${a.key}" class="${a.key === 'losses' ? 'actief' : ''}">${escapeHtml(a.label)}</button>`).join('')).join('');
-  sidebar.querySelectorAll('button').forEach((btn) => btn.addEventListener('click', () => {
-    sidebar.querySelectorAll('button').forEach((b) => b.classList.toggle('actief', b === btn));
-    document.querySelectorAll('.ra-analysis').forEach((s) => s.classList.toggle('actief', s.id === 'ra-' + btn.dataset.id));
-  }));
-  document.getElementById('ra-losses').classList.add('actief');
-}
-
-async function loadLosses() {
-  const [balance, recipeRes] = await Promise.all([
-    fetchAllRows(supabaseClient.from('batch_volume_balance').select('*').eq('stage', 'closed').order('batch_number')),
-    fetchAllRows(supabaseClient.from('recipes').select('id, name, version_major, version_minor, recipe_group_id').order('id')),
-  ]);
-  if (balance.error) throw balance.error;
-  if (recipeRes.error) throw recipeRes.error;
-  const rows = balance.data;
-  ra.recipes = recipeRes.data;
-  ra.losses = rows.map(batchLoss);
-  const years = [...new Set(rows.map((r) => Number(r.batch_year)).filter(Boolean))].sort((a, b) => b - a);
-  ra.year = years[0] || null;
-  document.getElementById('ra-year').innerHTML = years.map((y) => `<option value="${y}">${y}</option>`).join('') || '<option value="">—</option>';
+    `<button type="button" data-id="${a.key}">${escapeHtml(a.label)}</button>`).join('')).join('');
+  sidebar.querySelectorAll('button').forEach((btn) => btn.addEventListener('click', () => openAnalysis(btn.dataset.id)));
 }
 
 async function initRecipeAnalytics() {
@@ -461,29 +653,25 @@ async function initRecipeAnalytics() {
   }
   access.textContent = 'Loading…';
   renderSidebar();
-  try {
-    await loadLosses();
-  } catch (e) {
-    const err = document.getElementById('ra-fout');
-    err.textContent = 'Could not load the losses: ' + (e.message || e);
-    err.style.display = 'block';
-  }
+  const recipes = await fetchAllRows(supabaseClient.from('recipes').select('id, name, version_major, version_minor, recipe_group_id, brew_volume_hl').order('id'));
+  if (recipes.error) showError('Could not load the recipes: ' + (recipes.error.message || recipes.error));
+  ra.recipes = recipes.data || [];
+
   const params = new URLSearchParams(window.location.search);
-  if (RA_LOSS_TABS.some((t) => t.key === params.get('tab'))) ra.tab = params.get('tab');
+  const start = RA_ANALYSES.some((a) => a.key === params.get('analysis')) ? params.get('analysis') : 'losses';
+  if (RA_TABS.some((t) => t.key === params.get('tab'))) ra.tab = params.get('tab');
   if (params.get('recipe')) ra.recipe = params.get('recipe');
   if (params.get('compare')) ra.compare = params.get('compare').split(',').filter(Boolean);
-  if (!ra.compare.length) ra.compare = recipeGroups().filter((g) => g.pooled.batches > 0).sort((a, b) => b.pooled.batches - a.pooled.batches).slice(0, 3).map((g) => g.groupId);
-  if (!ra.recipe) ra.recipe = ra.compare[0] || null;
 
-  document.getElementById('ra-year').addEventListener('change', (e) => { ra.year = Number(e.target.value) || null; renderLosses(); });
-  document.getElementById('ra-size').addEventListener('change', (e) => { ra.size = e.target.value; renderLosses(); });
-  document.getElementById('ra-warnings').addEventListener('change', (e) => { ra.warnings = e.target.checked; renderLosses(); });
+  document.getElementById('ra-year').addEventListener('change', (e) => { ra.year = Number(e.target.value) || null; render(); });
+  document.getElementById('ra-size').addEventListener('change', (e) => { ra.size = e.target.value; render(); });
+  document.getElementById('ra-warnings').addEventListener('change', (e) => { ra.warnings = e.target.checked; render(); });
   let resizeTimer;
-  window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { if (ra.tab === 'one') drawOneChart(); if (ra.tab === 'compare') drawCompareChart(); }, 150); });
+  window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(render, 150); });
 
   access.style.display = 'none';
   document.getElementById('ra-content').style.display = '';
-  renderLosses();
+  await openAnalysis(start);
 }
 
 document.addEventListener('DOMContentLoaded', initRecipeAnalytics);
