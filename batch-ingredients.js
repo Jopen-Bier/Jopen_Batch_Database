@@ -203,11 +203,34 @@ function hopTotals(rows, ctx, names = {}) {
   return [...totals.values()].sort((a, b) => (b.boilG + b.dryG) - (a.boilG + a.dryG));
 }
 
+// --- Zinc sulphate (Jaap, 23-10) --------------------------------------------
+// Calculated on brew day and added only on the first brewing day, all in one go
+// in the first brew of that day: 4 ml solution × hl per brew × brews that day.
+const ZINC_ML_PER_HL = 4;
+
+function isZincSulphate(name) {
+  return /^\s*zin[kc]\s*sul(f|ph)a/i.test(String(name || ''));
+}
+
+/** { ml, text } for the brews of the first day, or null when an input is missing. */
+function zincSulphateDose(brewVolumeHl, brewsFirstDay) {
+  const hl = toNumber(brewVolumeHl), n = toNumber(brewsFirstDay);
+  if (!(hl > 0) || !(n > 0) || !Number.isInteger(n)) return null;
+  const ml = ZINC_ML_PER_HL * hl * n;
+  return { ml, text: `Calculated on brew day: ${ZINC_ML_PER_HL} ml × ${hl} hl × ${n} ${n === 1 ? 'brew' : 'brews'} = ${ml} ml` };
+}
+
+/** Rows with the zinc sulphate lines last (stable otherwise). */
+function zincLast(rows, nameOf) {
+  return rows.filter((r) => !isZincSulphate(nameOf(r))).concat(rows.filter((r) => isZincSulphate(nameOf(r))));
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     INGREDIENT_CARDS, ADDITION_CATEGORY,
     toNumber, sameNumber, amountBasis, dosingVolumeHl, amountContext, batchAmount, brewAmount,
     deviationKind, alphaDiffers, colorDiffers, deviationDelta, inventoryEffect,
     formatAmount, deviationList, boilTimeMin, hopTotals,
+    ZINC_ML_PER_HL, isZincSulphate, zincSulphateDose, zincLast,
   };
 }

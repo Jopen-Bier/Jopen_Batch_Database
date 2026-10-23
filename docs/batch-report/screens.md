@@ -87,6 +87,9 @@ their own screen). Filters: search, status, year (default all years), WP/JK.
 ## Brewing (`mockup/Brewing.dc.html`)
 - Additions brewers · per brew: a tick column per brew (22-10), see
   business-rules "Additions ticked per brew / per HBT".
+- Zinc sulphate: always the last addition line, under a thick line, with a
+  🧮 calculator button (editors) that writes the total to the batch line
+  (23-10; business-rules.md "Calculators").
 - Brew day card: brewhouse (from recipe), recipe name software (WP/JK
   column of `recipe_brewing_specs`), special bin, "Recipe number Braukon"
   (`batches.brewhouse_recipe_number`), brews, GLT, date first brew; recipe

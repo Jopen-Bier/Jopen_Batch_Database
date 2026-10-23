@@ -65,6 +65,7 @@ Agreed with Jaap. Date = when decided. Do not change without asking.
 | 20-10 | Filling report: articles, materials and the bill of materials are master data in Settings, seeded with the mockup list; the session volume (Filling tab) is what was taken from the HBT, the booked articles give the packaged litres. SKU in the Summary = packaging article until open-questions #13 is answered. |
 | 22-10 | Additions are ticked off per brew (Additions brewers) and per HBT (processing additions), a column per brew / HBT (Jaap). |
 | 21-10 | The Filling report holds three documents per batch: Production order, Filling order, Filling report (one file each), plus any number of Other documents; the Filling and Filled tiles count them (Jaap). |
+| 23-10 | Zinc sulphate gets a calculator on Brewing (4 ml × hl × brews on the first day, all in the first brew); the result is written to the batch line, so the Overview shows it too. Zinc sulphate is always the last addition, under a thick line (Jaap). |
 | 23-10 | Processing layout: Additions processing takes the place of Comments processing; Comments processing goes under Tasting (Jaap). |
 | 23-10 | Brewing: the GLT total shows whether it is in spec (extract and volume); no total pH, a pH cannot be averaged (Jaap). |
 | 21-10 | The same HBT can be used more than once on one batch (filled, emptied, filled again over the processing days); a refilled tank is shown with the day it was filled (Jaap). |

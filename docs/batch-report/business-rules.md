@@ -194,6 +194,15 @@ Steps are editable and reorderable in the recipe editor; edited steps get
 - Tasks x/y on the Active batches tile = done / total.
 
 ## Calculators (show only when relevant)
+- Zinc sulphate (Brewing, Additions brewers; Jaap, 23-10): calculator button
+  on the zinc sulphate line (ingredient name "Zinksulfaat…"). Calculated on
+  brew day and added only on the first brewing day, all in one go in the first
+  brew of that day: ml solution = 4 × brew volume hl × brews on the first day
+  (typed in; the brew volume defaults to `recipes.brew_volume_hl`). "Apply to
+  batch" stores it on the batch line: unit ml, quantity = total,
+  `all_in_first_brew`, and the calculation as `deviation_reason` (so the
+  Overview shows the same amount, with its reason). Zinc sulphate is always
+  the last line of the additions (Brewing and Overview), under a thick line.
 - Nagardo: recipe has an ingredient named Nagardo. Weight g = volume l ×
   ppm / 1000; water l = weight / 10 (1 % solution).
 - PGA/alginate: recipe cellar addition PGA/alginate. Volume before centrifuge

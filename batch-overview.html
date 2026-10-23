@@ -440,7 +440,7 @@
     // Additions Brewing / Yeasts / Additions Cellar: same columns, different amount column.
     function additionCard(type, title, buttonLabel, amountHeader, perBrew) {
       const ctx = amountCtx();
-      const rows = visibleRows([type]);
+      const rows = type === 'brewhouse_addition' ? zincLast(visibleRows([type]), ingredientName) : visibleRows([type]);   // zinc sulphate last, as on Brewing
       const body = rows.map((r) => {
         const amount = perBrew ? brewAmount(type, r.unit, r.quantity, ctx) : batchAmount(type, r.unit, r.quantity, ctx);
         return `<tr>

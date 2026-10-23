@@ -505,3 +505,50 @@ function openCellarCalculator({ kind, volumeL, saveLabel = 'Save to log', onSave
   document.body.appendChild(overlay);
   overlay.querySelector('#fl-calc-rate').focus();
 }
+
+/**
+ * Zinc sulphate calculator (Brewing, Additions brewers; Jaap, 23-10):
+ * 4 ml solution × hl per brew × brews on the first day (typed in), all added
+ * in the first brew of that day. onApply(dose) gets zincSulphateDose().
+ */
+function openZincCalculator({ brewVolumeHl, onApply }) {
+  document.getElementById('bw-zinc-calc')?.remove();
+  const state = { hl: brewVolumeHl ?? '', brews: '' };
+  const outHtml = (r) => (r ? `<div><span>Solution · all in the first brew</span><b style="white-space:nowrap;">${escapeHtml(formatAmount({ q: r.ml, unit: 'ml' }))}</b></div>`
+    : '<span class="br-note">Fill in both values.</span>');
+  const overlay = document.createElement('div');
+  overlay.className = 'br-dialog-overlay';
+  overlay.id = 'bw-zinc-calc';
+  overlay.innerHTML = `<div class="br-dialog" role="dialog" aria-modal="true" aria-labelledby="bw-zinc-title">
+    <div class="br-dialog-title" id="bw-zinc-title">Zinc sulphate</div>
+    <div class="br-note">${ZINC_ML_PER_HL} ml solution per hl, only on the first brewing day, all in one go in the first brew.</div>
+    <div class="br-field"><label class="br-label" for="bw-zinc-hl">Brew volume (hl)</label><input class="br-input" id="bw-zinc-hl" inputmode="decimal" value="${escapeHtml(String(state.hl))}"></div>
+    <div class="br-field"><label class="br-label" for="bw-zinc-brews">Brews on the first day</label><input class="br-input" id="bw-zinc-brews" inputmode="numeric" value=""></div>
+    <div class="fl-calc-out">${outHtml(null)}</div>
+    <div class="br-dialog-buttons">
+      <button type="button" class="br-ghost" id="bw-zinc-close">Close</button>
+      ${onApply ? '<button type="button" class="br-primary" id="bw-zinc-apply" disabled>Apply to batch</button>' : ''}
+    </div></div>`;
+  const dose = () => zincSulphateDose(parseNumberInput(state.hl), parseNumberInput(state.brews));
+  const close = () => { overlay.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  overlay.addEventListener('input', (e) => {
+    if (e.target.id === 'bw-zinc-hl') state.hl = e.target.value;
+    if (e.target.id === 'bw-zinc-brews') state.brews = e.target.value;
+    const r = dose();
+    overlay.querySelector('.fl-calc-out').innerHTML = outHtml(r);
+    const btn = overlay.querySelector('#bw-zinc-apply');
+    if (btn) btn.disabled = !r;
+  });
+  overlay.querySelector('#bw-zinc-close').addEventListener('click', close);
+  overlay.querySelector('#bw-zinc-apply')?.addEventListener('click', () => {
+    const r = dose();
+    if (!r) return;
+    close();
+    onApply(r);
+  });
+  document.addEventListener('keydown', onKey);
+  document.body.appendChild(overlay);
+  overlay.querySelector('#bw-zinc-brews').focus();
+}
