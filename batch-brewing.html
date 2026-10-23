@@ -393,18 +393,25 @@
       const hl = page.ctx.recipe.brew_volume_hl;
       const badge = (ok) => (ok === null ? '<span class="br-note">—</span>' : `<span class="br-okbadge ${ok ? 'ok' : 'bad'}">${ok ? 'OK' : 'Out'}</span>`);
       const last = calcs[calcs.length - 1];
+      // The GLT total is the result that counts (Jaap, 23-10): in spec on extract and volume.
+      const total = gltTotalCheck(last ? last.glt : null, og, page.specs.original_extract_tol, hl);
+      const verdict = total.extractOk === null && total.volumeOk === null ? ''
+        : total.extractOk !== false && total.volumeOk !== false
+          ? '<span class="br-okbadge ok bw-verdict">✓ GLT total in spec</span>'
+          : `<span class="br-okbadge bad bw-verdict">GLT total out of spec · ${[total.extractOk === false ? 'extract' : null, total.volumeOk === false ? 'volume' : null].filter(Boolean).join(' + ')}</span>`;
       document.getElementById('bw-results').innerHTML = `
-        <div class="br-label">Result per brew · at GLT</div>
+        <div class="br-head" style="align-items:center;"><div class="br-label">Result per brew · at GLT</div>${verdict}</div>
         <table class="br-ing"><thead><tr><th>Brew</th><th class="r">°P at GLT</th><th>vs ${escapeHtml(fmt(og, 1))}${ogTol !== null ? ' ±' + fmt(ogTol) : ''}</th>
           <th class="r">hl at GLT</th><th>vs ${escapeHtml(fmt(hl))} ±${VOLUME_TOL_HL}</th><th class="r">pH</th></tr></thead>
           <tbody>${calcs.map((c, i) => `<tr><td><b>Brew ${c.brewNumber}</b></td>
             <td class="n">${c.extractToGlt !== null ? c.extractToGlt.toFixed(2) : '—'}</td><td>${badge(withinSpec(c.extractToGlt, og, ogTol))}</td>
             <td class="n">${c.volumeToGltHl !== null ? c.volumeToGltHl.toFixed(1) : '—'}</td><td>${badge(withinSpec(c.volumeToGltHl, hl, VOLUME_TOL_HL))}</td>
             <td class="n">${escapeHtml(fmt(page.brews.find((b) => b.brew_number === c.brewNumber).whirlpool_ph))}</td></tr>`).join('')}
-            <tr class="tot"><td>GLT total</td><td class="n">${last && last.glt.extract !== null ? last.glt.extract.toFixed(2) : '—'}</td><td></td>
-              <td class="n">${last && last.glt.volumeHl ? last.glt.volumeHl.toFixed(1) : '—'}</td><td></td>
-              <td class="n">${last && last.glt.ph !== null ? last.glt.ph.toFixed(2) : '—'}</td></tr></tbody></table>
-        <div class="br-note">The GLT total extract and average pH become the first measurement of the fermentation log.</div>`;
+            <tr class="tot"><td>GLT total</td><td class="n">${last && last.glt.extract !== null ? last.glt.extract.toFixed(2) : '—'}</td><td>${badge(total.extractOk)}</td>
+              <td class="n">${last && last.glt.volumeHl ? last.glt.volumeHl.toFixed(1) : '—'}</td>
+              <td>${badge(total.volumeOk)}${total.plannedHl !== null ? ` <span class="br-note">vs ${escapeHtml(fmt(total.plannedHl, 1))} ±${escapeHtml(fmt(total.volumeTolHl, 1))}</span>` : ''}</td>
+              <td></td></tr></tbody></table>
+        <div class="br-note">The GLT total extract becomes the first measurement of the fermentation log. The total volume is compared with the brews so far × the brew volume (±${VOLUME_TOL_HL} hl per brew). No total pH: a pH cannot be averaged over brews.</div>`;
     }
 
     // ------------------------------------------------------------ events

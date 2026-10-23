@@ -139,9 +139,9 @@
     const isT0 = (entry) => sameMoment(entry.measured_at, timeZero());
 
     /**
-     * Every log starts with a measurement at Time 0, with the GLT total of the
-     * brews (extract and pH). Added when the page opens for an editor and the
-     * log has nothing at or before Time 0.
+     * Every log starts with a measurement at Time 0, with the GLT total extract
+     * of the brews (no pH: a pH cannot be averaged over brews). Added when the
+     * page opens for an editor and the log has nothing at or before Time 0.
      */
     async function ensureTimeZeroEntry() {
       const t0 = timeZero();
@@ -150,7 +150,6 @@
       await insertRow('fermentation_log_entries', {
         batch_id: page.ctx.batch.id, measured_at: new Date(t0).toISOString(),
         extract: glt ? Math.round(glt.extract * 100) / 100 : null,
-        ph: glt && glt.ph !== null ? Math.round(glt.ph * 100) / 100 : null,
         comment: glt ? `Time 0 · GLT total ${glt.volumeHl.toFixed(1)} hl` : 'Time 0',
       }, page.entries);
       sortEntries();

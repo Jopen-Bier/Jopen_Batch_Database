@@ -27,12 +27,15 @@
         <div class="br-card br-cardpad" style="flex:3 1 600px; min-width:0;" id="pr-specs"></div>
       </div>
       <div class="br-card br-cardpad" id="pr-session"></div>
+      <!-- Additions processing in the left column; Tasting with Comments processing under it on the right (Jaap, 23-10) -->
       <div class="br-grid2">
-        <div class="br-card br-cardpad" id="pr-comments"></div>
-        <div class="br-card br-cardpad" id="pr-tasting"></div>
+        <div class="br-card br-cardpad" id="pr-additions"></div>
+        <div style="display:flex; flex-direction:column; gap:16px; min-width:0;">
+          <div class="br-card br-cardpad" id="pr-tasting"></div>
+          <div class="br-card br-cardpad" id="pr-comments"></div>
+        </div>
       </div>
       <div class="br-card br-cardpad" id="pr-hbts"></div>
-      <div class="br-card br-cardpad" id="pr-additions"></div>
       <div class="br-card br-cardpad" id="pr-totals"></div>
       <div class="br-card br-cardpad" id="pr-transfers"></div>
     </div>
@@ -384,8 +387,10 @@
     function renderAdditions() {
       const el = document.getElementById('pr-additions');
       const lines = processingAdditionLines();
-      el.style.display = lines.length ? '' : 'none';
-      if (!lines.length) { el.innerHTML = ''; return; }
+      if (!lines.length) {
+        el.innerHTML = '<div class="br-label">Additions processing · per HBT</div><div class="br-note">No additions at processing in this recipe.</div>';
+        return;
+      }
       const label = (code) => (page.timings.find((t) => t.code === code) || {}).label || code;
       const ctx = amountContext(page.ctx.batch, page.ctx.recipe, page.ctx.stageRow);
       const hbts = hbtsInOrder();
@@ -406,8 +411,8 @@
       el.innerHTML = `
         <div class="br-head" style="align-items:baseline;"><div class="br-label">Additions processing · per HBT</div>
           <span class="br-note${progress.total && progress.done === progress.total ? ' bd-done' : ''}">${progress.total ? `${progress.done}/${progress.total} added · ` : ''}tick when it is added to the HBT</span></div>
-        <div class="br-table-wrap"><table class="br-ing" style="min-width:${480 + hbts.length * 90}px;">
-          <thead><tr><th>Addition</th><th style="width:140px;">Timing</th><th class="r" style="width:190px;">Dosing</th>
+        <div class="br-table-wrap"><table class="br-ing" style="min-width:${360 + hbts.length * 80}px;">
+          <thead><tr><th>Addition</th><th style="width:110px;">Timing</th><th class="r" style="width:160px;">Dosing</th>
             ${hbts.map((h) => `<th class="bd-check">${escapeHtml(hbtName(h))}</th>`).join('')}</tr></thead>
           <tbody>${rows}</tbody></table></div>
         ${hbts.length ? '' : '<div class="br-note">A tick column appears for every HBT you add.</div>'}`;

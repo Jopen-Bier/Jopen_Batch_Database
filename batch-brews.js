@@ -114,18 +114,16 @@ function totalBrewingHours(startedAt, endedAt, pause) {
 /**
  * Calculated values for every brew (sorted by brew_number), with the GLT
  * total running over the brews so far: { brewNumber, evaporationPct,
- * volumeToGltHl, extractToGlt, totalBrewingH, glt: { volumeHl, extract, ph } }.
- * GLT extract is volume-weighted; pH is the mean whirlpool pH.
+ * volumeToGltHl, extractToGlt, totalBrewingH, glt: { volumeHl, extract, brews } }.
+ * GLT extract is volume-weighted; brews = the brews counted in the total.
+ * No GLT pH: a pH cannot be averaged (Jaap, 23-10); each brew keeps its own.
  */
 function brewCalculations(brews) {
-  let vol = 0, extractVol = 0;
-  const phs = [];
+  let vol = 0, extractVol = 0, counted = 0;
   return brews.slice().sort((a, b) => a.brew_number - b.brew_number).map((b) => {
     const v = volumeToGlt(b.brew_volume_hl, b.water_addition_hl);
     const ex = extractToGlt(b.whirlpool_extract, b.brew_volume_hl, b.water_addition_hl);
-    if (v !== null && ex !== null) { vol += v; extractVol += v * ex; }
-    const ph = num(b.whirlpool_ph);
-    if (ph !== null) phs.push(ph);
+    if (v !== null && ex !== null) { vol += v; extractVol += v * ex; counted += 1; }
     return {
       brewNumber: b.brew_number,
       evaporationPct: evaporationPct(b.boil_start_extract, b.boil_end_extract),
@@ -135,7 +133,7 @@ function brewCalculations(brews) {
       glt: {
         volumeHl: vol || null,
         extract: vol ? extractVol / vol : null,
-        ph: phs.length ? phs.reduce((s, x) => s + x, 0) / phs.length : null,
+        brews: counted,
       },
     };
   });
@@ -157,6 +155,25 @@ function withinSpec(value, spec, tol) {
 /** Volume tolerance at GLT (decision 09-10). */
 const VOLUME_TOL_HL = 0.5;
 
+/**
+ * Is the GLT total in spec (Jaap, 23-10: the most important result)?
+ * glt = brewCalculations(...).at(-1).glt. Extract vs the recipe original
+ * extract ± tol; volume vs brews counted × brew volume ± 0.5 hl per brew.
+ * Returns { extractOk, volumeOk, plannedHl, volumeTolHl } (ok null = no value
+ * or no spec).
+ */
+function gltTotalCheck(glt, originalExtract, originalExtractTol, brewVolumeHl) {
+  const n = glt ? glt.brews || 0 : 0;
+  const perBrew = num(brewVolumeHl);
+  const plannedHl = n && perBrew !== null ? n * perBrew : null;
+  const volumeTolHl = n * VOLUME_TOL_HL;
+  return {
+    extractOk: glt ? withinSpec(glt.extract, originalExtract, toleranceValue(originalExtractTol)) : null,
+    volumeOk: glt && plannedHl !== null ? withinSpec(glt.volumeHl, plannedHl, volumeTolHl) : null,
+    plannedHl, volumeTolHl,
+  };
+}
+
 /** Next free brew number. */
 function nextBrewNumber(brews) {
   return brews.reduce((m, b) => Math.max(m, b.brew_number), 0) + 1;
@@ -166,6 +183,6 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     BREW_LOG_ROWS, VOLUME_TOL_HL, brewLogRows,
     evaporationPct, volumeToGlt, extractToGlt, pauseMinutes, totalBrewingHours,
-    brewCalculations, toleranceValue, withinSpec, nextBrewNumber,
+    brewCalculations, toleranceValue, withinSpec, gltTotalCheck, nextBrewNumber,
   };
 }

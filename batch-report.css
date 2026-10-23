@@ -336,6 +336,8 @@ select.br-in { text-align: left; cursor: pointer; }
 .br-ing td.fi-cpk.warn { color: #96601f; }
 .br-ing td.fi-cpk.bad, .br-ing td.fi-low { color: var(--br-alert-text); font-weight: 700; }
 
+.bw-verdict { font-size: 13px; padding: 4px 12px; }
+
 /* Addition tick boxes per brew / per HBT (dosing-checks.js) */
 .br-ing th.bd-check, .br-ing td.bd-check { text-align: center; width: 80px; }
 .br-ing td.bd-check input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--br-hop); cursor: pointer; }

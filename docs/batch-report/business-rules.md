@@ -97,12 +97,17 @@ EBU total compared with `recipe_specs.bitterness` ± `bitterness_tol`.
 - Extract to GLT = whirlpool_extract × brew_volume_hl / (brew_volume_hl +
   water_addition_hl).
 - GLT total (running): volume = Σ volume to GLT; extract = volume-weighted
-  mean of extract to GLT; pH = mean whirlpool_ph.
+  mean of extract to GLT. No GLT pH: a pH cannot be averaged over brews
+  (Jaap, 23-10); each brew keeps its own whirlpool pH.
 - Total brewing time = brewing_ended_at − mash_in_started_at (minus pause, JK).
-- **GLT total becomes the first fermentation log measurement** (extract, pH)
+- **GLT total becomes the first fermentation log measurement** (extract)
   at Time 0 — offer it, do not duplicate it silently.
 - Result per brew vs recipe: °P at GLT vs `recipe_specs.original_extract` ±
   tol; hl at GLT vs `recipes.brew_volume_hl` ± 0.5.
+- **GLT total in spec** (Jaap, 23-10, the most important parameter): total
+  extract vs `recipe_specs.original_extract` ± tol; total volume vs brews so
+  far × `recipes.brew_volume_hl` ± 0.5 hl per brew. Shown as a verdict badge
+  in the head of the Result card and per value in the total row.
 
 ## Time 0 and days
 - Time 0 default = `brewing_ended_at` of the last brew; editable. Empty
@@ -111,8 +116,8 @@ EBU total compared with `recipe_specs.bitterness` ± `bitterness_tol`.
 - Day of an entry = (measured_at − time_zero) in days, 1 decimal.
 - **The first measurement is always at Time 0** (Jaap, 20-10): added when the
   Fermentation log opens for an editor and the log has nothing at or before
-  Time 0, with the GLT total of the brews (volume-weighted extract °P, average
-  pH; comment "Time 0 · GLT total … hl"). It moves along when Time 0 changes
+  Time 0, with the GLT total of the brews (volume-weighted extract °P, no pH;
+  comment "Time 0 · GLT total … hl"). It moves along when Time 0 changes
   and cannot be deleted.
 - Recipe days (`recipe_process_steps.dry_hop_1_day`, `cellar_addition_day`)
   count from Time 0.
