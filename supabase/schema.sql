@@ -17,6 +17,13 @@ SET client_min_messages = warning;
 SET row_security = off;
 
 --
+-- Name: claude_connector; Type: SCHEMA; Schema: -; Owner: -
+--
+
+CREATE SCHEMA claude_connector;
+
+
+--
 -- Name: public; Type: SCHEMA; Schema: -; Owner: -
 --
 
@@ -932,6 +939,63 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
+-- Name: access_tokens; Type: TABLE; Schema: claude_connector; Owner: -
+--
+
+CREATE TABLE claude_connector.access_tokens (
+    id bigint NOT NULL,
+    label text NOT NULL,
+    token_sha256 text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    revoked_at timestamp with time zone
+);
+
+
+--
+-- Name: access_tokens_id_seq; Type: SEQUENCE; Schema: claude_connector; Owner: -
+--
+
+ALTER TABLE claude_connector.access_tokens ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME claude_connector.access_tokens_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: query_log; Type: TABLE; Schema: claude_connector; Owner: -
+--
+
+CREATE TABLE claude_connector.query_log (
+    id bigint NOT NULL,
+    at timestamp with time zone DEFAULT now() NOT NULL,
+    token_id bigint,
+    tool text NOT NULL,
+    arguments jsonb,
+    row_count integer,
+    duration_ms integer,
+    error text
+);
+
+
+--
+-- Name: query_log_id_seq; Type: SEQUENCE; Schema: claude_connector; Owner: -
+--
+
+ALTER TABLE claude_connector.query_log ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME claude_connector.query_log_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
 -- Name: batch_audit_log; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1163,6 +1227,36 @@ ALTER TABLE public.batch_documents ALTER COLUMN id ADD GENERATED ALWAYS AS IDENT
 
 
 --
+-- Name: batch_dosing_checks; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.batch_dosing_checks (
+    id bigint NOT NULL,
+    batch_id bigint NOT NULL,
+    batch_ingredient_id bigint NOT NULL,
+    batch_brew_id bigint,
+    batch_hbt_id bigint,
+    checked_at timestamp with time zone DEFAULT now() NOT NULL,
+    checked_by uuid DEFAULT auth.uid(),
+    CONSTRAINT batch_dosing_checks_one_target CHECK ((num_nonnulls(batch_brew_id, batch_hbt_id) = 1))
+);
+
+
+--
+-- Name: batch_dosing_checks_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.batch_dosing_checks ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.batch_dosing_checks_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
 -- Name: batch_hbts; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1231,6 +1325,7 @@ CREATE TABLE public.batch_ingredients (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_by uuid,
     source_recipe_group_id uuid,
+    lot_number text,
     CONSTRAINT batch_ingredients_added_has_ingredient CHECK (((NOT is_added) OR (ingredient_id IS NOT NULL))),
     CONSTRAINT batch_ingredients_addition_type_check CHECK ((addition_type = ANY (ARRAY['malt'::text, 'boil_hop'::text, 'dry_hop'::text, 'brewhouse_addition'::text, 'cellar_addition'::text, 'yeast'::text, 'base_beer'::text]))),
     CONSTRAINT batch_ingredients_base_beer_check CHECK (((addition_type = 'base_beer'::text) = (source_recipe_group_id IS NOT NULL)))
@@ -1269,6 +1364,7 @@ CREATE TABLE public.batch_transfers (
     created_by uuid DEFAULT auth.uid(),
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_by uuid,
+    empties_tank boolean DEFAULT false NOT NULL,
     CONSTRAINT batch_transfers_destination_check CHECK ((destination = ANY (ARRAY['batch'::text, 'discard'::text]))),
     CONSTRAINT batch_transfers_discard_reason CHECK (((destination <> 'discard'::text) OR (NULLIF(btrim(reason), ''::text) IS NOT NULL))),
     CONSTRAINT batch_transfers_not_self CHECK ((to_batch_id IS DISTINCT FROM batch_id)),
@@ -1318,8 +1414,32 @@ CREATE TABLE public.batches (
     cellar_additions_done boolean DEFAULT false NOT NULL,
     tasting_comment text,
     tasting_result text,
+    filling_report_checked_at timestamp with time zone,
+    filling_report_checked_by uuid,
+    mdrank_processed_at timestamp with time zone,
+    mdrank_processed_by uuid,
+    lagering_started_at timestamp with time zone,
     CONSTRAINT batches_status_check CHECK ((status = ANY (ARRAY['planned'::text, 'brewing'::text, 'fermenting'::text, 'processing'::text, 'filling'::text, 'completed'::text]))),
     CONSTRAINT batches_tasting_result_check CHECK ((tasting_result = ANY (ARRAY['go'::text, 'no_go'::text])))
+);
+
+
+--
+-- Name: cellar_action_tags; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.cellar_action_tags (
+    id bigint NOT NULL,
+    code text NOT NULL,
+    label text NOT NULL,
+    is_milestone boolean DEFAULT false NOT NULL,
+    sort_order integer DEFAULT 0 NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid DEFAULT auth.uid(),
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT cellar_action_tags_code_check CHECK ((code ~ '^[a-z0-9_]+$'::text))
 );
 
 
@@ -1505,6 +1625,9 @@ CREATE VIEW public.batch_stages WITH (security_invoker='true') AS
             b_1.status,
             b_1.time_zero,
             b_1.brew_count,
+            b_1.lagering_started_at AS manual_lagering_at,
+            b_1.filling_report_checked_at,
+            b_1.mdrank_processed_at,
             (ceil(COALESCE(b_1.brew_count, (0)::numeric)))::integer AS brews_planned,
             br.brews_started,
             br.brews_ended,
@@ -1524,11 +1647,12 @@ CREATE VIEW public.batch_stages WITH (security_invoker='true') AS
         )
  SELECT b.id AS batch_id,
         CASE
-            WHEN (b.status = 'completed'::text) THEN 'closed'::text
-            WHEN ((COALESCE(h.hbts_total, (0)::bigint) > 0) AND (fs.hbts_finished >= h.hbts_total)) THEN 'filled'::text
+            WHEN ((b.status = 'completed'::text) OR ((b.filling_report_checked_at IS NOT NULL) AND (b.mdrank_processed_at IS NOT NULL)) OR (COALESCE(d.documents_uploaded, (0)::bigint) >= 3)) THEN 'closed'::text
+            WHEN (((COALESCE(h.hbts_total, (0)::bigint) > 0) AND (fs.hbts_finished >= h.hbts_total)) OR (em.emptied_at IS NOT NULL)) THEN 'filled'::text
             WHEN (fs.first_filling_date IS NOT NULL) THEN 'filling'::text
             WHEN (ps.first_processing_date IS NOT NULL) THEN 'hbt'::text
-            WHEN (b.is_brewed AND (p.lagering_started_at IS NOT NULL)) THEN 'lagering'::text
+            WHEN lt.on_barrels THEN 'barrel'::text
+            WHEN (b.is_brewed AND (lag.started_at IS NOT NULL)) THEN 'lagering'::text
             WHEN b.is_brewed THEN 'fermentation'::text
             WHEN (COALESCE(b.brews_started, (0)::bigint) > 0) THEN 'brewing'::text
             ELSE 'raw'::text
@@ -1538,7 +1662,10 @@ CREATE VIEW public.batch_stages WITH (security_invoker='true') AS
             WHEN (COALESCE(b.brews_started, (0)::bigint) = 0) THEN ((b.first_incoming_at AT TIME ZONE 'Europe/Amsterdam'::text))::date
             ELSE NULL::date
         END) AS start_date,
-    NULL::date AS end_date,
+        CASE
+            WHEN ((b.filling_report_checked_at IS NOT NULL) AND (b.mdrank_processed_at IS NOT NULL)) THEN ((GREATEST(b.filling_report_checked_at, b.mdrank_processed_at) AT TIME ZONE 'Europe/Amsterdam'::text))::date
+            ELSE NULL::date
+        END AS end_date,
     b.brews_planned,
     (COALESCE(b.brews_started, (0)::bigint))::integer AS brews_started,
     (COALESCE(b.brews_ended, (0)::bigint))::integer AS brews_ended,
@@ -1551,7 +1678,7 @@ CREATE VIEW public.batch_stages WITH (security_invoker='true') AS
     (COALESCE(p.steps_total, (0)::bigint))::integer AS cellar_steps_total,
     (COALESCE(p.steps_done, (0)::bigint))::integer AS cellar_steps_done,
     p.next_step AS next_cellar_step,
-    p.lagering_started_at,
+    lag.started_at AS lagering_started_at,
     ps.first_processing_date,
     (COALESCE(h.hbts_total, (0)::bigint))::integer AS hbts_total,
     (COALESCE(h.hbts_released, (0)::bigint))::integer AS hbts_released,
@@ -1563,9 +1690,27 @@ CREATE VIEW public.batch_stages WITH (security_invoker='true') AS
     COALESCE(b.incoming_volume_hl, (0)::numeric) AS incoming_volume_hl,
     b.first_incoming_at,
     (COALESCE(d.documents_uploaded, (0)::bigint))::integer AS documents_uploaded,
-    (COALESCE(d.other_documents, (0)::bigint))::integer AS other_documents
-   FROM (((((base b
+    (COALESCE(d.other_documents, (0)::bigint))::integer AS other_documents,
+    em.emptied_at,
+    COALESCE(lt.on_barrels, false) AS on_barrels,
+    b.filling_report_checked_at,
+    b.mdrank_processed_at
+   FROM ((((((((base b
      LEFT JOIN plan p ON ((p.batch_id = b.id)))
+     LEFT JOIN LATERAL ( SELECT min(e.measured_at) FILTER (WHERE (t.code = ANY (ARRAY['cooling_16c'::text, 'cooling'::text]))) AS cooled_at,
+            bool_or((t.code = 'to_barrels'::text)) AS on_barrels
+           FROM ((public.fermentation_log_entry_tags et
+             JOIN public.fermentation_log_entries e ON ((e.id = et.entry_id)))
+             JOIN public.cellar_action_tags t ON ((t.id = et.tag_id)))
+          WHERE (et.batch_id = b.id)) lt ON (true))
+     LEFT JOIN LATERAL ( SELECT LEAST(p.lagering_started_at, lt.cooled_at, b.manual_lagering_at,
+                CASE
+                    WHEN (COALESCE(b.brews_started, (0)::bigint) = 0) THEN b.first_incoming_at
+                    ELSE NULL::timestamp with time zone
+                END) AS started_at) lag ON (true))
+     LEFT JOIN LATERAL ( SELECT max(t.transferred_at) AS emptied_at
+           FROM public.batch_transfers t
+          WHERE ((t.batch_id = b.id) AND t.empties_tank)) em ON (true))
      LEFT JOIN LATERAL ( SELECT count(DISTINCT bd.document_type) FILTER (WHERE (bd.document_type <> 'other'::text)) AS documents_uploaded,
             count(*) FILTER (WHERE (bd.document_type = 'other'::text)) AS other_documents
            FROM public.batch_documents bd
@@ -1589,6 +1734,43 @@ CREATE VIEW public.batch_stages WITH (security_invoker='true') AS
             sum(f.volume_hl) AS filled_volume_hl
            FROM public.filling_sessions f
           WHERE (f.batch_id = b.id)) fs ON (true));
+
+
+--
+-- Name: batch_tank_moves; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.batch_tank_moves (
+    id bigint NOT NULL,
+    batch_id bigint NOT NULL,
+    entry_tag_id bigint NOT NULL,
+    from_tank_id bigint,
+    to_tank_id bigint NOT NULL,
+    volume_hl numeric,
+    o2_ppb numeric,
+    co2_gl numeric,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid DEFAULT auth.uid(),
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT batch_tank_moves_co2_gl_check CHECK ((co2_gl >= (0)::numeric)),
+    CONSTRAINT batch_tank_moves_o2_ppb_check CHECK ((o2_ppb >= (0)::numeric)),
+    CONSTRAINT batch_tank_moves_volume_hl_check CHECK ((volume_hl > (0)::numeric))
+);
+
+
+--
+-- Name: batch_tank_moves_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.batch_tank_moves ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.batch_tank_moves_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
 
 
 --
@@ -1720,25 +1902,6 @@ CREATE TABLE public.brew_planning_splits (
     hl numeric NOT NULL,
     sort_order integer DEFAULT 0 NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL
-);
-
-
---
--- Name: cellar_action_tags; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.cellar_action_tags (
-    id bigint NOT NULL,
-    code text NOT NULL,
-    label text NOT NULL,
-    is_milestone boolean DEFAULT false NOT NULL,
-    sort_order integer DEFAULT 0 NOT NULL,
-    is_active boolean DEFAULT true NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    created_by uuid DEFAULT auth.uid(),
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_by uuid,
-    CONSTRAINT cellar_action_tags_code_check CHECK ((code ~ '^[a-z0-9_]+$'::text))
 );
 
 
@@ -3043,6 +3206,30 @@ ALTER TABLE public.water_settings_history ALTER COLUMN id ADD GENERATED ALWAYS A
 
 
 --
+-- Name: access_tokens access_tokens_pkey; Type: CONSTRAINT; Schema: claude_connector; Owner: -
+--
+
+ALTER TABLE ONLY claude_connector.access_tokens
+    ADD CONSTRAINT access_tokens_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: access_tokens access_tokens_token_sha256_key; Type: CONSTRAINT; Schema: claude_connector; Owner: -
+--
+
+ALTER TABLE ONLY claude_connector.access_tokens
+    ADD CONSTRAINT access_tokens_token_sha256_key UNIQUE (token_sha256);
+
+
+--
+-- Name: query_log query_log_pkey; Type: CONSTRAINT; Schema: claude_connector; Owner: -
+--
+
+ALTER TABLE ONLY claude_connector.query_log
+    ADD CONSTRAINT query_log_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: batch_audit_log batch_audit_log_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3064,6 +3251,14 @@ ALTER TABLE ONLY public.batch_brew_comments
 
 ALTER TABLE ONLY public.batch_brews
     ADD CONSTRAINT batch_brews_batch_brew_number_key UNIQUE (batch_id, brew_number);
+
+
+--
+-- Name: batch_brews batch_brews_id_batch_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.batch_brews
+    ADD CONSTRAINT batch_brews_id_batch_key UNIQUE (id, batch_id);
 
 
 --
@@ -3107,6 +3302,30 @@ ALTER TABLE ONLY public.batch_documents
 
 
 --
+-- Name: batch_dosing_checks batch_dosing_checks_brew_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.batch_dosing_checks
+    ADD CONSTRAINT batch_dosing_checks_brew_key UNIQUE (batch_ingredient_id, batch_brew_id);
+
+
+--
+-- Name: batch_dosing_checks batch_dosing_checks_hbt_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.batch_dosing_checks
+    ADD CONSTRAINT batch_dosing_checks_hbt_key UNIQUE (batch_ingredient_id, batch_hbt_id);
+
+
+--
+-- Name: batch_dosing_checks batch_dosing_checks_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.batch_dosing_checks
+    ADD CONSTRAINT batch_dosing_checks_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: batch_hbts batch_hbts_id_batch_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3123,11 +3342,35 @@ ALTER TABLE ONLY public.batch_hbts
 
 
 --
+-- Name: batch_ingredients batch_ingredients_id_batch_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.batch_ingredients
+    ADD CONSTRAINT batch_ingredients_id_batch_key UNIQUE (id, batch_id);
+
+
+--
 -- Name: batch_ingredients batch_ingredients_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.batch_ingredients
     ADD CONSTRAINT batch_ingredients_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: batch_tank_moves batch_tank_moves_entry_tag_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.batch_tank_moves
+    ADD CONSTRAINT batch_tank_moves_entry_tag_id_key UNIQUE (entry_tag_id);
+
+
+--
+-- Name: batch_tank_moves batch_tank_moves_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.batch_tank_moves
+    ADD CONSTRAINT batch_tank_moves_pkey PRIMARY KEY (id);
 
 
 --
@@ -3707,6 +3950,13 @@ ALTER TABLE ONLY public.water_settings
 
 
 --
+-- Name: query_log_at_idx; Type: INDEX; Schema: claude_connector; Owner: -
+--
+
+CREATE INDEX query_log_at_idx ON claude_connector.query_log USING btree (at DESC);
+
+
+--
 -- Name: batch_documents_type_key; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3756,6 +4006,34 @@ CREATE INDEX idx_batch_documents_uploaded_by ON public.batch_documents USING btr
 
 
 --
+-- Name: idx_batch_dosing_checks_batch_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_batch_dosing_checks_batch_id ON public.batch_dosing_checks USING btree (batch_id);
+
+
+--
+-- Name: idx_batch_dosing_checks_brew; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_batch_dosing_checks_brew ON public.batch_dosing_checks USING btree (batch_brew_id, batch_id);
+
+
+--
+-- Name: idx_batch_dosing_checks_checked_by; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_batch_dosing_checks_checked_by ON public.batch_dosing_checks USING btree (checked_by);
+
+
+--
+-- Name: idx_batch_dosing_checks_hbt; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_batch_dosing_checks_hbt ON public.batch_dosing_checks USING btree (batch_hbt_id, batch_id);
+
+
+--
 -- Name: idx_batch_hbts_batch_tank; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3791,6 +4069,41 @@ CREATE INDEX idx_batch_ingredients_recipe_ingredient_id ON public.batch_ingredie
 
 
 --
+-- Name: idx_batch_tank_moves_batch_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_batch_tank_moves_batch_id ON public.batch_tank_moves USING btree (batch_id);
+
+
+--
+-- Name: idx_batch_tank_moves_created_by; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_batch_tank_moves_created_by ON public.batch_tank_moves USING btree (created_by);
+
+
+--
+-- Name: idx_batch_tank_moves_from_tank_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_batch_tank_moves_from_tank_id ON public.batch_tank_moves USING btree (from_tank_id);
+
+
+--
+-- Name: idx_batch_tank_moves_to_tank_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_batch_tank_moves_to_tank_id ON public.batch_tank_moves USING btree (to_tank_id);
+
+
+--
+-- Name: idx_batch_tank_moves_updated_by; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_batch_tank_moves_updated_by ON public.batch_tank_moves USING btree (updated_by);
+
+
+--
 -- Name: idx_batch_transfers_batch_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3819,6 +4132,13 @@ CREATE INDEX idx_batches_batch_number ON public.batches USING btree (batch_numbe
 
 
 --
+-- Name: idx_batches_filling_report_checked_by; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_batches_filling_report_checked_by ON public.batches USING btree (filling_report_checked_by);
+
+
+--
 -- Name: idx_batches_glt_tank_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3830,6 +4150,13 @@ CREATE INDEX idx_batches_glt_tank_id ON public.batches USING btree (glt_tank_id)
 --
 
 CREATE INDEX idx_batches_lt_tank_id ON public.batches USING btree (lt_tank_id);
+
+
+--
+-- Name: idx_batches_mdrank_processed_by; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_batches_mdrank_processed_by ON public.batches USING btree (mdrank_processed_by);
 
 
 --
@@ -4225,6 +4552,13 @@ CREATE TRIGGER trg_batch_documents_updated_at BEFORE UPDATE ON public.batch_docu
 
 
 --
+-- Name: batch_dosing_checks trg_batch_dosing_checks_audit; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_batch_dosing_checks_audit AFTER INSERT OR DELETE OR UPDATE ON public.batch_dosing_checks FOR EACH ROW EXECUTE FUNCTION public.log_batch_change();
+
+
+--
 -- Name: batch_hbts trg_batch_hbts_audit; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -4250,6 +4584,20 @@ CREATE TRIGGER trg_batch_ingredients_audit AFTER INSERT OR DELETE OR UPDATE ON p
 --
 
 CREATE TRIGGER trg_batch_ingredients_updated_at BEFORE UPDATE ON public.batch_ingredients FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: batch_tank_moves trg_batch_tank_moves_audit; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_batch_tank_moves_audit AFTER INSERT OR DELETE OR UPDATE ON public.batch_tank_moves FOR EACH ROW EXECUTE FUNCTION public.log_batch_change();
+
+
+--
+-- Name: batch_tank_moves trg_batch_tank_moves_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_batch_tank_moves_updated_at BEFORE UPDATE ON public.batch_tank_moves FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
 
 --
@@ -4477,6 +4825,14 @@ CREATE TRIGGER trg_water_settings_stamp BEFORE UPDATE ON public.water_settings F
 
 
 --
+-- Name: query_log query_log_token_id_fkey; Type: FK CONSTRAINT; Schema: claude_connector; Owner: -
+--
+
+ALTER TABLE ONLY claude_connector.query_log
+    ADD CONSTRAINT query_log_token_id_fkey FOREIGN KEY (token_id) REFERENCES claude_connector.access_tokens(id);
+
+
+--
 -- Name: batch_brew_comments batch_brew_comments_batch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4613,6 +4969,46 @@ ALTER TABLE ONLY public.batch_documents
 
 
 --
+-- Name: batch_dosing_checks batch_dosing_checks_batch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.batch_dosing_checks
+    ADD CONSTRAINT batch_dosing_checks_batch_id_fkey FOREIGN KEY (batch_id) REFERENCES public.batches(id) ON DELETE CASCADE;
+
+
+--
+-- Name: batch_dosing_checks batch_dosing_checks_brew_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.batch_dosing_checks
+    ADD CONSTRAINT batch_dosing_checks_brew_fkey FOREIGN KEY (batch_brew_id, batch_id) REFERENCES public.batch_brews(id, batch_id) ON DELETE CASCADE;
+
+
+--
+-- Name: batch_dosing_checks batch_dosing_checks_checked_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.batch_dosing_checks
+    ADD CONSTRAINT batch_dosing_checks_checked_by_fkey FOREIGN KEY (checked_by) REFERENCES public.users(id);
+
+
+--
+-- Name: batch_dosing_checks batch_dosing_checks_hbt_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.batch_dosing_checks
+    ADD CONSTRAINT batch_dosing_checks_hbt_fkey FOREIGN KEY (batch_hbt_id, batch_id) REFERENCES public.batch_hbts(id, batch_id) ON DELETE CASCADE;
+
+
+--
+-- Name: batch_dosing_checks batch_dosing_checks_ingredient_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.batch_dosing_checks
+    ADD CONSTRAINT batch_dosing_checks_ingredient_fkey FOREIGN KEY (batch_ingredient_id, batch_id) REFERENCES public.batch_ingredients(id, batch_id) ON DELETE CASCADE;
+
+
+--
 -- Name: batch_hbts batch_hbts_batch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4693,6 +5089,54 @@ ALTER TABLE ONLY public.batch_ingredients
 
 
 --
+-- Name: batch_tank_moves batch_tank_moves_batch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.batch_tank_moves
+    ADD CONSTRAINT batch_tank_moves_batch_id_fkey FOREIGN KEY (batch_id) REFERENCES public.batches(id) ON DELETE CASCADE;
+
+
+--
+-- Name: batch_tank_moves batch_tank_moves_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.batch_tank_moves
+    ADD CONSTRAINT batch_tank_moves_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
+
+
+--
+-- Name: batch_tank_moves batch_tank_moves_entry_tag_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.batch_tank_moves
+    ADD CONSTRAINT batch_tank_moves_entry_tag_id_fkey FOREIGN KEY (entry_tag_id) REFERENCES public.fermentation_log_entry_tags(id) ON DELETE CASCADE;
+
+
+--
+-- Name: batch_tank_moves batch_tank_moves_from_tank_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.batch_tank_moves
+    ADD CONSTRAINT batch_tank_moves_from_tank_id_fkey FOREIGN KEY (from_tank_id) REFERENCES public.tanks(id);
+
+
+--
+-- Name: batch_tank_moves batch_tank_moves_to_tank_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.batch_tank_moves
+    ADD CONSTRAINT batch_tank_moves_to_tank_id_fkey FOREIGN KEY (to_tank_id) REFERENCES public.tanks(id);
+
+
+--
+-- Name: batch_tank_moves batch_tank_moves_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.batch_tank_moves
+    ADD CONSTRAINT batch_tank_moves_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id);
+
+
+--
 -- Name: batch_transfers batch_transfers_batch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4741,6 +5185,14 @@ ALTER TABLE ONLY public.batches
 
 
 --
+-- Name: batches batches_filling_report_checked_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.batches
+    ADD CONSTRAINT batches_filling_report_checked_by_fkey FOREIGN KEY (filling_report_checked_by) REFERENCES public.users(id);
+
+
+--
 -- Name: batches batches_glt_tank_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4754,6 +5206,14 @@ ALTER TABLE ONLY public.batches
 
 ALTER TABLE ONLY public.batches
     ADD CONSTRAINT batches_lt_tank_id_fkey FOREIGN KEY (lt_tank_id) REFERENCES public.tanks(id);
+
+
+--
+-- Name: batches batches_mdrank_processed_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.batches
+    ADD CONSTRAINT batches_mdrank_processed_by_fkey FOREIGN KEY (mdrank_processed_by) REFERENCES public.users(id);
 
 
 --
@@ -5581,6 +6041,18 @@ ALTER TABLE ONLY public.water_settings
 
 
 --
+-- Name: access_tokens; Type: ROW SECURITY; Schema: claude_connector; Owner: -
+--
+
+ALTER TABLE claude_connector.access_tokens ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: query_log; Type: ROW SECURITY; Schema: claude_connector; Owner: -
+--
+
+ALTER TABLE claude_connector.query_log ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: batch_audit_log; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -5590,7 +6062,7 @@ ALTER TABLE public.batch_audit_log ENABLE ROW LEVEL SECURITY;
 -- Name: batch_audit_log batch_audit_log_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY batch_audit_log_select ON public.batch_audit_log FOR SELECT TO authenticated USING (public.can_view('batches'::text));
+CREATE POLICY batch_audit_log_select ON public.batch_audit_log FOR SELECT TO authenticated USING (( SELECT public.can_view('batches'::text) AS can_view));
 
 
 --
@@ -5603,28 +6075,28 @@ ALTER TABLE public.batch_brew_comments ENABLE ROW LEVEL SECURITY;
 -- Name: batch_brew_comments batch_brew_comments_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY batch_brew_comments_delete ON public.batch_brew_comments FOR DELETE TO authenticated USING (public.can_delete('batches'::text));
+CREATE POLICY batch_brew_comments_delete ON public.batch_brew_comments FOR DELETE TO authenticated USING (( SELECT public.can_delete('batches'::text) AS can_delete));
 
 
 --
 -- Name: batch_brew_comments batch_brew_comments_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY batch_brew_comments_insert ON public.batch_brew_comments FOR INSERT TO authenticated WITH CHECK (public.can_edit('batches'::text));
+CREATE POLICY batch_brew_comments_insert ON public.batch_brew_comments FOR INSERT TO authenticated WITH CHECK (( SELECT public.can_edit('batches'::text) AS can_edit));
 
 
 --
 -- Name: batch_brew_comments batch_brew_comments_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY batch_brew_comments_select ON public.batch_brew_comments FOR SELECT TO authenticated USING (public.can_view('batches'::text));
+CREATE POLICY batch_brew_comments_select ON public.batch_brew_comments FOR SELECT TO authenticated USING (( SELECT public.can_view('batches'::text) AS can_view));
 
 
 --
 -- Name: batch_brew_comments batch_brew_comments_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY batch_brew_comments_update ON public.batch_brew_comments FOR UPDATE TO authenticated USING (public.can_edit('batches'::text)) WITH CHECK (public.can_edit('batches'::text));
+CREATE POLICY batch_brew_comments_update ON public.batch_brew_comments FOR UPDATE TO authenticated USING (( SELECT public.can_edit('batches'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('batches'::text) AS can_edit));
 
 
 --
@@ -5637,28 +6109,28 @@ ALTER TABLE public.batch_brews ENABLE ROW LEVEL SECURITY;
 -- Name: batch_brews batch_brews_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY batch_brews_delete ON public.batch_brews FOR DELETE TO authenticated USING (public.can_delete('batches'::text));
+CREATE POLICY batch_brews_delete ON public.batch_brews FOR DELETE TO authenticated USING (( SELECT public.can_delete('batches'::text) AS can_delete));
 
 
 --
 -- Name: batch_brews batch_brews_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY batch_brews_insert ON public.batch_brews FOR INSERT TO authenticated WITH CHECK (public.can_edit('batches'::text));
+CREATE POLICY batch_brews_insert ON public.batch_brews FOR INSERT TO authenticated WITH CHECK (( SELECT public.can_edit('batches'::text) AS can_edit));
 
 
 --
 -- Name: batch_brews batch_brews_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY batch_brews_select ON public.batch_brews FOR SELECT TO authenticated USING (public.can_view('batches'::text));
+CREATE POLICY batch_brews_select ON public.batch_brews FOR SELECT TO authenticated USING (( SELECT public.can_view('batches'::text) AS can_view));
 
 
 --
 -- Name: batch_brews batch_brews_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY batch_brews_update ON public.batch_brews FOR UPDATE TO authenticated USING (public.can_edit('batches'::text)) WITH CHECK (public.can_edit('batches'::text));
+CREATE POLICY batch_brews_update ON public.batch_brews FOR UPDATE TO authenticated USING (( SELECT public.can_edit('batches'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('batches'::text) AS can_edit));
 
 
 --
@@ -5671,28 +6143,28 @@ ALTER TABLE public.batch_cellar_steps ENABLE ROW LEVEL SECURITY;
 -- Name: batch_cellar_steps batch_cellar_steps_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY batch_cellar_steps_delete ON public.batch_cellar_steps FOR DELETE TO authenticated USING (public.can_delete('batches'::text));
+CREATE POLICY batch_cellar_steps_delete ON public.batch_cellar_steps FOR DELETE TO authenticated USING (( SELECT public.can_delete('batches'::text) AS can_delete));
 
 
 --
 -- Name: batch_cellar_steps batch_cellar_steps_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY batch_cellar_steps_insert ON public.batch_cellar_steps FOR INSERT TO authenticated WITH CHECK (public.can_edit('batches'::text));
+CREATE POLICY batch_cellar_steps_insert ON public.batch_cellar_steps FOR INSERT TO authenticated WITH CHECK (( SELECT public.can_edit('batches'::text) AS can_edit));
 
 
 --
 -- Name: batch_cellar_steps batch_cellar_steps_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY batch_cellar_steps_select ON public.batch_cellar_steps FOR SELECT TO authenticated USING (public.can_view('batches'::text));
+CREATE POLICY batch_cellar_steps_select ON public.batch_cellar_steps FOR SELECT TO authenticated USING (( SELECT public.can_view('batches'::text) AS can_view));
 
 
 --
 -- Name: batch_cellar_steps batch_cellar_steps_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY batch_cellar_steps_update ON public.batch_cellar_steps FOR UPDATE TO authenticated USING (public.can_edit('batches'::text)) WITH CHECK (public.can_edit('batches'::text));
+CREATE POLICY batch_cellar_steps_update ON public.batch_cellar_steps FOR UPDATE TO authenticated USING (( SELECT public.can_edit('batches'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('batches'::text) AS can_edit));
 
 
 --
@@ -5705,28 +6177,55 @@ ALTER TABLE public.batch_documents ENABLE ROW LEVEL SECURITY;
 -- Name: batch_documents batch_documents_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY batch_documents_delete ON public.batch_documents FOR DELETE TO authenticated USING (public.can_delete('batches'::text));
+CREATE POLICY batch_documents_delete ON public.batch_documents FOR DELETE TO authenticated USING (( SELECT public.can_delete('batches'::text) AS can_delete));
 
 
 --
 -- Name: batch_documents batch_documents_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY batch_documents_insert ON public.batch_documents FOR INSERT TO authenticated WITH CHECK (public.can_edit('batches'::text));
+CREATE POLICY batch_documents_insert ON public.batch_documents FOR INSERT TO authenticated WITH CHECK (( SELECT public.can_edit('batches'::text) AS can_edit));
 
 
 --
 -- Name: batch_documents batch_documents_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY batch_documents_select ON public.batch_documents FOR SELECT TO authenticated USING (public.can_view('batches'::text));
+CREATE POLICY batch_documents_select ON public.batch_documents FOR SELECT TO authenticated USING (( SELECT public.can_view('batches'::text) AS can_view));
 
 
 --
 -- Name: batch_documents batch_documents_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY batch_documents_update ON public.batch_documents FOR UPDATE TO authenticated USING (public.can_edit('batches'::text)) WITH CHECK (public.can_edit('batches'::text));
+CREATE POLICY batch_documents_update ON public.batch_documents FOR UPDATE TO authenticated USING (( SELECT public.can_edit('batches'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('batches'::text) AS can_edit));
+
+
+--
+-- Name: batch_dosing_checks; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.batch_dosing_checks ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: batch_dosing_checks batch_dosing_checks_delete; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY batch_dosing_checks_delete ON public.batch_dosing_checks FOR DELETE TO authenticated USING (( SELECT public.can_edit('batches'::text) AS can_edit));
+
+
+--
+-- Name: batch_dosing_checks batch_dosing_checks_insert; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY batch_dosing_checks_insert ON public.batch_dosing_checks FOR INSERT TO authenticated WITH CHECK (( SELECT public.can_edit('batches'::text) AS can_edit));
+
+
+--
+-- Name: batch_dosing_checks batch_dosing_checks_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY batch_dosing_checks_select ON public.batch_dosing_checks FOR SELECT TO authenticated USING (( SELECT public.can_view('batches'::text) AS can_view));
 
 
 --
@@ -5739,28 +6238,28 @@ ALTER TABLE public.batch_hbts ENABLE ROW LEVEL SECURITY;
 -- Name: batch_hbts batch_hbts_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY batch_hbts_delete ON public.batch_hbts FOR DELETE TO authenticated USING (public.can_delete('batches'::text));
+CREATE POLICY batch_hbts_delete ON public.batch_hbts FOR DELETE TO authenticated USING (( SELECT public.can_delete('batches'::text) AS can_delete));
 
 
 --
 -- Name: batch_hbts batch_hbts_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY batch_hbts_insert ON public.batch_hbts FOR INSERT TO authenticated WITH CHECK (public.can_edit('batches'::text));
+CREATE POLICY batch_hbts_insert ON public.batch_hbts FOR INSERT TO authenticated WITH CHECK (( SELECT public.can_edit('batches'::text) AS can_edit));
 
 
 --
 -- Name: batch_hbts batch_hbts_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY batch_hbts_select ON public.batch_hbts FOR SELECT TO authenticated USING (public.can_view('batches'::text));
+CREATE POLICY batch_hbts_select ON public.batch_hbts FOR SELECT TO authenticated USING (( SELECT public.can_view('batches'::text) AS can_view));
 
 
 --
 -- Name: batch_hbts batch_hbts_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY batch_hbts_update ON public.batch_hbts FOR UPDATE TO authenticated USING (public.can_edit('batches'::text)) WITH CHECK (public.can_edit('batches'::text));
+CREATE POLICY batch_hbts_update ON public.batch_hbts FOR UPDATE TO authenticated USING (( SELECT public.can_edit('batches'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('batches'::text) AS can_edit));
 
 
 --
@@ -5773,28 +6272,62 @@ ALTER TABLE public.batch_ingredients ENABLE ROW LEVEL SECURITY;
 -- Name: batch_ingredients batch_ingredients_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY batch_ingredients_delete ON public.batch_ingredients FOR DELETE TO authenticated USING (public.can_delete('batches'::text));
+CREATE POLICY batch_ingredients_delete ON public.batch_ingredients FOR DELETE TO authenticated USING (( SELECT public.can_delete('batches'::text) AS can_delete));
 
 
 --
 -- Name: batch_ingredients batch_ingredients_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY batch_ingredients_insert ON public.batch_ingredients FOR INSERT TO authenticated WITH CHECK (public.can_edit('batches'::text));
+CREATE POLICY batch_ingredients_insert ON public.batch_ingredients FOR INSERT TO authenticated WITH CHECK (( SELECT public.can_edit('batches'::text) AS can_edit));
 
 
 --
 -- Name: batch_ingredients batch_ingredients_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY batch_ingredients_select ON public.batch_ingredients FOR SELECT TO authenticated USING (public.can_view('batches'::text));
+CREATE POLICY batch_ingredients_select ON public.batch_ingredients FOR SELECT TO authenticated USING (( SELECT public.can_view('batches'::text) AS can_view));
 
 
 --
 -- Name: batch_ingredients batch_ingredients_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY batch_ingredients_update ON public.batch_ingredients FOR UPDATE TO authenticated USING (public.can_edit('batches'::text)) WITH CHECK (public.can_edit('batches'::text));
+CREATE POLICY batch_ingredients_update ON public.batch_ingredients FOR UPDATE TO authenticated USING (( SELECT public.can_edit('batches'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('batches'::text) AS can_edit));
+
+
+--
+-- Name: batch_tank_moves; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.batch_tank_moves ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: batch_tank_moves batch_tank_moves_delete; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY batch_tank_moves_delete ON public.batch_tank_moves FOR DELETE TO authenticated USING (( SELECT public.can_delete('batches'::text) AS can_delete));
+
+
+--
+-- Name: batch_tank_moves batch_tank_moves_insert; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY batch_tank_moves_insert ON public.batch_tank_moves FOR INSERT TO authenticated WITH CHECK (( SELECT public.can_edit('batches'::text) AS can_edit));
+
+
+--
+-- Name: batch_tank_moves batch_tank_moves_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY batch_tank_moves_select ON public.batch_tank_moves FOR SELECT TO authenticated USING (( SELECT public.can_view('batches'::text) AS can_view));
+
+
+--
+-- Name: batch_tank_moves batch_tank_moves_update; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY batch_tank_moves_update ON public.batch_tank_moves FOR UPDATE TO authenticated USING (( SELECT public.can_edit('batches'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('batches'::text) AS can_edit));
 
 
 --
@@ -5807,28 +6340,28 @@ ALTER TABLE public.batch_transfers ENABLE ROW LEVEL SECURITY;
 -- Name: batch_transfers batch_transfers_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY batch_transfers_delete ON public.batch_transfers FOR DELETE TO authenticated USING (public.can_delete('batches'::text));
+CREATE POLICY batch_transfers_delete ON public.batch_transfers FOR DELETE TO authenticated USING (( SELECT public.can_delete('batches'::text) AS can_delete));
 
 
 --
 -- Name: batch_transfers batch_transfers_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY batch_transfers_insert ON public.batch_transfers FOR INSERT TO authenticated WITH CHECK (public.can_edit('batches'::text));
+CREATE POLICY batch_transfers_insert ON public.batch_transfers FOR INSERT TO authenticated WITH CHECK (( SELECT public.can_edit('batches'::text) AS can_edit));
 
 
 --
 -- Name: batch_transfers batch_transfers_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY batch_transfers_select ON public.batch_transfers FOR SELECT TO authenticated USING (public.can_view('batches'::text));
+CREATE POLICY batch_transfers_select ON public.batch_transfers FOR SELECT TO authenticated USING (( SELECT public.can_view('batches'::text) AS can_view));
 
 
 --
 -- Name: batch_transfers batch_transfers_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY batch_transfers_update ON public.batch_transfers FOR UPDATE TO authenticated USING (public.can_edit('batches'::text)) WITH CHECK (public.can_edit('batches'::text));
+CREATE POLICY batch_transfers_update ON public.batch_transfers FOR UPDATE TO authenticated USING (( SELECT public.can_edit('batches'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('batches'::text) AS can_edit));
 
 
 --
@@ -5841,28 +6374,28 @@ ALTER TABLE public.batches ENABLE ROW LEVEL SECURITY;
 -- Name: batches batches_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY batches_delete ON public.batches FOR DELETE USING (public.can_delete('batches'::text));
+CREATE POLICY batches_delete ON public.batches FOR DELETE TO authenticated USING (( SELECT public.can_delete('batch_deletion'::text) AS can_delete));
 
 
 --
 -- Name: batches batches_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY batches_insert ON public.batches FOR INSERT WITH CHECK (public.can_edit('batches'::text));
+CREATE POLICY batches_insert ON public.batches FOR INSERT WITH CHECK (( SELECT public.can_edit('batches'::text) AS can_edit));
 
 
 --
 -- Name: batches batches_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY batches_select ON public.batches FOR SELECT USING (public.can_view('batches'::text));
+CREATE POLICY batches_select ON public.batches FOR SELECT USING (( SELECT public.can_view('batches'::text) AS can_view));
 
 
 --
 -- Name: batches batches_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY batches_update ON public.batches FOR UPDATE USING (public.can_edit('batches'::text)) WITH CHECK (public.can_edit('batches'::text));
+CREATE POLICY batches_update ON public.batches FOR UPDATE USING (( SELECT public.can_edit('batches'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('batches'::text) AS can_edit));
 
 
 --
@@ -5875,28 +6408,28 @@ ALTER TABLE public.brew_capacity ENABLE ROW LEVEL SECURITY;
 -- Name: brew_capacity brew_capacity_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY brew_capacity_delete ON public.brew_capacity FOR DELETE USING (public.can_delete('brewing_planning'::text));
+CREATE POLICY brew_capacity_delete ON public.brew_capacity FOR DELETE USING (( SELECT public.can_delete('brewing_planning'::text) AS can_delete));
 
 
 --
 -- Name: brew_capacity brew_capacity_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY brew_capacity_insert ON public.brew_capacity FOR INSERT WITH CHECK (public.can_edit('brewing_planning'::text));
+CREATE POLICY brew_capacity_insert ON public.brew_capacity FOR INSERT WITH CHECK (( SELECT public.can_edit('brewing_planning'::text) AS can_edit));
 
 
 --
 -- Name: brew_capacity brew_capacity_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY brew_capacity_select ON public.brew_capacity FOR SELECT USING (public.can_view('brewing_planning'::text));
+CREATE POLICY brew_capacity_select ON public.brew_capacity FOR SELECT USING (( SELECT public.can_view('brewing_planning'::text) AS can_view));
 
 
 --
 -- Name: brew_capacity brew_capacity_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY brew_capacity_update ON public.brew_capacity FOR UPDATE USING (public.can_edit('brewing_planning'::text)) WITH CHECK (public.can_edit('brewing_planning'::text));
+CREATE POLICY brew_capacity_update ON public.brew_capacity FOR UPDATE USING (( SELECT public.can_edit('brewing_planning'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('brewing_planning'::text) AS can_edit));
 
 
 --
@@ -5909,7 +6442,7 @@ ALTER TABLE public.brew_planning ENABLE ROW LEVEL SECURITY;
 -- Name: brew_planning brew_planning_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY brew_planning_delete ON public.brew_planning FOR DELETE USING (public.can_delete('brewing_planning'::text));
+CREATE POLICY brew_planning_delete ON public.brew_planning FOR DELETE USING (( SELECT public.can_delete('brewing_planning'::text) AS can_delete));
 
 
 --
@@ -5922,21 +6455,21 @@ ALTER TABLE public.brew_planning_history ENABLE ROW LEVEL SECURITY;
 -- Name: brew_planning_history brew_planning_history_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY brew_planning_history_select ON public.brew_planning_history FOR SELECT USING (public.can_view('brewing_planning'::text));
+CREATE POLICY brew_planning_history_select ON public.brew_planning_history FOR SELECT USING (( SELECT public.can_view('brewing_planning'::text) AS can_view));
 
 
 --
 -- Name: brew_planning brew_planning_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY brew_planning_insert ON public.brew_planning FOR INSERT WITH CHECK (public.can_edit('brewing_planning'::text));
+CREATE POLICY brew_planning_insert ON public.brew_planning FOR INSERT WITH CHECK (( SELECT public.can_edit('brewing_planning'::text) AS can_edit));
 
 
 --
 -- Name: brew_planning brew_planning_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY brew_planning_select ON public.brew_planning FOR SELECT USING (public.can_view('brewing_planning'::text));
+CREATE POLICY brew_planning_select ON public.brew_planning FOR SELECT USING (( SELECT public.can_view('brewing_planning'::text) AS can_view));
 
 
 --
@@ -5949,35 +6482,35 @@ ALTER TABLE public.brew_planning_splits ENABLE ROW LEVEL SECURITY;
 -- Name: brew_planning_splits brew_planning_splits_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY brew_planning_splits_delete ON public.brew_planning_splits FOR DELETE USING (public.can_edit('brewing_planning'::text));
+CREATE POLICY brew_planning_splits_delete ON public.brew_planning_splits FOR DELETE USING (( SELECT public.can_edit('brewing_planning'::text) AS can_edit));
 
 
 --
 -- Name: brew_planning_splits brew_planning_splits_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY brew_planning_splits_insert ON public.brew_planning_splits FOR INSERT WITH CHECK (public.can_edit('brewing_planning'::text));
+CREATE POLICY brew_planning_splits_insert ON public.brew_planning_splits FOR INSERT WITH CHECK (( SELECT public.can_edit('brewing_planning'::text) AS can_edit));
 
 
 --
 -- Name: brew_planning_splits brew_planning_splits_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY brew_planning_splits_select ON public.brew_planning_splits FOR SELECT USING (public.can_view('brewing_planning'::text));
+CREATE POLICY brew_planning_splits_select ON public.brew_planning_splits FOR SELECT USING (( SELECT public.can_view('brewing_planning'::text) AS can_view));
 
 
 --
 -- Name: brew_planning_splits brew_planning_splits_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY brew_planning_splits_update ON public.brew_planning_splits FOR UPDATE USING (public.can_edit('brewing_planning'::text)) WITH CHECK (public.can_edit('brewing_planning'::text));
+CREATE POLICY brew_planning_splits_update ON public.brew_planning_splits FOR UPDATE USING (( SELECT public.can_edit('brewing_planning'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('brewing_planning'::text) AS can_edit));
 
 
 --
 -- Name: brew_planning brew_planning_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY brew_planning_update ON public.brew_planning FOR UPDATE USING (public.can_edit('brewing_planning'::text)) WITH CHECK (public.can_edit('brewing_planning'::text));
+CREATE POLICY brew_planning_update ON public.brew_planning FOR UPDATE USING (( SELECT public.can_edit('brewing_planning'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('brewing_planning'::text) AS can_edit));
 
 
 --
@@ -5990,14 +6523,14 @@ ALTER TABLE public.cellar_action_tags ENABLE ROW LEVEL SECURITY;
 -- Name: cellar_action_tags cellar_action_tags_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY cellar_action_tags_delete ON public.cellar_action_tags FOR DELETE TO authenticated USING (public.can_delete('settings'::text));
+CREATE POLICY cellar_action_tags_delete ON public.cellar_action_tags FOR DELETE TO authenticated USING (( SELECT public.can_delete('settings'::text) AS can_delete));
 
 
 --
 -- Name: cellar_action_tags cellar_action_tags_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY cellar_action_tags_insert ON public.cellar_action_tags FOR INSERT TO authenticated WITH CHECK (public.can_edit('settings'::text));
+CREATE POLICY cellar_action_tags_insert ON public.cellar_action_tags FOR INSERT TO authenticated WITH CHECK (( SELECT public.can_edit('settings'::text) AS can_edit));
 
 
 --
@@ -6011,7 +6544,7 @@ CREATE POLICY cellar_action_tags_select ON public.cellar_action_tags FOR SELECT 
 -- Name: cellar_action_tags cellar_action_tags_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY cellar_action_tags_update ON public.cellar_action_tags FOR UPDATE TO authenticated USING (public.can_edit('settings'::text)) WITH CHECK (public.can_edit('settings'::text));
+CREATE POLICY cellar_action_tags_update ON public.cellar_action_tags FOR UPDATE TO authenticated USING (( SELECT public.can_edit('settings'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('settings'::text) AS can_edit));
 
 
 --
@@ -6024,14 +6557,14 @@ ALTER TABLE public.cellar_plan_parts ENABLE ROW LEVEL SECURITY;
 -- Name: cellar_plan_parts cellar_plan_parts_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY cellar_plan_parts_delete ON public.cellar_plan_parts FOR DELETE TO authenticated USING ((public.can_delete('settings'::text) AND (kind = 'addition_timing'::text)));
+CREATE POLICY cellar_plan_parts_delete ON public.cellar_plan_parts FOR DELETE TO authenticated USING ((( SELECT public.can_delete('settings'::text) AS can_delete) AND (kind = 'addition_timing'::text)));
 
 
 --
 -- Name: cellar_plan_parts cellar_plan_parts_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY cellar_plan_parts_insert ON public.cellar_plan_parts FOR INSERT TO authenticated WITH CHECK ((public.can_edit('settings'::text) AND (kind = 'addition_timing'::text)));
+CREATE POLICY cellar_plan_parts_insert ON public.cellar_plan_parts FOR INSERT TO authenticated WITH CHECK ((( SELECT public.can_edit('settings'::text) AS can_edit) AND (kind = 'addition_timing'::text)));
 
 
 --
@@ -6045,7 +6578,7 @@ CREATE POLICY cellar_plan_parts_select ON public.cellar_plan_parts FOR SELECT TO
 -- Name: cellar_plan_parts cellar_plan_parts_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY cellar_plan_parts_update ON public.cellar_plan_parts FOR UPDATE TO authenticated USING (public.can_edit('settings'::text)) WITH CHECK (public.can_edit('settings'::text));
+CREATE POLICY cellar_plan_parts_update ON public.cellar_plan_parts FOR UPDATE TO authenticated USING (( SELECT public.can_edit('settings'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('settings'::text) AS can_edit));
 
 
 --
@@ -6058,14 +6591,14 @@ ALTER TABLE public.document_types ENABLE ROW LEVEL SECURITY;
 -- Name: document_types document_types_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY document_types_delete ON public.document_types FOR DELETE USING (public.can_delete('settings'::text));
+CREATE POLICY document_types_delete ON public.document_types FOR DELETE USING (( SELECT public.can_delete('settings'::text) AS can_delete));
 
 
 --
 -- Name: document_types document_types_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY document_types_insert ON public.document_types FOR INSERT WITH CHECK (public.can_edit('settings'::text));
+CREATE POLICY document_types_insert ON public.document_types FOR INSERT WITH CHECK (( SELECT public.can_edit('settings'::text) AS can_edit));
 
 
 --
@@ -6079,7 +6612,7 @@ CREATE POLICY document_types_select ON public.document_types FOR SELECT USING (t
 -- Name: document_types document_types_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY document_types_update ON public.document_types FOR UPDATE USING (public.can_edit('settings'::text)) WITH CHECK (public.can_edit('settings'::text));
+CREATE POLICY document_types_update ON public.document_types FOR UPDATE USING (( SELECT public.can_edit('settings'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('settings'::text) AS can_edit));
 
 
 --
@@ -6092,28 +6625,28 @@ ALTER TABLE public.fermentation_log_entries ENABLE ROW LEVEL SECURITY;
 -- Name: fermentation_log_entries fermentation_log_entries_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY fermentation_log_entries_delete ON public.fermentation_log_entries FOR DELETE TO authenticated USING (public.can_delete('batches'::text));
+CREATE POLICY fermentation_log_entries_delete ON public.fermentation_log_entries FOR DELETE TO authenticated USING (( SELECT public.can_delete('batches'::text) AS can_delete));
 
 
 --
 -- Name: fermentation_log_entries fermentation_log_entries_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY fermentation_log_entries_insert ON public.fermentation_log_entries FOR INSERT TO authenticated WITH CHECK (public.can_edit('batches'::text));
+CREATE POLICY fermentation_log_entries_insert ON public.fermentation_log_entries FOR INSERT TO authenticated WITH CHECK (( SELECT public.can_edit('batches'::text) AS can_edit));
 
 
 --
 -- Name: fermentation_log_entries fermentation_log_entries_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY fermentation_log_entries_select ON public.fermentation_log_entries FOR SELECT TO authenticated USING (public.can_view('batches'::text));
+CREATE POLICY fermentation_log_entries_select ON public.fermentation_log_entries FOR SELECT TO authenticated USING (( SELECT public.can_view('batches'::text) AS can_view));
 
 
 --
 -- Name: fermentation_log_entries fermentation_log_entries_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY fermentation_log_entries_update ON public.fermentation_log_entries FOR UPDATE TO authenticated USING (public.can_edit('batches'::text)) WITH CHECK (public.can_edit('batches'::text));
+CREATE POLICY fermentation_log_entries_update ON public.fermentation_log_entries FOR UPDATE TO authenticated USING (( SELECT public.can_edit('batches'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('batches'::text) AS can_edit));
 
 
 --
@@ -6126,28 +6659,28 @@ ALTER TABLE public.fermentation_log_entry_tags ENABLE ROW LEVEL SECURITY;
 -- Name: fermentation_log_entry_tags fermentation_log_entry_tags_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY fermentation_log_entry_tags_delete ON public.fermentation_log_entry_tags FOR DELETE TO authenticated USING (public.can_delete('batches'::text));
+CREATE POLICY fermentation_log_entry_tags_delete ON public.fermentation_log_entry_tags FOR DELETE TO authenticated USING (( SELECT public.can_delete('batches'::text) AS can_delete));
 
 
 --
 -- Name: fermentation_log_entry_tags fermentation_log_entry_tags_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY fermentation_log_entry_tags_insert ON public.fermentation_log_entry_tags FOR INSERT TO authenticated WITH CHECK (public.can_edit('batches'::text));
+CREATE POLICY fermentation_log_entry_tags_insert ON public.fermentation_log_entry_tags FOR INSERT TO authenticated WITH CHECK (( SELECT public.can_edit('batches'::text) AS can_edit));
 
 
 --
 -- Name: fermentation_log_entry_tags fermentation_log_entry_tags_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY fermentation_log_entry_tags_select ON public.fermentation_log_entry_tags FOR SELECT TO authenticated USING (public.can_view('batches'::text));
+CREATE POLICY fermentation_log_entry_tags_select ON public.fermentation_log_entry_tags FOR SELECT TO authenticated USING (( SELECT public.can_view('batches'::text) AS can_view));
 
 
 --
 -- Name: fermentation_log_entry_tags fermentation_log_entry_tags_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY fermentation_log_entry_tags_update ON public.fermentation_log_entry_tags FOR UPDATE TO authenticated USING (public.can_edit('batches'::text)) WITH CHECK (public.can_edit('batches'::text));
+CREATE POLICY fermentation_log_entry_tags_update ON public.fermentation_log_entry_tags FOR UPDATE TO authenticated USING (( SELECT public.can_edit('batches'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('batches'::text) AS can_edit));
 
 
 --
@@ -6160,28 +6693,28 @@ ALTER TABLE public.filling_measurements ENABLE ROW LEVEL SECURITY;
 -- Name: filling_measurements filling_measurements_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY filling_measurements_delete ON public.filling_measurements FOR DELETE TO authenticated USING (public.can_delete('batches'::text));
+CREATE POLICY filling_measurements_delete ON public.filling_measurements FOR DELETE TO authenticated USING (( SELECT public.can_delete('batches'::text) AS can_delete));
 
 
 --
 -- Name: filling_measurements filling_measurements_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY filling_measurements_insert ON public.filling_measurements FOR INSERT TO authenticated WITH CHECK (public.can_edit('batches'::text));
+CREATE POLICY filling_measurements_insert ON public.filling_measurements FOR INSERT TO authenticated WITH CHECK (( SELECT public.can_edit('batches'::text) AS can_edit));
 
 
 --
 -- Name: filling_measurements filling_measurements_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY filling_measurements_select ON public.filling_measurements FOR SELECT TO authenticated USING (public.can_view('batches'::text));
+CREATE POLICY filling_measurements_select ON public.filling_measurements FOR SELECT TO authenticated USING (( SELECT public.can_view('batches'::text) AS can_view));
 
 
 --
 -- Name: filling_measurements filling_measurements_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY filling_measurements_update ON public.filling_measurements FOR UPDATE TO authenticated USING (public.can_edit('batches'::text)) WITH CHECK (public.can_edit('batches'::text));
+CREATE POLICY filling_measurements_update ON public.filling_measurements FOR UPDATE TO authenticated USING (( SELECT public.can_edit('batches'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('batches'::text) AS can_edit));
 
 
 --
@@ -6194,28 +6727,28 @@ ALTER TABLE public.filling_session_articles ENABLE ROW LEVEL SECURITY;
 -- Name: filling_session_articles filling_session_articles_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY filling_session_articles_delete ON public.filling_session_articles FOR DELETE TO authenticated USING (public.can_delete('batches'::text));
+CREATE POLICY filling_session_articles_delete ON public.filling_session_articles FOR DELETE TO authenticated USING (( SELECT public.can_delete('batches'::text) AS can_delete));
 
 
 --
 -- Name: filling_session_articles filling_session_articles_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY filling_session_articles_insert ON public.filling_session_articles FOR INSERT TO authenticated WITH CHECK (public.can_edit('batches'::text));
+CREATE POLICY filling_session_articles_insert ON public.filling_session_articles FOR INSERT TO authenticated WITH CHECK (( SELECT public.can_edit('batches'::text) AS can_edit));
 
 
 --
 -- Name: filling_session_articles filling_session_articles_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY filling_session_articles_select ON public.filling_session_articles FOR SELECT TO authenticated USING (public.can_view('batches'::text));
+CREATE POLICY filling_session_articles_select ON public.filling_session_articles FOR SELECT TO authenticated USING (( SELECT public.can_view('batches'::text) AS can_view));
 
 
 --
 -- Name: filling_session_articles filling_session_articles_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY filling_session_articles_update ON public.filling_session_articles FOR UPDATE TO authenticated USING (public.can_edit('batches'::text)) WITH CHECK (public.can_edit('batches'::text));
+CREATE POLICY filling_session_articles_update ON public.filling_session_articles FOR UPDATE TO authenticated USING (( SELECT public.can_edit('batches'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('batches'::text) AS can_edit));
 
 
 --
@@ -6228,28 +6761,28 @@ ALTER TABLE public.filling_session_materials ENABLE ROW LEVEL SECURITY;
 -- Name: filling_session_materials filling_session_materials_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY filling_session_materials_delete ON public.filling_session_materials FOR DELETE TO authenticated USING (public.can_delete('batches'::text));
+CREATE POLICY filling_session_materials_delete ON public.filling_session_materials FOR DELETE TO authenticated USING (( SELECT public.can_delete('batches'::text) AS can_delete));
 
 
 --
 -- Name: filling_session_materials filling_session_materials_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY filling_session_materials_insert ON public.filling_session_materials FOR INSERT TO authenticated WITH CHECK (public.can_edit('batches'::text));
+CREATE POLICY filling_session_materials_insert ON public.filling_session_materials FOR INSERT TO authenticated WITH CHECK (( SELECT public.can_edit('batches'::text) AS can_edit));
 
 
 --
 -- Name: filling_session_materials filling_session_materials_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY filling_session_materials_select ON public.filling_session_materials FOR SELECT TO authenticated USING (public.can_view('batches'::text));
+CREATE POLICY filling_session_materials_select ON public.filling_session_materials FOR SELECT TO authenticated USING (( SELECT public.can_view('batches'::text) AS can_view));
 
 
 --
 -- Name: filling_session_materials filling_session_materials_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY filling_session_materials_update ON public.filling_session_materials FOR UPDATE TO authenticated USING (public.can_edit('batches'::text)) WITH CHECK (public.can_edit('batches'::text));
+CREATE POLICY filling_session_materials_update ON public.filling_session_materials FOR UPDATE TO authenticated USING (( SELECT public.can_edit('batches'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('batches'::text) AS can_edit));
 
 
 --
@@ -6262,28 +6795,28 @@ ALTER TABLE public.filling_sessions ENABLE ROW LEVEL SECURITY;
 -- Name: filling_sessions filling_sessions_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY filling_sessions_delete ON public.filling_sessions FOR DELETE TO authenticated USING (public.can_delete('batches'::text));
+CREATE POLICY filling_sessions_delete ON public.filling_sessions FOR DELETE TO authenticated USING (( SELECT public.can_delete('batches'::text) AS can_delete));
 
 
 --
 -- Name: filling_sessions filling_sessions_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY filling_sessions_insert ON public.filling_sessions FOR INSERT TO authenticated WITH CHECK (public.can_edit('batches'::text));
+CREATE POLICY filling_sessions_insert ON public.filling_sessions FOR INSERT TO authenticated WITH CHECK (( SELECT public.can_edit('batches'::text) AS can_edit));
 
 
 --
 -- Name: filling_sessions filling_sessions_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY filling_sessions_select ON public.filling_sessions FOR SELECT TO authenticated USING (public.can_view('batches'::text));
+CREATE POLICY filling_sessions_select ON public.filling_sessions FOR SELECT TO authenticated USING (( SELECT public.can_view('batches'::text) AS can_view));
 
 
 --
 -- Name: filling_sessions filling_sessions_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY filling_sessions_update ON public.filling_sessions FOR UPDATE TO authenticated USING (public.can_edit('batches'::text)) WITH CHECK (public.can_edit('batches'::text));
+CREATE POLICY filling_sessions_update ON public.filling_sessions FOR UPDATE TO authenticated USING (( SELECT public.can_edit('batches'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('batches'::text) AS can_edit));
 
 
 --
@@ -6296,28 +6829,28 @@ ALTER TABLE public.hbt_readings ENABLE ROW LEVEL SECURITY;
 -- Name: hbt_readings hbt_readings_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY hbt_readings_delete ON public.hbt_readings FOR DELETE TO authenticated USING (public.can_delete('batches'::text));
+CREATE POLICY hbt_readings_delete ON public.hbt_readings FOR DELETE TO authenticated USING (( SELECT public.can_delete('batches'::text) AS can_delete));
 
 
 --
 -- Name: hbt_readings hbt_readings_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY hbt_readings_insert ON public.hbt_readings FOR INSERT TO authenticated WITH CHECK (public.can_edit('batches'::text));
+CREATE POLICY hbt_readings_insert ON public.hbt_readings FOR INSERT TO authenticated WITH CHECK (( SELECT public.can_edit('batches'::text) AS can_edit));
 
 
 --
 -- Name: hbt_readings hbt_readings_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY hbt_readings_select ON public.hbt_readings FOR SELECT TO authenticated USING (public.can_view('batches'::text));
+CREATE POLICY hbt_readings_select ON public.hbt_readings FOR SELECT TO authenticated USING (( SELECT public.can_view('batches'::text) AS can_view));
 
 
 --
 -- Name: hbt_readings hbt_readings_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY hbt_readings_update ON public.hbt_readings FOR UPDATE TO authenticated USING (public.can_edit('batches'::text)) WITH CHECK (public.can_edit('batches'::text));
+CREATE POLICY hbt_readings_update ON public.hbt_readings FOR UPDATE TO authenticated USING (( SELECT public.can_edit('batches'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('batches'::text) AS can_edit));
 
 
 --
@@ -6330,14 +6863,14 @@ ALTER TABLE public.ingredient_categories ENABLE ROW LEVEL SECURITY;
 -- Name: ingredient_categories ingredient_categories_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY ingredient_categories_delete ON public.ingredient_categories FOR DELETE USING (public.can_delete('settings'::text));
+CREATE POLICY ingredient_categories_delete ON public.ingredient_categories FOR DELETE USING (( SELECT public.can_delete('settings'::text) AS can_delete));
 
 
 --
 -- Name: ingredient_categories ingredient_categories_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY ingredient_categories_insert ON public.ingredient_categories FOR INSERT WITH CHECK (public.can_edit('settings'::text));
+CREATE POLICY ingredient_categories_insert ON public.ingredient_categories FOR INSERT WITH CHECK (( SELECT public.can_edit('settings'::text) AS can_edit));
 
 
 --
@@ -6351,7 +6884,7 @@ CREATE POLICY ingredient_categories_select ON public.ingredient_categories FOR S
 -- Name: ingredient_categories ingredient_categories_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY ingredient_categories_update ON public.ingredient_categories FOR UPDATE USING (public.can_edit('settings'::text)) WITH CHECK (public.can_edit('settings'::text));
+CREATE POLICY ingredient_categories_update ON public.ingredient_categories FOR UPDATE USING (( SELECT public.can_edit('settings'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('settings'::text) AS can_edit));
 
 
 --
@@ -6364,14 +6897,14 @@ ALTER TABLE public.ingredient_declarations ENABLE ROW LEVEL SECURITY;
 -- Name: ingredient_declarations ingredient_declarations_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY ingredient_declarations_delete ON public.ingredient_declarations FOR DELETE USING (public.can_delete('settings'::text));
+CREATE POLICY ingredient_declarations_delete ON public.ingredient_declarations FOR DELETE USING (( SELECT public.can_delete('settings'::text) AS can_delete));
 
 
 --
 -- Name: ingredient_declarations ingredient_declarations_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY ingredient_declarations_insert ON public.ingredient_declarations FOR INSERT WITH CHECK (public.can_edit('settings'::text));
+CREATE POLICY ingredient_declarations_insert ON public.ingredient_declarations FOR INSERT WITH CHECK (( SELECT public.can_edit('settings'::text) AS can_edit));
 
 
 --
@@ -6385,7 +6918,7 @@ CREATE POLICY ingredient_declarations_select ON public.ingredient_declarations F
 -- Name: ingredient_declarations ingredient_declarations_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY ingredient_declarations_update ON public.ingredient_declarations FOR UPDATE USING (public.can_edit('settings'::text)) WITH CHECK (public.can_edit('settings'::text));
+CREATE POLICY ingredient_declarations_update ON public.ingredient_declarations FOR UPDATE USING (( SELECT public.can_edit('settings'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('settings'::text) AS can_edit));
 
 
 --
@@ -6398,28 +6931,28 @@ ALTER TABLE public.ingredient_documents ENABLE ROW LEVEL SECURITY;
 -- Name: ingredient_documents ingredient_documents_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY ingredient_documents_delete ON public.ingredient_documents FOR DELETE USING (public.can_delete('ingredients'::text));
+CREATE POLICY ingredient_documents_delete ON public.ingredient_documents FOR DELETE USING (( SELECT public.can_delete('ingredients'::text) AS can_delete));
 
 
 --
 -- Name: ingredient_documents ingredient_documents_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY ingredient_documents_insert ON public.ingredient_documents FOR INSERT WITH CHECK (public.can_edit('ingredients'::text));
+CREATE POLICY ingredient_documents_insert ON public.ingredient_documents FOR INSERT WITH CHECK (( SELECT public.can_edit('ingredients'::text) AS can_edit));
 
 
 --
 -- Name: ingredient_documents ingredient_documents_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY ingredient_documents_select ON public.ingredient_documents FOR SELECT USING (public.can_view('ingredients'::text));
+CREATE POLICY ingredient_documents_select ON public.ingredient_documents FOR SELECT USING (( SELECT public.can_view('ingredients'::text) AS can_view));
 
 
 --
 -- Name: ingredient_documents ingredient_documents_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY ingredient_documents_update ON public.ingredient_documents FOR UPDATE USING (public.can_edit('ingredients'::text)) WITH CHECK (public.can_edit('ingredients'::text));
+CREATE POLICY ingredient_documents_update ON public.ingredient_documents FOR UPDATE USING (( SELECT public.can_edit('ingredients'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('ingredients'::text) AS can_edit));
 
 
 --
@@ -6432,14 +6965,14 @@ ALTER TABLE public.ingredient_revisions ENABLE ROW LEVEL SECURITY;
 -- Name: ingredient_revisions ingredient_revisions_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY ingredient_revisions_insert ON public.ingredient_revisions FOR INSERT WITH CHECK (public.can_edit('ingredients'::text));
+CREATE POLICY ingredient_revisions_insert ON public.ingredient_revisions FOR INSERT WITH CHECK (( SELECT public.can_edit('ingredients'::text) AS can_edit));
 
 
 --
 -- Name: ingredient_revisions ingredient_revisions_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY ingredient_revisions_select ON public.ingredient_revisions FOR SELECT USING (public.can_view('ingredients'::text));
+CREATE POLICY ingredient_revisions_select ON public.ingredient_revisions FOR SELECT USING (( SELECT public.can_view('ingredients'::text) AS can_view));
 
 
 --
@@ -6452,28 +6985,28 @@ ALTER TABLE public.ingredients ENABLE ROW LEVEL SECURITY;
 -- Name: ingredients ingredients_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY ingredients_delete ON public.ingredients FOR DELETE USING (public.can_delete('ingredients'::text));
+CREATE POLICY ingredients_delete ON public.ingredients FOR DELETE USING (( SELECT public.can_delete('ingredients'::text) AS can_delete));
 
 
 --
 -- Name: ingredients ingredients_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY ingredients_insert ON public.ingredients FOR INSERT WITH CHECK (public.can_edit('ingredients'::text));
+CREATE POLICY ingredients_insert ON public.ingredients FOR INSERT WITH CHECK (( SELECT public.can_edit('ingredients'::text) AS can_edit));
 
 
 --
 -- Name: ingredients ingredients_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY ingredients_select ON public.ingredients FOR SELECT USING (public.can_view('ingredients'::text));
+CREATE POLICY ingredients_select ON public.ingredients FOR SELECT USING (( SELECT public.can_view('ingredients'::text) AS can_view));
 
 
 --
 -- Name: ingredients ingredients_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY ingredients_update ON public.ingredients FOR UPDATE USING (public.can_edit('ingredients'::text)) WITH CHECK (public.can_edit('ingredients'::text));
+CREATE POLICY ingredients_update ON public.ingredients FOR UPDATE USING (( SELECT public.can_edit('ingredients'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('ingredients'::text) AS can_edit));
 
 
 --
@@ -6486,28 +7019,28 @@ ALTER TABLE public.lots ENABLE ROW LEVEL SECURITY;
 -- Name: lots lots_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY lots_delete ON public.lots FOR DELETE USING (public.can_delete('inventory'::text));
+CREATE POLICY lots_delete ON public.lots FOR DELETE USING (( SELECT public.can_delete('inventory'::text) AS can_delete));
 
 
 --
 -- Name: lots lots_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY lots_insert ON public.lots FOR INSERT WITH CHECK (public.can_edit('inventory'::text));
+CREATE POLICY lots_insert ON public.lots FOR INSERT WITH CHECK (( SELECT public.can_edit('inventory'::text) AS can_edit));
 
 
 --
 -- Name: lots lots_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY lots_select ON public.lots FOR SELECT USING (public.can_view('inventory'::text));
+CREATE POLICY lots_select ON public.lots FOR SELECT USING (( SELECT public.can_view('inventory'::text) AS can_view));
 
 
 --
 -- Name: lots lots_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY lots_update ON public.lots FOR UPDATE USING (public.can_edit('inventory'::text)) WITH CHECK (public.can_edit('inventory'::text));
+CREATE POLICY lots_update ON public.lots FOR UPDATE USING (( SELECT public.can_edit('inventory'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('inventory'::text) AS can_edit));
 
 
 --
@@ -6520,14 +7053,14 @@ ALTER TABLE public.packaging_article_materials ENABLE ROW LEVEL SECURITY;
 -- Name: packaging_article_materials packaging_article_materials_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY packaging_article_materials_delete ON public.packaging_article_materials FOR DELETE TO authenticated USING (public.can_delete('settings'::text));
+CREATE POLICY packaging_article_materials_delete ON public.packaging_article_materials FOR DELETE TO authenticated USING (( SELECT public.can_delete('settings'::text) AS can_delete));
 
 
 --
 -- Name: packaging_article_materials packaging_article_materials_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY packaging_article_materials_insert ON public.packaging_article_materials FOR INSERT TO authenticated WITH CHECK (public.can_edit('settings'::text));
+CREATE POLICY packaging_article_materials_insert ON public.packaging_article_materials FOR INSERT TO authenticated WITH CHECK (( SELECT public.can_edit('settings'::text) AS can_edit));
 
 
 --
@@ -6541,7 +7074,7 @@ CREATE POLICY packaging_article_materials_select ON public.packaging_article_mat
 -- Name: packaging_article_materials packaging_article_materials_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY packaging_article_materials_update ON public.packaging_article_materials FOR UPDATE TO authenticated USING (public.can_edit('settings'::text)) WITH CHECK (public.can_edit('settings'::text));
+CREATE POLICY packaging_article_materials_update ON public.packaging_article_materials FOR UPDATE TO authenticated USING (( SELECT public.can_edit('settings'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('settings'::text) AS can_edit));
 
 
 --
@@ -6554,14 +7087,14 @@ ALTER TABLE public.packaging_articles ENABLE ROW LEVEL SECURITY;
 -- Name: packaging_articles packaging_articles_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY packaging_articles_delete ON public.packaging_articles FOR DELETE TO authenticated USING (public.can_delete('settings'::text));
+CREATE POLICY packaging_articles_delete ON public.packaging_articles FOR DELETE TO authenticated USING (( SELECT public.can_delete('settings'::text) AS can_delete));
 
 
 --
 -- Name: packaging_articles packaging_articles_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY packaging_articles_insert ON public.packaging_articles FOR INSERT TO authenticated WITH CHECK (public.can_edit('settings'::text));
+CREATE POLICY packaging_articles_insert ON public.packaging_articles FOR INSERT TO authenticated WITH CHECK (( SELECT public.can_edit('settings'::text) AS can_edit));
 
 
 --
@@ -6575,7 +7108,7 @@ CREATE POLICY packaging_articles_select ON public.packaging_articles FOR SELECT 
 -- Name: packaging_articles packaging_articles_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY packaging_articles_update ON public.packaging_articles FOR UPDATE TO authenticated USING (public.can_edit('settings'::text)) WITH CHECK (public.can_edit('settings'::text));
+CREATE POLICY packaging_articles_update ON public.packaging_articles FOR UPDATE TO authenticated USING (( SELECT public.can_edit('settings'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('settings'::text) AS can_edit));
 
 
 --
@@ -6588,14 +7121,14 @@ ALTER TABLE public.packaging_materials ENABLE ROW LEVEL SECURITY;
 -- Name: packaging_materials packaging_materials_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY packaging_materials_delete ON public.packaging_materials FOR DELETE TO authenticated USING (public.can_delete('settings'::text));
+CREATE POLICY packaging_materials_delete ON public.packaging_materials FOR DELETE TO authenticated USING (( SELECT public.can_delete('settings'::text) AS can_delete));
 
 
 --
 -- Name: packaging_materials packaging_materials_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY packaging_materials_insert ON public.packaging_materials FOR INSERT TO authenticated WITH CHECK (public.can_edit('settings'::text));
+CREATE POLICY packaging_materials_insert ON public.packaging_materials FOR INSERT TO authenticated WITH CHECK (( SELECT public.can_edit('settings'::text) AS can_edit));
 
 
 --
@@ -6609,7 +7142,7 @@ CREATE POLICY packaging_materials_select ON public.packaging_materials FOR SELEC
 -- Name: packaging_materials packaging_materials_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY packaging_materials_update ON public.packaging_materials FOR UPDATE TO authenticated USING (public.can_edit('settings'::text)) WITH CHECK (public.can_edit('settings'::text));
+CREATE POLICY packaging_materials_update ON public.packaging_materials FOR UPDATE TO authenticated USING (( SELECT public.can_edit('settings'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('settings'::text) AS can_edit));
 
 
 --
@@ -6635,28 +7168,28 @@ ALTER TABLE public.processing_comments ENABLE ROW LEVEL SECURITY;
 -- Name: processing_comments processing_comments_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY processing_comments_delete ON public.processing_comments FOR DELETE TO authenticated USING (public.can_delete('batches'::text));
+CREATE POLICY processing_comments_delete ON public.processing_comments FOR DELETE TO authenticated USING (( SELECT public.can_delete('batches'::text) AS can_delete));
 
 
 --
 -- Name: processing_comments processing_comments_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY processing_comments_insert ON public.processing_comments FOR INSERT TO authenticated WITH CHECK (public.can_edit('batches'::text));
+CREATE POLICY processing_comments_insert ON public.processing_comments FOR INSERT TO authenticated WITH CHECK (( SELECT public.can_edit('batches'::text) AS can_edit));
 
 
 --
 -- Name: processing_comments processing_comments_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY processing_comments_select ON public.processing_comments FOR SELECT TO authenticated USING (public.can_view('batches'::text));
+CREATE POLICY processing_comments_select ON public.processing_comments FOR SELECT TO authenticated USING (( SELECT public.can_view('batches'::text) AS can_view));
 
 
 --
 -- Name: processing_comments processing_comments_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY processing_comments_update ON public.processing_comments FOR UPDATE TO authenticated USING (public.can_edit('batches'::text)) WITH CHECK (public.can_edit('batches'::text));
+CREATE POLICY processing_comments_update ON public.processing_comments FOR UPDATE TO authenticated USING (( SELECT public.can_edit('batches'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('batches'::text) AS can_edit));
 
 
 --
@@ -6669,28 +7202,28 @@ ALTER TABLE public.processing_sessions ENABLE ROW LEVEL SECURITY;
 -- Name: processing_sessions processing_sessions_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY processing_sessions_delete ON public.processing_sessions FOR DELETE TO authenticated USING (public.can_delete('batches'::text));
+CREATE POLICY processing_sessions_delete ON public.processing_sessions FOR DELETE TO authenticated USING (( SELECT public.can_delete('batches'::text) AS can_delete));
 
 
 --
 -- Name: processing_sessions processing_sessions_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY processing_sessions_insert ON public.processing_sessions FOR INSERT TO authenticated WITH CHECK (public.can_edit('batches'::text));
+CREATE POLICY processing_sessions_insert ON public.processing_sessions FOR INSERT TO authenticated WITH CHECK (( SELECT public.can_edit('batches'::text) AS can_edit));
 
 
 --
 -- Name: processing_sessions processing_sessions_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY processing_sessions_select ON public.processing_sessions FOR SELECT TO authenticated USING (public.can_view('batches'::text));
+CREATE POLICY processing_sessions_select ON public.processing_sessions FOR SELECT TO authenticated USING (( SELECT public.can_view('batches'::text) AS can_view));
 
 
 --
 -- Name: processing_sessions processing_sessions_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY processing_sessions_update ON public.processing_sessions FOR UPDATE TO authenticated USING (public.can_edit('batches'::text)) WITH CHECK (public.can_edit('batches'::text));
+CREATE POLICY processing_sessions_update ON public.processing_sessions FOR UPDATE TO authenticated USING (( SELECT public.can_edit('batches'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('batches'::text) AS can_edit));
 
 
 --
@@ -6703,14 +7236,14 @@ ALTER TABLE public.product_sheet_revisions ENABLE ROW LEVEL SECURITY;
 -- Name: product_sheet_revisions product_sheet_revisions_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY product_sheet_revisions_insert ON public.product_sheet_revisions FOR INSERT WITH CHECK (public.can_edit('product_sheets'::text));
+CREATE POLICY product_sheet_revisions_insert ON public.product_sheet_revisions FOR INSERT WITH CHECK (( SELECT public.can_edit('product_sheets'::text) AS can_edit));
 
 
 --
 -- Name: product_sheet_revisions product_sheet_revisions_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY product_sheet_revisions_select ON public.product_sheet_revisions FOR SELECT USING (public.can_view('product_sheets'::text));
+CREATE POLICY product_sheet_revisions_select ON public.product_sheet_revisions FOR SELECT USING (( SELECT public.can_view('product_sheets'::text) AS can_view));
 
 
 --
@@ -6723,28 +7256,28 @@ ALTER TABLE public.product_sheets ENABLE ROW LEVEL SECURITY;
 -- Name: product_sheets product_sheets_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY product_sheets_delete ON public.product_sheets FOR DELETE USING (public.can_delete('product_sheets'::text));
+CREATE POLICY product_sheets_delete ON public.product_sheets FOR DELETE USING (( SELECT public.can_delete('product_sheets'::text) AS can_delete));
 
 
 --
 -- Name: product_sheets product_sheets_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY product_sheets_insert ON public.product_sheets FOR INSERT WITH CHECK (public.can_edit('product_sheets'::text));
+CREATE POLICY product_sheets_insert ON public.product_sheets FOR INSERT WITH CHECK (( SELECT public.can_edit('product_sheets'::text) AS can_edit));
 
 
 --
 -- Name: product_sheets product_sheets_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY product_sheets_select ON public.product_sheets FOR SELECT USING (public.can_view('product_sheets'::text));
+CREATE POLICY product_sheets_select ON public.product_sheets FOR SELECT USING (( SELECT public.can_view('product_sheets'::text) AS can_view));
 
 
 --
 -- Name: product_sheets product_sheets_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY product_sheets_update ON public.product_sheets FOR UPDATE USING (public.can_edit('product_sheets'::text));
+CREATE POLICY product_sheets_update ON public.product_sheets FOR UPDATE USING (( SELECT public.can_edit('product_sheets'::text) AS can_edit));
 
 
 --
@@ -6757,28 +7290,28 @@ ALTER TABLE public.recipe_brewing_specs ENABLE ROW LEVEL SECURITY;
 -- Name: recipe_brewing_specs recipe_brewing_specs_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_brewing_specs_delete ON public.recipe_brewing_specs FOR DELETE USING (public.can_delete('recipes'::text));
+CREATE POLICY recipe_brewing_specs_delete ON public.recipe_brewing_specs FOR DELETE USING (( SELECT public.can_delete('recipes'::text) AS can_delete));
 
 
 --
 -- Name: recipe_brewing_specs recipe_brewing_specs_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_brewing_specs_insert ON public.recipe_brewing_specs FOR INSERT WITH CHECK (public.can_edit('recipes'::text));
+CREATE POLICY recipe_brewing_specs_insert ON public.recipe_brewing_specs FOR INSERT WITH CHECK (( SELECT public.can_edit('recipes'::text) AS can_edit));
 
 
 --
 -- Name: recipe_brewing_specs recipe_brewing_specs_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_brewing_specs_select ON public.recipe_brewing_specs FOR SELECT USING (public.can_view('recipes'::text));
+CREATE POLICY recipe_brewing_specs_select ON public.recipe_brewing_specs FOR SELECT USING (( SELECT public.can_view('recipes'::text) AS can_view));
 
 
 --
 -- Name: recipe_brewing_specs recipe_brewing_specs_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_brewing_specs_update ON public.recipe_brewing_specs FOR UPDATE USING (public.can_edit('recipes'::text)) WITH CHECK (public.can_edit('recipes'::text));
+CREATE POLICY recipe_brewing_specs_update ON public.recipe_brewing_specs FOR UPDATE USING (( SELECT public.can_edit('recipes'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('recipes'::text) AS can_edit));
 
 
 --
@@ -6791,28 +7324,28 @@ ALTER TABLE public.recipe_cellar_steps ENABLE ROW LEVEL SECURITY;
 -- Name: recipe_cellar_steps recipe_cellar_steps_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_cellar_steps_delete ON public.recipe_cellar_steps FOR DELETE TO authenticated USING (public.can_edit('recipes'::text));
+CREATE POLICY recipe_cellar_steps_delete ON public.recipe_cellar_steps FOR DELETE TO authenticated USING (( SELECT public.can_edit('recipes'::text) AS can_edit));
 
 
 --
 -- Name: recipe_cellar_steps recipe_cellar_steps_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_cellar_steps_insert ON public.recipe_cellar_steps FOR INSERT TO authenticated WITH CHECK (public.can_edit('recipes'::text));
+CREATE POLICY recipe_cellar_steps_insert ON public.recipe_cellar_steps FOR INSERT TO authenticated WITH CHECK (( SELECT public.can_edit('recipes'::text) AS can_edit));
 
 
 --
 -- Name: recipe_cellar_steps recipe_cellar_steps_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_cellar_steps_select ON public.recipe_cellar_steps FOR SELECT TO authenticated USING (public.can_view('recipes'::text));
+CREATE POLICY recipe_cellar_steps_select ON public.recipe_cellar_steps FOR SELECT TO authenticated USING (( SELECT public.can_view('recipes'::text) AS can_view));
 
 
 --
 -- Name: recipe_cellar_steps recipe_cellar_steps_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_cellar_steps_update ON public.recipe_cellar_steps FOR UPDATE TO authenticated USING (public.can_edit('recipes'::text)) WITH CHECK (public.can_edit('recipes'::text));
+CREATE POLICY recipe_cellar_steps_update ON public.recipe_cellar_steps FOR UPDATE TO authenticated USING (( SELECT public.can_edit('recipes'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('recipes'::text) AS can_edit));
 
 
 --
@@ -6825,28 +7358,28 @@ ALTER TABLE public.recipe_comments ENABLE ROW LEVEL SECURITY;
 -- Name: recipe_comments recipe_comments_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_comments_delete ON public.recipe_comments FOR DELETE USING (public.can_delete('recipes'::text));
+CREATE POLICY recipe_comments_delete ON public.recipe_comments FOR DELETE USING (( SELECT public.can_delete('recipes'::text) AS can_delete));
 
 
 --
 -- Name: recipe_comments recipe_comments_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_comments_insert ON public.recipe_comments FOR INSERT WITH CHECK (public.can_edit('recipes'::text));
+CREATE POLICY recipe_comments_insert ON public.recipe_comments FOR INSERT WITH CHECK (( SELECT public.can_edit('recipes'::text) AS can_edit));
 
 
 --
 -- Name: recipe_comments recipe_comments_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_comments_select ON public.recipe_comments FOR SELECT USING (public.can_view('recipes'::text));
+CREATE POLICY recipe_comments_select ON public.recipe_comments FOR SELECT USING (( SELECT public.can_view('recipes'::text) AS can_view));
 
 
 --
 -- Name: recipe_comments recipe_comments_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_comments_update ON public.recipe_comments FOR UPDATE USING (public.can_edit('recipes'::text)) WITH CHECK (public.can_edit('recipes'::text));
+CREATE POLICY recipe_comments_update ON public.recipe_comments FOR UPDATE USING (( SELECT public.can_edit('recipes'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('recipes'::text) AS can_edit));
 
 
 --
@@ -6859,28 +7392,28 @@ ALTER TABLE public.recipe_costs ENABLE ROW LEVEL SECURITY;
 -- Name: recipe_costs recipe_costs_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_costs_delete ON public.recipe_costs FOR DELETE USING (public.can_delete('recipes'::text));
+CREATE POLICY recipe_costs_delete ON public.recipe_costs FOR DELETE USING (( SELECT public.can_delete('recipes'::text) AS can_delete));
 
 
 --
 -- Name: recipe_costs recipe_costs_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_costs_insert ON public.recipe_costs FOR INSERT WITH CHECK (public.can_edit('recipes'::text));
+CREATE POLICY recipe_costs_insert ON public.recipe_costs FOR INSERT WITH CHECK (( SELECT public.can_edit('recipes'::text) AS can_edit));
 
 
 --
 -- Name: recipe_costs recipe_costs_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_costs_select ON public.recipe_costs FOR SELECT USING (public.can_view('recipes'::text));
+CREATE POLICY recipe_costs_select ON public.recipe_costs FOR SELECT USING (( SELECT public.can_view('recipes'::text) AS can_view));
 
 
 --
 -- Name: recipe_costs recipe_costs_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_costs_update ON public.recipe_costs FOR UPDATE USING (public.can_edit('recipes'::text)) WITH CHECK (public.can_edit('recipes'::text));
+CREATE POLICY recipe_costs_update ON public.recipe_costs FOR UPDATE USING (( SELECT public.can_edit('recipes'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('recipes'::text) AS can_edit));
 
 
 --
@@ -6893,28 +7426,28 @@ ALTER TABLE public.recipe_fermentation ENABLE ROW LEVEL SECURITY;
 -- Name: recipe_fermentation recipe_fermentation_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_fermentation_delete ON public.recipe_fermentation FOR DELETE USING (public.can_delete('recipes'::text));
+CREATE POLICY recipe_fermentation_delete ON public.recipe_fermentation FOR DELETE USING (( SELECT public.can_delete('recipes'::text) AS can_delete));
 
 
 --
 -- Name: recipe_fermentation recipe_fermentation_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_fermentation_insert ON public.recipe_fermentation FOR INSERT WITH CHECK (public.can_edit('recipes'::text));
+CREATE POLICY recipe_fermentation_insert ON public.recipe_fermentation FOR INSERT WITH CHECK (( SELECT public.can_edit('recipes'::text) AS can_edit));
 
 
 --
 -- Name: recipe_fermentation recipe_fermentation_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_fermentation_select ON public.recipe_fermentation FOR SELECT USING (public.can_view('recipes'::text));
+CREATE POLICY recipe_fermentation_select ON public.recipe_fermentation FOR SELECT USING (( SELECT public.can_view('recipes'::text) AS can_view));
 
 
 --
 -- Name: recipe_fermentation recipe_fermentation_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_fermentation_update ON public.recipe_fermentation FOR UPDATE USING (public.can_edit('recipes'::text)) WITH CHECK (public.can_edit('recipes'::text));
+CREATE POLICY recipe_fermentation_update ON public.recipe_fermentation FOR UPDATE USING (( SELECT public.can_edit('recipes'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('recipes'::text) AS can_edit));
 
 
 --
@@ -6927,28 +7460,28 @@ ALTER TABLE public.recipe_ingredients ENABLE ROW LEVEL SECURITY;
 -- Name: recipe_ingredients recipe_ingredients_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_ingredients_delete ON public.recipe_ingredients FOR DELETE USING (public.can_edit('recipes'::text));
+CREATE POLICY recipe_ingredients_delete ON public.recipe_ingredients FOR DELETE USING (( SELECT public.can_edit('recipes'::text) AS can_edit));
 
 
 --
 -- Name: recipe_ingredients recipe_ingredients_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_ingredients_insert ON public.recipe_ingredients FOR INSERT WITH CHECK (public.can_edit('recipes'::text));
+CREATE POLICY recipe_ingredients_insert ON public.recipe_ingredients FOR INSERT WITH CHECK (( SELECT public.can_edit('recipes'::text) AS can_edit));
 
 
 --
 -- Name: recipe_ingredients recipe_ingredients_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_ingredients_select ON public.recipe_ingredients FOR SELECT USING (public.can_view('recipes'::text));
+CREATE POLICY recipe_ingredients_select ON public.recipe_ingredients FOR SELECT USING (( SELECT public.can_view('recipes'::text) AS can_view));
 
 
 --
 -- Name: recipe_ingredients recipe_ingredients_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_ingredients_update ON public.recipe_ingredients FOR UPDATE USING (public.can_edit('recipes'::text)) WITH CHECK (public.can_edit('recipes'::text));
+CREATE POLICY recipe_ingredients_update ON public.recipe_ingredients FOR UPDATE USING (( SELECT public.can_edit('recipes'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('recipes'::text) AS can_edit));
 
 
 --
@@ -6961,28 +7494,28 @@ ALTER TABLE public.recipe_packaging ENABLE ROW LEVEL SECURITY;
 -- Name: recipe_packaging recipe_packaging_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_packaging_delete ON public.recipe_packaging FOR DELETE USING (public.can_delete('recipes'::text));
+CREATE POLICY recipe_packaging_delete ON public.recipe_packaging FOR DELETE USING (( SELECT public.can_delete('recipes'::text) AS can_delete));
 
 
 --
 -- Name: recipe_packaging recipe_packaging_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_packaging_insert ON public.recipe_packaging FOR INSERT WITH CHECK (public.can_edit('recipes'::text));
+CREATE POLICY recipe_packaging_insert ON public.recipe_packaging FOR INSERT WITH CHECK (( SELECT public.can_edit('recipes'::text) AS can_edit));
 
 
 --
 -- Name: recipe_packaging recipe_packaging_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_packaging_select ON public.recipe_packaging FOR SELECT USING (public.can_view('recipes'::text));
+CREATE POLICY recipe_packaging_select ON public.recipe_packaging FOR SELECT USING (( SELECT public.can_view('recipes'::text) AS can_view));
 
 
 --
 -- Name: recipe_packaging recipe_packaging_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_packaging_update ON public.recipe_packaging FOR UPDATE USING (public.can_edit('recipes'::text)) WITH CHECK (public.can_edit('recipes'::text));
+CREATE POLICY recipe_packaging_update ON public.recipe_packaging FOR UPDATE USING (( SELECT public.can_edit('recipes'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('recipes'::text) AS can_edit));
 
 
 --
@@ -6995,28 +7528,28 @@ ALTER TABLE public.recipe_process_steps ENABLE ROW LEVEL SECURITY;
 -- Name: recipe_process_steps recipe_process_steps_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_process_steps_delete ON public.recipe_process_steps FOR DELETE USING (public.can_delete('recipes'::text));
+CREATE POLICY recipe_process_steps_delete ON public.recipe_process_steps FOR DELETE USING (( SELECT public.can_delete('recipes'::text) AS can_delete));
 
 
 --
 -- Name: recipe_process_steps recipe_process_steps_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_process_steps_insert ON public.recipe_process_steps FOR INSERT WITH CHECK (public.can_edit('recipes'::text));
+CREATE POLICY recipe_process_steps_insert ON public.recipe_process_steps FOR INSERT WITH CHECK (( SELECT public.can_edit('recipes'::text) AS can_edit));
 
 
 --
 -- Name: recipe_process_steps recipe_process_steps_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_process_steps_select ON public.recipe_process_steps FOR SELECT USING (public.can_view('recipes'::text));
+CREATE POLICY recipe_process_steps_select ON public.recipe_process_steps FOR SELECT USING (( SELECT public.can_view('recipes'::text) AS can_view));
 
 
 --
 -- Name: recipe_process_steps recipe_process_steps_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_process_steps_update ON public.recipe_process_steps FOR UPDATE USING (public.can_edit('recipes'::text)) WITH CHECK (public.can_edit('recipes'::text));
+CREATE POLICY recipe_process_steps_update ON public.recipe_process_steps FOR UPDATE USING (( SELECT public.can_edit('recipes'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('recipes'::text) AS can_edit));
 
 
 --
@@ -7029,28 +7562,28 @@ ALTER TABLE public.recipe_revisions ENABLE ROW LEVEL SECURITY;
 -- Name: recipe_revisions recipe_revisions_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_revisions_delete ON public.recipe_revisions FOR DELETE USING (public.can_delete('recipes'::text));
+CREATE POLICY recipe_revisions_delete ON public.recipe_revisions FOR DELETE USING (( SELECT public.can_delete('recipes'::text) AS can_delete));
 
 
 --
 -- Name: recipe_revisions recipe_revisions_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_revisions_insert ON public.recipe_revisions FOR INSERT WITH CHECK (public.can_edit('recipes'::text));
+CREATE POLICY recipe_revisions_insert ON public.recipe_revisions FOR INSERT WITH CHECK (( SELECT public.can_edit('recipes'::text) AS can_edit));
 
 
 --
 -- Name: recipe_revisions recipe_revisions_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_revisions_select ON public.recipe_revisions FOR SELECT USING (public.can_view('recipes'::text));
+CREATE POLICY recipe_revisions_select ON public.recipe_revisions FOR SELECT USING (( SELECT public.can_view('recipes'::text) AS can_view));
 
 
 --
 -- Name: recipe_revisions recipe_revisions_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_revisions_update ON public.recipe_revisions FOR UPDATE USING (public.can_edit('recipes'::text)) WITH CHECK (public.can_edit('recipes'::text));
+CREATE POLICY recipe_revisions_update ON public.recipe_revisions FOR UPDATE USING (( SELECT public.can_edit('recipes'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('recipes'::text) AS can_edit));
 
 
 --
@@ -7063,28 +7596,28 @@ ALTER TABLE public.recipe_specs ENABLE ROW LEVEL SECURITY;
 -- Name: recipe_specs recipe_specs_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_specs_delete ON public.recipe_specs FOR DELETE USING (public.can_delete('recipes'::text));
+CREATE POLICY recipe_specs_delete ON public.recipe_specs FOR DELETE USING (( SELECT public.can_delete('recipes'::text) AS can_delete));
 
 
 --
 -- Name: recipe_specs recipe_specs_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_specs_insert ON public.recipe_specs FOR INSERT WITH CHECK (public.can_edit('recipes'::text));
+CREATE POLICY recipe_specs_insert ON public.recipe_specs FOR INSERT WITH CHECK (( SELECT public.can_edit('recipes'::text) AS can_edit));
 
 
 --
 -- Name: recipe_specs recipe_specs_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_specs_select ON public.recipe_specs FOR SELECT USING (public.can_view('recipes'::text));
+CREATE POLICY recipe_specs_select ON public.recipe_specs FOR SELECT USING (( SELECT public.can_view('recipes'::text) AS can_view));
 
 
 --
 -- Name: recipe_specs recipe_specs_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_specs_update ON public.recipe_specs FOR UPDATE USING (public.can_edit('recipes'::text)) WITH CHECK (public.can_edit('recipes'::text));
+CREATE POLICY recipe_specs_update ON public.recipe_specs FOR UPDATE USING (( SELECT public.can_edit('recipes'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('recipes'::text) AS can_edit));
 
 
 --
@@ -7097,28 +7630,28 @@ ALTER TABLE public.recipe_water ENABLE ROW LEVEL SECURITY;
 -- Name: recipe_water recipe_water_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_water_delete ON public.recipe_water FOR DELETE USING (public.can_delete('recipes'::text));
+CREATE POLICY recipe_water_delete ON public.recipe_water FOR DELETE USING (( SELECT public.can_delete('recipes'::text) AS can_delete));
 
 
 --
 -- Name: recipe_water recipe_water_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_water_insert ON public.recipe_water FOR INSERT WITH CHECK (public.can_edit('recipes'::text));
+CREATE POLICY recipe_water_insert ON public.recipe_water FOR INSERT WITH CHECK (( SELECT public.can_edit('recipes'::text) AS can_edit));
 
 
 --
 -- Name: recipe_water recipe_water_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_water_select ON public.recipe_water FOR SELECT USING (public.can_view('recipes'::text));
+CREATE POLICY recipe_water_select ON public.recipe_water FOR SELECT USING (( SELECT public.can_view('recipes'::text) AS can_view));
 
 
 --
 -- Name: recipe_water recipe_water_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipe_water_update ON public.recipe_water FOR UPDATE USING (public.can_edit('recipes'::text)) WITH CHECK (public.can_edit('recipes'::text));
+CREATE POLICY recipe_water_update ON public.recipe_water FOR UPDATE USING (( SELECT public.can_edit('recipes'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('recipes'::text) AS can_edit));
 
 
 --
@@ -7131,28 +7664,28 @@ ALTER TABLE public.recipes ENABLE ROW LEVEL SECURITY;
 -- Name: recipes recipes_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipes_delete ON public.recipes FOR DELETE USING (public.can_delete('recipes'::text));
+CREATE POLICY recipes_delete ON public.recipes FOR DELETE USING (( SELECT public.can_delete('recipes'::text) AS can_delete));
 
 
 --
 -- Name: recipes recipes_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipes_insert ON public.recipes FOR INSERT WITH CHECK (public.can_edit('recipes'::text));
+CREATE POLICY recipes_insert ON public.recipes FOR INSERT WITH CHECK (( SELECT public.can_edit('recipes'::text) AS can_edit));
 
 
 --
 -- Name: recipes recipes_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipes_select ON public.recipes FOR SELECT USING (public.can_view('recipes'::text));
+CREATE POLICY recipes_select ON public.recipes FOR SELECT USING (( SELECT public.can_view('recipes'::text) AS can_view));
 
 
 --
 -- Name: recipes recipes_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY recipes_update ON public.recipes FOR UPDATE USING (public.can_edit('recipes'::text)) WITH CHECK (public.can_edit('recipes'::text));
+CREATE POLICY recipes_update ON public.recipes FOR UPDATE USING (( SELECT public.can_edit('recipes'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('recipes'::text) AS can_edit));
 
 
 --
@@ -7165,14 +7698,14 @@ ALTER TABLE public.role_permissions ENABLE ROW LEVEL SECURITY;
 -- Name: role_permissions role_permissions_delete_admin; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY role_permissions_delete_admin ON public.role_permissions FOR DELETE USING (public.is_admin());
+CREATE POLICY role_permissions_delete_admin ON public.role_permissions FOR DELETE USING (( SELECT public.is_admin() AS is_admin));
 
 
 --
 -- Name: role_permissions role_permissions_insert_admin; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY role_permissions_insert_admin ON public.role_permissions FOR INSERT WITH CHECK (public.is_admin());
+CREATE POLICY role_permissions_insert_admin ON public.role_permissions FOR INSERT WITH CHECK (( SELECT public.is_admin() AS is_admin));
 
 
 --
@@ -7186,7 +7719,7 @@ CREATE POLICY role_permissions_select ON public.role_permissions FOR SELECT USIN
 -- Name: role_permissions role_permissions_update_admin; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY role_permissions_update_admin ON public.role_permissions FOR UPDATE USING (public.is_admin()) WITH CHECK (public.is_admin());
+CREATE POLICY role_permissions_update_admin ON public.role_permissions FOR UPDATE USING (( SELECT public.is_admin() AS is_admin)) WITH CHECK (( SELECT public.is_admin() AS is_admin));
 
 
 --
@@ -7199,14 +7732,14 @@ ALTER TABLE public.roles ENABLE ROW LEVEL SECURITY;
 -- Name: roles roles_delete_admin; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY roles_delete_admin ON public.roles FOR DELETE USING (public.is_admin());
+CREATE POLICY roles_delete_admin ON public.roles FOR DELETE USING (( SELECT public.is_admin() AS is_admin));
 
 
 --
 -- Name: roles roles_insert_admin; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY roles_insert_admin ON public.roles FOR INSERT WITH CHECK (public.is_admin());
+CREATE POLICY roles_insert_admin ON public.roles FOR INSERT WITH CHECK (( SELECT public.is_admin() AS is_admin));
 
 
 --
@@ -7220,7 +7753,7 @@ CREATE POLICY roles_select ON public.roles FOR SELECT USING (true);
 -- Name: roles roles_update_admin; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY roles_update_admin ON public.roles FOR UPDATE USING (public.is_admin()) WITH CHECK (public.is_admin());
+CREATE POLICY roles_update_admin ON public.roles FOR UPDATE USING (( SELECT public.is_admin() AS is_admin)) WITH CHECK (( SELECT public.is_admin() AS is_admin));
 
 
 --
@@ -7233,28 +7766,28 @@ ALTER TABLE public.stock_movements ENABLE ROW LEVEL SECURITY;
 -- Name: stock_movements stock_movements_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY stock_movements_delete ON public.stock_movements FOR DELETE USING (public.can_delete('inventory'::text));
+CREATE POLICY stock_movements_delete ON public.stock_movements FOR DELETE USING (( SELECT public.can_delete('inventory'::text) AS can_delete));
 
 
 --
 -- Name: stock_movements stock_movements_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY stock_movements_insert ON public.stock_movements FOR INSERT WITH CHECK (public.can_edit('inventory'::text));
+CREATE POLICY stock_movements_insert ON public.stock_movements FOR INSERT WITH CHECK (( SELECT public.can_edit('inventory'::text) AS can_edit));
 
 
 --
 -- Name: stock_movements stock_movements_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY stock_movements_select ON public.stock_movements FOR SELECT USING (public.can_view('inventory'::text));
+CREATE POLICY stock_movements_select ON public.stock_movements FOR SELECT USING (( SELECT public.can_view('inventory'::text) AS can_view));
 
 
 --
 -- Name: stock_movements stock_movements_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY stock_movements_update ON public.stock_movements FOR UPDATE USING (public.can_edit('inventory'::text)) WITH CHECK (public.can_edit('inventory'::text));
+CREATE POLICY stock_movements_update ON public.stock_movements FOR UPDATE USING (( SELECT public.can_edit('inventory'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('inventory'::text) AS can_edit));
 
 
 --
@@ -7267,14 +7800,14 @@ ALTER TABLE public.tanks ENABLE ROW LEVEL SECURITY;
 -- Name: tanks tanks_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY tanks_delete ON public.tanks FOR DELETE TO authenticated USING (public.can_delete('settings'::text));
+CREATE POLICY tanks_delete ON public.tanks FOR DELETE TO authenticated USING (( SELECT public.can_delete('settings'::text) AS can_delete));
 
 
 --
 -- Name: tanks tanks_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY tanks_insert ON public.tanks FOR INSERT TO authenticated WITH CHECK (public.can_edit('settings'::text));
+CREATE POLICY tanks_insert ON public.tanks FOR INSERT TO authenticated WITH CHECK (( SELECT public.can_edit('settings'::text) AS can_edit));
 
 
 --
@@ -7288,7 +7821,7 @@ CREATE POLICY tanks_select ON public.tanks FOR SELECT TO authenticated USING (tr
 -- Name: tanks tanks_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY tanks_update ON public.tanks FOR UPDATE TO authenticated USING (public.can_edit('settings'::text)) WITH CHECK (public.can_edit('settings'::text));
+CREATE POLICY tanks_update ON public.tanks FOR UPDATE TO authenticated USING (( SELECT public.can_edit('settings'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('settings'::text) AS can_edit));
 
 
 --
@@ -7301,14 +7834,14 @@ ALTER TABLE public.units ENABLE ROW LEVEL SECURITY;
 -- Name: units units_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY units_delete ON public.units FOR DELETE USING (public.can_delete('settings'::text));
+CREATE POLICY units_delete ON public.units FOR DELETE USING (( SELECT public.can_delete('settings'::text) AS can_delete));
 
 
 --
 -- Name: units units_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY units_insert ON public.units FOR INSERT WITH CHECK (public.can_edit('settings'::text));
+CREATE POLICY units_insert ON public.units FOR INSERT WITH CHECK (( SELECT public.can_edit('settings'::text) AS can_edit));
 
 
 --
@@ -7322,7 +7855,7 @@ CREATE POLICY units_select ON public.units FOR SELECT USING (true);
 -- Name: units units_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY units_update ON public.units FOR UPDATE USING (public.can_edit('settings'::text)) WITH CHECK (public.can_edit('settings'::text));
+CREATE POLICY units_update ON public.units FOR UPDATE USING (( SELECT public.can_edit('settings'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('settings'::text) AS can_edit));
 
 
 --
@@ -7335,14 +7868,14 @@ ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 -- Name: users users_delete_admin; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY users_delete_admin ON public.users FOR DELETE TO authenticated USING (public.is_admin());
+CREATE POLICY users_delete_admin ON public.users FOR DELETE TO authenticated USING (( SELECT public.is_admin() AS is_admin));
 
 
 --
 -- Name: users users_insert_admin; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY users_insert_admin ON public.users FOR INSERT TO authenticated WITH CHECK (public.is_admin());
+CREATE POLICY users_insert_admin ON public.users FOR INSERT TO authenticated WITH CHECK (( SELECT public.is_admin() AS is_admin));
 
 
 --
@@ -7356,7 +7889,7 @@ CREATE POLICY users_select ON public.users FOR SELECT TO authenticated USING (tr
 -- Name: users users_update_admin; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY users_update_admin ON public.users FOR UPDATE TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin());
+CREATE POLICY users_update_admin ON public.users FOR UPDATE TO authenticated USING (( SELECT public.is_admin() AS is_admin)) WITH CHECK (( SELECT public.is_admin() AS is_admin));
 
 
 --
@@ -7389,7 +7922,7 @@ CREATE POLICY water_settings_select ON public.water_settings FOR SELECT USING (t
 -- Name: water_settings water_settings_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY water_settings_update ON public.water_settings FOR UPDATE USING (public.can_edit('settings'::text)) WITH CHECK (public.can_edit('settings'::text));
+CREATE POLICY water_settings_update ON public.water_settings FOR UPDATE USING (( SELECT public.can_edit('settings'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('settings'::text) AS can_edit));
 
 
 --
@@ -7400,6 +7933,7 @@ REVOKE USAGE ON SCHEMA public FROM PUBLIC;
 GRANT USAGE ON SCHEMA public TO anon;
 GRANT USAGE ON SCHEMA public TO authenticated;
 GRANT USAGE ON SCHEMA public TO service_role;
+GRANT USAGE ON SCHEMA public TO claude_reader;
 
 
 --
@@ -7598,6 +8132,7 @@ GRANT ALL ON FUNCTION public.water_settings_stamp() TO service_role;
 
 GRANT SELECT ON TABLE public.batch_audit_log TO authenticated;
 GRANT ALL ON TABLE public.batch_audit_log TO service_role;
+GRANT SELECT ON TABLE public.batch_audit_log TO claude_reader;
 
 
 --
@@ -7615,6 +8150,7 @@ GRANT ALL ON SEQUENCE public.batch_audit_log_id_seq TO service_role;
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.batch_brew_comments TO authenticated;
 GRANT ALL ON TABLE public.batch_brew_comments TO service_role;
+GRANT SELECT ON TABLE public.batch_brew_comments TO claude_reader;
 
 
 --
@@ -7632,6 +8168,7 @@ GRANT ALL ON SEQUENCE public.batch_brew_comments_id_seq TO service_role;
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.batch_brews TO authenticated;
 GRANT ALL ON TABLE public.batch_brews TO service_role;
+GRANT SELECT ON TABLE public.batch_brews TO claude_reader;
 
 
 --
@@ -7649,6 +8186,7 @@ GRANT ALL ON SEQUENCE public.batch_brews_id_seq TO service_role;
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.batch_cellar_steps TO authenticated;
 GRANT ALL ON TABLE public.batch_cellar_steps TO service_role;
+GRANT SELECT ON TABLE public.batch_cellar_steps TO claude_reader;
 
 
 --
@@ -7666,6 +8204,7 @@ GRANT ALL ON SEQUENCE public.batch_cellar_steps_id_seq TO service_role;
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.batch_documents TO authenticated;
 GRANT ALL ON TABLE public.batch_documents TO service_role;
+GRANT SELECT ON TABLE public.batch_documents TO claude_reader;
 
 
 --
@@ -7678,11 +8217,30 @@ GRANT ALL ON SEQUENCE public.batch_documents_id_seq TO service_role;
 
 
 --
+-- Name: TABLE batch_dosing_checks; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.batch_dosing_checks TO authenticated;
+GRANT ALL ON TABLE public.batch_dosing_checks TO service_role;
+GRANT SELECT ON TABLE public.batch_dosing_checks TO claude_reader;
+
+
+--
+-- Name: SEQUENCE batch_dosing_checks_id_seq; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,USAGE ON SEQUENCE public.batch_dosing_checks_id_seq TO anon;
+GRANT SELECT,USAGE ON SEQUENCE public.batch_dosing_checks_id_seq TO authenticated;
+GRANT ALL ON SEQUENCE public.batch_dosing_checks_id_seq TO service_role;
+
+
+--
 -- Name: TABLE batch_hbts; Type: ACL; Schema: public; Owner: -
 --
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.batch_hbts TO authenticated;
 GRANT ALL ON TABLE public.batch_hbts TO service_role;
+GRANT SELECT ON TABLE public.batch_hbts TO claude_reader;
 
 
 --
@@ -7700,6 +8258,7 @@ GRANT ALL ON SEQUENCE public.batch_hbts_id_seq TO service_role;
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.batch_ingredients TO authenticated;
 GRANT ALL ON TABLE public.batch_ingredients TO service_role;
+GRANT SELECT ON TABLE public.batch_ingredients TO claude_reader;
 
 
 --
@@ -7717,6 +8276,7 @@ GRANT ALL ON SEQUENCE public.batch_ingredients_id_seq TO service_role;
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.batch_transfers TO authenticated;
 GRANT ALL ON TABLE public.batch_transfers TO service_role;
+GRANT SELECT ON TABLE public.batch_transfers TO claude_reader;
 
 
 --
@@ -7726,6 +8286,16 @@ GRANT ALL ON TABLE public.batch_transfers TO service_role;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.batches TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.batches TO authenticated;
 GRANT ALL ON TABLE public.batches TO service_role;
+GRANT SELECT ON TABLE public.batches TO claude_reader;
+
+
+--
+-- Name: TABLE cellar_action_tags; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.cellar_action_tags TO authenticated;
+GRANT ALL ON TABLE public.cellar_action_tags TO service_role;
+GRANT SELECT ON TABLE public.cellar_action_tags TO claude_reader;
 
 
 --
@@ -7734,6 +8304,7 @@ GRANT ALL ON TABLE public.batches TO service_role;
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.fermentation_log_entries TO authenticated;
 GRANT ALL ON TABLE public.fermentation_log_entries TO service_role;
+GRANT SELECT ON TABLE public.fermentation_log_entries TO claude_reader;
 
 
 --
@@ -7742,6 +8313,7 @@ GRANT ALL ON TABLE public.fermentation_log_entries TO service_role;
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.fermentation_log_entry_tags TO authenticated;
 GRANT ALL ON TABLE public.fermentation_log_entry_tags TO service_role;
+GRANT SELECT ON TABLE public.fermentation_log_entry_tags TO claude_reader;
 
 
 --
@@ -7750,6 +8322,7 @@ GRANT ALL ON TABLE public.fermentation_log_entry_tags TO service_role;
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.filling_sessions TO authenticated;
 GRANT ALL ON TABLE public.filling_sessions TO service_role;
+GRANT SELECT ON TABLE public.filling_sessions TO claude_reader;
 
 
 --
@@ -7758,6 +8331,7 @@ GRANT ALL ON TABLE public.filling_sessions TO service_role;
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.processing_sessions TO authenticated;
 GRANT ALL ON TABLE public.processing_sessions TO service_role;
+GRANT SELECT ON TABLE public.processing_sessions TO claude_reader;
 
 
 --
@@ -7766,6 +8340,7 @@ GRANT ALL ON TABLE public.processing_sessions TO service_role;
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.tanks TO authenticated;
 GRANT ALL ON TABLE public.tanks TO service_role;
+GRANT SELECT ON TABLE public.tanks TO claude_reader;
 
 
 --
@@ -7774,6 +8349,25 @@ GRANT ALL ON TABLE public.tanks TO service_role;
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.batch_stages TO authenticated;
 GRANT ALL ON TABLE public.batch_stages TO service_role;
+GRANT SELECT ON TABLE public.batch_stages TO claude_reader;
+
+
+--
+-- Name: TABLE batch_tank_moves; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.batch_tank_moves TO authenticated;
+GRANT ALL ON TABLE public.batch_tank_moves TO service_role;
+GRANT SELECT ON TABLE public.batch_tank_moves TO claude_reader;
+
+
+--
+-- Name: SEQUENCE batch_tank_moves_id_seq; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,USAGE ON SEQUENCE public.batch_tank_moves_id_seq TO anon;
+GRANT SELECT,USAGE ON SEQUENCE public.batch_tank_moves_id_seq TO authenticated;
+GRANT ALL ON SEQUENCE public.batch_tank_moves_id_seq TO service_role;
 
 
 --
@@ -7801,6 +8395,7 @@ GRANT ALL ON SEQUENCE public.batches_id_seq TO service_role;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.brew_capacity TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.brew_capacity TO authenticated;
 GRANT ALL ON TABLE public.brew_capacity TO service_role;
+GRANT SELECT ON TABLE public.brew_capacity TO claude_reader;
 
 
 --
@@ -7810,6 +8405,7 @@ GRANT ALL ON TABLE public.brew_capacity TO service_role;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.brew_planning TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.brew_planning TO authenticated;
 GRANT ALL ON TABLE public.brew_planning TO service_role;
+GRANT SELECT ON TABLE public.brew_planning TO claude_reader;
 
 
 --
@@ -7819,6 +8415,7 @@ GRANT ALL ON TABLE public.brew_planning TO service_role;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.brew_planning_history TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.brew_planning_history TO authenticated;
 GRANT ALL ON TABLE public.brew_planning_history TO service_role;
+GRANT SELECT ON TABLE public.brew_planning_history TO claude_reader;
 
 
 --
@@ -7828,6 +8425,7 @@ GRANT ALL ON TABLE public.brew_planning_history TO service_role;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.users TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.users TO authenticated;
 GRANT ALL ON TABLE public.users TO service_role;
+GRANT SELECT ON TABLE public.users TO claude_reader;
 
 
 --
@@ -7837,6 +8435,7 @@ GRANT ALL ON TABLE public.users TO service_role;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.brew_planning_history_detailed TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.brew_planning_history_detailed TO authenticated;
 GRANT ALL ON TABLE public.brew_planning_history_detailed TO service_role;
+GRANT SELECT ON TABLE public.brew_planning_history_detailed TO claude_reader;
 
 
 --
@@ -7846,14 +8445,7 @@ GRANT ALL ON TABLE public.brew_planning_history_detailed TO service_role;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.brew_planning_splits TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.brew_planning_splits TO authenticated;
 GRANT ALL ON TABLE public.brew_planning_splits TO service_role;
-
-
---
--- Name: TABLE cellar_action_tags; Type: ACL; Schema: public; Owner: -
---
-
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.cellar_action_tags TO authenticated;
-GRANT ALL ON TABLE public.cellar_action_tags TO service_role;
+GRANT SELECT ON TABLE public.brew_planning_splits TO claude_reader;
 
 
 --
@@ -7871,6 +8463,7 @@ GRANT ALL ON SEQUENCE public.cellar_action_tags_id_seq TO service_role;
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.cellar_plan_parts TO authenticated;
 GRANT ALL ON TABLE public.cellar_plan_parts TO service_role;
+GRANT SELECT ON TABLE public.cellar_plan_parts TO claude_reader;
 
 
 --
@@ -7889,6 +8482,7 @@ GRANT ALL ON SEQUENCE public.cellar_plan_parts_id_seq TO service_role;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.document_types TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.document_types TO authenticated;
 GRANT ALL ON TABLE public.document_types TO service_role;
+GRANT SELECT ON TABLE public.document_types TO claude_reader;
 
 
 --
@@ -7915,6 +8509,7 @@ GRANT ALL ON SEQUENCE public.fermentation_log_entry_tags_id_seq TO service_role;
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.filling_measurements TO authenticated;
 GRANT ALL ON TABLE public.filling_measurements TO service_role;
+GRANT SELECT ON TABLE public.filling_measurements TO claude_reader;
 
 
 --
@@ -7932,6 +8527,7 @@ GRANT ALL ON SEQUENCE public.filling_measurements_id_seq TO service_role;
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.filling_session_articles TO authenticated;
 GRANT ALL ON TABLE public.filling_session_articles TO service_role;
+GRANT SELECT ON TABLE public.filling_session_articles TO claude_reader;
 
 
 --
@@ -7949,6 +8545,7 @@ GRANT ALL ON SEQUENCE public.filling_session_articles_id_seq TO service_role;
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.filling_session_materials TO authenticated;
 GRANT ALL ON TABLE public.filling_session_materials TO service_role;
+GRANT SELECT ON TABLE public.filling_session_materials TO claude_reader;
 
 
 --
@@ -7975,6 +8572,7 @@ GRANT ALL ON SEQUENCE public.filling_sessions_id_seq TO service_role;
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.hbt_readings TO authenticated;
 GRANT ALL ON TABLE public.hbt_readings TO service_role;
+GRANT SELECT ON TABLE public.hbt_readings TO claude_reader;
 
 
 --
@@ -7993,6 +8591,7 @@ GRANT ALL ON SEQUENCE public.hbt_readings_id_seq TO service_role;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ingredient_categories TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ingredient_categories TO authenticated;
 GRANT ALL ON TABLE public.ingredient_categories TO service_role;
+GRANT SELECT ON TABLE public.ingredient_categories TO claude_reader;
 
 
 --
@@ -8011,6 +8610,7 @@ GRANT ALL ON SEQUENCE public.ingredient_categories_id_seq TO service_role;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ingredient_declarations TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ingredient_declarations TO authenticated;
 GRANT ALL ON TABLE public.ingredient_declarations TO service_role;
+GRANT SELECT ON TABLE public.ingredient_declarations TO claude_reader;
 
 
 --
@@ -8020,6 +8620,7 @@ GRANT ALL ON TABLE public.ingredient_declarations TO service_role;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ingredient_documents TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ingredient_documents TO authenticated;
 GRANT ALL ON TABLE public.ingredient_documents TO service_role;
+GRANT SELECT ON TABLE public.ingredient_documents TO claude_reader;
 
 
 --
@@ -8038,6 +8639,7 @@ GRANT ALL ON SEQUENCE public.ingredient_documents_id_seq TO service_role;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ingredient_revisions TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ingredient_revisions TO authenticated;
 GRANT ALL ON TABLE public.ingredient_revisions TO service_role;
+GRANT SELECT ON TABLE public.ingredient_revisions TO claude_reader;
 
 
 --
@@ -8056,6 +8658,7 @@ GRANT ALL ON SEQUENCE public.ingredient_revisions_id_seq TO service_role;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_ingredients TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_ingredients TO authenticated;
 GRANT ALL ON TABLE public.recipe_ingredients TO service_role;
+GRANT SELECT ON TABLE public.recipe_ingredients TO claude_reader;
 
 
 --
@@ -8065,6 +8668,7 @@ GRANT ALL ON TABLE public.recipe_ingredients TO service_role;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ingredient_usage_counts TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ingredient_usage_counts TO authenticated;
 GRANT ALL ON TABLE public.ingredient_usage_counts TO service_role;
+GRANT SELECT ON TABLE public.ingredient_usage_counts TO claude_reader;
 
 
 --
@@ -8074,6 +8678,7 @@ GRANT ALL ON TABLE public.ingredient_usage_counts TO service_role;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ingredients TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ingredients TO authenticated;
 GRANT ALL ON TABLE public.ingredients TO service_role;
+GRANT SELECT ON TABLE public.ingredients TO claude_reader;
 
 
 --
@@ -8092,6 +8697,7 @@ GRANT ALL ON SEQUENCE public.ingredients_id_seq TO service_role;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.lots TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.lots TO authenticated;
 GRANT ALL ON TABLE public.lots TO service_role;
+GRANT SELECT ON TABLE public.lots TO claude_reader;
 
 
 --
@@ -8109,6 +8715,7 @@ GRANT ALL ON SEQUENCE public.lots_id_seq TO service_role;
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.packaging_article_materials TO authenticated;
 GRANT ALL ON TABLE public.packaging_article_materials TO service_role;
+GRANT SELECT ON TABLE public.packaging_article_materials TO claude_reader;
 
 
 --
@@ -8126,6 +8733,7 @@ GRANT ALL ON SEQUENCE public.packaging_article_materials_id_seq TO service_role;
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.packaging_articles TO authenticated;
 GRANT ALL ON TABLE public.packaging_articles TO service_role;
+GRANT SELECT ON TABLE public.packaging_articles TO claude_reader;
 
 
 --
@@ -8143,6 +8751,7 @@ GRANT ALL ON SEQUENCE public.packaging_articles_id_seq TO service_role;
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.packaging_materials TO authenticated;
 GRANT ALL ON TABLE public.packaging_materials TO service_role;
+GRANT SELECT ON TABLE public.packaging_materials TO claude_reader;
 
 
 --
@@ -8161,6 +8770,7 @@ GRANT ALL ON SEQUENCE public.packaging_materials_id_seq TO service_role;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.permission_modules TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.permission_modules TO authenticated;
 GRANT ALL ON TABLE public.permission_modules TO service_role;
+GRANT SELECT ON TABLE public.permission_modules TO claude_reader;
 
 
 --
@@ -8169,6 +8779,7 @@ GRANT ALL ON TABLE public.permission_modules TO service_role;
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.processing_comments TO authenticated;
 GRANT ALL ON TABLE public.processing_comments TO service_role;
+GRANT SELECT ON TABLE public.processing_comments TO claude_reader;
 
 
 --
@@ -8196,6 +8807,7 @@ GRANT ALL ON SEQUENCE public.processing_sessions_id_seq TO service_role;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.product_sheet_revisions TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.product_sheet_revisions TO authenticated;
 GRANT ALL ON TABLE public.product_sheet_revisions TO service_role;
+GRANT SELECT ON TABLE public.product_sheet_revisions TO claude_reader;
 
 
 --
@@ -8214,6 +8826,7 @@ GRANT ALL ON SEQUENCE public.product_sheet_revisions_id_seq TO service_role;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.product_sheets TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.product_sheets TO authenticated;
 GRANT ALL ON TABLE public.product_sheets TO service_role;
+GRANT SELECT ON TABLE public.product_sheets TO claude_reader;
 
 
 --
@@ -8223,6 +8836,7 @@ GRANT ALL ON TABLE public.product_sheets TO service_role;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.product_sheet_status TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.product_sheet_status TO authenticated;
 GRANT ALL ON TABLE public.product_sheet_status TO service_role;
+GRANT SELECT ON TABLE public.product_sheet_status TO claude_reader;
 
 
 --
@@ -8241,6 +8855,7 @@ GRANT ALL ON SEQUENCE public.product_sheets_id_seq TO service_role;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_brewing_specs TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_brewing_specs TO authenticated;
 GRANT ALL ON TABLE public.recipe_brewing_specs TO service_role;
+GRANT SELECT ON TABLE public.recipe_brewing_specs TO claude_reader;
 
 
 --
@@ -8249,6 +8864,7 @@ GRANT ALL ON TABLE public.recipe_brewing_specs TO service_role;
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_cellar_steps TO authenticated;
 GRANT ALL ON TABLE public.recipe_cellar_steps TO service_role;
+GRANT SELECT ON TABLE public.recipe_cellar_steps TO claude_reader;
 
 
 --
@@ -8267,6 +8883,7 @@ GRANT ALL ON SEQUENCE public.recipe_cellar_steps_id_seq TO service_role;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_comments TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_comments TO authenticated;
 GRANT ALL ON TABLE public.recipe_comments TO service_role;
+GRANT SELECT ON TABLE public.recipe_comments TO claude_reader;
 
 
 --
@@ -8276,6 +8893,7 @@ GRANT ALL ON TABLE public.recipe_comments TO service_role;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_costs TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_costs TO authenticated;
 GRANT ALL ON TABLE public.recipe_costs TO service_role;
+GRANT SELECT ON TABLE public.recipe_costs TO claude_reader;
 
 
 --
@@ -8285,6 +8903,7 @@ GRANT ALL ON TABLE public.recipe_costs TO service_role;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_fermentation TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_fermentation TO authenticated;
 GRANT ALL ON TABLE public.recipe_fermentation TO service_role;
+GRANT SELECT ON TABLE public.recipe_fermentation TO claude_reader;
 
 
 --
@@ -8303,6 +8922,7 @@ GRANT ALL ON SEQUENCE public.recipe_ingredients_id_seq TO service_role;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_packaging TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_packaging TO authenticated;
 GRANT ALL ON TABLE public.recipe_packaging TO service_role;
+GRANT SELECT ON TABLE public.recipe_packaging TO claude_reader;
 
 
 --
@@ -8312,6 +8932,7 @@ GRANT ALL ON TABLE public.recipe_packaging TO service_role;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_process_steps TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_process_steps TO authenticated;
 GRANT ALL ON TABLE public.recipe_process_steps TO service_role;
+GRANT SELECT ON TABLE public.recipe_process_steps TO claude_reader;
 
 
 --
@@ -8321,6 +8942,7 @@ GRANT ALL ON TABLE public.recipe_process_steps TO service_role;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_revisions TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_revisions TO authenticated;
 GRANT ALL ON TABLE public.recipe_revisions TO service_role;
+GRANT SELECT ON TABLE public.recipe_revisions TO claude_reader;
 
 
 --
@@ -8339,6 +8961,7 @@ GRANT ALL ON SEQUENCE public.recipe_revisions_id_seq TO service_role;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_specs TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_specs TO authenticated;
 GRANT ALL ON TABLE public.recipe_specs TO service_role;
+GRANT SELECT ON TABLE public.recipe_specs TO claude_reader;
 
 
 --
@@ -8348,6 +8971,7 @@ GRANT ALL ON TABLE public.recipe_specs TO service_role;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_water TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_water TO authenticated;
 GRANT ALL ON TABLE public.recipe_water TO service_role;
+GRANT SELECT ON TABLE public.recipe_water TO claude_reader;
 
 
 --
@@ -8357,6 +8981,7 @@ GRANT ALL ON TABLE public.recipe_water TO service_role;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipes TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipes TO authenticated;
 GRANT ALL ON TABLE public.recipes TO service_role;
+GRANT SELECT ON TABLE public.recipes TO claude_reader;
 
 
 --
@@ -8375,6 +9000,7 @@ GRANT ALL ON SEQUENCE public.recipes_id_seq TO service_role;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.role_permissions TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.role_permissions TO authenticated;
 GRANT ALL ON TABLE public.role_permissions TO service_role;
+GRANT SELECT ON TABLE public.role_permissions TO claude_reader;
 
 
 --
@@ -8384,6 +9010,7 @@ GRANT ALL ON TABLE public.role_permissions TO service_role;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.roles TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.roles TO authenticated;
 GRANT ALL ON TABLE public.roles TO service_role;
+GRANT SELECT ON TABLE public.roles TO claude_reader;
 
 
 --
@@ -8402,6 +9029,7 @@ GRANT ALL ON SEQUENCE public.roles_id_seq TO service_role;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.stock_movements TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.stock_movements TO authenticated;
 GRANT ALL ON TABLE public.stock_movements TO service_role;
+GRANT SELECT ON TABLE public.stock_movements TO claude_reader;
 
 
 --
@@ -8429,6 +9057,7 @@ GRANT ALL ON SEQUENCE public.tanks_id_seq TO service_role;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.units TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.units TO authenticated;
 GRANT ALL ON TABLE public.units TO service_role;
+GRANT SELECT ON TABLE public.units TO claude_reader;
 
 
 --
@@ -8438,6 +9067,7 @@ GRANT ALL ON TABLE public.units TO service_role;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.water_settings TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.water_settings TO authenticated;
 GRANT ALL ON TABLE public.water_settings TO service_role;
+GRANT SELECT ON TABLE public.water_settings TO claude_reader;
 
 
 --
@@ -8447,6 +9077,7 @@ GRANT ALL ON TABLE public.water_settings TO service_role;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.water_settings_history TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.water_settings_history TO authenticated;
 GRANT ALL ON TABLE public.water_settings_history TO service_role;
+GRANT SELECT ON TABLE public.water_settings_history TO claude_reader;
 
 
 --
@@ -8481,6 +9112,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON FUNCTIO
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT SELECT,INSERT,DELETE,UPDATE ON TABLES TO anon;
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT SELECT,INSERT,DELETE,UPDATE ON TABLES TO authenticated;
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON TABLES TO service_role;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT SELECT ON TABLES TO claude_reader;
 
 
 --
