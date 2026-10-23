@@ -89,6 +89,16 @@ assert.deepStrictEqual(ga.sections[0].groups[0].items.map((r) => r.id), [1]);
 assert.strictEqual(ga.sections[0].attentionCount, 1);
 assert.strictEqual(ga.attentionTotal, 1);
 
+// stage pills: only the chosen blocks; Cellar keeps only the chosen stage; summary unchanged
+const gs = s.groupActiveBatches(rows, { stages: ['raw', 'lagering'] });
+assert.deepStrictEqual(gs.sections.map((x) => x.key), ['raw', 'cellar']);
+assert.deepStrictEqual(gs.sections[1].groups.map((x) => x.stage), ['lagering']);
+assert.strictEqual(gs.sections[0].count, 3);
+assert.strictEqual(gs.summary.length, g.summary.length);
+assert.deepStrictEqual(gs.summary.filter((x) => x.on).map((x) => x.stage), ['raw', 'lagering']);
+assert.strictEqual(gs.total, 3);
+assert.strictEqual(s.groupActiveBatches(rows, { stages: [] }).sections.length, g.sections.length);
+
 // Tile lines (raw)
 assert.deepStrictEqual(s.tileLines(row({ id: 9, no: '26400', stage: 'raw', pick: '2026-10-14' })),
   { line1: 'Order picking 14-10', line2: 'Not picked yet', isOk: false, progress: null });

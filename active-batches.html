@@ -51,7 +51,7 @@
   <script src="batch-report-shell.js"></script>
   <script>
     let allRows = [];
-    const view = { q: '', location: '', attentionOnly: false };
+    const view = { q: '', location: '', attentionOnly: false, stages: [] };
 
     function showMessage(text, isError) {
       const el = document.getElementById('ac-message');
@@ -102,8 +102,10 @@
     function render() {
       const result = groupActiveBatches(allRows, view);
       document.getElementById('ac-total').textContent = `${result.total} in progress`;
+      // stage pills filter the blocks; several can be on at once
       document.getElementById('ac-summary').innerHTML = result.summary
-        .map((s) => `<span>${escapeHtml(s.label)}<b>${s.count}</b></span>`).join('');
+        .map((s) => `<button type="button" class="${s.on ? 'on' : ''}" data-stage="${s.stage}" aria-pressed="${s.on}">${escapeHtml(s.label)}<b>${s.count}</b></button>`).join('')
+        + (view.stages.length ? '<button type="button" class="br-summary-clear" data-stage="">Show all</button>' : '');
       document.getElementById('ac-attention-text').textContent = `Needs attention · ${result.attentionTotal}`;
       document.getElementById('ac-attention').classList.toggle('on', view.attentionOnly);
 
@@ -128,6 +130,13 @@
     function bindControls() {
       document.getElementById('ac-search').addEventListener('input', (e) => { view.q = e.target.value; render(); });
       document.getElementById('ac-attention').addEventListener('click', () => { view.attentionOnly = !view.attentionOnly; render(); });
+      document.getElementById('ac-summary').addEventListener('click', (e) => {
+        const btn = e.target.closest('button[data-stage]');
+        if (!btn) return;
+        const code = btn.dataset.stage;
+        view.stages = !code ? [] : view.stages.includes(code) ? view.stages.filter((c) => c !== code) : [...view.stages, code];
+        render();
+      });
       document.getElementById('ac-location').addEventListener('click', (e) => {
         const btn = e.target.closest('button[data-location]');
         if (!btn) return;
