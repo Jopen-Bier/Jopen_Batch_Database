@@ -112,31 +112,33 @@ function pooledLoss(losses, includeWarnings) {
 }
 
 /**
- * Losses grouped per recipe (all versions of a recipe_group_id together).
- * recipes: rows { id, name, version_major, version_minor, recipe_group_id }.
- * Returns [{ groupId, name (of the newest version), versions, losses }].
+ * Items grouped per recipe (all versions of a recipe_group_id together); an
+ * item is anything with .row.recipe_id / .row.recipe_group_id (a batchLoss(),
+ * a brew of Brewhouse efficiency). recipes: rows { id, name, version_major,
+ * version_minor, recipe_group_id }.
+ * Returns [{ groupId, name (of the newest version), versions, items }].
  */
-function lossesByRecipe(losses, recipes) {
+function groupByRecipe(items, recipes) {
   const recipeById = new Map((recipes || []).map((r) => [r.id, r]));
   const groups = new Map();
-  losses.forEach((l) => {
+  items.forEach((l) => {
     const recipe = recipeById.get(l.row.recipe_id);
     const key = l.row.recipe_group_id || (recipe && recipe.recipe_group_id) || 'recipe-' + l.row.recipe_id;
-    if (!groups.has(key)) groups.set(key, { groupId: key, recipes: new Map(), losses: [] });
+    if (!groups.has(key)) groups.set(key, { groupId: key, recipes: new Map(), items: [] });
     const g = groups.get(key);
-    g.losses.push(l);
+    g.items.push(l);
     if (recipe) g.recipes.set(recipe.id, recipe);
   });
   const vKey = (r) => (Number(r.version_major) || 0) * 10000 + (Number(r.version_minor) || 0);
   return [...groups.values()].map((g) => {
     const rs = [...g.recipes.values()].sort((a, b) => vKey(b) - vKey(a));
-    return { groupId: g.groupId, name: rs.length ? rs[0].name : '?', versions: rs.map((r) => `${r.version_major}.${r.version_minor}`), losses: g.losses };
+    return { groupId: g.groupId, name: rs.length ? rs[0].name : '?', versions: rs.map((r) => `${r.version_major}.${r.version_minor}`), items: g.items };
   });
 }
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     LOSS_VOLUME_TOLERANCE_HL, LOSS_LIMIT_SHARE, FULLY_SPLIT_SHARE, LOSS_CHECKS,
-    lossCheck, batchLoss, lossCounts, pooledLoss, lossesByRecipe,
+    lossCheck, batchLoss, lossCounts, pooledLoss, groupByRecipe,
   };
 }
