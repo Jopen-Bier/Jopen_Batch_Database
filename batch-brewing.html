@@ -269,13 +269,13 @@
       document.getElementById('bw-additions').innerHTML = `
         <div class="br-head" style="align-items:baseline;"><div class="br-label">Additions brewers · per brew</div>
           ${progress.total ? `<span class="br-note${progress.done === progress.total ? ' bd-done' : ''}">${progress.done}/${progress.total} added</span>` : ''}</div>
-        <div class="br-table-wrap"><table class="br-ing" style="min-width:${470 + brews.length * 70}px;"><thead><tr><th>Addition</th><th class="r" style="width:170px;">Amount</th><th style="width:150px;">Moment</th>
+        <div class="br-table-wrap"><table class="br-ing" style="min-width:${480 + brews.length * 70}px;"><thead><tr><th>Addition</th><th class="r" style="width:150px;">Amount</th><th style="width:150px;">Moment</th>
           ${brews.map((b) => `<th class="bd-check">Brew ${b.brew_number}</th>`).join('')}</tr></thead>
           <tbody>${adds.map((r) => {
             const amount = r.all_in_first_brew ? batchAmount(r.addition_type, r.unit, r.quantity, ctx) : brewAmount(r.addition_type, r.unit, r.quantity, ctx);
             const zinc = isZincSulphate(name(r));
-            const calc = zinc && page.canEdit ? ` <button type="button" class="br-ghost bw-calc" data-zinc-calc="${r.id}" title="Calculate zinc sulphate" aria-label="Calculate zinc sulphate">🧮</button>` : '';
-            return `<tr${r === firstZinc && adds[0] !== r ? ' class="bw-zinc"' : ''}><td>${escapeHtml(name(r))}</td><td class="n">${escapeHtml(formatAmount(amount))}${r.all_in_first_brew ? ' <span class="br-note">brew 1 only</span>' : ''}${calc}</td><td>${escapeHtml(r.timing || '—')}</td>
+            const calc = zinc && page.canEdit ? ` <button type="button" class="br-ghost bw-calc" data-zinc-calc="${r.id}" title="Calculate zinc sulphate">Calculate</button>` : '';
+            return `<tr${r === firstZinc && adds[0] !== r ? ' class="bw-zinc"' : ''}><td>${escapeHtml(name(r))}${calc}</td><td class="n">${escapeHtml(formatAmount(amount))}${r.all_in_first_brew ? ' <span class="br-note">brew 1 only</span>' : ''}</td><td>${escapeHtml(r.timing || '—')}</td>
               ${brewColumns(r, brews).map((c) => (c.applies ? dosing.cellHtml(r, 'brew', c.brew.id) : '<td class="bd-check small">—</td>')).join('')}</tr>`;
           }).join('') || `<tr><td colspan="${3 + brews.length}" class="small">No brewing additions.</td></tr>`}</tbody></table></div>
         ${adds.length && !brews.length ? '<div class="br-note">A tick column appears for every brew you add.</div>' : ''}`;

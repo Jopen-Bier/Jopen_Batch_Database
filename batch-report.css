@@ -182,7 +182,7 @@ a.br-tile:hover { border-color: var(--br-hop-dark); background: #fff; }
 .br-ing td.small { font-size: 12px; color: var(--br-muted); }
 .br-ing tr.first td { border-top: 3px solid var(--br-hop-dark); }
 .br-ing tr.bw-zinc td { border-top: 3px solid var(--br-hop-dark); }
-.br-ghost.bw-calc { padding: 0 6px; min-height: 0; height: 24px; font-size: 13px; line-height: 22px; margin-left: 6px; vertical-align: middle; border-radius: 6px; }
+.bw-calc { margin-left: 8px; vertical-align: middle; }
 .br-ing tr.dry td { background: #fbfaf6; }
 .br-ing tr.tot td { border-top: 2px solid #d8d2c4; border-bottom: 0; font-weight: 700; }
 .br-ing tr.tot td.cv.ok { background: #e1ead9; }
