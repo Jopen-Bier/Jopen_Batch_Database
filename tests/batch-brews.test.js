@@ -41,7 +41,15 @@ close(calc[0].glt.extract, 15.2 * 40.1 / 40.4, 'GLT extract after brew 1');
 close(calc[1].glt.volumeHl, 80.6, 'GLT after brew 2');
 const ex1 = 15.2 * 40.1 / 40.4, ex2 = 15.1 * 40 / 40.2;
 close(calc[1].glt.extract, (40.4 * ex1 + 40.2 * ex2) / 80.6, 'GLT extract volume-weighted');
-close(calc[1].glt.ph, (5.16 + 5.15) / 2, 'GLT pH mean');
+assert.strictEqual(calc[1].glt.brews, 2);
+assert.ok(!('ph' in calc[1].glt), 'no GLT pH: a pH cannot be averaged');
+// GLT total in spec: extract vs OG ± tol, volume vs brews × brew volume ± 0.5 hl per brew
+const g = calc[1].glt;   // 80.6 hl, ~15.07 °P
+assert.deepStrictEqual(b.gltTotalCheck(g, 15, '0.2', 40), { extractOk: true, volumeOk: true, plannedHl: 80, volumeTolHl: 1 });
+assert.strictEqual(b.gltTotalCheck(g, 15.5, '±0.2', 40).extractOk, false);
+assert.strictEqual(b.gltTotalCheck(g, 15, '0.2', 39.5).volumeOk, false);   // 79 ± 1
+assert.deepStrictEqual(b.gltTotalCheck(null, 15, '0.2', 40), { extractOk: null, volumeOk: null, plannedHl: null, volumeTolHl: 0 });
+assert.strictEqual(b.gltTotalCheck(g, null, null, null).extractOk, null);
 close(calc[0].totalBrewingH, 7 + 10 / 60, 'total brewing time brew 1');
 assert.strictEqual(calc[1].totalBrewingH, null);
 // a brew without volume does not count for the GLT total

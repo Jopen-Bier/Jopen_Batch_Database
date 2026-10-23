@@ -99,7 +99,8 @@ their own screen). Filters: search, status, year (default all years), WP/JK.
   `batch_brews` grouped General · Mashing · Filtration (mash filter WP /
   lauter tun JK) · Boiling · Whirlpool / end of boil · End · Hygiene & CIP
   (JK). Unit and recipe value right after the parameter. Grey calculated rows.
-- Result per brew at GLT (°P, hl, pH vs spec) and GLT total.
+- Result per brew at GLT (°P, hl, pH vs spec) and GLT total (°P and hl vs
+  spec, no pH) with a verdict badge "GLT total in spec / out of spec" (23-10).
 - Built (phase 3): "Pitched by" is a user (default: who fills in "Pitched
   on"); yeast strain and weight come from the batch's yeast lines, temp.
   start · max from the recipe (pitching / main fermentation temp.). Deleting
@@ -161,8 +162,10 @@ steps. An "On day" step without a day blocks the save (message in the save
 window).
 
 ## Processing (`mockup/Processing.dc.html`)
-- Additions processing · per HBT (card under the HBTs, 22-10): a tick
-  column per HBT with the amount for that HBT.
+- Layout (23-10): Additions processing · per HBT in the left column; on the
+  right Tasting with Comments processing under it; the HBTs below. Additions
+  processing: a tick column per HBT with the amount for that HBT; a recipe
+  without processing additions says so.
 - Check before processing (beer risk, minimum maturation auto-check,
   "Cellar adds completed"), Specifications (turbidity after centrifuge,
   pasteurisation, O2 in HBT, CO2 per format).
