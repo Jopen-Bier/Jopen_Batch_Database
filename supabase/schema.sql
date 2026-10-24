@@ -1788,6 +1788,176 @@ ALTER TABLE public.batch_transfers ALTER COLUMN id ADD GENERATED ALWAYS AS IDENT
 
 
 --
+-- Name: filling_session_articles; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.filling_session_articles (
+    id bigint NOT NULL,
+    batch_id bigint NOT NULL,
+    filling_session_id bigint NOT NULL,
+    article_id bigint NOT NULL,
+    quantity numeric,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid DEFAULT auth.uid(),
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    comment text,
+    CONSTRAINT filling_session_articles_quantity_check CHECK ((quantity >= (0)::numeric))
+);
+
+
+--
+-- Name: hbt_readings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.hbt_readings (
+    id bigint NOT NULL,
+    batch_id bigint NOT NULL,
+    batch_hbt_id bigint NOT NULL,
+    processing_session_id bigint,
+    sort_order integer NOT NULL,
+    level_hl numeric,
+    o2_ppb numeric,
+    co2_gl numeric,
+    co2_target text,
+    comment text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid DEFAULT auth.uid(),
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT hbt_readings_co2_target_check CHECK ((co2_target = ANY (ARRAY['bottle'::text, 'can'::text, 'keg'::text, 'tank'::text])))
+);
+
+
+--
+-- Name: packaging_articles; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.packaging_articles (
+    id bigint NOT NULL,
+    code text NOT NULL,
+    name text NOT NULL,
+    package_format text NOT NULL,
+    liters_per_unit numeric NOT NULL,
+    ean text,
+    mdrank_article_number text,
+    sort_order integer DEFAULT 0 NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid DEFAULT auth.uid(),
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT packaging_articles_code_check CHECK ((code ~ '^[a-z0-9_]+$'::text)),
+    CONSTRAINT packaging_articles_liters_per_unit_check CHECK ((liters_per_unit > (0)::numeric)),
+    CONSTRAINT packaging_articles_package_format_check CHECK ((package_format = ANY (ARRAY['bottle'::text, 'can'::text, 'keg'::text, 'tank'::text])))
+);
+
+
+--
+-- Name: recipes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.recipes (
+    id bigint NOT NULL,
+    name text NOT NULL,
+    beer_style text,
+    location text,
+    status text DEFAULT 'active'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now(),
+    version_major integer DEFAULT 1 NOT NULL,
+    version_minor integer DEFAULT 0 NOT NULL,
+    created_by uuid,
+    updated_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    recipe_group_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    brew_volume_hl numeric,
+    recipe_color text,
+    flavor_description text,
+    flavor_keywords text[],
+    serving_temperature numeric,
+    color_srm numeric,
+    color_free_text text,
+    CONSTRAINT recipes_location_check CHECK ((location = ANY (ARRAY['wp'::text, 'jk'::text]))),
+    CONSTRAINT recipes_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'active'::text, 'archived'::text])))
+);
+
+
+--
+-- Name: batch_volume_balance; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.batch_volume_balance WITH (security_invoker='true') AS
+ WITH glt AS (
+         SELECT bb.batch_id,
+            sum((bb.brew_volume_hl + COALESCE(bb.water_addition_hl, (0)::numeric))) AS glt_hl
+           FROM public.batch_brews bb
+          WHERE ((bb.brew_volume_hl IS NOT NULL) AND (bb.whirlpool_extract IS NOT NULL) AND ((bb.brew_volume_hl + COALESCE(bb.water_addition_hl, (0)::numeric)) <> (0)::numeric))
+          GROUP BY bb.batch_id
+        ), hbt_end AS (
+         SELECT h.batch_id,
+            h.tank_id,
+            ( SELECT r_1.level_hl
+                   FROM public.hbt_readings r_1
+                  WHERE ((r_1.batch_hbt_id = h.id) AND (r_1.level_hl IS NOT NULL))
+                  ORDER BY r_1.sort_order DESC, r_1.id DESC
+                 LIMIT 1) AS end_hl
+           FROM public.batch_hbts h
+        ), hbt AS (
+         SELECT hbt_end.batch_id,
+            sum(COALESCE(hbt_end.end_hl, (0)::numeric)) AS in_hbt_hl,
+            (count(*) FILTER (WHERE (hbt_end.end_hl IS NULL)))::integer AS hbts_without_level
+           FROM hbt_end
+          GROUP BY hbt_end.batch_id
+        ), transfers AS (
+         SELECT t.batch_id,
+            COALESCE(sum(t.volume_hl) FILTER (WHERE (NOT (EXISTS ( SELECT 1
+                   FROM public.batch_hbts h
+                  WHERE ((h.batch_id = t.batch_id) AND (h.tank_id = t.from_tank_id)))))), (0)::numeric) AS splits_before_hl,
+            COALESCE(sum(t.volume_hl) FILTER (WHERE (EXISTS ( SELECT 1
+                   FROM public.batch_hbts h
+                  WHERE ((h.batch_id = t.batch_id) AND (h.tank_id = t.from_tank_id))))), (0)::numeric) AS splits_after_hl
+           FROM public.batch_transfers t
+          GROUP BY t.batch_id
+        ), packaged AS (
+         SELECT a.batch_id,
+            (COALESCE(sum((a.quantity * pa.liters_per_unit)) FILTER (WHERE (pa.package_format = 'bottle'::text)), (0)::numeric) / (100)::numeric) AS bottle_hl,
+            (COALESCE(sum((a.quantity * pa.liters_per_unit)) FILTER (WHERE (pa.package_format = 'can'::text)), (0)::numeric) / (100)::numeric) AS can_hl,
+            (COALESCE(sum((a.quantity * pa.liters_per_unit)) FILTER (WHERE (pa.package_format = 'keg'::text)), (0)::numeric) / (100)::numeric) AS keg_hl,
+            (COALESCE(sum((a.quantity * pa.liters_per_unit)) FILTER (WHERE (pa.package_format = 'tank'::text)), (0)::numeric) / (100)::numeric) AS tank_hl
+           FROM (public.filling_session_articles a
+             JOIN public.packaging_articles pa ON ((pa.id = a.article_id)))
+          GROUP BY a.batch_id
+        )
+ SELECT b.id AS batch_id,
+    b.batch_number,
+    b.recipe_id,
+    r.recipe_group_id,
+    s.stage,
+    b.brew_count,
+        CASE
+            WHEN (b.batch_number ~ '^[0-9]{5}$'::text) THEN (2000 + ("left"(b.batch_number, 2))::integer)
+            ELSE (EXTRACT(year FROM b.created_at))::integer
+        END AS batch_year,
+    glt.glt_hl,
+    COALESCE(s.incoming_volume_hl, (0)::numeric) AS incoming_hl,
+    COALESCE(tr.splits_before_hl, (0)::numeric) AS splits_before_hl,
+    COALESCE(hbt.in_hbt_hl, (0)::numeric) AS in_hbt_hl,
+    COALESCE(hbt.hbts_without_level, 0) AS hbts_without_level,
+    COALESCE(tr.splits_after_hl, (0)::numeric) AS splits_after_hl,
+    COALESCE(pk.bottle_hl, (0)::numeric) AS bottle_hl,
+    COALESCE(pk.can_hl, (0)::numeric) AS can_hl,
+    COALESCE(pk.keg_hl, (0)::numeric) AS keg_hl,
+    COALESCE(pk.tank_hl, (0)::numeric) AS tank_hl
+   FROM ((((((public.batches b
+     JOIN public.recipes r ON ((r.id = b.recipe_id)))
+     JOIN public.batch_stages s ON ((s.batch_id = b.id)))
+     LEFT JOIN glt ON ((glt.batch_id = b.id)))
+     LEFT JOIN hbt ON ((hbt.batch_id = b.id)))
+     LEFT JOIN transfers tr ON ((tr.batch_id = b.id)))
+     LEFT JOIN packaged pk ON ((pk.batch_id = b.id)));
+
+
+--
 -- Name: batches_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
@@ -2039,25 +2209,6 @@ ALTER TABLE public.filling_measurements ALTER COLUMN id ADD GENERATED ALWAYS AS 
 
 
 --
--- Name: filling_session_articles; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.filling_session_articles (
-    id bigint NOT NULL,
-    batch_id bigint NOT NULL,
-    filling_session_id bigint NOT NULL,
-    article_id bigint NOT NULL,
-    quantity numeric,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    created_by uuid DEFAULT auth.uid(),
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_by uuid,
-    comment text,
-    CONSTRAINT filling_session_articles_quantity_check CHECK ((quantity >= (0)::numeric))
-);
-
-
---
 -- Name: filling_session_articles_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
@@ -2115,29 +2266,6 @@ ALTER TABLE public.filling_sessions ALTER COLUMN id ADD GENERATED ALWAYS AS IDEN
     NO MINVALUE
     NO MAXVALUE
     CACHE 1
-);
-
-
---
--- Name: hbt_readings; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.hbt_readings (
-    id bigint NOT NULL,
-    batch_id bigint NOT NULL,
-    batch_hbt_id bigint NOT NULL,
-    processing_session_id bigint,
-    sort_order integer NOT NULL,
-    level_hl numeric,
-    o2_ppb numeric,
-    co2_gl numeric,
-    co2_target text,
-    comment text,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    created_by uuid DEFAULT auth.uid(),
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_by uuid,
-    CONSTRAINT hbt_readings_co2_target_check CHECK ((co2_target = ANY (ARRAY['bottle'::text, 'can'::text, 'keg'::text, 'tank'::text])))
 );
 
 
@@ -2460,30 +2588,6 @@ ALTER TABLE public.packaging_article_materials ALTER COLUMN id ADD GENERATED ALW
     NO MINVALUE
     NO MAXVALUE
     CACHE 1
-);
-
-
---
--- Name: packaging_articles; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.packaging_articles (
-    id bigint NOT NULL,
-    code text NOT NULL,
-    name text NOT NULL,
-    package_format text NOT NULL,
-    liters_per_unit numeric NOT NULL,
-    ean text,
-    mdrank_article_number text,
-    sort_order integer DEFAULT 0 NOT NULL,
-    is_active boolean DEFAULT true NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    created_by uuid DEFAULT auth.uid(),
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_by uuid,
-    CONSTRAINT packaging_articles_code_check CHECK ((code ~ '^[a-z0-9_]+$'::text)),
-    CONSTRAINT packaging_articles_liters_per_unit_check CHECK ((liters_per_unit > (0)::numeric)),
-    CONSTRAINT packaging_articles_package_format_check CHECK ((package_format = ANY (ARRAY['bottle'::text, 'can'::text, 'keg'::text, 'tank'::text])))
 );
 
 
@@ -3003,35 +3107,6 @@ CREATE TABLE public.recipe_water (
     so4 numeric,
     ratio_cl_so4 numeric,
     alkalinity numeric
-);
-
-
---
--- Name: recipes; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.recipes (
-    id bigint NOT NULL,
-    name text NOT NULL,
-    beer_style text,
-    location text,
-    status text DEFAULT 'active'::text NOT NULL,
-    created_at timestamp with time zone DEFAULT now(),
-    version_major integer DEFAULT 1 NOT NULL,
-    version_minor integer DEFAULT 0 NOT NULL,
-    created_by uuid,
-    updated_by uuid,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    recipe_group_id uuid DEFAULT gen_random_uuid() NOT NULL,
-    brew_volume_hl numeric,
-    recipe_color text,
-    flavor_description text,
-    flavor_keywords text[],
-    serving_temperature numeric,
-    color_srm numeric,
-    color_free_text text,
-    CONSTRAINT recipes_location_check CHECK ((location = ANY (ARRAY['wp'::text, 'jk'::text]))),
-    CONSTRAINT recipes_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'active'::text, 'archived'::text])))
 );
 
 
@@ -8380,6 +8455,53 @@ GRANT ALL ON SEQUENCE public.batch_transfers_id_seq TO service_role;
 
 
 --
+-- Name: TABLE filling_session_articles; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.filling_session_articles TO authenticated;
+GRANT ALL ON TABLE public.filling_session_articles TO service_role;
+GRANT SELECT ON TABLE public.filling_session_articles TO claude_reader;
+
+
+--
+-- Name: TABLE hbt_readings; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.hbt_readings TO authenticated;
+GRANT ALL ON TABLE public.hbt_readings TO service_role;
+GRANT SELECT ON TABLE public.hbt_readings TO claude_reader;
+
+
+--
+-- Name: TABLE packaging_articles; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.packaging_articles TO authenticated;
+GRANT ALL ON TABLE public.packaging_articles TO service_role;
+GRANT SELECT ON TABLE public.packaging_articles TO claude_reader;
+
+
+--
+-- Name: TABLE recipes; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipes TO anon;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipes TO authenticated;
+GRANT ALL ON TABLE public.recipes TO service_role;
+GRANT SELECT ON TABLE public.recipes TO claude_reader;
+
+
+--
+-- Name: TABLE batch_volume_balance; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.batch_volume_balance TO anon;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.batch_volume_balance TO authenticated;
+GRANT ALL ON TABLE public.batch_volume_balance TO service_role;
+GRANT SELECT ON TABLE public.batch_volume_balance TO claude_reader;
+
+
+--
 -- Name: SEQUENCE batches_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
@@ -8522,15 +8644,6 @@ GRANT ALL ON SEQUENCE public.filling_measurements_id_seq TO service_role;
 
 
 --
--- Name: TABLE filling_session_articles; Type: ACL; Schema: public; Owner: -
---
-
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.filling_session_articles TO authenticated;
-GRANT ALL ON TABLE public.filling_session_articles TO service_role;
-GRANT SELECT ON TABLE public.filling_session_articles TO claude_reader;
-
-
---
 -- Name: SEQUENCE filling_session_articles_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
@@ -8564,15 +8677,6 @@ GRANT ALL ON SEQUENCE public.filling_session_materials_id_seq TO service_role;
 GRANT SELECT,USAGE ON SEQUENCE public.filling_sessions_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.filling_sessions_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.filling_sessions_id_seq TO service_role;
-
-
---
--- Name: TABLE hbt_readings; Type: ACL; Schema: public; Owner: -
---
-
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.hbt_readings TO authenticated;
-GRANT ALL ON TABLE public.hbt_readings TO service_role;
-GRANT SELECT ON TABLE public.hbt_readings TO claude_reader;
 
 
 --
@@ -8725,15 +8829,6 @@ GRANT SELECT ON TABLE public.packaging_article_materials TO claude_reader;
 GRANT SELECT,USAGE ON SEQUENCE public.packaging_article_materials_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.packaging_article_materials_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.packaging_article_materials_id_seq TO service_role;
-
-
---
--- Name: TABLE packaging_articles; Type: ACL; Schema: public; Owner: -
---
-
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.packaging_articles TO authenticated;
-GRANT ALL ON TABLE public.packaging_articles TO service_role;
-GRANT SELECT ON TABLE public.packaging_articles TO claude_reader;
 
 
 --
@@ -8972,16 +9067,6 @@ GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_water TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_water TO authenticated;
 GRANT ALL ON TABLE public.recipe_water TO service_role;
 GRANT SELECT ON TABLE public.recipe_water TO claude_reader;
-
-
---
--- Name: TABLE recipes; Type: ACL; Schema: public; Owner: -
---
-
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipes TO anon;
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipes TO authenticated;
-GRANT ALL ON TABLE public.recipes TO service_role;
-GRANT SELECT ON TABLE public.recipes TO claude_reader;
 
 
 --
