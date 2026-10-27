@@ -338,6 +338,13 @@ Page `recipe-analytics.html` (sidebar: Brewhouse efficiency), module
 - **Data checks** (in this order): no Volume brew or whirlpool °P; no malt;
   a malt without extract %; a sugar not in a weight unit; efficiency below
   70 % or above 100 %. Left out unless "Include data warnings" is ticked.
+- **Marked as good** (Jaap, 27-10): the 70–100 % limits stay, so every brew
+  outside them is checked. One that is right after all (e.g. a high-gravity
+  brew at 60 %) is marked as good on Data checks with a reason
+  (`batch_brews.efficiency_accepted_*`); it then counts again and is listed
+  under "Marked as good" (reason, by, on, Undo). Only the out-of-range check
+  can be marked; missing data must be fixed. Marking needs edit rights on
+  batches.
 
 ## Transfers (splits)
 - A transfer reduces the source volume and adds an incoming line on the
