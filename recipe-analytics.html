@@ -66,6 +66,7 @@
     table.ra-table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
     table.ra-table th, table.ra-table td { padding: 7px 9px; border-bottom: 1px solid #eee; text-align: right; white-space: nowrap; }
     table.ra-table th.t, table.ra-table td.t { text-align: left; }
+    table.ra-table td.wrap { white-space: normal; min-width: 130px; }
     table.ra-table thead th { position: sticky; top: 0; background: #faf8f3; color: #444; font-weight: 700; z-index: 1; }
     table.ra-table thead th.sort { cursor: pointer; }
     table.ra-table tbody tr:hover td { background: #faf9f6; }
@@ -268,7 +269,7 @@ function viewChecks() {
     </div>
     ${ra.check ? `<p class="ra-note"><b>${escapeHtml(a.checks[ra.check].label)}:</b> ${escapeHtml(a.checks[ra.check].hint)}</p>` : '<p class="ra-note">Pick a check above to see what to look at, or hover a check label.</p>'}
     ${shown.length ? `<div class="ra-tw"><table class="ra-table"><thead><tr>${a.checkColumns.map((c) => `<th class="${c.t ? 't' : ''}">${c.label}</th>`).join('')}<th class="t">Fix on</th>${a.rowAction ? '<th class="t"></th>' : ''}</tr></thead><tbody>
-      ${shown.map((i) => `<tr>${a.checkColumns.map((c) => `<td class="${c.t ? 't' : ''}">${c.cell(i)}</td>`).join('')}<td class="t">${escapeHtml(tabLabel(a.checks[i.check].tab))}</td>${a.rowAction ? `<td class="t">${a.rowAction(i)}</td>` : ''}</tr>`).join('')}
+      ${shown.map((i) => `<tr>${a.checkColumns.map((c) => `<td class="${c.t ? 't' : ''}${c.wrap ? ' wrap' : ''}">${c.cell(i)}</td>`).join('')}<td class="t">${escapeHtml(tabLabel(a.checks[i.check].tab))}</td>${a.rowAction ? `<td class="t">${a.rowAction(i)}</td>` : ''}</tr>`).join('')}
     </tbody></table></div>` : `<div class="ra-empty">${escapeHtml(a.noWarnings)}</div>`}
   </section>
   ${a.acceptedSection ? a.acceptedSection(inScope) : ''}`;
@@ -569,9 +570,9 @@ const EFFICIENCY = {
   checkColumns: [
     { label: 'Batch', t: true, cell: (e) => batchLink(e, EFFICIENCY_CHECKS[e.check].tab) },
     { label: 'Brew', cell: (e) => e.brewNumber },
-    { label: 'Recipe', t: true, cell: (e) => escapeHtml(recipeName(e)) },
+    { label: 'Recipe', t: true, wrap: true, cell: (e) => escapeHtml(recipeName(e)) },
     { label: 'Check', t: true, cell: (e) => checkCell(e) },
-    { label: 'Detail', t: true, cell: (e) => escapeHtml(
+    { label: 'Detail', t: true, wrap: true, cell: (e) => escapeHtml(
       e.check === 'malt_without_extract' ? [...new Set(e.fermentables.maltsWithoutExtract)].join(', ')
         : e.check === 'sugar_without_weight' ? [...new Set(e.fermentables.sugarsNotWeighed)].join(', ')
           : e.check === 'out_of_range' ? `${pct(e.efficiency)} · ${hl0(e.maltKg)} kg malt for ${hl1(Number(e.volumeHl))} hl at ${Number(e.plato).toFixed(1)} °P`
