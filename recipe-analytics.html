@@ -162,6 +162,7 @@ const ra = {
   recipes: [],
   tab: 'all', recipe: null, compare: [], year: null, size: '', warnings: false,
   sort: ['count', -1], search: '', check: '',
+  user: null, canEditBatches: false, accepting: null,   // accepting: id of the brew whose "Mark as good" form is open
 };
 
 const pct = (x) => (x === null || x === undefined || !Number.isFinite(x) ? '—' : (100 * x).toFixed(1) + '%');
@@ -188,7 +189,9 @@ const recipeGroups = () => groupByRecipe(filtered(), ra.recipes).map((g) => ({ .
 const groupById = (id) => recipeGroups().find((g) => g.groupId === id);
 const checkCell = (item) => {
   const c = A().checks[item.check];
-  return item.check === 'ok' ? '<span class="ra-ok">OK</span>' : `<span class="ra-flag" title="${escapeHtml(c.hint || '')}">${escapeHtml(c.label)}</span>`;
+  if (item.check === 'ok') return '<span class="ra-ok">OK</span>';
+  if (!c.warning) return `<span class="ra-ok" title="${escapeHtml(item.acceptedReason || c.hint || '')}">${escapeHtml(c.label)}</span>`;
+  return `<span class="ra-flag" title="${escapeHtml(c.hint || '')}">${escapeHtml(c.label)}</span>`;
 };
 
 function kpiRow(tiles) {
@@ -264,10 +267,11 @@ function viewChecks() {
       ${codes.map((c) => { const n = warnings.filter((i) => i.check === c).length; return n ? `<button type="button" class="ra-chip${ra.check === c ? ' actief' : ''}" data-check="${c}">${escapeHtml(a.checks[c].label)} (${n})</button>` : ''; }).join('')}
     </div>
     ${ra.check ? `<p class="ra-note"><b>${escapeHtml(a.checks[ra.check].label)}:</b> ${escapeHtml(a.checks[ra.check].hint)}</p>` : '<p class="ra-note">Pick a check above to see what to look at, or hover a check label.</p>'}
-    ${shown.length ? `<div class="ra-tw"><table class="ra-table"><thead><tr>${a.checkColumns.map((c) => `<th class="${c.t ? 't' : ''}">${c.label}</th>`).join('')}<th class="t">Fix on</th></tr></thead><tbody>
-      ${shown.map((i) => `<tr>${a.checkColumns.map((c) => `<td class="${c.t ? 't' : ''}">${c.cell(i)}</td>`).join('')}<td class="t">${escapeHtml(tabLabel(a.checks[i.check].tab))}</td></tr>`).join('')}
+    ${shown.length ? `<div class="ra-tw"><table class="ra-table"><thead><tr>${a.checkColumns.map((c) => `<th class="${c.t ? 't' : ''}">${c.label}</th>`).join('')}<th class="t">Fix on</th>${a.rowAction ? '<th class="t"></th>' : ''}</tr></thead><tbody>
+      ${shown.map((i) => `<tr>${a.checkColumns.map((c) => `<td class="${c.t ? 't' : ''}">${c.cell(i)}</td>`).join('')}<td class="t">${escapeHtml(tabLabel(a.checks[i.check].tab))}</td>${a.rowAction ? `<td class="t">${a.rowAction(i)}</td>` : ''}</tr>`).join('')}
     </tbody></table></div>` : `<div class="ra-empty">${escapeHtml(a.noWarnings)}</div>`}
-  </section>`;
+  </section>
+  ${a.acceptedSection ? a.acceptedSection(inScope) : ''}`;
 }
 
 // --------------------------------------------------------------- charts
@@ -460,7 +464,8 @@ const EFFICIENCY = {
   checks: EFFICIENCY_CHECKS,
   async load() {
     const [brews, batches, lines] = await Promise.all([
-      fetchAllRows(supabaseClient.from('batch_brews').select('id, batch_id, brew_number, brew_volume_hl, whirlpool_extract, brewing_ended_at').not('brewing_ended_at', 'is', null).order('id')),
+      fetchAllRows(supabaseClient.from('batch_brews').select('id, batch_id, brew_number, brew_volume_hl, whirlpool_extract, brewing_ended_at, efficiency_accepted_at, efficiency_accepted_reason, accepted_by:users!batch_brews_efficiency_accepted_by_fkey(name)')
+        .not('brewing_ended_at', 'is', null).order('id')),
       fetchAllRows(supabaseClient.from('batches').select('id, batch_number, recipe_id, brew_count').order('id')),
       fetchAllRows(supabaseClient.from('batch_ingredients').select('id, batch_id, addition_type, unit, quantity, is_removed, ingredient:ingredients(name, extract_pct)')
         .in('addition_type', ['malt', 'brewhouse_addition', 'boil_hop']).order('id')),
@@ -477,7 +482,9 @@ const EFFICIENCY = {
       const f = fermentablesOf.get(batch.id);
       return { row: { batch_id: batch.id, batch_number: batch.batch_number, recipe_id: batch.recipe_id, recipe_group_id: recipe.recipe_group_id,
           brew_count: batch.brew_count, batch_year: batchYear(batch.batch_number) },
-        brewNumber: b.brew_number, volumeHl: b.brew_volume_hl, plato: b.whirlpool_extract, fermentables: f, ...brewEfficiency(b, f) };
+        brewId: b.id, brewNumber: b.brew_number, volumeHl: b.brew_volume_hl, plato: b.whirlpool_extract, fermentables: f,
+        acceptedAt: b.efficiency_accepted_at, acceptedReason: b.efficiency_accepted_reason, acceptedBy: b.accepted_by ? b.accepted_by.name : null,
+        brew: b, ...brewEfficiency(b, f) };
     }).sort((x, y) => String(x.row.batch_number).localeCompare(String(y.row.batch_number)) || x.brewNumber - y.brewNumber);
   },
   pool(items) { const p = pooledEfficiency(items, ra.warnings); return { ...p, count: p.brews }; },
@@ -530,8 +537,35 @@ const EFFICIENCY = {
       counted: (e) => effCounts(e, ra.warnings), value: (e) => e.efficiency, pooled: (g) => g.pooled.efficiency,
       title: (e) => `${e.row.batch_number} brew ${e.brewNumber}: ${pct(e.efficiency)}` });
   },
-  checksIntro: 'Finished brews whose efficiency cannot be calculated or is outside 70–100%, so they are left out.',
+  checksIntro: 'Finished brews whose efficiency cannot be calculated or is outside 70–100%, so they are left out. A brew outside 70–100% that is right after all (e.g. a high-gravity brew) can be marked as good with a reason: it then counts again and moves to the list below.',
   noWarnings: 'No data warnings. Every finished brew can be calculated.',
+  rowAction(e) {
+    if (!EFFICIENCY_CHECKS[e.check].acceptable || !ra.canEditBatches) return '';
+    if (ra.accepting !== e.brewId) return `<button type="button" class="ra-chip" data-accept="${e.brewId}">Mark as good</button>`;
+    return `<span style="display:inline-flex;gap:6px;align-items:center"><input type="text" id="ra-accept-reason" maxlength="200" placeholder="Reason (required), e.g. high gravity" aria-label="Reason" style="font:inherit;font-size:12.5px;padding:4px 6px;border:1px solid #ccc;border-radius:4px;width:220px">
+      <button type="button" class="ra-chip actief" data-accept-save="${e.brewId}">Save</button><button type="button" class="ra-chip" data-accept-cancel>Cancel</button></span>`;
+  },
+  acceptedSection(inScope) {
+    const list = inScope.filter((e) => e.check === 'accepted');
+    return `<section class="ra-card"><h2>Marked as good (${list.length})</h2>
+      <p class="ra-note">Brews outside 70–100% that were checked and are right. They count in the efficiency.</p>
+      ${list.length ? `<div class="ra-tw"><table class="ra-table"><thead><tr><th class="t">Batch</th><th>Brew</th><th class="t">Recipe</th><th>Efficiency</th><th class="t">Reason</th><th class="t">By</th><th class="t">On</th>${ra.canEditBatches ? '<th class="t"></th>' : ''}</tr></thead><tbody>
+        ${list.map((e) => `<tr><td class="t">${batchLink(e, 'brewing')}</td><td>${e.brewNumber}</td><td class="t">${escapeHtml(recipeName(e))}</td><td>${pct(e.efficiency)}</td>
+          <td class="t">${escapeHtml(e.acceptedReason || '')}</td><td class="t">${escapeHtml(e.acceptedBy || '')}</td><td class="t">${escapeHtml(formatDate(e.acceptedAt))}</td>
+          ${ra.canEditBatches ? `<td class="t"><button type="button" class="ra-chip" data-unaccept="${e.brewId}">Undo</button></td>` : ''}</tr>`).join('')}
+      </tbody></table></div>` : '<div class="ra-empty">None yet.</div>'}
+    </section>`;
+  },
+  async setAccepted(e, reason) {
+    const patch = reason
+      ? { efficiency_accepted_at: new Date().toISOString(), efficiency_accepted_by: ra.user.id, efficiency_accepted_reason: reason, updated_by: ra.user.id }
+      : { efficiency_accepted_at: null, efficiency_accepted_by: null, efficiency_accepted_reason: null, updated_by: ra.user.id };
+    const { error } = await supabaseClient.from('batch_brews').update(patch).eq('id', e.brewId);
+    if (error) { showError('Could not save: ' + (error.message || error)); return; }
+    showError('');
+    Object.assign(e.brew, patch);
+    Object.assign(e, brewEfficiency(e.brew, e.fermentables), { acceptedAt: patch.efficiency_accepted_at, acceptedReason: patch.efficiency_accepted_reason, acceptedBy: reason ? ra.user.name : null });
+  },
   checkColumns: [
     { label: 'Batch', t: true, cell: (e) => batchLink(e, EFFICIENCY_CHECKS[e.check].tab) },
     { label: 'Brew', cell: (e) => e.brewNumber },
@@ -587,6 +621,33 @@ function render() {
   }));
   view.querySelectorAll('[data-remove]').forEach((b) => b.addEventListener('click', () => { ra.compare = ra.compare.filter((x) => x !== b.dataset.remove); render(); }));
   view.querySelectorAll('[data-check]').forEach((b) => b.addEventListener('click', () => { ra.check = b.dataset.check; render(); }));
+  const itemByBrew = (id) => allItems().find((i) => String(i.brewId) === String(id));
+  view.querySelectorAll('[data-accept]').forEach((b) => b.addEventListener('click', () => {
+    ra.accepting = Number(b.dataset.accept);
+    render();
+    const input = document.getElementById('ra-accept-reason');
+    if (input) input.focus();
+  }));
+  view.querySelectorAll('[data-accept-cancel]').forEach((b) => b.addEventListener('click', () => { ra.accepting = null; render(); }));
+  view.querySelectorAll('[data-accept-save]').forEach((b) => b.addEventListener('click', async () => {
+    const input = document.getElementById('ra-accept-reason');
+    const reason = input ? input.value.trim() : '';
+    if (!reason) { input.focus(); input.style.borderColor = 'var(--ra-warn)'; return; }
+    b.disabled = true;
+    await A().setAccepted(itemByBrew(b.dataset.acceptSave), reason);
+    ra.accepting = null;
+    render();
+  }));
+  view.querySelectorAll('[data-unaccept]').forEach((b) => b.addEventListener('click', async () => {
+    b.disabled = true;
+    await A().setAccepted(itemByBrew(b.dataset.unaccept), null);
+    render();
+  }));
+  const reasonInput = view.querySelector('#ra-accept-reason');
+  if (reasonInput) reasonInput.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') view.querySelector('[data-accept-save]').click();
+    if (ev.key === 'Escape') view.querySelector('[data-accept-cancel]').click();
+  });
   const search = view.querySelector('#ra-search');
   if (search) search.addEventListener('input', () => {
     ra.search = search.value;
@@ -652,6 +713,8 @@ async function initRecipeAnalytics() {
     return;
   }
   access.textContent = 'Loading…';
+  ra.user = user;
+  ra.canEditBatches = await magBewerkenModule('batches');
   renderSidebar();
   const recipes = await fetchAllRows(supabaseClient.from('recipes').select('id, name, version_major, version_minor, recipe_group_id, brew_volume_hl').order('id'));
   if (recipes.error) showError('Could not load the recipes: ' + (recipes.error.message || recipes.error));

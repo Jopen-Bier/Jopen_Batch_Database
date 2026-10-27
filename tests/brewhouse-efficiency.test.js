@@ -55,6 +55,18 @@ assert.strictEqual(e.brewEfficiency(brew, e.brewFermentables([line('malt', 'kg',
 assert.strictEqual(e.brewEfficiency({ brew_volume_hl: 40, whirlpool_extract: 9 }, f).check, 'out_of_range');                                      // 51%
 Object.values(e.EFFICIENCY_CHECKS).filter((c) => c.warning).forEach((c) => assert.ok(c.hint && c.tab));
 
+// Marked as good: only an out-of-range brew, then it counts again
+const highGravity = e.brewFermentables([line('malt', 'kg', 980, 'Pilsner Malt', 80)], 20, 4);
+const hgBrew = { brew_volume_hl: 18, whirlpool_extract: 26 };                    // ~66%, a real high-gravity brew
+assert.strictEqual(e.brewEfficiency(hgBrew, highGravity).check, 'out_of_range');
+const accepted = e.brewEfficiency({ ...hgBrew, efficiency_accepted_at: '2026-10-27T09:00:00Z' }, highGravity);
+assert.strictEqual(accepted.check, 'accepted');
+assert.ok(e.effCounts(accepted, false));
+assert.ok(!e.EFFICIENCY_CHECKS.accepted.warning);
+assert.ok(e.EFFICIENCY_CHECKS.out_of_range.acceptable);
+assert.strictEqual(e.brewEfficiency({ brew_volume_hl: null, whirlpool_extract: 26, efficiency_accepted_at: '2026-10-27' }, highGravity).check, 'no_brew_data');
+assert.strictEqual(e.brewEfficiency({ ...brew, efficiency_accepted_at: '2026-10-27' }, f).check, 'ok');   // in range: stays ok
+
 // Pooled over brews, warnings only when asked
 const a = e.brewEfficiency(brew, f);
 const b = e.brewEfficiency({ brew_volume_hl: 39, whirlpool_extract: 14.8 }, f);

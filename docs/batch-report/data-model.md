@@ -213,6 +213,7 @@ this phase (pitched by = chosen user, default the logged-in user).
 | brew_volume_hl | numeric | Volume brew |
 | brewer_end_id | uuid → users | Brewer end — a brew can be finished by someone else (migration `20261021064500_batch_brews_brewer_end`, 21-10) |
 | brewing_ended_at | timestamptz | End of brewing — last brew → stage Fermentation, default Time 0 |
+| efficiency_accepted_at / _by / _reason | timestamptz / uuid → users / text | Brewhouse efficiency outside 70–100% checked and marked as good (Recipe analytics › Data checks); all three or none, reason required (migration `20261027090000`, 27-10) |
 | process_pause | text | JK only (hh:mm) |
 | is_aeration_filter_steamed | boolean | JK only |
 | is_wort_line_sterilized | boolean | JK only |

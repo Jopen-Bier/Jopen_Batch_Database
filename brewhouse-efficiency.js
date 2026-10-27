@@ -30,8 +30,10 @@ const EFFICIENCY_CHECKS = {
     hint: 'A malt of this batch has no extract % on its ingredient card. Fill it in from the supplier CoA (Ingredients).' },
   sugar_without_weight: { label: 'Sugar not in kg', warning: true, tab: 'overview',
     hint: 'A brewhouse sugar is in a unit that is not a weight (e.g. litres). Enter it in kg or kg/hl.' },
-  out_of_range: { label: 'Efficiency below 70% or above 100%', warning: true, tab: 'overview',
-    hint: 'Usually the malt is entered per batch instead of per brew, or an ingredient is missing.' },
+  out_of_range: { label: 'Efficiency below 70% or above 100%', warning: true, tab: 'overview', acceptable: true,
+    hint: 'Usually the malt is entered per batch instead of per brew, or an ingredient is missing. Right after all (e.g. a high-gravity brew)? Mark it as good with a reason.' },
+  // Out of range, checked and marked as good (batch_brews.efficiency_accepted_*): counts again.
+  accepted: { label: 'Marked as good', warning: false },
 };
 
 function effNumber(value) {
@@ -90,7 +92,9 @@ function brewFermentables(rows, brewVolumeHl, brewCount) {
 /**
  * Efficiency of one brew: { wortExtractKg, sugarExtractKg, maltPotentialKg,
  * efficiency, sugarShare, check }. efficiency = (wort − sugar extract) ÷ malt
- * potential; sugarShare = sugar extract ÷ wort extract.
+ * potential; sugarShare = sugar extract ÷ wort extract. An out-of-range brew
+ * with brew.efficiency_accepted_at is 'accepted'; the other checks are missing
+ * data and cannot be marked as good.
  */
 function brewEfficiency(brew, fermentables) {
   const f = fermentables;
@@ -102,12 +106,12 @@ function brewEfficiency(brew, fermentables) {
   else if (!f.maltLines) check = 'no_malt';
   else if (f.maltsWithoutExtract.length) check = 'malt_without_extract';
   else if (f.sugarsNotWeighed.length) check = 'sugar_without_weight';
-  else if (efficiency === null || efficiency < EFFICIENCY_MIN || efficiency > EFFICIENCY_MAX) check = 'out_of_range';
+  else if (efficiency === null || efficiency < EFFICIENCY_MIN || efficiency > EFFICIENCY_MAX) check = brew.efficiency_accepted_at ? 'accepted' : 'out_of_range';
   return { wortExtractKg: wort, sugarExtractKg: f.sugarExtractKg, maltPotentialKg: f.maltPotentialKg, maltKg: f.maltKg,
     efficiency, sugarShare: wort ? f.sugarExtractKg / wort : null, check };
 }
 
-const effCounts = (e, includeWarnings) => e.check === 'ok' || (!!includeWarnings && e.efficiency !== null);
+const effCounts = (e, includeWarnings) => e.check === 'ok' || e.check === 'accepted' || (!!includeWarnings && e.efficiency !== null);
 
 /**
  * Over several brews: efficiency pooled as Σ(wort − sugar extract) ÷ Σ malt
