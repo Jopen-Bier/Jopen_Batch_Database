@@ -56,7 +56,8 @@ recipe-base-beer.js        Base beer block of the recipe editor (source beer by 
 filling.js                 Filling tab: spec limits, Cpk / process capability, HBT filling status, day number (has a test)
 dosing-checks.js           tick boxes for additions per brew / per HBT: which brews apply, tick, progress (has a test)
 filling-report.js          Filling report tab: book in / out per session (BOM expected, loss), volume balance, pie chart (has a test)
-recipe-losses.js           Recipe analytics › Losses: loss per closed batch from view batch_volume_balance, data checks, pooled loss per recipe (has a test)
+recipe-losses.js           Recipe analytics › Losses: loss per closed batch from view batch_volume_balance, data checks, pooled loss per recipe, groupByRecipe() (has a test)
+brewhouse-efficiency.js    Recipe analytics › Brewhouse efficiency: wort extract vs malt potential per brew, brewhouse sugar taken out, data checks (has a test)
 batch-report-shell.js      shared frame of the batch tabs: header, tabs, autosave, confirm dialog, undo toast
 batch-report.css           shared styles of the batch-report screens (load after jopen-shared.css)
 voorraad-forecast.js       consumption calculation (shared module)
@@ -246,7 +247,7 @@ Agreed table and column names per table: `supabase/rename-map.json`.
 | `batch-overview.html` | batches | batches, batch_ingredients, `snapshot_batch_ingredients()`, recipes + recipe_specs/_fermentation/_brewing_specs/_packaging/_water/_revisions, ingredients, stock_movements, lots |
 | `voorraad-overzicht/inboeken/uitboeken.html` | inventory | lots, stock_movements, ingredients, batches, users |
 | `analytics.html` | analytics (view for every role) | ingredients, ingredient_documents, document_types |
-| `recipe-analytics.html` | analytics | batch_volume_balance (view), recipes; Losses via `recipe-losses.js` + `filling-report.js` |
+| `recipe-analytics.html` | analytics | batch_volume_balance (view), recipes; Losses via `recipe-losses.js` + `filling-report.js`; Brewhouse efficiency via `brewhouse-efficiency.js` + `batch-ingredients.js` from batch_brews, batches, batch_ingredients (+ ingredients.extract_pct) |
 | `settings.html` | settings | units, ingredient_categories, document_types, ingredient_declarations, water_settings (+ _history), cellar_action_tags, cellar_plan_parts (`apply_cellar_plan_order()`), recipe_ingredients (count), packaging_articles/_materials/_article_materials (+ filling_session_articles/_materials, count) |
 | `gebruikers.html` | admin only (`user_management`) | users, roles, `admin_get_last_logins()` |
 | `rollen.html` | admin only (`role_management`) | roles, role_permissions, permission_modules |

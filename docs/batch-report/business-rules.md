@@ -312,11 +312,32 @@ Page `recipe-analytics.html` (Analytics › Recipe analytics), module
     the HBT end levels, or an HBT without an end level.
   - *More out than in*: negative cellar loss.
   - *Loss over 30 %* of the processed volume.
-  Batches with a warning are left out unless "Include batches with a data
-  warning" is ticked; the Data checks tab lists them with a link to the batch
+  Batches with a warning are left out unless "Include data warnings" is
+  ticked; the Data checks tab lists them with a link to the batch
   tab where the data is fixed.
 - Filters: year (from the batch number, `26xxx` = 2026), batch size (1–3
   brews, 4+ brews, from splits = 0 brews).
+
+## Recipe analytics — Brewhouse efficiency
+Page `recipe-analytics.html` (sidebar: Brewhouse efficiency), module
+`brewhouse-efficiency.js`, test `tests/brewhouse-efficiency.test.js` (Jaap, 23-10).
+- Per **finished brew** (`batch_brews.brewing_ended_at` set), any batch stage.
+- Extract in the wort, kg = **Volume brew** (the real volume from the
+  brewhouse) × 100 × SG × whirlpool °P / 100, SG = 259 / (259 − °P).
+- Malt potential, kg = Σ malt kg per brew × `ingredients.extract_pct` (the
+  supplier CoA value, as is). Malt amounts are per brew.
+- **Brewhouse sugar** = a brewhouse or boil addition whose ingredient has an
+  extract % (Additives has the Extract % field since 23-10). kg per brew as
+  "Weigh for this brew" (`brewAmount()`: kg/hl × the recipe brew volume, g per
+  brew; a batch total is spread over the brews). Its extract (kg × extract %)
+  is taken out of the wort extract first, so the efficiency is that of the
+  malt and recipes with and without sugar compare on one scale. A line without
+  an amount ("Suiker!") is a comment and is skipped. Cellar sugars do not count.
+- **Efficiency** = (wort extract − sugar extract) ÷ malt potential. Over brews
+  it is pooled (Σ ÷ Σ); the spread is the SD of the brews.
+- **Data checks** (in this order): no Volume brew or whirlpool °P; no malt;
+  a malt without extract %; a sugar not in a weight unit; efficiency below
+  70 % or above 100 %. Left out unless "Include data warnings" is ticked.
 
 ## Transfers (splits)
 - A transfer reduces the source volume and adds an incoming line on the
