@@ -35,6 +35,7 @@ const { XlsxDirectWriter, StylesManager } = require('./xlsx-direct');
 const { fromDb, fromDbResult } = require('../db-legacy-names.js');
 const { BEER_RISK_REPORT_TEXT, BEER_STATUS_REPORT_TEXT } = require('../recipe-values.js');
 const { hopUtilizationPct } = require('../brew-calculations.js');
+const { reportCommentCells } = require('../report-comments.js');
 
 const SCALAR_MAP = require('./data/scalar_field_map.json');
 const INGREDIENT_MAP = require('./data/ingredient_field_map.json');
@@ -209,6 +210,14 @@ async function vulScalaireVelden(writer, bundel, isWP, verschuifCel) {
     if (!bron) { console.warn(`Onbekende tabel in mapping: ${tabel} (${veld.key})`); continue; }
     const waarde = bron[kolom];
     for (const loc of veld.locaties) await writer.setCelWaarde(verschuifCel(loc), waarde);
+  }
+}
+
+// Recipe comments onto the Brew Sheet "Comments:" rows (report-comments.js).
+async function vulReceptComments(writer, bundel) {
+  for (const { cell, value, styleFrom } of reportCommentCells(bundel.recipe_comments.comments)) {
+    await writer.setCelWaarde(cell, value);
+    if (styleFrom) await writer.zetStijlIndex(cell, await writer.haalStijlIndexOp(styleFrom));
   }
 }
 
@@ -720,6 +729,7 @@ async function genereerBatchrapportBuffer(bundel) {
   await vulScalaireVelden(writer, bundel, isWP, overloop.verschuifCel);
   await vulWpKerkVelden(writer, bundel, isWP);
   await vulReceptnaamKruisVelden(writer, bundel, isWP);
+  await vulReceptComments(writer, bundel);
   await vulIngredientRijen(writer, bundel, overloop, stylesManager);
   await vulRevisies(writer, bundel, overloop.verschuifCel);
   await vulFormaten(writer, bundel);
