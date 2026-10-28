@@ -29,9 +29,7 @@ CO2 fust +/-,Recept-voorblad!L15; Recept-voorblad!L15,recipe_specificaties.co2_f
 Ca (water),Recept-voorblad!A97,recipe_water.ca,water,
 Cl (water),Recept-voorblad!G97,recipe_water.cl,water,
 Comment verwerken,Verwerking!C28,recipe_processtappen.comment_verwerken,processtap,
-Comments 1,Brouwen!A44,recipe_comments.comments (samengevoegd tot 1 veld sinds recente sessie),comments,"LET OP: 3 losse Comments-velden bestaan niet meer, nu 1 tekstveld"
-Comments 2,Brouwen!A45,recipe_comments.comments (samengevoegd tot 1 veld sinds recente sessie),comments,"LET OP: 3 losse Comments-velden bestaan niet meer, nu 1 tekstveld"
-Comments 3,Brouwen!A46,recipe_comments.comments (samengevoegd tot 1 veld sinds recente sessie),comments,"LET OP: 3 losse Comments-velden bestaan niet meer, nu 1 tekstveld"
+Comments,Brew Sheet!A44:A52,recipe_comments.comments,comments,"Text array, word-wrapped over rows 44-52 (report-comments.js); remaining rows stay free for brewers"
 Dissolved O2 +/-,Recept-voorblad!L17; Recept-voorblad!L17,recipe_specificaties.dissolved_o2_tol,tolerantie,
 "Dissolved O2 Spec,",Recept-voorblad!M17; Recept-voorblad!M17,recipe_specificaties.dissolved_o2,spec-waarde,
 Dry Hop 1,Recept-voorblad!A58,"recipe_ingredients (rol=dry_hop, volgorde=1).ingredient_id (naam)",ingrediënt-rij,

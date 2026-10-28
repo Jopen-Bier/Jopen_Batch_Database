@@ -930,6 +930,14 @@ async function brVulScalaireVelden(writer, bundel, isWP, scalarMap, verschuifCel
   }
 }
 
+// Recipe comments onto the Brew Sheet "Comments:" rows (report-comments.js).
+async function brVulReceptComments(writer, bundel) {
+  for (const { cell, value, styleFrom } of reportCommentCells(bundel.recipe_comments.comments)) {
+    await writer.setCelWaarde(cell, value);
+    if (styleFrom) await writer.zetStijlIndex(cell, await writer.haalStijlIndexOp(styleFrom));
+  }
+}
+
 const WP_KERK_VELDEN = [
   { cel: 'Brew Sheet!F10', wp: 'stort_special_bin_kg', kerk: 'maischwater' },
   { cel: 'Brew Sheet!F18', wp: 'volume_water_additie_terugkoeling', kerk: 'eindvolume_brouwsel' },
@@ -1398,6 +1406,7 @@ async function genereerEnDownloadBatchrapport(supabase, batchnummer, ingredientO
   await brVulScalaireVelden(writer, bundel, isWP, scalarMap, overloop.verschuifCel);
   await brVulWpKerkVelden(writer, bundel, isWP);
   await brVulReceptnaamKruisVelden(writer, bundel, isWP);
+  await brVulReceptComments(writer, bundel);
   await brVulIngredientRijen(writer, bundel, ingredientMap, overloop, stylesManager);
   await brVulRevisies(writer, bundel, revisieMap, overloop.verschuifCel);
   await brVulFormaten(writer, bundel, formatenMap);

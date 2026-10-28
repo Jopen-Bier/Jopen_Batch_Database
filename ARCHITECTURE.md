@@ -44,6 +44,7 @@ db-legacy-names.js         translation layer for not-yet-translated pages (gener
 waterzouten.js             water-salts calculation (shared module, has a test)
 brew-calculations.js       hop utilization, EBU, malt color (shared module, has a test)
 recipe-values.js           recipe value lists (codes -> labels, colours, report text; has a test)
+report-comments.js         recipe comments -> Brew Sheet comment rows of the Excel batch report (has a test)
 batch-stages.js            batch stages + list logic of the batch-report pages (has a test)
 batch-ingredients.js       ingredient snapshot per batch: batch amounts, deviations (has a test)
 batch-brews.js             brew log rows and calculations (evaporation, GLT volume/extract; has a test)
