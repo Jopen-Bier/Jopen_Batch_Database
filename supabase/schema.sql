@@ -1111,8 +1111,12 @@ CREATE TABLE public.batch_brews (
     updated_by uuid,
     brewer_end_id uuid,
     mash_rinse_water_hl numeric,
+    efficiency_accepted_at timestamp with time zone,
+    efficiency_accepted_by uuid,
+    efficiency_accepted_reason text,
     CONSTRAINT batch_brews_brew_number_check CHECK ((brew_number > 0)),
-    CONSTRAINT batch_brews_ckt_cip_program_check CHECK ((ckt_cip_program = ANY (ARRAY['lo-de'::text, 'lo-zu-de'::text, 'lo-de-hw'::text, 'lo-zu-de-hw'::text])))
+    CONSTRAINT batch_brews_ckt_cip_program_check CHECK ((ckt_cip_program = ANY (ARRAY['lo-de'::text, 'lo-zu-de'::text, 'lo-de-hw'::text, 'lo-zu-de-hw'::text]))),
+    CONSTRAINT batch_brews_efficiency_accepted_check CHECK ((((efficiency_accepted_at IS NULL) AND (efficiency_accepted_by IS NULL) AND (efficiency_accepted_reason IS NULL)) OR ((efficiency_accepted_at IS NOT NULL) AND (efficiency_accepted_by IS NOT NULL) AND (NULLIF(btrim(efficiency_accepted_reason), ''::text) IS NOT NULL))))
 );
 
 
@@ -4060,6 +4064,13 @@ CREATE INDEX idx_batch_brew_comments_batch_id ON public.batch_brew_comments USIN
 
 
 --
+-- Name: idx_batch_brews_efficiency_accepted_by; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_batch_brews_efficiency_accepted_by ON public.batch_brews USING btree (efficiency_accepted_by);
+
+
+--
 -- Name: idx_batch_cellar_steps_batch_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4961,6 +4972,14 @@ ALTER TABLE ONLY public.batch_brews
 
 ALTER TABLE ONLY public.batch_brews
     ADD CONSTRAINT batch_brews_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
+
+
+--
+-- Name: batch_brews batch_brews_efficiency_accepted_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.batch_brews
+    ADD CONSTRAINT batch_brews_efficiency_accepted_by_fkey FOREIGN KEY (efficiency_accepted_by) REFERENCES public.users(id);
 
 
 --
