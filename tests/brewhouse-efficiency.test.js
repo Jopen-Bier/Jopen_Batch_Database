@@ -80,4 +80,41 @@ near(p.sd, Math.abs(a.efficiency - b.efficiency) / Math.sqrt(2));
 assert.strictEqual(e.pooledEfficiency([a, b, bad], true).brews, 3);
 assert.strictEqual(e.pooledEfficiency([]).efficiency, null);
 
+// Steps: filtration × boil × whirlpool = efficiency, also with sugar (Mooie Nel-like brew)
+const stepBrew = { brew_volume_hl: 37.4, whirlpool_extract: 15.3, boil_start_volume_hl: 41, boil_start_extract: 14.6, whirlpool_volume_hl: 41.3 };
+const st = e.brewEfficiency(stepBrew, f);
+near(st.filtration, e.wortExtractKg(41, 14.6) / f.maltPotentialKg);
+near(st.boil, e.wortExtractKg(41.3, 15.3) / e.wortExtractKg(41, 14.6));
+near(st.whirlpool, 37.4 / 41.3);                                                   // same °P: the volume ratio
+near(st.filtration * st.boil * st.whirlpool, st.efficiency);
+const sw = e.brewEfficiency({ ...stepBrew, whirlpool_extract: 17 }, e.brewFermentables([...malt, ...sugars], 40, 8));
+near(sw.boil, (e.wortExtractKg(41.3, 17) - sw.sugarExtractKg) / e.wortExtractKg(41, 14.6));
+near(sw.filtration * sw.boil * sw.whirlpool, sw.efficiency);
+assert.ok(e.hasSteps(st));
+const noStart = e.brewEfficiency({ ...stepBrew, boil_start_volume_hl: null }, f);
+assert.strictEqual(noStart.filtration, null);
+assert.strictEqual(noStart.boil, null);
+near(noStart.whirlpool, st.whirlpool);
+assert.ok(!e.hasSteps(noStart));
+assert.strictEqual(noStart.check, 'ok');                                          // the steps have no checks (Jaap, 28-10)
+
+// Pooled steps: over brews with all three points, multiplying to their efficiency; where the extract went
+const st2 = e.brewEfficiency({ ...stepBrew, brew_volume_hl: 36.5, boil_start_volume_hl: 40.2 }, f);
+const ps = e.pooledEfficiency([st, st2, noStart]);
+assert.strictEqual(ps.brews, 3);
+assert.strictEqual(ps.steps.brews, 2);
+near(ps.steps.filtration * ps.steps.boil * ps.steps.whirlpool, ps.steps.efficiency);
+near(ps.steps.efficiency, (st.wortExtractKg + st2.wortExtractKg) / (2 * f.maltPotentialKg));
+near(ps.lost.filtration + ps.lost.boil + ps.lost.whirlpool + ps.lost.inWort - ps.lost.boilGain, 1);
+near(ps.lost.inWort, ps.steps.efficiency);
+assert.ok(ps.steps.whirlpoolSpread.sd > 0);
+const over = e.pooledEfficiency([e.brewEfficiency({ ...stepBrew, boil_start_volume_hl: 36 }, f)]);   // boil above 100 %
+assert.ok(over.steps.boil > 1);
+assert.strictEqual(over.lost.boil, 0);
+assert.ok(over.lost.boilGain > 0);
+near(over.lost.inWort, over.steps.efficiency);
+const normal = e.pooledEfficiency([e.brewEfficiency({ ...stepBrew, boil_start_volume_hl: 46, boil_start_extract: 14.3 }, f)]);
+assert.ok(normal.steps.boil < 1 && normal.lost.boilGain === 0);
+near(normal.lost.filtration + normal.lost.boil + normal.lost.whirlpool + normal.lost.inWort, 1);
+
 console.log('brewhouse-efficiency: all tests passed');

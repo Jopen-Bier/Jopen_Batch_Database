@@ -85,6 +85,15 @@
     .ra-melding { padding: 40px; text-align: center; color: var(--ra-muted); }
     .ra-fout { background: #fdecea; border: 1px solid #e0a39b; color: #a33f2c; padding: 12px 16px; border-radius: 8px; }
     .ra-view { min-width: 0; }
+    .ra-chain { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; }
+    .ra-chain .ra-kpi { flex: 1 1 130px; }
+    .ra-chain-op { align-self: center; font-size: 20px; color: var(--ra-muted); }
+    .ra-flow { display: flex; width: 100%; height: 18px; background: #f0ece4; border-radius: 3px; overflow: hidden; }
+    .ra-flow b { display: block; height: 100%; }
+    .ra-flow-rows { display: flex; flex-direction: column; gap: 8px; }
+    .ra-flow-row { display: grid; grid-template-columns: minmax(120px, 220px) 1fr 56px; gap: 10px; align-items: center; font-size: 13px; }
+    .ra-flow-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ra-flow-val { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
     @media (max-width: 760px) {
       .ra-layout { flex-direction: column; align-items: stretch; }
       .ra-inhoud { width: 100%; }
@@ -164,6 +173,7 @@ const ra = {
   tab: 'all', recipe: null, compare: [], year: null, size: '', warnings: false,
   sort: ['count', -1], search: '', check: '',
   user: null, canEditBatches: false, accepting: null,   // accepting: id of the brew whose "Mark as good" form is open
+  effView: 'efficiency',   // Brewhouse efficiency: total or one step in the per-brew charts
 };
 
 const pct = (x) => (x === null || x === undefined || !Number.isFinite(x) ? '—' : (100 * x).toFixed(1) + '%');
@@ -353,7 +363,8 @@ function drawCompareDots(boxId, groups, opts) {
   const H = groups.length * rowH + m.t + m.b;
   const vals = groups.flatMap((g) => g.items.filter(opts.counted).map(opts.value)).filter((v) => v !== null);
   const lo = Math.min(opts.lo, ...vals), hi = Math.max(opts.hi, ...vals);
-  const x = (v) => m.l + (Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo) * (W - m.l - m.r);
+  const pad = 10;   // keeps a dot at the end of the scale off the recipe name
+  const x = (v) => m.l + pad + (Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo) * (W - m.l - m.r - 2 * pad);
   let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${escapeHtml(opts.label)}">`;
   for (let t = Math.ceil(lo * 20) / 20; t <= hi + 1e-9; t += 0.05) s += `<line x1="${x(t)}" x2="${x(t)}" y1="${m.t}" y2="${H - m.b}" stroke="#eee"/><text x="${x(t)}" y="${H - 6}" text-anchor="middle">${Math.round(t * 100)}%</text>`;
   groups.forEach((g, i) => {
@@ -458,14 +469,50 @@ const LOSSES = {
 
 // --------------------------------------------------------------- Brewhouse efficiency
 const EFFICIENCY_LO = 0.70, EFFICIENCY_HI = 1.00;
+// What the per-brew charts show (chips): the total or one step, each on its own scale.
+const EFF_VIEWS = [
+  { key: 'efficiency', label: 'Total', lo: EFFICIENCY_LO, hi: EFFICIENCY_HI },
+  { key: 'filtration', label: 'Filtration', lo: 0.85, hi: 1.02 },
+  { key: 'boil', label: 'Boil', lo: 0.95, hi: 1.05 },
+  { key: 'whirlpool', label: 'Whirlpool', lo: 0.85, hi: 0.98 },
+];
+const EFF_LOSS_COLORS = { filtration: '#b4772c', boil: '#e3c08f', whirlpool: '#7d9bb5' };
+const EFF_TEMPERATURE_NOTE = 'Volumes as read: Volume start boil and Volume whirlpool at about 80 °C, Volume brew at about 20 °C. Wort shrinks about 3% from 80 to 20 °C, so Filtration reads about 3% higher and Whirlpool about 3% lower than at one temperature; the total is not affected.';
+const effView = () => EFF_VIEWS.find((v) => v.key === ra.effView) || EFF_VIEWS[0];
+const sdText = (sd) => (sd === null || sd === undefined ? '' : ` ±${(100 * sd).toFixed(1)}`);
+
+// Filtration → Boil → Whirlpool = total, pooled over the brews with all three measuring points.
+function effChain(p) {
+  const st = p.steps;
+  const tile = (label, v, sd) => `<div class="ra-kpi"><div class="l">${escapeHtml(label)}</div><div class="v">${pct(v)}${sd ? `<small>${sd}</small>` : ''}</div></div>`;
+  const arrow = (t) => `<div class="ra-chain-op" aria-hidden="true">${t}</div>`;
+  return `<div class="ra-chain">${tile('Filtration', st.filtration, sdText(st.filtrationSpread.sd))}${arrow('→')}${tile('Boil', st.boil, sdText(st.boilSpread.sd))}${arrow('→')}${tile('Whirlpool', st.whirlpool, sdText(st.whirlpoolSpread.sd))}${arrow('=')}${tile('Brewhouse efficiency', st.efficiency)}</div>
+    <p class="ra-note" style="margin:6px 0 0">Steps over the ${st.brews} brews with all three measuring points (± = spread per brew). ${escapeHtml(EFF_TEMPERATURE_NOTE)}</p>`;
+}
+
+// Where the malt potential went: in the wort, lost in filtration, boil, whirlpool.
+function effFlowBar(p, label) {
+  const l = p.lost;
+  if (!l) return '<span class="ra-muted">No brews with all three measuring points</span>';
+  const total = Math.max(1, l.inWort + l.filtration + l.boil + l.whirlpool);
+  const seg = (v, colour, title) => (v > 0 ? `<b style="width:${v / total * 100}%;background:${colour}" title="${escapeHtml(title)} ${pct(v)}"></b>` : '');
+  return `<span class="ra-flow" role="img" aria-label="${escapeHtml(label)}: in the wort ${pct(l.inWort)}, filtration ${pct(l.filtration)}, boil ${pct(l.boil)}, whirlpool ${pct(l.whirlpool)}">`
+    + seg(l.inWort, 'var(--ra-cellar)', 'In the wort') + seg(l.filtration, EFF_LOSS_COLORS.filtration, 'Lost in filtration')
+    + seg(l.boil, EFF_LOSS_COLORS.boil, 'Lost in boil') + seg(l.whirlpool, EFF_LOSS_COLORS.whirlpool, 'Lost in whirlpool') + '</span>';
+}
+const effFlowLegend = () => `<div class="ra-legend"><span><i style="background:var(--ra-cellar)"></i>In the wort</span><span><i style="background:${EFF_LOSS_COLORS.filtration}"></i>Lost in filtration</span><span><i style="background:${EFF_LOSS_COLORS.boil}"></i>Lost in boil</span><span><i style="background:${EFF_LOSS_COLORS.whirlpool}"></i>Lost in whirlpool</span></div>`;
+const effFlowNumbers = (p) => (p.lost ? `${pct(p.lost.inWort)} in the wort · lost: filtration ${pct(p.lost.filtration)}, boil ${p.lost.boilGain > 0 ? `+${pct(p.lost.boilGain)} gain` : pct(p.lost.boil)}, whirlpool ${pct(p.lost.whirlpool)}` : '');
+
+const effViewChips = () => `<div class="ra-chips" style="margin-bottom:8px" role="group" aria-label="Show">${EFF_VIEWS.map((v) =>
+  `<button type="button" class="ra-chip${effView().key === v.key ? ' actief' : ''}" data-effview="${v.key}" aria-pressed="${effView().key === v.key}">${escapeHtml(v.label)}</button>`).join('')}</div>`;
 
 const EFFICIENCY = {
   group: 'Production', key: 'efficiency', label: 'Brewhouse efficiency',
-  intro: 'Extract in the wort (Volume brew × whirlpool °P) against the extract the malt could give (malt kg × extract % of the CoA), per finished brew. Extract from brewhouse sugars is taken out first, so recipes with and without sugar compare on one scale.',
+  intro: 'Extract in the wort (Volume brew × whirlpool °P) against the extract the malt could give (malt kg × extract % of the CoA), per finished brew, and in three steps: Filtration (malt → wort at the start of the boil), Boil (→ wort in the whirlpool) and Whirlpool (→ Volume brew). Extract from brewhouse sugars is taken out from the boil on, so recipes with and without sugar compare on one scale. ' + EFF_TEMPERATURE_NOTE,
   checks: EFFICIENCY_CHECKS,
   async load() {
     const [brews, batches, lines] = await Promise.all([
-      fetchAllRows(supabaseClient.from('batch_brews').select('id, batch_id, brew_number, brew_volume_hl, whirlpool_extract, brewing_ended_at, efficiency_accepted_at, efficiency_accepted_reason, accepted_by:users!batch_brews_efficiency_accepted_by_fkey(name)')
+      fetchAllRows(supabaseClient.from('batch_brews').select('id, batch_id, brew_number, brew_volume_hl, whirlpool_extract, boil_start_volume_hl, boil_start_extract, whirlpool_volume_hl, brewing_ended_at, efficiency_accepted_at, efficiency_accepted_reason, accepted_by:users!batch_brews_efficiency_accepted_by_fkey(name)')
         .not('brewing_ended_at', 'is', null).order('id')),
       fetchAllRows(supabaseClient.from('batches').select('id, batch_number, recipe_id, brew_count').order('id')),
       fetchAllRows(supabaseClient.from('batch_ingredients').select('id, batch_id, addition_type, unit, quantity, is_removed, ingredient:ingredients(name, extract_pct)')
@@ -491,52 +538,68 @@ const EFFICIENCY = {
   pool(items) { const p = pooledEfficiency(items, ra.warnings); return { ...p, count: p.brews }; },
   kpis(p, wide) {
     return kpiRow([[wide ? 'Brewery-wide efficiency' : 'Brewhouse efficiency', pct(p.efficiency)], ['Spread per brew (SD)', p.sd === null ? '—' : '±' + (100 * p.sd).toFixed(1), 'pt'],
-      ['Range per brew', p.min === null ? '—' : `${(100 * p.min).toFixed(0)}–${(100 * p.max).toFixed(0)}%`], ['Sugar share of extract', pct(p.sugarShare)], ['Brews counted', p.brews, `of ${p.total}`]]);
+      ['Range per brew', p.min === null ? '—' : `${(100 * p.min).toFixed(0)}–${(100 * p.max).toFixed(0)}%`], ['Sugar share of extract', pct(p.sugarShare)], ['Brews counted', p.brews, `of ${p.total}`]])
+      + `<section class="ra-card"><h2>Step by step</h2>${effChain(p)}
+        <div style="margin-top:12px">${effFlowLegend()}${effFlowBar(p, 'Where the malt extract goes')}<p class="ra-note" style="margin:6px 0 0">${escapeHtml(effFlowNumbers(p))}</p></div></section>`;
   },
   columns: [
     { key: 'count', label: 'Brews', cell: (g) => `${g.pooled.brews}${g.pooled.brews < g.pooled.total ? `<span class="ra-muted"> /${g.pooled.total}</span>` : ''}` },
     { key: 'efficiency', label: 'Efficiency', cell: (g) => `<span class="ra-pct">${pct(g.pooled.efficiency)} ${rangeBar(g.pooled.efficiency, 0.6, EFFICIENCY_HI)}</span>` },
     { key: 'sd', label: 'Spread (SD)', cell: (g) => (g.pooled.sd === null ? '—' : '±' + (100 * g.pooled.sd).toFixed(1)) },
-    { key: 'min', label: 'Lowest', cell: (g) => pct(g.pooled.min) },
-    { key: 'max', label: 'Highest', cell: (g) => pct(g.pooled.max) },
+    { key: 'filtration', label: 'Filtration', cell: (g) => pct(g.pooled.filtration) },
+    { key: 'boil', label: 'Boil', cell: (g) => pct(g.pooled.boil) },
+    { key: 'whirlpool', label: 'Whirlpool', cell: (g) => pct(g.pooled.whirlpool) },
     { key: 'sugarShare', label: 'Sugar share', cell: (g) => (g.pooled.sugarShare ? pct(g.pooled.sugarShare) : '—') },
   ],
-  legend: () => '<div class="ra-legend"><span>Bar: efficiency from 60% (empty) to 100% (full)</span><span>“/n”: brews not counted (data warning)</span></div>',
+  legend: () => '<div class="ra-legend"><span>Bar: efficiency from 60% (empty) to 100% (full)</span><span>Filtration × Boil × Whirlpool = efficiency (brews with all three measuring points)</span><span>“/n”: brews not counted (data warning)</span></div>',
   one(g) {
-    const list = g.items;
+    const v = effView();
     return `${this.kpis(g.pooled)}
-    <section class="ra-card"><h2>Efficiency per brew</h2>
-      <p class="ra-note">One dot per brew, in batch order. Dashed lines: this recipe ${pct(g.pooled.efficiency)} (red), brewery-wide ${pct(pooledEfficiency(filtered(), ra.warnings).efficiency)} (grey).</p>
+    <section class="ra-card"><h2>${v.key === 'efficiency' ? 'Efficiency' : escapeHtml(v.label)} per brew</h2>
+      ${effViewChips()}
+      <p class="ra-note">One dot per brew, in batch order. Dashed lines: this recipe ${pct(g.pooled[v.key])} (red), brewery-wide ${pct(pooledEfficiency(filtered(), ra.warnings)[v.key])} (grey).</p>
       <div class="ra-legend"><span><i style="background:var(--ra-cellar);border-radius:50%"></i>Counted</span><span><i style="background:var(--ra-left-out);border-radius:50%"></i>Data warning</span></div>
       <div class="ra-chart" id="ra-chart-one"></div></section>
     <section class="ra-card"><h2>Brews</h2><p class="ra-note">The batch number opens its Brewing tab. Malt and sugar are per brew.</p><div class="ra-tw"><table class="ra-table">
-      <thead><tr><th class="t">Batch</th><th>Brew</th><th class="t">Version</th><th>Volume brew hl</th><th>Whirlpool °P</th><th>Extract in wort kg</th><th>Malt kg</th><th>Malt potential kg</th><th>Sugar extract kg</th><th>Efficiency</th><th class="t">Data check</th></tr></thead>
-      <tbody>${list.map((e) => `<tr class="${effCounts(e, ra.warnings) ? '' : 'ra-out'}"><td class="t">${batchLink(e, 'brewing')}</td><td>${e.brewNumber}</td><td class="t">${escapeHtml(versionOf(e))}</td>
-        <td>${hl1(Number(e.volumeHl))}</td><td>${e.plato === null || e.plato === undefined ? '—' : Number(e.plato).toFixed(2)}</td><td>${hl0(e.wortExtractKg)}</td><td>${hl0(e.maltKg)}</td><td>${hl0(e.maltPotentialKg)}</td>
-        <td>${e.sugarExtractKg ? hl0(e.sugarExtractKg) : '—'}</td><td>${pct(e.efficiency)}</td><td class="t">${checkCell(e)}</td></tr>`).join('')}</tbody>
+      <thead><tr><th class="t">Batch</th><th>Brew</th><th class="t">Version</th><th>Volume brew hl</th><th>Whirlpool °P</th><th>Extract in wort kg</th><th>Malt potential kg</th><th>Sugar extract kg</th><th>Filtration</th><th>Boil</th><th>Whirlpool</th><th>Efficiency</th><th class="t">Data check</th></tr></thead>
+      <tbody>${g.items.map((e) => `<tr class="${effCounts(e, ra.warnings) ? '' : 'ra-out'}"><td class="t">${batchLink(e, 'brewing')}</td><td>${e.brewNumber}</td><td class="t">${escapeHtml(versionOf(e))}</td>
+        <td>${hl1(Number(e.volumeHl))}</td><td>${e.plato === null || e.plato === undefined ? '—' : Number(e.plato).toFixed(2)}</td><td>${hl0(e.wortExtractKg)}</td><td>${hl0(e.maltPotentialKg)}</td>
+        <td>${e.sugarExtractKg ? hl0(e.sugarExtractKg) : '—'}</td><td>${pct(e.filtration)}</td><td>${pct(e.boil)}</td><td>${pct(e.whirlpool)}</td><td><b>${pct(e.efficiency)}</b></td><td class="t">${checkCell(e)}</td></tr>`).join('')}</tbody>
     </table></div></section>`;
   },
   drawOne(g) {
-    drawDots('ra-chart-one', g.items, { label: 'Efficiency per brew', lo: EFFICIENCY_LO, hi: EFFICIENCY_HI,
-      value: (e) => e.efficiency, colour: (e) => (effCounts(e, ra.warnings) ? 'var(--ra-cellar)' : 'var(--ra-left-out)'),
-      lines: [[g.pooled.efficiency, 'var(--jopen-red)'], [pooledEfficiency(filtered(), ra.warnings).efficiency, '#777']],
-      tip: (e) => `<b>${escapeHtml(e.row.batch_number)}</b> · brew ${e.brewNumber}<br>${hl1(Number(e.volumeHl))} hl at ${e.plato === null ? '—' : Number(e.plato).toFixed(2)} °P · efficiency ${pct(e.efficiency)}`
+    const v = effView();
+    drawDots('ra-chart-one', g.items, { label: `${v.label} per brew`, lo: v.lo, hi: v.hi,
+      value: (e) => e[v.key], colour: (e) => (effCounts(e, ra.warnings) ? 'var(--ra-cellar)' : 'var(--ra-left-out)'),
+      lines: [[g.pooled[v.key], 'var(--jopen-red)'], [pooledEfficiency(filtered(), ra.warnings)[v.key], '#777']],
+      tip: (e) => `<b>${escapeHtml(e.row.batch_number)}</b> · brew ${e.brewNumber}<br>${hl1(Number(e.volumeHl))} hl at ${e.plato === null ? '—' : Number(e.plato).toFixed(2)} °P`
+        + `<br>Filtration ${pct(e.filtration)} · Boil ${pct(e.boil)} · Whirlpool ${pct(e.whirlpool)} · <b>Total ${pct(e.efficiency)}</b>`
         + (e.sugarExtractKg ? `<br>Sugar ${hl0(e.sugarExtractKg)} kg extract` : '')
         + (e.check !== 'ok' ? `<br><span style="color:var(--ra-warn)">${escapeHtml(EFFICIENCY_CHECKS[e.check].label)}</span>` : '') });
   },
   compare(groups) {
-    return `<section class="ra-card"><h2>Efficiency side by side</h2><p class="ra-note">Pooled over each recipe's counted brews.</p>
-      <div class="ra-tw"><table class="ra-table"><thead><tr><th class="t">Recipe</th><th>Brews</th><th class="t" style="width:34%">Efficiency</th><th>Spread (SD)</th><th>Lowest</th><th>Highest</th><th>Sugar share</th></tr></thead><tbody>
-      ${groups.map((g, i) => `<tr><td class="t"><span class="ra-dot" style="background:${RA_COMPARE_COLORS[i % RA_COMPARE_COLORS.length]};margin-right:6px"></span>${escapeHtml(g.name)}</td><td>${g.pooled.brews}</td>
+    const v = effView();
+    const colourDot = (i) => `<span class="ra-dot" style="background:${RA_COMPARE_COLORS[i % RA_COMPARE_COLORS.length]};margin-right:6px"></span>`;
+    return `<section class="ra-card"><h2>Where the malt extract goes</h2><p class="ra-note">Per recipe, of the malt potential (100%), over its brews with all three measuring points. ${escapeHtml(EFF_TEMPERATURE_NOTE)}</p>
+      ${effFlowLegend()}
+      <div class="ra-flow-rows">${groups.map((g, i) => `<div class="ra-flow-row"><span class="ra-flow-name">${colourDot(i)}${escapeHtml(g.name)}</span>${effFlowBar(g.pooled, g.name)}<span class="ra-flow-val">${pct(g.pooled.lost ? g.pooled.lost.inWort : null)}</span></div>`).join('')}</div></section>
+    <section class="ra-card"><h2>Efficiency side by side</h2><p class="ra-note">Pooled over each recipe's counted brews; ± = spread per brew.</p>
+      <div class="ra-tw"><table class="ra-table"><thead><tr><th class="t">Recipe</th><th>Brews</th><th>Filtration</th><th>Boil</th><th>Whirlpool</th><th class="t" style="width:26%">Efficiency</th><th>Spread (SD)</th><th>Sugar share</th></tr></thead><tbody>
+      ${groups.map((g, i) => { const st = g.pooled.steps; return `<tr><td class="t">${colourDot(i)}${escapeHtml(g.name)}</td><td>${g.pooled.brews}</td>
+        <td>${pct(st.filtration)}<span class="ra-muted">${sdText(st.filtrationSpread.sd)}</span></td><td>${pct(st.boil)}<span class="ra-muted">${sdText(st.boilSpread.sd)}</span></td><td>${pct(st.whirlpool)}<span class="ra-muted">${sdText(st.whirlpoolSpread.sd)}</span></td>
         <td class="t"><span style="display:flex;align-items:center;gap:8px">${rangeBar(g.pooled.efficiency, 0.6, EFFICIENCY_HI, true)}<b>${pct(g.pooled.efficiency)}</b></span></td>
-        <td>${g.pooled.sd === null ? '—' : '±' + (100 * g.pooled.sd).toFixed(1)}</td><td>${pct(g.pooled.min)}</td><td>${pct(g.pooled.max)}</td><td>${g.pooled.sugarShare ? pct(g.pooled.sugarShare) : '—'}</td></tr>`).join('')}
+        <td>${g.pooled.sd === null ? '—' : '±' + (100 * g.pooled.sd).toFixed(1)}</td><td>${g.pooled.sugarShare ? pct(g.pooled.sugarShare) : '—'}</td></tr>`; }).join('')}
       </tbody></table></div><div class="ra-legend" style="margin-top:8px"><span>Bar: efficiency from 60% (empty) to 100% (full)</span></div></section>
-    <section class="ra-card"><h2>Every brew, per recipe</h2><p class="ra-note">One dot per counted brew; the black tick is the recipe's pooled efficiency.</p><div class="ra-chart" id="ra-chart-compare"></div></section>`;
+    <section class="ra-card"><h2>Every brew, per recipe</h2>${effViewChips()}<p class="ra-note">One dot per counted brew (${escapeHtml(v.label.toLowerCase())}); the black tick is the recipe's pooled value.</p><div class="ra-chart" id="ra-chart-compare"></div></section>`;
   },
   drawCompare(groups) {
-    drawCompareDots('ra-chart-compare', groups, { label: 'Efficiency of every brew per recipe', lo: 0.75, hi: EFFICIENCY_HI,
-      counted: (e) => effCounts(e, ra.warnings), value: (e) => e.efficiency, pooled: (g) => g.pooled.efficiency,
-      title: (e) => `${e.row.batch_number} brew ${e.brewNumber}: ${pct(e.efficiency)}` });
+    const v = effView();
+    drawCompareDots('ra-chart-compare', groups, { label: `${v.label} of every brew per recipe`, lo: v.key === 'efficiency' ? 0.75 : v.lo, hi: v.hi,
+      counted: (e) => effCounts(e, ra.warnings) && e[v.key] !== null, value: (e) => e[v.key], pooled: (g) => g.pooled[v.key],
+      title: (e) => `${e.row.batch_number} brew ${e.brewNumber}: ${pct(e[v.key])}` });
+  },
+  bind(view) {
+    view.querySelectorAll('[data-effview]').forEach((b) => b.addEventListener('click', () => { ra.effView = b.dataset.effview; render(); }));
   },
   checksIntro: 'Finished brews whose efficiency cannot be calculated or is outside 70–100%, so they are left out. A brew outside 70–100% that is right after all (e.g. a high-gravity brew) can be marked as good with a reason: it then counts again and moves to the list below.',
   noWarnings: 'No data warnings. Every finished brew can be calculated.',
@@ -644,6 +707,7 @@ function render() {
     await A().setAccepted(itemByBrew(b.dataset.unaccept), null);
     render();
   }));
+  if (A().bind) A().bind(view);
   const reasonInput = view.querySelector('#ra-accept-reason');
   if (reasonInput) reasonInput.addEventListener('keydown', (ev) => {
     if (ev.key === 'Enter') view.querySelector('[data-accept-save]').click();

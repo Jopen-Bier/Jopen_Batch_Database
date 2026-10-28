@@ -108,7 +108,44 @@ function brewEfficiency(brew, fermentables) {
   else if (f.sugarsNotWeighed.length) check = 'sugar_without_weight';
   else if (efficiency === null || efficiency < EFFICIENCY_MIN || efficiency > EFFICIENCY_MAX) check = brew.efficiency_accepted_at ? 'accepted' : 'out_of_range';
   return { wortExtractKg: wort, sugarExtractKg: f.sugarExtractKg, maltPotentialKg: f.maltPotentialKg, maltKg: f.maltKg,
-    efficiency, sugarShare: wort ? f.sugarExtractKg / wort : null, check };
+    efficiency, sugarShare: wort ? f.sugarExtractKg / wort : null, check, ...brewSteps(brew, f, wort) };
+}
+
+/**
+ * The efficiency in three steps, from the extract at three measuring points
+ * (Jaap, 28-10), volumes as read (start boil and whirlpool ≈ 80 °C, Volume
+ * brew ≈ 20 °C, not corrected):
+ *   filtration = extract at boil start ÷ malt potential
+ *   boil       = (extract at whirlpool − sugar) ÷ extract at boil start
+ *   whirlpool  = (extract in Volume brew − sugar) ÷ (extract at whirlpool − sugar)
+ * Sugar goes in during the boil, so it comes off from the whirlpool on; the
+ * three multiply to the efficiency. A step is null when its points are missing.
+ */
+function brewSteps(brew, f, wort) {
+  const atBoilStart = wortExtractKg(brew.boil_start_volume_hl, brew.boil_start_extract);
+  const atWhirlpool = wortExtractKg(brew.whirlpool_volume_hl, brew.whirlpool_extract);
+  const s = f.sugarExtractKg;
+  const ratio = (a, b) => (a !== null && b !== null && b > 0 ? a / b : null);
+  return {
+    boilStartExtractKg: atBoilStart, whirlpoolExtractKg: atWhirlpool,
+    filtration: f.maltPotentialKg > 0 ? ratio(atBoilStart, f.maltPotentialKg) : null,
+    boil: atWhirlpool === null ? null : ratio(atWhirlpool - s, atBoilStart),
+    whirlpool: atWhirlpool === null || wort === null ? null : ratio(wort - s, atWhirlpool - s),
+  };
+}
+
+const EFFICIENCY_STEPS = [
+  { key: 'filtration', label: 'Filtration' },
+  { key: 'boil', label: 'Boil' },
+  { key: 'whirlpool', label: 'Whirlpool' },
+];
+const hasSteps = (e) => EFFICIENCY_STEPS.every((st) => e[st.key] !== null && e[st.key] !== undefined);
+
+function spread(vals) {
+  const v = vals.filter((x) => x !== null && x !== undefined).sort((a, b) => a - b);
+  const mean = v.length ? v.reduce((t, x) => t + x, 0) / v.length : null;
+  return { mean, sd: v.length > 1 ? Math.sqrt(v.reduce((t, x) => t + (x - mean) ** 2, 0) / (v.length - 1)) : null,
+    min: v.length ? v[0] : null, max: v.length ? v[v.length - 1] : null };
 }
 
 const effCounts = (e, includeWarnings) => e.check === 'ok' || e.check === 'accepted' || (!!includeWarnings && e.efficiency !== null);
@@ -116,6 +153,10 @@ const effCounts = (e, includeWarnings) => e.check === 'ok' || e.check === 'accep
 /**
  * Over several brews: efficiency pooled as Σ(wort − sugar extract) ÷ Σ malt
  * potential, the mean and spread (sample SD) of the brews, and the sugar share.
+ * steps: the three steps pooled the same way over the counted brews that have
+ * all three measuring points (stepBrews), so filtration × boil × whirlpool =
+ * steps.efficiency; each with its spread over the brews; lost: where the malt
+ * potential went (shares; inWort = steps.efficiency).
  */
 function pooledEfficiency(effs, includeWarnings) {
   const counted = effs.filter((e) => effCounts(e, includeWarnings));
@@ -124,17 +165,36 @@ function pooledEfficiency(effs, includeWarnings) {
   const vals = counted.map((e) => e.efficiency).sort((a, b) => a - b);
   const mean = vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
   const sd = vals.length > 1 ? Math.sqrt(vals.reduce((s, v) => s + (v - mean) ** 2, 0) / (vals.length - 1)) : null;
+  const withSteps = counted.filter(hasSteps);
+  const ssum = (fn) => withSteps.reduce((t, e) => t + fn(e), 0);
+  const pot = ssum((e) => e.maltPotentialKg), bs = ssum((e) => e.boilStartExtractKg);
+  const wp = ssum((e) => e.whirlpoolExtractKg - e.sugarExtractKg), out = ssum((e) => e.wortExtractKg - e.sugarExtractKg);
+  const q = (a, b) => (b > 0 ? a / b : null);
+  const steps = { brews: withSteps.length, filtration: q(bs, pot), boil: q(wp, bs), whirlpool: q(out, wp), efficiency: q(out, pot) };
+  EFFICIENCY_STEPS.forEach((st) => { steps[st.key + 'Spread'] = spread(withSteps.map((e) => e[st.key])); });
+  const F = steps.filtration, B = steps.boil, W = steps.whirlpool;
+  // Shares of the malt potential. A boil above 100 % (start boil measured too
+  // early) is a gain, not a negative loss: inWort + losses = 1 + boilGain.
+  const lost = F === null || B === null || W === null ? null : {
+    filtration: Math.max(0, 1 - F),
+    boil: Math.max(0, F * (1 - B)),
+    boilGain: Math.max(0, F * (B - 1)),
+    whirlpool: Math.max(0, F * B * (1 - W)),
+    inWort: F * B * W,
+  };
   return {
     brews: counted.length, total: effs.length,
     efficiency: potential > 0 ? (wort - sugar) / potential : null,
     mean, sd, min: vals.length ? vals[0] : null, max: vals.length ? vals[vals.length - 1] : null,
     sugarShare: wort > 0 ? sugar / wort : null, wortExtractKg: wort, maltPotentialKg: potential,
+    steps, lost,
+    filtration: steps.filtration, boil: steps.boil, whirlpool: steps.whirlpool,   // flat, for sorting
   };
 }
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    EFFICIENCY_MIN, EFFICIENCY_MAX, EFFICIENCY_CHECKS,
-    wortExtractKg, brewKg, brewFermentables, brewEfficiency, effCounts, pooledEfficiency,
+    EFFICIENCY_MIN, EFFICIENCY_MAX, EFFICIENCY_CHECKS, EFFICIENCY_STEPS,
+    wortExtractKg, brewKg, brewFermentables, brewEfficiency, brewSteps, hasSteps, effCounts, pooledEfficiency,
   };
 }
