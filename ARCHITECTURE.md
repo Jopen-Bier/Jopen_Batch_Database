@@ -57,7 +57,7 @@ filling.js                 Filling tab: spec limits, Cpk / process capability, H
 dosing-checks.js           tick boxes for additions per brew / per HBT: which brews apply, tick, progress (has a test)
 filling-report.js          Filling report tab: book in / out per session (BOM expected, loss), volume balance, pie chart (has a test)
 recipe-losses.js           Recipe analytics › Losses: loss per closed batch from view batch_volume_balance, data checks, pooled loss per recipe, groupByRecipe() (has a test)
-brewhouse-efficiency.js    Recipe analytics › Brewhouse efficiency: wort extract vs malt potential per brew, brewhouse sugar taken out, data checks (has a test)
+brewhouse-efficiency.js    Recipe analytics › Brewhouse efficiency: wort extract vs malt potential per brew, brewhouse sugar taken out, steps Filtration / Boil / Whirlpool, data checks (has a test)
 batch-report-shell.js      shared frame of the batch tabs: header, tabs, autosave, confirm dialog, undo toast
 batch-report.css           shared styles of the batch-report screens (load after jopen-shared.css)
 voorraad-forecast.js       consumption calculation (shared module)

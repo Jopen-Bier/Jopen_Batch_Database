@@ -338,6 +338,24 @@ Page `recipe-analytics.html` (sidebar: Brewhouse efficiency), module
 - **Data checks** (in this order): no Volume brew or whirlpool °P; no malt;
   a malt without extract %; a sugar not in a weight unit; efficiency below
   70 % or above 100 %. Left out unless "Include data warnings" is ticked.
+- **Steps** (Jaap, 28-10), extract (kg) at three measuring points, volumes as
+  read (Volume start boil and Volume whirlpool ≈ 80 °C, Volume brew ≈ 20 °C;
+  wort shrinks ≈ 3 % from 80 to 20 °C, so Filtration reads ≈ 3 % high and
+  Whirlpool ≈ 3 % low, the total is not affected; noted on the page):
+  - **Filtration** = extract at boil start (Volume start boil × °P start boil)
+    ÷ malt potential;
+  - **Boil** = (extract at whirlpool (Volume whirlpool × whirlpool °P) − sugar
+    extract) ÷ extract at boil start;
+  - **Whirlpool** = (extract in Volume brew − sugar) ÷ (extract at whirlpool −
+    sugar). Sugar goes in during the boil, so it comes off from there on and
+    Filtration × Boil × Whirlpool = the efficiency.
+  Over brews pooled the same way, over the counted brews that have all three
+  points; ± is the spread per brew. "Where the malt extract goes" splits the
+  malt potential into in the wort and lost in filtration, boil, whirlpool (a
+  boil above 100 % shows as a gain). No checks on the steps yet (Jaap, 28-10).
+  Screens: the chain and the split on All recipes / One recipe, step columns
+  in the tables, the split per recipe on Compare; chips Total / Filtration /
+  Boil / Whirlpool switch the per-brew dot charts.
 - **Marked as good** (Jaap, 27-10): the 70–100 % limits stay, so every brew
   outside them is checked. One that is right after all (e.g. a high-gravity
   brew at 60 %) is marked as good on Data checks with a reason
