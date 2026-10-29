@@ -300,7 +300,7 @@
           <div class="vp-groep">
             <div class="vp-groep-titel">${ROL_LABEL[rol] || rol}</div>
             <table class="vp-tabel">
-              <thead><tr><th>Ingredient</th><th>Total needed</th>${toonTotaalKolom ? '<th>Total (Kg or L)</th>' : ''}</tr></thead>
+              <thead><tr><th>Ingredient</th><th>Total needed</th><th>Unit</th>${toonTotaalKolom ? '<th>Total (kg or L)</th><th>Unit</th>' : ''}</tr></thead>
               <tbody>
                 ${rijen.map((r, i) => {
                   const kgOfL = toonTotaalKolom ? naarKgOfL(r.eenheid, r.weergaveTotaal) : null;
@@ -313,11 +313,14 @@
                   return `
                   <tr class="vp-rij-ingredient" data-detail="detail-${rol}-${i}">
                     <td>${escapeHtml(r.naam)}${mixedBadge}${missingHlBadge}</td>
-                    <td>${formatGetal(r.weergaveTotaal)}${r.eenheid ? ' ' + escapeHtml(r.eenheid) : ''}${rol === 'yeast' ? ' <span title="Sum of the per-recipe amounts, each rounded up to the nearest 500 g">(rounded)</span>' : ''}</td>
-                    ${toonTotaalKolom ? `<td>${kgOfL !== null ? formatGetal(kgOfL.waarde) + ' ' + kgOfL.label : `<span title="Unit '${escapeHtml(r.eenheid || '')}' not recognized — check manually">—</span>`}</td>` : ''}
+                    <td>${formatGetal(r.weergaveTotaal)}${rol === 'yeast' ? ' <span title="Sum of the per-recipe amounts, each rounded up to the nearest 500 g">(rounded)</span>' : ''}</td>
+                    <td>${escapeHtml(r.eenheid || '')}</td>
+                    ${toonTotaalKolom ? (kgOfL !== null
+                      ? `<td>${formatGetal(kgOfL.waarde)}</td><td>${kgOfL.label}</td>`
+                      : `<td><span title="Unit '${escapeHtml(r.eenheid || '')}' not recognized — check manually">—</span></td><td></td>`) : ''}
                   </tr>
                   <tr class="vp-detail-rij" id="detail-${rol}-${i}">
-                    <td colspan="${toonTotaalKolom ? 3 : 2}">
+                    <td colspan="${toonTotaalKolom ? 5 : 3}">
                       Per recipe:
                       <ul>
                         ${Object.entries(r.perRecept).map(([naam, hoev]) =>
@@ -386,6 +389,7 @@
       sheet.getColumn(2).width = 20;
       sheet.getColumn(3).width = 22;
       sheet.getColumn(4).width = 14;
+      sheet.getColumn(5).width = 14;
 
       const kopCel = sheet.getCell('A1');
       kopCel.value = `Selected weeks: wk ${van} - ${tot} (${jaar})`;
@@ -415,21 +419,14 @@
           ref: `A${tabelStartRij}`,
           headerRow: true,
           style: { theme: 'TableStyleLight15', showRowStripes: true },
+          // Amounts as numbers and the unit in its own column, so the
+          // sheet can be calculated with (wishlist #13).
           columns: isGist
-            ? [{ name: 'Ingredient' }, { name: 'Total needed' }, { name: 'Rounded (nearest 500 g)' }, { name: 'Checked' }]
-            : [{ name: 'Ingredient' }, { name: 'Total needed' }, { name: 'Checked' }],
+            ? [{ name: 'Ingredient' }, { name: 'Total needed' }, { name: 'Rounded (nearest 500 g)' }, { name: 'Unit' }, { name: 'Checked' }]
+            : [{ name: 'Ingredient' }, { name: 'Total needed' }, { name: 'Unit' }, { name: 'Checked' }],
           rows: rijen.map(r => isGist
-            ? [
-                r.naam,
-                `${formatGetal(r.totaal)}${r.eenheid ? ' ' + r.eenheid : ''}`,
-                `${formatGetal(r.weergaveTotaal)}${r.eenheid ? ' ' + r.eenheid : ''}`,
-                null,
-              ]
-            : [
-                r.naam,
-                `${formatGetal(r.totaal)}${r.eenheid ? ' ' + r.eenheid : ''}`,
-                null,
-              ]),
+            ? [r.naam, formatGetal(r.totaal), formatGetal(r.weergaveTotaal), r.eenheid || '', null]
+            : [r.naam, formatGetal(r.totaal), r.eenheid || '', null]),
         });
 
         tabellenGeschreven += 1;
