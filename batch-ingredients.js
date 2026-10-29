@@ -207,6 +207,9 @@ function hopTotals(rows, ctx, names = {}) {
 // Calculated on brew day and added only on the first brewing day, all in one go
 // in the first brew of that day: 4 ml solution × hl per brew × brews that day.
 const ZINC_ML_PER_HL = 4;
+// The solution is always made the same way: 0.176 g zinc sulphate per 4 ml
+// (Jaap, 29-10). The grams are what will be taken off the stock later.
+const ZINC_G_PER_ML = 0.176 / 4;
 
 function isZincSulphate(name) {
   return /^\s*zin[kc]\s*sul(f|ph)a/i.test(String(name || ''));
@@ -217,7 +220,13 @@ function zincSulphateDose(brewVolumeHl, brewsFirstDay) {
   const hl = toNumber(brewVolumeHl), n = toNumber(brewsFirstDay);
   if (!(hl > 0) || !(n > 0) || !Number.isInteger(n)) return null;
   const ml = ZINC_ML_PER_HL * hl * n;
-  return { ml, text: `Calculated on brew day: ${ZINC_ML_PER_HL} ml × ${hl} hl × ${n} ${n === 1 ? 'brew' : 'brews'} = ${ml} ml` };
+  return { ml, text: `Calculated on brew day: ${ZINC_ML_PER_HL} ml × ${hl} hl × ${n} ${n === 1 ? 'brew' : 'brews'} = ${ml} ml (${zincSulphateGrams(ml)} g)` };
+}
+
+/** Grams of zinc sulphate in `ml` solution (rounded to 0.01 g), null without a number. */
+function zincSulphateGrams(ml) {
+  const v = toNumber(ml);
+  return v === null ? null : Math.round(v * ZINC_G_PER_ML * 100) / 100;
 }
 
 /** Rows with the zinc sulphate lines last (stable otherwise). */
@@ -231,6 +240,6 @@ if (typeof module !== 'undefined' && module.exports) {
     toNumber, sameNumber, amountBasis, dosingVolumeHl, amountContext, batchAmount, brewAmount,
     deviationKind, alphaDiffers, colorDiffers, deviationDelta, inventoryEffect,
     formatAmount, deviationList, boilTimeMin, hopTotals,
-    ZINC_ML_PER_HL, isZincSulphate, zincSulphateDose, zincLast,
+    ZINC_ML_PER_HL, ZINC_G_PER_ML, isZincSulphate, zincSulphateDose, zincSulphateGrams, zincLast,
   };
 }

@@ -116,7 +116,12 @@ assert.strictEqual(b.formatAmount(null), '—');
 // Zinc sulphate: 4 ml × hl per brew × brews on the first day, all in brew 1
 assert.ok(b.isZincSulphate('Zinksulfaat') && b.isZincSulphate('Zinksulfaat (g/brew)') && b.isZincSulphate('zinc sulphate'));
 assert.ok(!b.isZincSulphate('Calciumchloride') && !b.isZincSulphate(''));
-assert.deepStrictEqual(b.zincSulphateDose(40, 4), { ml: 640, text: 'Calculated on brew day: 4 ml × 40 hl × 4 brews = 640 ml' });
+assert.deepStrictEqual(b.zincSulphateDose(40, 4), { ml: 640, text: 'Calculated on brew day: 4 ml × 40 hl × 4 brews = 640 ml (28.16 g)' });
+// 0.176 g zinc sulphate per 4 ml solution (wishlist #23)
+assert.strictEqual(b.zincSulphateGrams(4), 0.18);
+assert.strictEqual(b.zincSulphateGrams(640), 28.16);
+assert.strictEqual(b.zincSulphateGrams('240'), 10.56);
+assert.strictEqual(b.zincSulphateGrams(null), null);
 assert.strictEqual(b.zincSulphateDose('40', '1').ml, 160);
 assert.strictEqual(b.zincSulphateDose(40, ''), null);
 assert.strictEqual(b.zincSulphateDose(40, 1.5), null);
