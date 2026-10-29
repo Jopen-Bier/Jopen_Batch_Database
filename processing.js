@@ -160,55 +160,96 @@ function processingSummary(d) {
   }
   t.push(`  Total end volume ${v(d.totalEndHl, 'hl')} · cellar loss ${v(d.cellarLossHl, 'hl')} · GLT empty? ${yn(d.gltEmpty)}`);
 
-  // ---- html: the look of the batch report pages (batch-report.css colours),
-  // inline styles so it survives pasting into Outlook
+  // ---- html: the look of the batch report pages (batch-report.css colours).
+  // Outlook renders mail with Word: only tables, fixed widths, bgcolor and
+  // td styles survive, so the cards are tables, not styled divs.
   const C = { ink: '#1c2b26', paper: '#f6f4ee', line: '#e2ddd0', muted: '#6b6355', hop: '#33473a', alert: '#a3492f' };
-  const F = `font-family:Arial,Helvetica,sans-serif;font-size:13px;color:${C.ink};`;
-  const label = (x) => `<div style="font-size:11px;font-weight:bold;letter-spacing:.04em;text-transform:uppercase;color:${C.muted};margin:0 0 6px;">${esc(x)}</div>`;
-  const card = (title, inner) => `<div style="background:#fff;border:1px solid ${C.line};border-radius:10px;padding:12px 14px;margin:0 0 12px;">${label(title)}${inner}</div>`;
-  const th = (x, r) => `<th style="text-align:${r ? 'right' : 'left'};font-size:11px;font-weight:bold;color:${C.muted};padding:4px 8px;border-bottom:1px solid ${C.line};">${esc(x)}</th>`;
-  const td = (x, r, extra = '') => `<td style="text-align:${r ? 'right' : 'left'};padding:4px 8px;border-bottom:1px solid ${C.line};${extra}">${esc(v(x))}</td>`;
-  const grid = (head, rows) => `<table style="border-collapse:collapse;${F}width:100%;">
-<tr>${head.map(([h, r]) => th(h, r)).join('')}</tr>
-${rows.join('\n')}</table>`;
-  const kv = (pairs) => `<table style="border-collapse:collapse;${F}">${pairs.map(([k, x]) =>
-    `<tr><td style="padding:3px 16px 3px 0;color:${C.muted};">${esc(k)}</td><td style="padding:3px 0;font-weight:bold;">${esc(v(x))}</td></tr>`).join('')}</table>`;
+  const W = 700;                                    // card width in px
+  const FONT = `font-family:Arial,Helvetica,sans-serif;font-size:13px;color:${C.ink};`;
+  const cell = (x, style = '') => `<td style="${FONT}${style}">${x}</td>`;
+  const table = (width, rows, extra = '') => `<table role="presentation" width="${width}" cellpadding="0" cellspacing="0" border="0" style="width:${width}px;border-collapse:collapse;${extra}">${rows}</table>`;
+  const card = (title, inner) => table(W, `<tr><td bgcolor="#ffffff" style="${FONT}background:#ffffff;border:1px solid ${C.line};padding:12px 14px;">
+      <p style="margin:0 0 8px;${FONT}font-size:11px;font-weight:bold;letter-spacing:1px;text-transform:uppercase;color:${C.muted};">${esc(title)}</p>${inner}</td></tr>`)
+    + table(W, `<tr><td height="12" style="font-size:1px;line-height:12px;">&nbsp;</td></tr>`);
+  const kv = (pairs, width) => table(width, pairs.map(([k, x]) => `<tr>${cell(esc(k), `color:${C.muted};padding:3px 12px 3px 0;width:${Math.round(width * 0.55)}px;`)}${cell(esc(v(x)), 'font-weight:bold;padding:3px 0;')}</tr>`).join(''));
+  const twoCols = (left, right) => table(W - 30, `<tr><td valign="top" width="${(W - 30) / 2}" style="width:${(W - 30) / 2}px;">${left}</td><td valign="top" width="${(W - 30) / 2}" style="width:${(W - 30) / 2}px;">${right}</td></tr>`);
+  const grid = (head, rows) => table(W - 30, `<tr>${head.map(([h, r]) => cell(esc(h), `font-size:11px;font-weight:bold;color:${C.muted};text-align:${r ? 'right' : 'left'};padding:4px 8px;border-bottom:1px solid ${C.line};`)).join('')}</tr>
+${rows.join('\n')}`, 'margin-top:6px;');
+  const td = (x, r) => cell(esc(v(x)), `text-align:${r ? 'right' : 'left'};padding:4px 8px;border-bottom:1px solid ${C.line};`);
+  const half = (W - 30) / 2;
   const co2 = (spec, t) => (spec === null || spec === undefined || spec === '' ? null : `${spec} g/l ${tol(t)}`.trim());
   const goColor = tasting.result === 'go' ? C.hop : tasting.result === 'no_go' ? C.alert : C.muted;
-  const html = [`<div style="${F}background:${C.paper};padding:14px;max-width:760px;">`,
-    `<div style="font-size:20px;font-weight:bold;margin:0 0 2px;">Processing · ${esc(d.batchNumber)} · ${esc(d.beerName || '')}</div>`,
-    `<div style="color:${C.muted};margin:0 0 12px;">Beer risk category: <b style="color:${C.ink};">${esc(v(d.risk))}</b></div>`,
-    card('Specifications', `<table style="border-collapse:collapse;${F}width:100%;"><tr><td style="vertical-align:top;width:50%;">
-      ${kv([['Turbidity after centrifuge', sp.turbidity == null ? null : `≤ ${sp.turbidity} EBC`], ['Pasteurisation', sp.pu == null ? null : `${sp.pu} PU ${tol(sp.puTol)}`.trim()], ['O2 in HBT', `< ${sp.o2Max} ppb`]])}
-      </td><td style="vertical-align:top;">
-      ${kv([['CO2 bottle', co2(sp.co2Bottle, sp.co2BottleTol)], ['CO2 can', co2(sp.co2Can, sp.co2CanTol)], ['CO2 keg', co2(sp.co2Keg, sp.co2KegTol)]])}
-      </td></tr></table>`),
-    card('Lagering', kv([['Start date lagering', lg.startDate], ['Days on lagering', lg.days]])),
-    ...sessions.map((s) => card(`Processing session ${s.number}`, `<table style="border-collapse:collapse;${F}width:100%;margin:0 0 8px;"><tr><td style="vertical-align:top;width:50%;">
-      ${kv([['Date', s.date], ['Start – end', `${v(s.start)} – ${v(s.end)}`], ['Duration', s.duration], ['Operators', `${v(s.operatorStart)} / ${v(s.operatorEnd)}`]])}
-      </td><td style="vertical-align:top;">
-      ${kv([['Processed from (G)LT', s.tank], ['Outlet', s.outlet], ['Discharges', s.discharges == null ? null : `${s.discharges} · every ${v(s.interval, 'min')}`]])}
-      </td></tr></table>
-      ${grid([['Measurement'], ['Time'], ['O2 (ppb)', 1], ['CO2 (g/l)', 1], ['Flow (hl/h)', 1], ['Turbidity (EBC)', 1]], [
+  const body = [
+    table(W, `<tr>${cell(`<span style="font-size:20px;font-weight:bold;">Processing · ${esc(d.batchNumber)} · ${esc(d.beerName || '')}</span><br>
+      <span style="color:${C.muted};">Beer risk category: <b style="color:${C.ink};">${esc(v(d.risk))}</b></span>`, 'padding:0 0 12px;')}</tr>`),
+    card('Specifications', twoCols(
+      kv([['Turbidity after centrifuge', sp.turbidity == null ? null : `≤ ${sp.turbidity} EBC`], ['Pasteurisation', sp.pu == null ? null : `${sp.pu} PU ${tol(sp.puTol)}`.trim()], ['O2 in HBT', `< ${sp.o2Max} ppb`]], half),
+      kv([['CO2 bottle', co2(sp.co2Bottle, sp.co2BottleTol)], ['CO2 can', co2(sp.co2Can, sp.co2CanTol)], ['CO2 keg', co2(sp.co2Keg, sp.co2KegTol)]], half))),
+    card('Lagering', kv([['Start date lagering', lg.startDate], ['Days on lagering', lg.days]], half)),
+    ...sessions.map((s) => card(`Processing session ${s.number}`, twoCols(
+      kv([['Date', s.date], ['Start – end', `${v(s.start)} – ${v(s.end)}`], ['Duration', s.duration], ['Operators', `${v(s.operatorStart)} / ${v(s.operatorEnd)}`]], half),
+      kv([['Processed from (G)LT', s.tank], ['Outlet', s.outlet], ['Discharges', s.discharges == null ? null : `${s.discharges} · every ${v(s.interval, 'min')}`]], half))
+      + grid([['Measurement'], ['Time'], ['O2 (ppb)', 1], ['CO2 (g/l)', 1], ['Flow (hl/h)', 1], ['Turbidity (EBC)', 1]], [
         `<tr>${td('Centrifuge in')}${td(s.centrifugeIn.time)}${td(s.centrifugeIn.o2, 1)}${td(s.centrifugeIn.co2, 1)}${td(null, 1)}${td(null, 1)}</tr>`,
-        `<tr>${td('Centrifuge out')}${td(s.centrifugeOut.time)}${td(s.centrifugeOut.o2, 1)}${td(s.centrifugeOut.co2, 1)}${td(s.startFlow, 1)}${td(s.startTurbidity, 1)}</tr>`])}`)),
-    card('Comments & tasting', `${comments.length ? grid([['Time'], ['Comment'], ['By']], comments.map((c) => `<tr>${td(c.time, false, 'width:60px;')}${td(c.text)}${td(c.by, false, 'width:50px;')}</tr>`))
-      : `<div style="color:${C.muted};margin:0 0 6px;">No processing comments.</div>`}
-      <div style="margin-top:8px;">Tasting: <b style="color:${goColor};">${esc(result)}</b>${tasting.comment ? ` · ${esc(tasting.comment)}` : ''}</div>`),
-    card('Bright beer tanks (HBT)', hbts.length ? hbts.map((h) => `<div style="font-weight:bold;margin:6px 0 4px;">${esc(h.name)}${h.formats ? ` <span style="font-weight:normal;color:${C.muted};">· ${esc(h.formats)}</span>` : ''}</div>
-      ${grid([['HL', 1], ['O2 (ppb)', 1], ['CO2 (g/l)', 1], ['Target'], ['Flow (hl/h)', 1], ['Turbidity (EBC)', 1], ['Comments']],
-        (h.readings || []).map((r) => `<tr>${td(r.hl, 1)}${td(r.o2, 1)}${td(r.co2, 1)}${td(r.target)}${td(r.flow, 1)}${td(r.turbidity, 1)}${td(r.comment)}</tr>`))}`).join('')
-      : `<div style="color:${C.muted};">No HBT readings yet.</div>`),
-    card('Total measured volumes', `${hbts.length ? grid([['HBT'], ['HL', 1], ['O2 (ppb)', 1], ['CO2 (g/l)', 1], ['Avg. in-line O2', 1], ['Avg. PU', 1], ['Avg. turbidity', 1], ['Avg. flow', 1]],
-        hbts.map((h) => `<tr>${td(h.name)}${td(h.end.hl, 1)}${td(h.end.o2, 1)}${td(h.end.co2, 1)}${td(h.avgO2, 1)}${td(h.avgPu, 1)}${td(h.avgTurbidity, 1)}${td(h.avgFlow, 1)}</tr>`)) : ''}
-      <div style="margin-top:10px;">${kv([['Total end volume', d.totalEndHl == null ? null : `${d.totalEndHl} hl`], ['Cellar loss', d.cellarLossHl == null ? null : `${d.cellarLossHl} hl`], ['GLT empty?', yn(d.gltEmpty)]])}</div>`),
-    '</div>'].join('\n');
+        `<tr>${td('Centrifuge out')}${td(s.centrifugeOut.time)}${td(s.centrifugeOut.o2, 1)}${td(s.centrifugeOut.co2, 1)}${td(s.startFlow, 1)}${td(s.startTurbidity, 1)}</tr>`]))),
+    card('Comments & tasting', (comments.length ? grid([['Time'], ['Comment'], ['By']], comments.map((c) => `<tr>${td(c.time)}${td(c.text)}${td(c.by)}</tr>`))
+      : `<p style="margin:0;${FONT}color:${C.muted};">No processing comments.</p>`)
+      + `<p style="margin:8px 0 0;${FONT}">Tasting: <b style="color:${goColor};">${esc(result)}</b>${tasting.comment ? ` · ${esc(tasting.comment)}` : ''}</p>`),
+    card('Bright beer tanks (HBT)', hbts.length ? hbts.map((h) => `<p style="margin:8px 0 2px;${FONT}font-weight:bold;">${esc(h.name)}${h.formats ? ` <span style="font-weight:normal;color:${C.muted};">· ${esc(h.formats)}</span>` : ''}</p>`
+      + grid([['HL', 1], ['O2 (ppb)', 1], ['CO2 (g/l)', 1], ['Target'], ['Flow (hl/h)', 1], ['Turbidity (EBC)', 1], ['Comments']],
+        (h.readings || []).map((r) => `<tr>${td(r.hl, 1)}${td(r.o2, 1)}${td(r.co2, 1)}${td(r.target)}${td(r.flow, 1)}${td(r.turbidity, 1)}${td(r.comment)}</tr>`))).join('')
+      : `<p style="margin:0;${FONT}color:${C.muted};">No HBT readings yet.</p>`),
+    card('Total measured volumes', (hbts.length ? grid([['HBT'], ['HL', 1], ['O2 (ppb)', 1], ['CO2 (g/l)', 1], ['Avg. in-line O2', 1], ['Avg. PU', 1], ['Avg. turbidity', 1], ['Avg. flow', 1]],
+        hbts.map((h) => `<tr>${td(h.name)}${td(h.end.hl, 1)}${td(h.end.o2, 1)}${td(h.end.co2, 1)}${td(h.avgO2, 1)}${td(h.avgPu, 1)}${td(h.avgTurbidity, 1)}${td(h.avgFlow, 1)}</tr>`)) : '')
+      + `<p style="margin:10px 0 0;font-size:1px;">&nbsp;</p>`
+      + kv([['Total end volume', d.totalEndHl == null ? null : `${d.totalEndHl} hl`], ['Cellar loss', d.cellarLossHl == null ? null : `${d.cellarLossHl} hl`], ['GLT empty?', yn(d.gltEmpty)]], half)),
+  ].join('\n');
+  const html = table(W + 28, `<tr><td bgcolor="${C.paper}" style="background:${C.paper};padding:14px;">${body}</td></tr>`);
   return { subject, text: t.join('\n'), html };
+}
+
+/** UTF-8 text → base64, in the browser and in Node. */
+function utf8Base64(text) {
+  if (typeof Buffer !== 'undefined') return Buffer.from(String(text), 'utf8').toString('base64');
+  const bytes = new TextEncoder().encode(String(text));
+  let bin = '';
+  bytes.forEach((b) => { bin += String.fromCharCode(b); });
+  return btoa(bin);
+}
+
+/**
+ * An unsent e-mail as an .eml file: Outlook opens it as a new message with
+ * the HTML layout, recipients and subject filled in (X-Unsent), ready to
+ * send from the user's own account. A mailto link can only carry plain text.
+ */
+function emlMessage({ to = [], subject, html, text }) {
+  const boundary = 'jopen-' + Math.random().toString(36).slice(2);
+  const wrap = (b64) => b64.replace(/.{1,76}/g, '$&\r\n');
+  return [
+    'X-Unsent: 1',
+    `To: ${to.join(', ')}`,
+    `Subject: =?UTF-8?B?${utf8Base64(subject)}?=`,
+    'MIME-Version: 1.0',
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    '',
+    `--${boundary}`,
+    'Content-Type: text/plain; charset="utf-8"',
+    'Content-Transfer-Encoding: base64',
+    '',
+    wrap(utf8Base64(text || '')),
+    `--${boundary}`,
+    'Content-Type: text/html; charset="utf-8"',
+    'Content-Transfer-Encoding: base64',
+    '',
+    wrap(utf8Base64(`<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;">${html}</body></html>`)),
+    `--${boundary}--`,
+    '',
+  ].join('\r\n');
 }
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    processingSummary,
+    processingSummary, emlMessage,
     O2_HBT_MAX_PPB, durationMinutes, durationText, hbtEnd, hbtFilledOn,
     co2Spec, co2Status, o2High, turbidityHigh, puOutOfSpec, maturation, cellarLoss,
   };
