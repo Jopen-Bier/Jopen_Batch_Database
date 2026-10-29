@@ -252,28 +252,43 @@
     // Opens a prefilled message in the default mail program (Outlook); the
     // recipients are the users with "Processing report" ticked on the Users page.
     function summaryData() {
-      const b = page.ctx.batch;
-      const date = (d) => (d ? `${d.slice(8, 10)}-${d.slice(5, 7)}-${d.slice(0, 4)}` : null);
+      const b = page.ctx.batch, f = page.ferm, pk = page.packaging;
+      const date = (d) => (d ? `${String(d).slice(8, 10)}-${String(d).slice(5, 7)}-${String(d).slice(0, 4)}` : null);
       const time = (t) => (t ? String(t).slice(0, 5) : null);
+      const n = (x, digits) => (x === null || x === undefined || x === '' ? null : Number(Number(x).toFixed(digits ?? 2)));
+      const formatName = (code) => (PACKAGE_FORMATS.find((x) => x.code === code) || {}).label || code || null;
+      const lageringAt = page.ctx.stageRow && page.ctx.stageRow.lagering_started_at;
+      const m = maturation(lageringAt, f.lagering_time);
+      const calcs = brewCalculations(page.brews);
+      const glt = calcs.length ? calcs[calcs.length - 1].glt : null;
+      const ends = hbtsInOrder().map((h) => hbtEnd(readingsOf(h)));
+      const total = ends.reduce((sum, e) => sum + (Number(e && e.level_hl) || 0), 0);
+      const loss = cellarLoss({ gltVolumeHl: gltVolumeHl(), transfers: page.transfers, hbtTankIds: page.hbts.map((h) => h.tank_id), hbtEndTotalHl: total, incomingHl: page.ctx.stageRow && page.ctx.stageRow.incoming_volume_hl });
       return {
-        batchNumber: b.batch_number, beerName: b.name || page.ctx.recipe.name || '',
+        batchNumber: b.batch_number, beerName: b.name || page.ctx.recipe.name || '', risk: f.beer_risk ? valueLabel(BEER_RISK_LABELS, f.beer_risk) : null,
+        specs: { turbidity: f.turbidity_after_separation, pu: f.pasteurization, puTol: toleranceValue(f.pasteurization_tol), o2Max: O2_HBT_MAX_PPB,
+          co2Bottle: pk.co2_bottle_can_spec, co2BottleTol: pk.co2_bottle_can_tolerance, co2Keg: pk.co2_keg_spec, co2KegTol: pk.co2_keg_tolerance },
+        lagering: { ogGlt: glt && glt.volumeHl ? n(glt.extract, 2) : null, startDate: date(lageringAt), days: m.days === null ? null : Math.floor(m.days) },
         sessions: page.sessions.slice().sort((x, y) => x.session_number - y.session_number).map((s) => ({
           number: s.session_number, date: date(s.processing_date), start: time(s.start_time), end: time(s.end_time),
-          tank: s.tank_id ? tankCode(s.tank_id) : null,
-          operators: [...new Set([s.started_by, s.ended_by].filter(Boolean).map((u) => page.initialsOf(u)))].join(' / ') || null,
+          duration: durationText(durationMinutes(s.start_time, s.end_time)),
+          operatorStart: s.started_by ? page.initialsOf(s.started_by) : null, operatorEnd: s.ended_by ? page.initialsOf(s.ended_by) : null,
+          tank: s.tank_id ? tankCode(s.tank_id) : null, outlet: { standpipe: 'Standpipe', bottom_valve: 'Bottom valve' }[s.outlet] || null,
+          discharges: s.discharge_count, interval: s.discharge_interval_min,
           centrifugeIn: { time: time(s.centrifuge_in_time), o2: s.centrifuge_in_o2_ppb, co2: s.centrifuge_in_co2_gl },
           centrifugeOut: { time: time(s.centrifuge_out_time), o2: s.centrifuge_out_o2_ppb, co2: s.centrifuge_out_co2_gl },
           startFlow: s.start_flow_hl_h, startTurbidity: s.start_turbidity_ebc,
         })),
-        hbts: hbtsInOrder().map((h) => {
-          const rows = readingsOf(h);
-          const end = hbtEnd(rows) || {};
-          return { name: hbtName(h), formats: formatsText(h.intended_formats || []),
-            end: { hl: end.level_hl, o2: end.o2_ppb, co2: end.co2_gl },
-            readings: rows.map((r) => ({ hl: r.level_hl, o2: r.o2_ppb, co2: r.co2_gl, flow: r.flow_hl_h, turbidity: r.turbidity_ebc })) };
-        }),
-        tasting: { result: b.tasting_result, comment: b.tasting_comment },
         comments: page.comments.map((c) => ({ time: time(c.comment_time), text: c.comment, by: page.initialsOf(c.created_by) })),
+        tasting: { result: b.tasting_result, comment: b.tasting_comment },
+        hbts: hbtsInOrder().map((h, i) => {
+          const end = ends[i] || {};
+          return { name: hbtName(h), formats: formatsText(h.intended_formats || []),
+            readings: readingsOf(h).map((r) => ({ hl: r.level_hl, o2: r.o2_ppb, co2: r.co2_gl, target: formatName(r.co2_target), flow: r.flow_hl_h, turbidity: r.turbidity_ebc, comment: r.comment })),
+            end: { hl: end.level_hl, o2: end.o2_ppb, co2: end.co2_gl },
+            avgO2: h.avg_inline_o2_ppb, avgPu: h.avg_pu, avgTurbidity: h.avg_turbidity_ebc, avgFlow: h.avg_flow_hl_h };
+        }),
+        totalEndHl: n(total, 1), cellarLossHl: loss.lossHl === null ? null : n(loss.lossHl, 1), gltEmpty: b.glt_empty,
       };
     }
 
@@ -288,13 +303,13 @@
       const overlay = document.createElement('div');
       overlay.className = 'br-dialog-overlay';
       overlay.id = 'pr-email-dialog';
-      overlay.innerHTML = `<div class="br-dialog" role="dialog" aria-modal="true" aria-labelledby="pr-email-title" style="max-width:520px;">
+      overlay.innerHTML = `<div class="br-dialog" role="dialog" aria-modal="true" aria-labelledby="pr-email-title" style="max-width:760px;">
         <div class="br-dialog-title" id="pr-email-title">Email · ${escapeHtml(sum.subject)}</div>
         <div class="br-dialog-text">${error ? `Could not load the recipients: ${escapeHtml(error.message)}`
           : recipients.length ? `To: ${recipients.map((r) => escapeHtml(r.name)).join(', ')}`
             : 'No recipients yet: tick "Processing report" for them on the Users page.'}</div>
-        <div class="br-dialog-text">"Open email" opens a new message in Outlook with recipients, subject and the report as text. For the report with tables, click "Copy report" and paste it (Ctrl+V) into the message.</div>
-        <pre style="max-height:220px; overflow:auto; background:#f6f4ee; border-radius:8px; padding:10px; font-size:12px; white-space:pre-wrap; margin:0;">${escapeHtml(sum.text)}</pre>
+        <div class="br-dialog-text">1. "Copy report" copies the sheet below. 2. "Open email" opens a new message in Outlook with recipients and subject. 3. Select the text in the message and paste (Ctrl+V) the sheet over it.</div>
+        <div style="max-height:360px; overflow:auto; border:1px solid var(--br-line-soft); border-radius:8px; padding:8px; background:#fff;">${sum.html}</div>
         <span class="br-note" id="pr-email-note"></span>
         <div class="br-dialog-buttons">
           <button type="button" class="br-ghost" id="pr-email-close">Close</button>

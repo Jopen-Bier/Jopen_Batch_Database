@@ -65,27 +65,31 @@ assert.strictEqual(p.hbtFilledOn({ id: 7 }, rd, sess), null);
 
 
 
-// E-mail summary (wishlist #30)
+// E-mail summary (wishlist #30): the blocks of the Excel sheet "Verwerking"
 {
   const sum = p.processingSummary({
-    batchNumber: '26301', beerName: 'Mooie Nel',
-    sessions: [{ number: 1, date: '28-10-2026', start: '07:30', end: '11:00', tank: 'LT12', operators: 'EVL / DS',
-      centrifugeIn: { time: '07:45', o2: 12, co2: 5.1 }, centrifugeOut: { time: '10:50', o2: null, co2: 5.2 }, startFlow: 60, startTurbidity: 0.8 }],
-    hbts: [{ name: 'HBT3', formats: 'Can', end: { hl: 120.5, o2: 20, co2: 5.4 }, readings: [{ hl: 60, o2: 18, co2: 5.3, flow: 55, turbidity: 0.6 }] }],
-    tasting: { result: 'go', comment: 'Clean <fruity>' },
-    comments: [{ time: '09:10', text: 'Bypass opened', by: 'DS' }],
+    batchNumber: '26311', beerName: 'Mooie Nel', risk: 'Standard',
+    specs: { turbidity: 15, pu: 15, puTol: 2, o2Max: 50, co2Bottle: 5.5, co2BottleTol: 0, co2Keg: 4.7, co2KegTol: 0.3 },
+    lagering: { ogGlt: 14.74, startDate: '02-10-2026', days: 27 },
+    sessions: [{ number: 1, date: '29-10-2026', start: '11:25', end: null, duration: '—', operatorStart: 'SB', operatorEnd: 'EP', tank: 'LT63',
+      outlet: 'Standpipe', discharges: 1, interval: 10, centrifugeIn: { time: null, o2: null, co2: null }, centrifugeOut: { time: '11:40', o2: 12, co2: 5.1 }, startFlow: 30, startTurbidity: 8 }],
+    comments: [{ time: '12:10', text: 'Bypass <closed>', by: 'SB' }], tasting: { result: null, comment: null },
+    hbts: [{ name: 'HBT18', formats: 'Can', readings: [{ hl: 25, o2: 20, co2: 5.07, target: 'Can', flow: 30, turbidity: 8 }, { hl: 73, o2: 15, co2: 4.9, target: 'Can' }],
+      end: { hl: 120, o2: 9, co2: 5 }, avgO2: null, avgPu: null, avgTurbidity: null, avgFlow: null }],
+    totalEndHl: 120, cellarLossHl: 3.5, gltEmpty: false,
   });
-  assert.strictEqual(sum.subject, 'Processing 26301 Mooie Nel');
-  assert.ok(sum.text.includes('Session 1 · 28-10-2026 · 07:30–11:00 · from LT12 · EVL / DS'));
-  assert.ok(sum.text.includes('Centrifuge out 10:50: O2 —, CO2 5.2 g/l'));
-  assert.ok(sum.text.includes('HBT3 (Can): 120.5 hl · O2 20 ppb · CO2 5.4 g/l'));
-  assert.ok(sum.text.includes('Tasting: Go · Clean <fruity>'));
-  assert.ok(sum.text.includes('09:10 Bypass opened (DS)'));
-  assert.ok(sum.html.includes('Clean &lt;fruity&gt;') && !sum.html.includes('<fruity>'));
-  assert.ok(sum.html.includes('<td style="padding:4px 8px;border-bottom:1px solid #ddd;">55</td>'));
-  const empty = p.processingSummary({ batchNumber: '1', beerName: '', sessions: [], hbts: [], tasting: {}, comments: [] });
+  assert.strictEqual(sum.subject, 'Processing 26311 Mooie Nel');
+  assert.ok(sum.text.includes('LAGERING') && sum.text.includes('O.G. GLT 14.74 °P · Start 02-10-2026 · 27 days'));
+  assert.ok(sum.text.includes('From LT63 (Standpipe) · discharges 1 every 10 min'));
+  assert.ok(sum.text.includes('HBT18: 25 hl · 20 ppb · 5.07 g/l · Can · 30 hl/h · 8 EBC'));
+  assert.ok(sum.text.includes('End value HBT18: 120 hl · O2 9 ppb · CO2 5 g/l'));
+  assert.ok(sum.text.includes('Total end volume 120 hl · cellar loss 3.5 hl · GLT empty? No'));
+  ['>Processing<', '>Specifications<', '>Lagering<', '>Bright beer tanks (HBT)<', '>Total measured volumes<', 'Comments tasting', 'Go or Not go?']
+    .forEach((x) => assert.ok(sum.html.includes(x), x));
+  assert.ok(sum.html.includes('Bypass &lt;closed&gt; (SB)') && !sum.html.includes('<closed>'));
+  const empty = p.processingSummary({ batchNumber: '1', beerName: '', sessions: [], hbts: [], comments: [] });
   assert.strictEqual(empty.subject, 'Processing 1');
-  assert.ok(empty.text.includes('Tasting: —'));
+  assert.ok(empty.text.includes('TASTING: —') && empty.html.includes('No HBT readings yet.'));
 }
 
 console.log('processing: all tests passed');
