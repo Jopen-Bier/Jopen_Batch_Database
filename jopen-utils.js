@@ -68,6 +68,22 @@ function toggleDropdownPanel(prefix) {
   }
 }
 
+/**
+ * Copies formatted text (with a plain-text fallback) to the clipboard, for
+ * pasting into an e-mail. Resolves true when it worked.
+ */
+async function copyRichText(html, text) {
+  try {
+    await navigator.clipboard.write([new ClipboardItem({
+      'text/html': new Blob([html], { type: 'text/html' }),
+      'text/plain': new Blob([text], { type: 'text/plain' }),
+    })]);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { escapeHtml, fetchAllRows, formatDate, toggleDropdownPanel };
+  module.exports = { escapeHtml, fetchAllRows, formatDate, toggleDropdownPanel, copyRichText };
 }

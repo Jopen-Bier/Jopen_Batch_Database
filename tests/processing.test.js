@@ -63,4 +63,29 @@ assert.strictEqual(p.hbtFilledOn({ id: 5 }, rd, sess), '2026-10-01');
 assert.strictEqual(p.hbtFilledOn({ id: 6, created_at: '2026-10-20T08:00:00Z' }, rd, sess), '2026-10-20');
 assert.strictEqual(p.hbtFilledOn({ id: 7 }, rd, sess), null);
 
+
+
+// E-mail summary (wishlist #30)
+{
+  const sum = p.processingSummary({
+    batchNumber: '26301', beerName: 'Mooie Nel',
+    sessions: [{ number: 1, date: '28-10-2026', start: '07:30', end: '11:00', tank: 'LT12', operators: 'EVL / DS',
+      centrifugeIn: { time: '07:45', o2: 12, co2: 5.1 }, centrifugeOut: { time: '10:50', o2: null, co2: 5.2 }, startFlow: 60, startTurbidity: 0.8 }],
+    hbts: [{ name: 'HBT3', formats: 'Can', end: { hl: 120.5, o2: 20, co2: 5.4 }, readings: [{ hl: 60, o2: 18, co2: 5.3, flow: 55, turbidity: 0.6 }] }],
+    tasting: { result: 'go', comment: 'Clean <fruity>' },
+    comments: [{ time: '09:10', text: 'Bypass opened', by: 'DS' }],
+  });
+  assert.strictEqual(sum.subject, 'Processing 26301 Mooie Nel');
+  assert.ok(sum.text.includes('Session 1 · 28-10-2026 · 07:30–11:00 · from LT12 · EVL / DS'));
+  assert.ok(sum.text.includes('Centrifuge out 10:50: O2 —, CO2 5.2 g/l'));
+  assert.ok(sum.text.includes('HBT3 (Can): 120.5 hl · O2 20 ppb · CO2 5.4 g/l'));
+  assert.ok(sum.text.includes('Tasting: Go · Clean <fruity>'));
+  assert.ok(sum.text.includes('09:10 Bypass opened (DS)'));
+  assert.ok(sum.html.includes('Clean &lt;fruity&gt;') && !sum.html.includes('<fruity>'));
+  assert.ok(sum.html.includes('<td style="padding:4px 8px;border-bottom:1px solid #ddd;">55</td>'));
+  const empty = p.processingSummary({ batchNumber: '1', beerName: '', sessions: [], hbts: [], tasting: {}, comments: [] });
+  assert.strictEqual(empty.subject, 'Processing 1');
+  assert.ok(empty.text.includes('Tasting: —'));
+}
+
 console.log('processing: all tests passed');
