@@ -154,6 +154,93 @@
     const applyZinc = (row, dose) => saveRowPatch({ table: 'batch_ingredients', row, saveStatus: page.save, renderSoon, userId: page.user.id,
       patch: { unit: 'ml', quantity: dose.ml, all_in_first_brew: true, deviation_reason: dose.text } });
 
+    // Brews on the first day (wishlist #22): stored once on the batch; filled in
+    // at the yeast block or in the zinc calculator, it recalculates both the dry
+    // yeast (ratio × hl × brews, in g) and the zinc sulphate lines.
+    async function applyFirstDayBrews(n) {
+      const hl = page.ctx.recipe.brew_volume_hl;
+      await saveBatch({ first_day_brew_count: n });
+      if (!n) return;
+      const name = (r) => page.names[r.ingredient_id] || r.note;
+      for (const row of page.ingredients.filter((r) => r.addition_type === 'yeast')) {
+        const dose = yeastDose(yeastRatio(row), hl, n);
+        if (dose) await saveRowPatch({ table: 'batch_ingredients', row, saveStatus: page.save, renderSoon, userId: page.user.id,
+          patch: { unit: 'g', quantity: dose.g, deviation_reason: dose.text } });
+      }
+      const zinc = zincSulphateDose(hl, n);
+      if (!zinc) return;
+      for (const row of page.ingredients.filter((r) => r.addition_type === 'brewhouse_addition' && isZincSulphate(name(r)))) await applyZinc(row, zinc);
+    }
+
+    // ------------------------------------------------------------ extra addition (wishlist #29)
+    // An ingredient added during brewing that is not in the recipe: an "Added"
+    // batch line (also on the Overview); the tick boxes say which brews got it.
+    let ingredientChoices = null;
+    async function openAddAdditionDialog() {
+      document.getElementById('bw-add-dialog')?.remove();
+      if (!ingredientChoices) {
+        const { data, error } = await fetchAllRows(supabaseClient.from('ingredients').select('id, name, unit').order('name'));
+        if (error) { page.save.failed(error.message); return; }
+        ingredientChoices = data;
+      }
+      const overlay = document.createElement('div');
+      overlay.className = 'br-dialog-overlay';
+      overlay.id = 'bw-add-dialog';
+      overlay.innerHTML = `<div class="br-dialog" role="dialog" aria-modal="true" aria-labelledby="bw-add-title">
+        <div class="br-dialog-title" id="bw-add-title">Extra addition</div>
+        <div class="br-note">Not in the recipe, e.g. filtrase. It shows on the Overview as an added ingredient; tick the brews it went into.</div>
+        <div class="br-field"><label class="br-label" for="bw-add-ingredient">Ingredient</label>
+          <input class="br-input" id="bw-add-ingredient" list="bw-add-ingredients" placeholder="Search ingredient…" autocomplete="off">
+          <datalist id="bw-add-ingredients">${ingredientChoices.map((i) => `<option value="${escapeHtml(i.name)}"></option>`).join('')}</datalist></div>
+        <div style="display:flex; gap:10px;">
+          <div class="br-field" style="flex:1;"><label class="br-label" for="bw-add-qty">Amount</label><input class="br-input" id="bw-add-qty" inputmode="decimal"></div>
+          <div class="br-field" style="width:110px;"><label class="br-label" for="bw-add-unit">Unit</label>
+            <select class="br-input" id="bw-add-unit">${['g', 'kg', 'ml', 'l', 'pcs'].map((u) => `<option>${u}</option>`).join('')}</select></div>
+        </div>
+        <div class="br-field"><span class="br-label">Amount is</span><div class="br-seg" role="group" id="bw-add-basis">
+          <button type="button" data-basis="brew" class="on">Per brew</button><button type="button" data-basis="batch">Per batch</button></div></div>
+        <div class="br-field"><label class="br-label" for="bw-add-timing">Moment</label><input class="br-input" id="bw-add-timing" placeholder="e.g. Mash-in, Whirlpool"></div>
+        <span class="br-note" id="bw-add-note"></span>
+        <div class="br-dialog-buttons">
+          <button type="button" class="br-ghost" id="bw-add-close">Cancel</button>
+          <button type="button" class="br-primary" id="bw-add-save">Add</button>
+        </div></div>`;
+      let basis = 'brew';
+      const q = (sel) => overlay.querySelector(sel);
+      const close = () => { overlay.remove(); document.removeEventListener('keydown', onKey); };
+      const onKey = (e) => { if (e.key === 'Escape') close(); };
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) return close();
+        const b = e.target.closest('button[data-basis]');
+        if (b) { basis = b.dataset.basis; overlay.querySelectorAll('button[data-basis]').forEach((x) => x.classList.toggle('on', x === b)); }
+      });
+      q('#bw-add-ingredient').addEventListener('change', () => {
+        const ing = ingredientChoices.find((i) => i.name === q('#bw-add-ingredient').value);
+        const base = ing && String(ing.unit || '').split('/')[0].trim();
+        if (base && [...q('#bw-add-unit').options].some((o) => o.value === base)) q('#bw-add-unit').value = base;
+      });
+      q('#bw-add-close').addEventListener('click', close);
+      q('#bw-add-save').addEventListener('click', async () => {
+        const ing = ingredientChoices.find((i) => i.name === q('#bw-add-ingredient').value);
+        const quantity = parseNumberInput(q('#bw-add-qty').value);
+        if (!ing) { q('#bw-add-note').textContent = 'Choose an ingredient from the list.'; return; }
+        if (!(quantity > 0)) { q('#bw-add-note').textContent = 'Enter an amount above 0.'; return; }
+        const sortOrder = Math.max(0, ...page.ingredients.filter((r) => r.addition_type === 'brewhouse_addition').map((r) => r.sort_order || 0)) + 1;
+        const row = await insertRow('batch_ingredients', {
+          batch_id: page.ctx.batch.id, is_added: true, addition_type: 'brewhouse_addition', ingredient_id: ing.id,
+          quantity, unit: extraAdditionUnit(q('#bw-add-unit').value, basis), timing: q('#bw-add-timing').value.trim() || null,
+          sort_order: sortOrder, updated_by: page.user.id,
+        }, page.ingredients);
+        if (!row) return;
+        page.names[ing.id] = ing.name;
+        close();
+        renderSoon();
+      });
+      document.addEventListener('keydown', onKey);
+      document.body.appendChild(overlay);
+      q('#bw-add-ingredient').focus();
+    }
+
     async function addBrew() {
       const brew = await insertRow('batch_brews', { batch_id: page.ctx.batch.id, brew_number: nextBrewNumber(page.brews), brewer_id: page.user.id }, page.brews);
       if (brew) renderSoon(`[data-brew="${brew.id}"][data-field="software_order_number"]`);
@@ -261,8 +348,11 @@
             || '<tr><td colspan="4" class="small">No boil hops.</td></tr>'}</tbody></table>`;
       const ctx = amountContext(page.ctx.batch, page.ctx.recipe, page.ctx.stageRow);
       // zinc sulphate always last, under a thick line, with its calculator (Jaap, 23-10)
-      const adds = zincLast(page.ingredients.filter((r) => r.addition_type === 'brewhouse_addition'), name);
+      // extra additions per batch sit under the zinc sulphate (wishlist #29)
+      const adds = brewingAdditionOrder(page.ingredients.filter((r) => r.addition_type === 'brewhouse_addition'), name);
       const firstZinc = adds.find((r) => isZincSulphate(name(r)));
+      const firstPerBatch = adds.find((r) => isPerBatchAddition(r));
+      const ticked = (r) => page.dosingChecks.filter((c) => c.batch_ingredient_id === r.id && c.batch_brew_id).length;
       // a tick box per brew (batch_dosing_checks); a line "brew 1 only" has one in brew 1
       const brews = page.brews.slice().sort((a, b) => a.brew_number - b.brew_number);
       const progress = dosingProgress(adds, 'brew', (r) => brewColumns(r, brews).filter((c) => c.applies).map((c) => c.brew.id), page.dosingChecks);
@@ -275,10 +365,17 @@
             const amount = r.all_in_first_brew ? batchAmount(r.addition_type, r.unit, r.quantity, ctx) : brewAmount(r.addition_type, r.unit, r.quantity, ctx);
             const zinc = isZincSulphate(name(r));
             const calc = zinc && page.canEdit ? ` <button type="button" class="br-ghost bw-calc" data-zinc-calc="${r.id}" title="Calculate zinc sulphate">Calculate</button>` : '';
-            return `<tr${r === firstZinc && adds[0] !== r ? ' class="bw-zinc"' : ''}><td>${escapeHtml(name(r))}${calc}</td><td class="n">${escapeHtml(formatAmount(amount))}${r.all_in_first_brew ? ' <span class="br-note">brew 1 only</span>' : ''}</td><td>${escapeHtml(r.timing || '—')}</td>
+            const perBatch = isPerBatchAddition(r);
+            const total = r.is_added ? addedTotal(r, ticked(r)) : null;
+            const note = r.all_in_first_brew ? ' <span class="br-note">brew 1 only</span>'
+              : perBatch ? ' <span class="br-note">batch total</span>'
+                : r.is_added && total ? ` <span class="br-note">· ${ticked(r)} ${ticked(r) === 1 ? 'brew' : 'brews'} = ${escapeHtml(formatAmount(total))}</span>` : '';
+            const divider = (r === firstZinc && adds[0] !== r) || (r === firstPerBatch && adds[0] !== r);
+            return `<tr${divider ? ' class="bw-zinc"' : ''}><td>${escapeHtml(name(r))}${r.is_added ? '<span class="br-added">Added</span>' : ''}${calc}</td><td class="n">${escapeHtml(formatAmount(perBatch ? { q: toNumber(r.quantity), unit: r.unit } : amount))}${note}</td><td>${escapeHtml(r.timing || '—')}</td>
               ${brewColumns(r, brews).map((c) => (c.applies ? dosing.cellHtml(r, 'brew', c.brew.id) : '<td class="bd-check small">—</td>')).join('')}</tr>`;
           }).join('') || `<tr><td colspan="${3 + brews.length}" class="small">No brewing additions.</td></tr>`}</tbody></table></div>
-        ${adds.length && !brews.length ? '<div class="br-note">A tick column appears for every brew you add.</div>' : ''}`;
+        ${adds.length && !brews.length ? '<div class="br-note">A tick column appears for every brew you add.</div>' : ''}
+        ${page.canEdit ? '<div class="br-buttons"><button class="br-ghost" type="button" id="bw-add-addition">+ Add</button></div>' : ''}`;
     }
 
     function yesNo(id, value) {
@@ -297,19 +394,22 @@
       const ctx = amountContext(b, page.ctx.recipe, page.ctx.stageRow);
       const yeasts = page.ingredients.filter((r) => r.addition_type === 'yeast');
       const strain = yeasts.map((r) => page.names[r.ingredient_id] || r.note).filter(Boolean).join(' + ') || '—';
+      // until "Brews on the first day" is filled in only the ratio is known (wishlist #22)
       const weight = yeasts.map((r) => {
+        if (/\/hl$/.test(r.unit || '')) return `${fmt(r.quantity)} ${escapeHtml(r.unit)} <span class="br-note">· fill in the brews on the first day</span>`;
         const a = batchAmount('yeast', r.unit, r.quantity, ctx);
-        return a ? `${formatAmount(a)}${/\/hl$/.test(r.unit || '') ? ` <span class="br-note">(${fmt(r.quantity)} ${escapeHtml(r.unit)} × ${fmt(dosingVolumeHl(ctx), 1)} hl)</span>` : ''}` : '—';
+        return a ? `${formatAmount(a)}${isCalculatedOnBrewDay(r) ? ` <span class="br-note">(${escapeHtml(r.deviation_reason.replace(/^Calculated on brew day: /, '').replace(/ = .*$/, ''))})</span>` : ''}` : '—';
       }).join(' + ') || '—';
       document.getElementById('bw-yeast').innerHTML = `
         <div class="br-label">Dry yeast pitching</div>
         ${kr('Yeast strain', escapeHtml(strain))}
+        ${kr('Brews on the first day', `<input class="br-in" id="bw-first-day-brews" inputmode="numeric" style="width:80px;" value="${escapeHtml(b.first_day_brew_count ?? '')}" aria-label="Brews on the first day"${dis()}>`)}
         ${kr('Weight', weight)}
         ${kr('Temp. start · temp. max', escapeHtml(`${fmt(page.ferm.pitching_temp)} °C · ${fmt(page.ferm.main_ferm_temp)} °C`))}
         <div style="display:flex; gap:12px 22px; padding-top:6px; flex-wrap:wrap; align-items:flex-end;">
-          <div class="br-field" style="padding-top:0;"><span class="br-label">Rehydrated?</span>${yesNo('yeast_rehydrated', b.yeast_rehydrated)}</div>
+          <div class="br-field" style="padding-top:0;"><span class="br-label">Yeast Beast used?</span>${yesNo('yeast_rehydrated', b.yeast_rehydrated)}</div>
           <div class="br-field" style="padding-top:0;"><span class="br-label">At 1st brew?</span>${yesNo('yeast_with_first_brew', b.yeast_with_first_brew)}</div>
-          <div class="br-field" style="padding-top:0;"><span class="br-label">Yeast program on?</span>${yesNo('yeast_program_on', b.yeast_program_on)}</div>
+          <div class="br-field" style="padding-top:0;"><span class="br-label">Temperature GLT checked?</span>${yesNo('yeast_program_on', b.yeast_program_on)}</div>
           <div class="br-field" style="width:160px; padding-top:0;"><label class="br-label" for="bw-pitched-on">Pitched on</label>
             <input id="bw-pitched-on" type="date" value="${escapeHtml(b.yeast_pitched_on || '')}"${dis()}></div>
           <div class="br-field" style="width:200px; padding-top:0;"><label class="br-label" for="bw-pitched-by">Pitched by</label>
@@ -359,13 +459,19 @@
       if (row.kind === 'user') return `<td><select class="br-in" ${attrs}>${userOptions(value)}</select></td>`;
       if (row.kind === 'datetime') return `<td><input class="br-in l" type="datetime-local" ${attrs} value="${escapeHtml(toDateTimeLocal(value))}"></td>`;
       if (row.kind === 'text') return `<td><input class="br-in l" ${attrs} value="${escapeHtml(value || '')}"></td>`;
-      return `<td><input class="br-in" inputmode="decimal" ${attrs} value="${escapeHtml(value === null || value === undefined ? '' : String(value))}"></td>`;
+      const input = `<input class="br-in" inputmode="decimal" ${attrs} value="${escapeHtml(value === null || value === undefined ? '' : String(value))}">`;
+      // start/end time popup → minutes (wishlist #24)
+      if (row.timeSpan && page.canEdit) {
+        return `<td><div class="bw-span">${input}<button type="button" class="br-ghost bw-span-btn" data-span-brew="${brew.id}" data-span-field="${row.key}" title="From start and end time" aria-label="${escapeHtml(row.label)} from start and end time · brew ${brew.brew_number}">⏱</button></div></td>`;
+      }
+      return `<td>${input}</td>`;
     }
 
     function recipeValue(key) {
       if (!key) return '';
       const v = key === 'original_extract' ? page.specs.original_extract
         : key === 'brew_volume_hl' ? page.ctx.recipe.brew_volume_hl
+        : key === 'pitching_temp' ? page.ferm.pitching_temp
         : page.brewing[key];
       return v === null || v === undefined ? '' : String(v).replace(/\s*-\s*/, ' – ');
     }
@@ -460,6 +566,12 @@
         if (el.id === 'bw-glt') return saveBatch({ glt_tank_id: el.value ? Number(el.value) : null });
         if (el.id === 'bw-braukon') return saveBatch({ brewhouse_recipe_number: el.value.trim() || null });
         if (el.id === 'bw-pitched-by') return saveBatch({ yeast_pitched_by: el.value || null });
+        if (el.id === 'bw-first-day-brews') {
+          const n = parseNumberInput(el.value);
+          if (n === undefined || (n !== null && !(Number.isInteger(n) && n > 0))) { el.classList.add('bad'); el.title = 'A whole number of brews'; return; }
+          el.classList.remove('bad');
+          return applyFirstDayBrews(n);
+        }
         if (el.id === 'bw-pitched-on') {
           const patch = { yeast_pitched_on: el.value || null };
           if (el.value && !b.yeast_pitched_by) patch.yeast_pitched_by = page.user.id;   // default: who fills it in
@@ -489,10 +601,21 @@
         const yn = e.target.closest('button[data-yesno]');
         if (yn) return saveBatch({ [yn.dataset.yesno]: page.ctx.batch[yn.dataset.yesno] === (yn.dataset.value === 'true') ? null : yn.dataset.value === 'true' });
         if (e.target.closest('#bw-add-brew')) return addBrew();
+        if (e.target.closest('#bw-add-addition')) return openAddAdditionDialog();
+        const span = e.target.closest('button[data-span-brew]');
+        if (span) {
+          const brew = page.brews.find((x) => x.id === Number(span.dataset.spanBrew));
+          const row = BREW_LOG_ROWS.find((r) => r.key === span.dataset.spanField);
+          return openTimeSpanCalculator({ title: `${row.label} · brew ${brew.brew_number}`, onApply: (min) => saveBrew(brew, { [row.key]: min }) });
+        }
         const zincCalc = e.target.closest('button[data-zinc-calc]');
         if (zincCalc) {
           const row = page.ingredients.find((x) => x.id === Number(zincCalc.dataset.zincCalc));
-          return openZincCalculator({ brewVolumeHl: page.ctx.recipe.brew_volume_hl, onApply: (dose) => applyZinc(row, dose) });
+          return openZincCalculator({ brewVolumeHl: page.ctx.recipe.brew_volume_hl, brews: page.ctx.batch.first_day_brew_count,
+            onApply: async (dose, brews) => {
+              await applyZinc(row, dose);
+              if (brews && brews !== page.ctx.batch.first_day_brew_count) await applyFirstDayBrews(brews);
+            } });
         }
         if (e.target.closest('#bw-add-comment')) { page.commentDraft = true; return renderSoon('#bw-draft-comment'); }
         const delBrew = e.target.closest('button[data-delete-brew]');

@@ -108,8 +108,59 @@ function hbtFilledOn(hbt, readings, sessions) {
   return dates[0] || (hbt.created_at ? String(hbt.created_at).slice(0, 10) : null);
 }
 
+/**
+ * E-mail summary of the Processing tab (wishlist #30), the replacement for
+ * the copied Excel sheet. Input is already resolved to display values:
+ * { batchNumber, beerName, sessions: [{ number, date, start, end, tank,
+ *   operators, centrifugeIn: { time, o2, co2 }, centrifugeOut, startFlow,
+ *   startTurbidity }], hbts: [{ name, formats, end: { hl, o2, co2 },
+ *   readings: [{ hl, o2, co2, flow, turbidity }] }], tasting: { result,
+ *   comment }, comments: [{ time, text, by }] }.
+ * Returns { subject, text, html }; text is plain (mailto body), html is for
+ * pasting into the message.
+ */
+function processingSummary(d) {
+  const v = (x, unit) => (x === null || x === undefined || x === '' ? '—' : `${x}${unit ? ' ' + unit : ''}`);
+  const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const subject = `Processing ${d.batchNumber} ${d.beerName || ''}`.trim();
+  const tasting = d.tasting || {};
+  const result = tasting.result === 'go' ? 'Go' : tasting.result === 'no_go' ? 'Not go' : '—';
+  const lines = [subject, ''];
+  (d.sessions || []).forEach((s) => {
+    lines.push(`Session ${s.number} · ${v(s.date)} · ${v(s.start)}–${v(s.end)} · from ${v(s.tank)} · ${v(s.operators)}`);
+    lines.push(`  Centrifuge in ${v(s.centrifugeIn.time)}: O2 ${v(s.centrifugeIn.o2, 'ppb')}, CO2 ${v(s.centrifugeIn.co2, 'g/l')}`);
+    lines.push(`  Centrifuge out ${v(s.centrifugeOut.time)}: O2 ${v(s.centrifugeOut.o2, 'ppb')}, CO2 ${v(s.centrifugeOut.co2, 'g/l')}`);
+    lines.push(`  Start flow ${v(s.startFlow, 'hl/h')}, turbidity ${v(s.startTurbidity, 'EBC')}`);
+  });
+  if ((d.hbts || []).length) lines.push('', 'HBTs');
+  (d.hbts || []).forEach((h) => {
+    lines.push(`  ${h.name}${h.formats ? ' (' + h.formats + ')' : ''}: ${v(h.end.hl, 'hl')} · O2 ${v(h.end.o2, 'ppb')} · CO2 ${v(h.end.co2, 'g/l')}`);
+  });
+  lines.push('', `Tasting: ${result}${tasting.comment ? ' · ' + tasting.comment : ''}`);
+  if ((d.comments || []).length) lines.push('', 'Comments');
+  (d.comments || []).forEach((c) => lines.push(`  ${c.time ? c.time + ' ' : ''}${c.text}${c.by ? ' (' + c.by + ')' : ''}`));
+
+  const th = 'style="text-align:left;padding:4px 8px;border-bottom:1px solid #999;background:#f1efe8;"';
+  const td = 'style="padding:4px 8px;border-bottom:1px solid #ddd;"';
+  const table = (head, rows) => `<table style="border-collapse:collapse;font-family:Arial,sans-serif;font-size:13px;margin:6px 0 14px;">
+<tr>${head.map((h) => `<th ${th}>${esc(h)}</th>`).join('')}</tr>
+${rows.map((r) => `<tr>${r.map((c) => `<td ${td}>${esc(c)}</td>`).join('')}</tr>`).join('\n')}</table>`;
+  const html = [`<div style="font-family:Arial,sans-serif;font-size:13px;"><p style="font-size:15px;"><b>${esc(subject)}</b></p>`,
+    (d.sessions || []).length ? table(['Session', 'Date', 'Start', 'End', 'From', 'Operators', 'Centr. in O2 / CO2', 'Centr. out O2 / CO2', 'Start flow', 'Start turbidity'],
+      d.sessions.map((s) => [s.number, v(s.date), v(s.start), v(s.end), v(s.tank), v(s.operators),
+        `${v(s.centrifugeIn.o2)} / ${v(s.centrifugeIn.co2)}`, `${v(s.centrifugeOut.o2)} / ${v(s.centrifugeOut.co2)}`, v(s.startFlow, 'hl/h'), v(s.startTurbidity, 'EBC')])) : '',
+    ...(d.hbts || []).map((h) => `<p style="margin:10px 0 0;"><b>${esc(h.name)}</b>${h.formats ? ' · ' + esc(h.formats) : ''} · end ${esc(v(h.end.hl, 'hl'))}</p>`
+      + table(['HL', 'O2 ppb', 'CO2 g/l', 'Flow hl/h', 'Turbidity EBC'], (h.readings || []).map((r) => [v(r.hl), v(r.o2), v(r.co2), v(r.flow), v(r.turbidity)]))),
+    `<p><b>Tasting:</b> ${esc(result)}${tasting.comment ? ' · ' + esc(tasting.comment) : ''}</p>`,
+    (d.comments || []).length ? `<p style="margin-bottom:2px;"><b>Comments</b></p><ul style="margin-top:0;">${d.comments.map((c) =>
+      `<li>${c.time ? esc(c.time) + ' ' : ''}${esc(c.text)}${c.by ? ' (' + esc(c.by) + ')' : ''}</li>`).join('')}</ul>` : '',
+    '</div>'].join('\n');
+  return { subject, text: lines.join('\n'), html };
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
+    processingSummary,
     O2_HBT_MAX_PPB, durationMinutes, durationText, hbtEnd, hbtFilledOn,
     co2Spec, co2Status, o2High, turbidityHigh, puOutOfSpec, maturation, cellarLoss,
   };

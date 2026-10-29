@@ -511,9 +511,50 @@ function openCellarCalculator({ kind, volumeL, saveLabel = 'Save to log', onSave
  * 4 ml solution × hl per brew × brews on the first day (typed in), all added
  * in the first brew of that day. onApply(dose) gets zincSulphateDose().
  */
-function openZincCalculator({ brewVolumeHl, onApply }) {
+/**
+ * Filtration time popup (wishlist #24): start and end time from the
+ * Brewmaxx graph → minutes, handed to onApply. Only the minutes are stored.
+ */
+function openTimeSpanCalculator({ title, onApply }) {
+  document.getElementById('bw-span-calc')?.remove();
+  const overlay = document.createElement('div');
+  overlay.className = 'br-dialog-overlay';
+  overlay.id = 'bw-span-calc';
+  overlay.innerHTML = `<div class="br-dialog" role="dialog" aria-modal="true" aria-labelledby="bw-span-title">
+    <div class="br-dialog-title" id="bw-span-title">${escapeHtml(title)}</div>
+    <div class="br-note">Start and end time from the graph; past midnight is fine.</div>
+    <div class="br-field"><label class="br-label" for="bw-span-start">Start</label><input class="br-input" id="bw-span-start" type="time"></div>
+    <div class="br-field"><label class="br-label" for="bw-span-end">End</label><input class="br-input" id="bw-span-end" type="time"></div>
+    <div class="fl-calc-out"><span class="br-note">Fill in both times.</span></div>
+    <div class="br-dialog-buttons">
+      <button type="button" class="br-ghost" id="bw-span-close">Close</button>
+      <button type="button" class="br-primary" id="bw-span-apply" disabled>Use minutes</button>
+    </div></div>`;
+  const minutes = () => minutesBetween(overlay.querySelector('#bw-span-start').value, overlay.querySelector('#bw-span-end').value);
+  const close = () => { overlay.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  overlay.addEventListener('input', () => {
+    const m = minutes();
+    overlay.querySelector('.fl-calc-out').innerHTML = m === null ? '<span class="br-note">Fill in both times.</span>'
+      : `<div><span>Duration</span><b>${m} min</b></div>`;
+    overlay.querySelector('#bw-span-apply').disabled = m === null;
+  });
+  overlay.querySelector('#bw-span-close').addEventListener('click', close);
+  overlay.querySelector('#bw-span-apply').addEventListener('click', () => {
+    const m = minutes();
+    if (m === null) return;
+    close();
+    onApply(m);
+  });
+  document.addEventListener('keydown', onKey);
+  document.body.appendChild(overlay);
+  overlay.querySelector('#bw-span-start').focus();
+}
+
+function openZincCalculator({ brewVolumeHl, brews, onApply }) {
   document.getElementById('bw-zinc-calc')?.remove();
-  const state = { hl: brewVolumeHl ?? '', brews: '' };
+  const state = { hl: brewVolumeHl ?? '', brews: brews ?? '' };
   const outHtml = (r) => (r ? `<div><span>Solution · all in the first brew</span><b style="white-space:nowrap;">${escapeHtml(formatAmount({ q: r.ml, unit: 'ml' }))}</b></div>`
     : '<span class="br-note">Fill in both values.</span>');
   const overlay = document.createElement('div');
@@ -523,7 +564,7 @@ function openZincCalculator({ brewVolumeHl, onApply }) {
     <div class="br-dialog-title" id="bw-zinc-title">Zinc sulphate</div>
     <div class="br-note">${ZINC_ML_PER_HL} ml solution per hl, only on the first brewing day, all in one go in the first brew.</div>
     <div class="br-field"><label class="br-label" for="bw-zinc-hl">Brew volume (hl)</label><input class="br-input" id="bw-zinc-hl" inputmode="decimal" value="${escapeHtml(String(state.hl))}"></div>
-    <div class="br-field"><label class="br-label" for="bw-zinc-brews">Brews on the first day</label><input class="br-input" id="bw-zinc-brews" inputmode="numeric" value=""></div>
+    <div class="br-field"><label class="br-label" for="bw-zinc-brews">Brews on the first day</label><input class="br-input" id="bw-zinc-brews" inputmode="numeric" value="${escapeHtml(String(state.brews))}"></div>
     <div class="fl-calc-out">${outHtml(null)}</div>
     <div class="br-dialog-buttons">
       <button type="button" class="br-ghost" id="bw-zinc-close">Close</button>
@@ -546,9 +587,15 @@ function openZincCalculator({ brewVolumeHl, onApply }) {
     const r = dose();
     if (!r) return;
     close();
-    onApply(r);
+    onApply(r, parseNumberInput(state.brews));
   });
   document.addEventListener('keydown', onKey);
   document.body.appendChild(overlay);
+  // prefilled (brews on the first day are stored on the batch): show the result straight away
+  if (dose()) {
+    overlay.querySelector('.fl-calc-out').innerHTML = outHtml(dose());
+    const btn = overlay.querySelector('#bw-zinc-apply');
+    if (btn) btn.disabled = false;
+  }
   overlay.querySelector('#bw-zinc-brews').focus();
 }

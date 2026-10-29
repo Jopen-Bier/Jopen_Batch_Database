@@ -437,17 +437,31 @@
       </div>`;
     }
 
+    // Dry yeast follows the brews on the first day (Brewing); until that is filled in
+    // only the ratio is shown, no batch total (wishlist #22).
+    const yeastByRatio = (r) => r.addition_type === 'yeast' && /\/hl$/.test(String(r.unit || '').trim());
+
+    // Zinc sulphate is dosed as solution (ml); the grams are what leaves the stock.
+    function zincGramsNote(r) {
+      if (!isZincSulphate(ingredientName(r)) || String(r.unit || '').trim().toLowerCase() !== 'ml') return '';
+      const g = zincSulphateGrams(r.quantity);
+      return g === null ? '' : `<div class="br-note">= ${escapeHtml(formatAmount({ q: g, unit: 'g' }))} zinc sulphate</div>`;
+    }
+
     // Additions Brewing / Yeasts / Additions Cellar: same columns, different amount column.
     function additionCard(type, title, buttonLabel, amountHeader, perBrew) {
       const ctx = amountCtx();
-      const rows = type === 'brewhouse_addition' ? zincLast(visibleRows([type]), ingredientName) : visibleRows([type]);   // zinc sulphate last, as on Brewing
+      // zinc sulphate, then extra additions per batch, last: as on Brewing
+      const rows = type === 'brewhouse_addition' ? brewingAdditionOrder(visibleRows([type]), ingredientName) : visibleRows([type]);
       const body = rows.map((r) => {
         const amount = perBrew ? brewAmount(type, r.unit, r.quantity, ctx) : batchAmount(type, r.unit, r.quantity, ctx);
         return `<tr>
           <td>${nameCell(r)}</td>
           <td style="width:90px;">${numberInput(r, 'quantity', r.quantity, quantityDiffers(r), 'Amount')}</td>
           <td class="small" style="width:90px;">${r.is_added ? unitSelect(r) : escapeHtml(r.unit || '—')}</td>
-          <td class="n" style="width:140px;">${escapeHtml(formatAmount(amount))}</td>
+          <td class="n" style="width:140px;">${yeastByRatio(r) ? '<span class="br-note">Calculated on brew day</span>'
+            : perBrew && isPerBatchAddition(r) ? `${escapeHtml(formatAmount({ q: num(r.quantity), unit: r.unit }))} <span class="br-note">batch total</span>`
+              : escapeHtml(formatAmount(amount))}${zincGramsNote(r)}</td>
           ${perBrew ? `<td class="small" style="width:90px;">${r.all_in_first_brew ? 'Yes' : 'No'}</td>` : ''}
           <td style="width:160px;">${r.is_added ? textInput(r, 'timing', r.timing, 'Timing', 'e.g. Boil') : escapeHtml(r.timing || '—')}</td>
           <td style="width:200px;">${lotCell(r)}</td>

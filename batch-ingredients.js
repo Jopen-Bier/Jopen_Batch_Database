@@ -207,6 +207,9 @@ function hopTotals(rows, ctx, names = {}) {
 // Calculated on brew day and added only on the first brewing day, all in one go
 // in the first brew of that day: 4 ml solution × hl per brew × brews that day.
 const ZINC_ML_PER_HL = 4;
+// The solution is always made the same way: 0.176 g zinc sulphate per 4 ml
+// (Jaap, 29-10). The grams are what will be taken off the stock later.
+const ZINC_G_PER_ML = 0.176 / 4;
 
 function isZincSulphate(name) {
   return /^\s*zin[kc]\s*sul(f|ph)a/i.test(String(name || ''));
@@ -217,12 +220,83 @@ function zincSulphateDose(brewVolumeHl, brewsFirstDay) {
   const hl = toNumber(brewVolumeHl), n = toNumber(brewsFirstDay);
   if (!(hl > 0) || !(n > 0) || !Number.isInteger(n)) return null;
   const ml = ZINC_ML_PER_HL * hl * n;
-  return { ml, text: `Calculated on brew day: ${ZINC_ML_PER_HL} ml × ${hl} hl × ${n} ${n === 1 ? 'brew' : 'brews'} = ${ml} ml` };
+  return { ml, text: `Calculated on brew day: ${ZINC_ML_PER_HL} ml × ${hl} hl × ${n} ${n === 1 ? 'brew' : 'brews'} = ${ml} ml (${zincSulphateGrams(ml)} g)` };
+}
+
+/** Grams of zinc sulphate in `ml` solution (rounded to 0.01 g), null without a number. */
+function zincSulphateGrams(ml) {
+  const v = toNumber(ml);
+  return v === null ? null : Math.round(v * ZINC_G_PER_ML * 100) / 100;
+}
+
+// --- Dry yeast (wishlist #22) -------------------------------------------------
+// Pitched on the first brewing day: ratio (g/hl) × hl per brew × brews that
+// day. The number of first-day brews is stored once on the batch
+// (batches.first_day_brew_count) and drives the zinc sulphate dose too.
+const CALCULATED_PREFIX = 'Calculated on brew day: ';
+
+/** { g, text } for a yeast ratio in g/hl, or null when an input is missing. */
+function yeastDose(ratioGPerHl, brewVolumeHl, brewsFirstDay) {
+  const r = toNumber(ratioGPerHl), hl = toNumber(brewVolumeHl), n = toNumber(brewsFirstDay);
+  if (!(r > 0) || !(hl > 0) || !(n > 0) || !Number.isInteger(n)) return null;
+  const g = Math.round(r * hl * n * 10) / 10;
+  return { g, text: `${CALCULATED_PREFIX}${r} g/hl × ${hl} hl × ${n} ${n === 1 ? 'brew' : 'brews'} = ${g} g` };
+}
+
+/**
+ * Ratio (g/hl) of a batch yeast line: its own amount while the unit is g/hl;
+ * after the calculation (unit g) the ratio is read back from the reason text,
+ * so a ratio changed on the Overview survives a recalculation. null otherwise.
+ */
+function yeastRatio(row) {
+  if (/^\s*g\s*\/\s*hl\s*$/i.test(String(row.unit || ''))) return toNumber(row.quantity);
+  const m = /^Calculated on brew day: ([\d.]+) g\/hl ×/.exec(String(row.deviation_reason || ''));
+  return m ? Number(m[1]) : null;
+}
+
+/** Whether a line's amount was set by a brew-day calculator. */
+function isCalculatedOnBrewDay(row) {
+  return String(row.deviation_reason || '').startsWith(CALCULATED_PREFIX);
 }
 
 /** Rows with the zinc sulphate lines last (stable otherwise). */
 function zincLast(rows, nameOf) {
   return rows.filter((r) => !isZincSulphate(nameOf(r))).concat(rows.filter((r) => isZincSulphate(nameOf(r))));
+}
+
+// --- Extra additions on Brewing (wishlist #29) --------------------------------
+// The brewer adds an ingredient that is not in the recipe (e.g. filtrase) as
+// an "Added" batch line, per brew or per batch. Per brew is stored as a /brew
+// unit (amount × brews ticked), per batch as a plain unit (the total). Per
+// brew lines sit with the other additions, per batch lines under the zinc.
+
+/** Unit to store for an extra addition: 'g' + 'brew' → 'g/brew'; per batch stays 'g'. */
+function extraAdditionUnit(unit, basis) {
+  const u = String(unit || '').trim();
+  if (!u || basis !== 'brew' || u.includes('/')) return u || null;
+  return `${u}/brew`;
+}
+
+/** An added (not in recipe) line whose amount is a batch total. */
+function isPerBatchAddition(row) {
+  const basis = amountBasis(row.addition_type, row.unit);
+  return !!row.is_added && !!basis && basis.per === 'batch';
+}
+
+/** Brewing additions in display order: the others, then zinc sulphate, then added per batch lines. */
+function brewingAdditionOrder(rows, nameOf) {
+  const perBatch = rows.filter((r) => isPerBatchAddition(r));
+  return zincLast(rows.filter((r) => !isPerBatchAddition(r)), nameOf).concat(perBatch);
+}
+
+/** Total of an added line: per brew × ticked brews, per batch as entered. { q, unit } or null. */
+function addedTotal(row, tickedBrews) {
+  const q = toNumber(row.quantity);
+  const basis = amountBasis(row.addition_type, row.unit);
+  if (q === null || !basis) return null;
+  if (basis.per === 'brew') return { q: q * (toNumber(tickedBrews) || 0), unit: basis.unit };
+  if (basis.per === 'batch') return { q, unit: basis.unit };
+  return null;
 }
 
 if (typeof module !== 'undefined' && module.exports) {
@@ -231,6 +305,8 @@ if (typeof module !== 'undefined' && module.exports) {
     toNumber, sameNumber, amountBasis, dosingVolumeHl, amountContext, batchAmount, brewAmount,
     deviationKind, alphaDiffers, colorDiffers, deviationDelta, inventoryEffect,
     formatAmount, deviationList, boilTimeMin, hopTotals,
-    ZINC_ML_PER_HL, isZincSulphate, zincSulphateDose, zincLast,
+    ZINC_ML_PER_HL, ZINC_G_PER_ML, isZincSulphate, zincSulphateDose, zincSulphateGrams, zincLast,
+    yeastDose, yeastRatio, isCalculatedOnBrewDay,
+    extraAdditionUnit, isPerBatchAddition, brewingAdditionOrder, addedTotal,
   };
 }

@@ -221,6 +221,22 @@
           <p id="packaging-materials-message" class="jopen-form-melding"></p>
         </div>
 
+        <!-- Section: Breweries (wishlist #18) -->
+        <div class="settings-sectie" id="sectie-breweries" data-titel="Breweries">
+          <h2>Breweries</h2>
+          <p class="uitleg">The breweries a recipe can belong to (Brewery on the recipe's General tab, also a column on the recipe overview). The order is the order of the dropdown. A brewery with recipes can only be made inactive: it is then no longer offered, but stays on its recipes.</p>
+          <div id="breweries-list"><p class="jopen-subtitel">Loading…</p></div>
+          <table class="cat-tabel">
+            <tbody>
+              <tr class="cat-nieuw-rij">
+                <td><input type="text" id="brewery-new-name" placeholder="Name, e.g. 'Bird'…" /></td>
+                <td><button id="brewery-add-btn">Add</button></td>
+              </tr>
+            </tbody>
+          </table>
+          <p id="breweries-message" class="jopen-form-melding"></p>
+        </div>
+
         <!-- Sectie: Ingredient declarations -->
         <div class="settings-sectie" id="sectie-declaraties" data-titel="Ingredient declarations">
           <h2>Ingredient declarations</h2>
@@ -264,6 +280,7 @@
       { id: 'action-tags', titel: 'Cellar action tags', laadFn: loadActionTagsSection },
       { id: 'packaging-articles', titel: 'Packaging articles', laadFn: loadPackagingSections },
       { id: 'packaging-materials', titel: 'Packaging materials', laadFn: () => {} },
+      { id: 'breweries', titel: 'Breweries', laadFn: loadBreweriesSection },
     ];
 
     let alleCategorieen = [];
@@ -1244,6 +1261,88 @@
         sort_order: nextSortOrder(packaging.materials),
       }), 'Material added.');
       if (ok) document.getElementById('packaging-material-new-name').value = '';
+    });
+
+    // ----------------------------------------------------------------
+    // Section: Breweries (wishlist #18)
+    // ----------------------------------------------------------------
+    let breweries = [];
+
+    function showBreweriesMessage(text, cls) {
+      const el = document.getElementById('breweries-message');
+      el.textContent = text;
+      el.className = 'jopen-form-melding ' + (cls || '');
+    }
+
+    async function loadBreweriesSection() {
+      const container = document.getElementById('breweries-list');
+      const [{ data, error }, { data: recipes }] = await Promise.all([
+        supabaseClient.from('breweries').select('id, name, sort_order, is_active').order('sort_order').order('name'),
+        fetchAllRows(supabaseClient.from('recipes').select('brewery_id')),
+      ]);
+      if (error) { container.innerHTML = `<p class="jopen-form-melding fout">Could not load breweries: ${escapeHtml(error.message)}</p>`; return; }
+      const uses = new Map();
+      (recipes || []).forEach((r) => { if (r.brewery_id) uses.set(r.brewery_id, (uses.get(r.brewery_id) || 0) + 1); });
+      breweries = (data || []).map((b) => ({ ...b, recipes: uses.get(b.id) || 0 }));
+      renderBreweries();
+    }
+
+    function renderBreweries() {
+      const container = document.getElementById('breweries-list');
+      if (!breweries.length) { container.innerHTML = '<p class="jopen-subtitel">No breweries yet.</p>'; return; }
+      const rows = breweries.map((b) => `
+        <tr data-id="${b.id}"${b.is_active ? '' : ' style="color:#999;"'}>
+          <td><input type="text" class="brw-name" value="${escapeHtml(b.name)}" aria-label="Name" /></td>
+          <td><input type="text" class="brw-order" value="${b.sort_order}" inputmode="numeric" aria-label="Order" style="max-width:70px;" /></td>
+          <td class="cat-check"><input type="checkbox" class="brw-active"${b.is_active ? ' checked' : ''} aria-label="Active" /></td>
+          <td style="font-size:0.85em; color:#555;">${b.recipes} recipes</td>
+          <td style="display:flex; gap:6px;">
+            <button class="brw-save-btn">Save</button>
+            ${b.recipes ? '' : '<button class="rij-verwijder-btn brw-delete-btn">Delete</button>'}
+          </td>
+        </tr>`).join('');
+      container.innerHTML = `
+        <table class="cat-tabel">
+          <thead><tr><th>Name</th><th>Order</th><th class="cat-check">Active</th><th>Used</th><th></th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+      container.querySelectorAll('tr[data-id]').forEach((tr) => {
+        tr.querySelector('.brw-save-btn').addEventListener('click', () => saveBrewery(tr));
+        tr.querySelector('.brw-delete-btn')?.addEventListener('click', () => deleteBrewery(tr));
+      });
+    }
+
+    async function breweryWrite(request, okText) {
+      const { error } = await request;
+      if (error) {
+        showBreweriesMessage(error.code === '23505' ? 'That brewery already exists.'
+          : error.code === '23503' ? 'Could not delete: recipes use it. Make it inactive instead.'
+            : 'Save failed: ' + error.message, 'fout');
+        return false;
+      }
+      showBreweriesMessage(okText, 'ok');
+      loadBreweriesSection();
+      return true;
+    }
+
+    function saveBrewery(tr) {
+      const name = tr.querySelector('.brw-name').value.trim();
+      const order = Number(tr.querySelector('.brw-order').value);
+      if (!name) return showBreweriesMessage('Name cannot be empty.', 'fout');
+      if (!Number.isInteger(order)) return showBreweriesMessage('Order must be a whole number.', 'fout');
+      return breweryWrite(supabaseClient.from('breweries').update({ name, sort_order: order, is_active: tr.querySelector('.brw-active').checked }).eq('id', tr.dataset.id), 'Saved.');
+    }
+
+    function deleteBrewery(tr) {
+      if (!confirm('Delete this brewery?')) return;
+      return breweryWrite(supabaseClient.from('breweries').delete().eq('id', tr.dataset.id), 'Deleted.');
+    }
+
+    document.getElementById('brewery-add-btn').addEventListener('click', async () => {
+      const name = document.getElementById('brewery-new-name').value.trim();
+      if (!name) return showBreweriesMessage('Enter a name for the new brewery.', 'fout');
+      const ok = await breweryWrite(supabaseClient.from('breweries').insert({ name, sort_order: Math.max(0, ...breweries.map((b) => b.sort_order || 0)) + 1 }), 'Brewery added.');
+      if (ok) document.getElementById('brewery-new-name').value = '';
     });
 
     // ----------------------------------------------------------------

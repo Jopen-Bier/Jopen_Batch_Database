@@ -8,6 +8,19 @@ const close = (a, e, msg) => assert.ok(Math.abs(a - e) < 1e-6, `${msg}: ${a} ≠
 const keys = b.BREW_LOG_ROWS.filter((r) => r.kind !== 'section' && r.kind !== 'calc').map((r) => r.key);
 assert.strictEqual(new Set(keys).size, keys.length, 'no duplicate rows');
 assert.ok(b.brewLogRows('wp').some((r) => r.key === 'cumulative_sparge_volume_hl'));
+// Wort cooling temp. between Aeration and Water addition, against the recipe pitching temp (wishlist #11)
+const order = b.BREW_LOG_ROWS.map((r) => r.key);
+assert.strictEqual(order.indexOf('wort_cooling_temp_c'), order.indexOf('aeration_ppm') + 1);
+assert.strictEqual(order.indexOf('water_addition_hl'), order.indexOf('wort_cooling_temp_c') + 1);
+assert.strictEqual(b.BREW_LOG_ROWS.find((r) => r.key === 'wort_cooling_temp_c').recipe, 'pitching_temp');
+assert.strictEqual(b.BREW_LOG_ROWS.find((r) => r.key === 'boil_time_min').recipe, 'boil_time_min');
+// Filtration time from start/end (wishlist #24)
+assert.ok(b.BREW_LOG_ROWS.find((r) => r.key === 'lauter_time_min').timeSpan);
+assert.strictEqual(b.minutesBetween('10:15', '12:05'), 110);
+assert.strictEqual(b.minutesBetween('23:40', '01:10'), 90);
+assert.strictEqual(b.minutesBetween('8:00', '8:00'), 0);
+assert.strictEqual(b.minutesBetween('10:15', ''), null);
+assert.strictEqual(b.minutesBetween('25:00', '10:00'), null);
 assert.ok(!b.brewLogRows('wp').some((r) => r.key === 'ckt_cip_program'));
 assert.ok(b.brewLogRows('jk').some((r) => r.key === 'ckt_cip_program'));
 assert.ok(!b.brewLogRows('jk').some((r) => r.label === 'Filtration · mash filter'));

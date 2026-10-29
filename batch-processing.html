@@ -248,6 +248,71 @@
     }
 
     // ------------------------------------------------------------ rendering
+    // ------------------------------------------------------------ e-mail (wishlist #30)
+    // Opens a prefilled message in the default mail program (Outlook); the
+    // recipients are the users with "Processing report" ticked on the Users page.
+    function summaryData() {
+      const b = page.ctx.batch;
+      const date = (d) => (d ? `${d.slice(8, 10)}-${d.slice(5, 7)}-${d.slice(0, 4)}` : null);
+      const time = (t) => (t ? String(t).slice(0, 5) : null);
+      return {
+        batchNumber: b.batch_number, beerName: b.name || page.ctx.recipe.name || '',
+        sessions: page.sessions.slice().sort((x, y) => x.session_number - y.session_number).map((s) => ({
+          number: s.session_number, date: date(s.processing_date), start: time(s.start_time), end: time(s.end_time),
+          tank: s.tank_id ? tankCode(s.tank_id) : null,
+          operators: [...new Set([s.started_by, s.ended_by].filter(Boolean).map((u) => page.initialsOf(u)))].join(' / ') || null,
+          centrifugeIn: { time: time(s.centrifuge_in_time), o2: s.centrifuge_in_o2_ppb, co2: s.centrifuge_in_co2_gl },
+          centrifugeOut: { time: time(s.centrifuge_out_time), o2: s.centrifuge_out_o2_ppb, co2: s.centrifuge_out_co2_gl },
+          startFlow: s.start_flow_hl_h, startTurbidity: s.start_turbidity_ebc,
+        })),
+        hbts: hbtsInOrder().map((h) => {
+          const rows = readingsOf(h);
+          const end = hbtEnd(rows) || {};
+          return { name: hbtName(h), formats: formatsText(h.intended_formats || []),
+            end: { hl: end.level_hl, o2: end.o2_ppb, co2: end.co2_gl },
+            readings: rows.map((r) => ({ hl: r.level_hl, o2: r.o2_ppb, co2: r.co2_gl, flow: r.flow_hl_h, turbidity: r.turbidity_ebc })) };
+        }),
+        tasting: { result: b.tasting_result, comment: b.tasting_comment },
+        comments: page.comments.map((c) => ({ time: time(c.comment_time), text: c.comment, by: page.initialsOf(c.created_by) })),
+      };
+    }
+
+    async function openEmailDialog() {
+      document.getElementById('pr-email-dialog')?.remove();
+      const sum = processingSummary(summaryData());
+      const { data, error } = await supabaseClient.rpc('report_recipients', { p_report: 'processing' });
+      const recipients = error ? [] : (data || []);
+      // a mailto link is limited in length; the full report is always on the clipboard button
+      const body = sum.text.length > 1800 ? sum.text.slice(0, 1800) + '\n…\n(Shortened: paste the full report with "Copy report".)' : sum.text;
+      const href = `mailto:${recipients.map((r) => encodeURIComponent(r.email)).join(',')}?subject=${encodeURIComponent(sum.subject)}&body=${encodeURIComponent(body)}`;
+      const overlay = document.createElement('div');
+      overlay.className = 'br-dialog-overlay';
+      overlay.id = 'pr-email-dialog';
+      overlay.innerHTML = `<div class="br-dialog" role="dialog" aria-modal="true" aria-labelledby="pr-email-title" style="max-width:520px;">
+        <div class="br-dialog-title" id="pr-email-title">Email · ${escapeHtml(sum.subject)}</div>
+        <div class="br-dialog-text">${error ? `Could not load the recipients: ${escapeHtml(error.message)}`
+          : recipients.length ? `To: ${recipients.map((r) => escapeHtml(r.name)).join(', ')}`
+            : 'No recipients yet: tick "Processing report" for them on the Users page.'}</div>
+        <div class="br-dialog-text">"Open email" opens a new message in Outlook with recipients, subject and the report as text. For the report with tables, click "Copy report" and paste it (Ctrl+V) into the message.</div>
+        <pre style="max-height:220px; overflow:auto; background:#f6f4ee; border-radius:8px; padding:10px; font-size:12px; white-space:pre-wrap; margin:0;">${escapeHtml(sum.text)}</pre>
+        <span class="br-note" id="pr-email-note"></span>
+        <div class="br-dialog-buttons">
+          <button type="button" class="br-ghost" id="pr-email-close">Close</button>
+          <button type="button" class="br-ghost" id="pr-email-copy">Copy report</button>
+          <a class="br-primary" id="pr-email-open" href="${href}" style="text-decoration:none;">Open email</a>
+        </div></div>`;
+      const close = () => { overlay.remove(); document.removeEventListener('keydown', onKey); };
+      const onKey = (e) => { if (e.key === 'Escape') close(); };
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+      overlay.querySelector('#pr-email-close').addEventListener('click', close);
+      overlay.querySelector('#pr-email-copy').addEventListener('click', async () => {
+        overlay.querySelector('#pr-email-note').textContent = await copyRichText(sum.html, sum.text)
+          ? 'Copied: paste it (Ctrl+V) into the message.' : 'Could not copy in this browser; use "Open email".';
+      });
+      document.addEventListener('keydown', onKey);
+      document.body.appendChild(overlay);
+    }
+
     function renderAll() {
       renderCheck();
       renderSpecs();
@@ -317,6 +382,7 @@
             <div class="br-label">Processing session</div>
             ${page.sessions.length || page.canEdit ? `<div class="br-seg" role="tablist">${tabs}${page.canEdit ? '<button type="button" id="pr-add-session">+ session</button>' : ''}</div>` : ''}
             ${s && page.canDelete ? `<button class="br-del" type="button" id="pr-delete-session" aria-label="Delete this session">${TRASH_ICON}</button>` : ''}
+            ${page.sessions.length ? '<button class="br-ghost" type="button" id="pr-email">Email report</button>' : ''}
           </div>
           ${calc.nagardo || calc.alginate ? `<div style="display:flex; gap:8px; align-items:center;"><span class="br-label">Calculators</span>
             ${calc.nagardo ? '<button class="br-ghost" type="button" data-calc="nagardo">Nagardo</button>' : ''}
@@ -444,6 +510,7 @@
         <td><select class="br-in" data-reading="${r.id}" data-field="co2_target" aria-label="CO2 target"${dis()}><option value="">—</option>
           ${PACKAGE_FORMATS.map((f) => `<option value="${f.code}"${f.code === r.co2_target ? ' selected' : ''}>${f.label}</option>`).join('')}</select></td>
         <td class="small${status && status !== 'OK' ? ' pr-bad' : status ? ' pr-ok' : ''}">${status ? `${status} · ${fmt(spec.spec, 1)}` : '—'}</td>
+        ${num('flow_hl_h')}${num('turbidity_ebc')}
         <td><input class="br-in l" data-reading="${r.id}" data-field="comment" value="${val(r.comment)}" aria-label="Comment"${dis()}></td>
         <td>${page.canDelete ? `<button class="br-del" type="button" data-delete-reading="${r.id}" aria-label="Delete reading">${TRASH_ICON}</button>` : ''}</td></tr>`;
     }
@@ -476,10 +543,11 @@
               <b>${end && end.level_hl !== null ? `${fmt(end.level_hl, 1)} hl · ${fmt(end.o2_ppb)} ppb · ${fmt(end.co2_gl)} g/l` : '—'}</b></div>
             ${page.canDelete ? `<button class="br-del" type="button" data-delete-hbt="${h.id}" aria-label="Delete HBT">${TRASH_ICON}</button>` : ''}
           </div>
-          <div class="br-table-wrap"><table class="br-ing" style="min-width:860px;">
+          <div class="br-table-wrap"><table class="br-ing" style="min-width:1020px;">
             <thead><tr><th style="width:44px;"></th><th style="width:110px;">Session</th><th class="r" style="width:80px;">HL</th><th class="r" style="width:80px;">O2 ppb</th>
-              <th class="r" style="width:80px;">CO2 g/l</th><th style="width:100px;">CO2 target</th><th style="width:90px;">Spec</th><th>Comments</th><th style="width:34px;"></th></tr></thead>
-            <tbody>${rows.map((r) => readingRow(r, !!end && r.id === end.id)).join('') || '<tr><td colspan="9" class="small">No readings yet.</td></tr>'}</tbody></table></div>
+              <th class="r" style="width:80px;">CO2 g/l</th><th style="width:100px;">CO2 target</th><th style="width:90px;">Spec</th>
+              <th class="r" style="width:80px;">Flow hl/h</th><th class="r" style="width:80px;">Turbidity EBC</th><th>Comments</th><th style="width:34px;"></th></tr></thead>
+            <tbody>${rows.map((r) => readingRow(r, !!end && r.id === end.id)).join('') || '<tr><td colspan="11" class="small">No readings yet.</td></tr>'}</tbody></table></div>
           ${page.canEdit ? `<div><button class="br-ghost" type="button" data-add-reading="${h.id}">+ Reading</button></div>` : ''}
         </div>`;
       }).join('');
@@ -607,6 +675,7 @@
         const t = e.target;
         if (transfersCard.handleClick(t)) return;
         if (t.closest('#pr-add-session')) return addSession();
+        if (t.closest('#pr-email')) return openEmailDialog();
         if (t.closest('#pr-delete-session')) return deleteSession(activeSession());
         const tab = t.closest('button[data-session-tab]');
         if (tab) { page.activeSessionId = Number(tab.dataset.sessionTab); return renderSoon(); }

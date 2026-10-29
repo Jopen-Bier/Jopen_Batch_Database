@@ -21,6 +21,7 @@
     .inactive { color: #999; font-style: italic; }
     .no-access { padding: 40px 0; color: #555; }
     .user-role-select { padding: 4px 6px; border: 1px solid #ccc; border-radius: 4px; }
+    .user-report { display: inline-flex; gap: 4px; align-items: center; white-space: nowrap; font-size: 0.9em; }
     .user-initials-input { width: 4em; padding: 4px 6px; border: 1px solid #ccc; border-radius: 4px; text-transform: uppercase; }
     .user-save-btn { padding: 4px 10px; border: 1px solid #ccc; border-radius: 4px; background: #fff; cursor: pointer; }
     .user-delete-btn { padding: 4px 10px; border: 1px solid #A80016; color: #A80016; border-radius: 4px; background: #fff; cursor: pointer; }
@@ -214,17 +215,9 @@
 
       document.getElementById('copy-html-btn').onclick = async () => {
         const copyMsg = document.getElementById('copy-html-message');
-        try {
-          await navigator.clipboard.write([
-            new ClipboardItem({
-              'text/html': new Blob([emailHtml], { type: 'text/html' }),
-              'text/plain': new Blob([plainText], { type: 'text/plain' }),
-            }),
-          ]);
-          copyMsg.textContent = 'Copied — now paste (Ctrl+V) into a new email message.';
-        } catch (e) {
-          copyMsg.textContent = 'Could not copy in this browser — try "Open Email" instead.';
-        }
+        copyMsg.textContent = await copyRichText(emailHtml, plainText)
+          ? 'Copied — now paste (Ctrl+V) into a new email message.'
+          : 'Could not copy in this browser — try "Open Email" instead.';
       };
     }
 
@@ -261,12 +254,16 @@
         ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
     }
 
+    // E-mail reports a user can receive (users.report_subscriptions, wishlist #30).
+    // A new report: add it here and to the check constraint on that column.
+    const REPORTS = [['processing', 'Processing report']];
+
     async function loadUserList() {
       const container = document.getElementById('users-list');
       const [{ data, error }, loginsResult] = await Promise.all([
         supabaseClient
           .from('users')
-          .select('id, name, initials, role_id, is_active, created_at')
+          .select('id, name, initials, role_id, is_active, created_at, report_subscriptions')
           .order('name'),
         // auth.users.last_sign_in_at is Supabase's own, always current source
         // (users.last_login_at is not maintained by the app).
@@ -305,6 +302,8 @@
               : `<select class="user-role-select">${roleOptionsHtml(u.role_id)}</select>`}
           </td>
           <td>${u.is_active ? 'Yes' : '<span class="inactive">No</span>'}</td>
+          <td>${REPORTS.map(([code, label]) => `<label class="user-report" title="Receives the ${escapeHtml(label)} e-mail">
+            <input type="checkbox" class="user-report-input" data-report="${code}"${(u.report_subscriptions || []).includes(code) ? ' checked' : ''}> ${escapeHtml(label)}</label>`).join('')}</td>
           <td>${formatLastLogin(lastLoginByUser[u.id])}</td>
           <td>
             ${isSelf
@@ -320,7 +319,7 @@
 
       container.innerHTML = `
         <table class="users-table">
-          <thead><tr><th>Name</th><th>Initials</th><th>Role</th><th>Active</th><th>Last login</th><th></th></tr></thead>
+          <thead><tr><th>Name</th><th>Initials</th><th>Role</th><th>Active</th><th>Reports</th><th>Last login</th><th></th></tr></thead>
           <tbody>${rows}</tbody>
         </table>`;
 
@@ -341,7 +340,10 @@
       const input = tr.querySelector('.user-initials-input');
       const id = tr.dataset.id;
       const initials = input.value.trim().toUpperCase();
-      const changes = { initials: initials || null };
+      const changes = {
+        initials: initials || null,
+        report_subscriptions: [...tr.querySelectorAll('.user-report-input:checked')].map((el) => el.dataset.report),
+      };
       const roleSelect = tr.querySelector('.user-role-select');
       if (roleSelect) changes.role_id = Number(roleSelect.value);
 

@@ -39,6 +39,7 @@
   <script src="batch-stages.js"></script>
   <script src="processing.js"></script>
   <script src="filling.js"></script>
+  <script src="pallet-labels.js"></script>
   <script src="batch-report-shell.js"></script>
   <script src="batch-report-cards.js"></script>
   <script>
@@ -49,11 +50,13 @@
       ['pressure_bar', 'Pressure'], ['temp_c', 'Temp. (°C)'], ['co2_gl', 'CO2 g/l (20 °C)'],
     ];
     const KEG_FIELDS = [['keg_co2_gl', 'CO2 keg g/l'], ['keg_o2_ppb', 'Oxygen keg ppb']];
+    // Each check is signed off by the operator(s), chosen from a list (wishlist #28);
+    // the check counts as done (the boolean) once every signature is filled in.
     const CHECKS = [
-      ['is_first_package_checked', 'First package check (two operators)'],
-      ['is_fill_tube_checked_first', 'Fill tube detection check · first package'],
-      ['is_fill_tube_checked_end', 'Fill tube detection check · end of batch'],
-      ['are_burst_bottles_controlled', 'Burst bottles under control', 'bottle'],
+      ['is_first_package_checked', 'First package check (two operators)', null, ['first_package_checked_by', 'first_package_checked_by_2']],
+      ['is_fill_tube_checked_first', 'Fill tube detection check · first package', null, ['fill_tube_checked_first_by']],
+      ['is_fill_tube_checked_end', 'Fill tube detection check · end of batch', null, ['fill_tube_checked_end_by']],
+      ['are_burst_bottles_controlled', 'Burst bottles under control', 'bottle', ['burst_bottles_controlled_by']],
     ];
 
     const page = {
@@ -100,6 +103,102 @@
         users: users.users.filter((u) => u.is_active), initialsOf: users.initialsOf,
         packaging: packaging.data || {}, ferm: ferm.data || {},
       });
+    }
+
+    // ------------------------------------------------------------ pallet labels (wishlist #2)
+    // Standard best before periods in the pallet label popup (Jaap, 29-10)
+    const THT_YEAR_OPTIONS = [1, 1.5, 2, 20];
+
+    function openPalletLabelDialog() {
+      document.getElementById('fi-pallet-dialog')?.remove();
+      const b = page.ctx.batch;
+      const today = new Date();
+      const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      const tankNumber = (h) => { const t = page.tanks.find((x) => x.id === h.tank_id); return t ? t.number : null; };
+      // the HBT of the latest filling session is the likely one
+      const last = page.sessions.slice().sort((x, y) => y.session_number - x.session_number).find((s) => s.batch_hbt_id);
+      const state = { hbtId: last ? last.batch_hbt_id : page.hbts[0].id, format: null, perPallet: '2', pallets: '1', date: (last && last.filling_date) || iso, tht: '', years: null };
+      const hbt = () => hbtById(state.hbtId);
+      // package of the HBT: its filling session, else its intended format (tank beer → keg)
+      const formatOf = (h) => {
+        const s = page.sessions.find((x) => x.batch_hbt_id === h.id && x.package_format);
+        const f = (s && s.package_format) || (h.intended_formats || [])[0];
+        return f === 'bottle' || f === 'can' ? f : 'keg';
+      };
+      // best before differs per package type (Recipe › Packaging, months)
+      const months = () => page.packaging[{ keg: 'best_before_keg_months', bottle: 'best_before_bottle_months', can: 'best_before_can_months' }[state.format]];
+      // THT = filling date + the recipe's THT months (Recipe › Packaging) when filled in,
+      // otherwise chosen here (THT_YEAR_OPTIONS or a date)
+      const thtFromRecipe = () => thtDate(state.date, months());
+      const setFormat = (f) => {
+        state.format = f;
+        state.tht = thtFromRecipe() || (state.years ? thtDate(state.date, state.years * 12) : '');
+      };
+      setFormat(formatOf(hbt()));
+      const overlay = document.createElement('div');
+      overlay.className = 'br-dialog-overlay';
+      overlay.id = 'fi-pallet-dialog';
+      const render = () => {
+        const seq = palletLabelSequence(Number(state.perPallet), Number(state.pallets));
+        overlay.innerHTML = `<div class="br-dialog" role="dialog" aria-modal="true" aria-labelledby="fi-pallet-title" style="max-width:440px;">
+          <div class="br-dialog-title" id="fi-pallet-title">Print pallet label</div>
+          <div class="br-field"><label class="br-label" for="fi-pl-hbt">HBT</label><select class="br-input" id="fi-pl-hbt">
+            ${page.hbts.map((h) => `<option value="${h.id}"${h.id === state.hbtId ? ' selected' : ''}>${escapeHtml(hbtName(h))}</option>`).join('')}</select></div>
+          <div class="br-field"><span class="br-label">Package</span><div class="br-seg" role="group">
+            ${[['keg', 'Keg'], ['bottle', 'Bottle'], ['can', 'Can']].map(([f, label]) => `<button type="button" data-pl-format="${f}" class="${state.format === f ? 'on' : ''}">${label}</button>`).join('')}</div>
+            <span class="br-note">${state.format === 'keg' ? 'One label per A4' : 'Two labels per A4, to fold round the pallet corner'}</span></div>
+          <div style="display:flex; gap:10px;">
+            <div class="br-field" style="flex:1;"><label class="br-label" for="fi-pl-per">Labels per pallet</label><input class="br-input" id="fi-pl-per" inputmode="numeric" value="${escapeHtml(state.perPallet)}"></div>
+            <div class="br-field" style="flex:1;"><label class="br-label" for="fi-pl-pallets">Pallets</label><input class="br-input" id="fi-pl-pallets" inputmode="numeric" value="${escapeHtml(state.pallets)}"></div>
+          </div>
+          <div style="display:flex; gap:10px;">
+            <div class="br-field" style="flex:1;"><label class="br-label" for="fi-pl-date">Filling date</label><input class="br-input" id="fi-pl-date" type="date" value="${escapeHtml(state.date)}"></div>
+            <div class="br-field" style="flex:1;"><label class="br-label" for="fi-pl-tht">Best before</label><input class="br-input" id="fi-pl-tht" type="date" value="${escapeHtml(state.tht)}"></div>
+          </div>
+          <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+            <span class="br-note">Filling date</span>
+            ${THT_YEAR_OPTIONS.map((y) => `<button type="button" class="br-ghost" data-pl-years="${y}">+${String(y).replace('.', ',')} ${y === 1 ? 'year' : 'years'}</button>`).join('')}
+            <span class="br-note">${months() ? `· recipe (${state.format}): ${fmt(months())} months` : `· no ${state.format} THT in the recipe yet (Recipe › Packaging)`}</span>
+          </div>
+          ${state.tht ? '' : '<div class="br-note" style="color:var(--br-alert);">No best before date: the labels print without it.</div>'}
+          <div class="br-note">${seq.length ? `${seq.length} ${seq.length === 1 ? 'sheet' : 'sheets'}, pallets 1–${state.pallets}, ${state.perPallet} of each · batch code <b>${escapeHtml(palletBatchCode(b.batch_number, tankNumber(hbt())))}</b>` : 'Fill in whole numbers for labels per pallet and pallets.'}</div>
+          <div class="br-dialog-buttons">
+            <button type="button" class="br-ghost" id="fi-pl-close">Close</button>
+            <button type="button" class="br-primary" id="fi-pl-print"${seq.length ? '' : ' disabled'}>Print</button>
+          </div></div>`;
+      };
+      const close = () => { overlay.remove(); document.removeEventListener('keydown', onKey); };
+      const onKey = (e) => { if (e.key === 'Escape') close(); };
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay || e.target.closest('#fi-pl-close')) return close();
+        const k = e.target.closest('button[data-pl-format]');
+        if (k) { setFormat(k.dataset.plFormat); return render(); }
+        const years = e.target.closest('button[data-pl-years]');
+        if (years) { state.years = Number(years.dataset.plYears); state.tht = thtDate(state.date, state.years * 12); return render(); }
+        if (e.target.closest('#fi-pl-print')) {
+          const win = window.open('', '_blank');
+          if (!win) { showMessage('The browser blocked the print window: allow pop-ups for this site.', true); return; }
+          win.document.write(palletLabelsHtml({
+            format: state.format, beerName: b.name || page.ctx.recipe.name || '', code: palletBatchCode(b.batch_number, tankNumber(hbt())),
+            tht: state.tht,
+            sequence: palletLabelSequence(Number(state.perPallet), Number(state.pallets)),
+          }));
+          win.document.close();
+          return close();
+        }
+      });
+      overlay.addEventListener('change', (e) => {
+        const id = e.target.id;
+        if (id === 'fi-pl-hbt') { state.hbtId = Number(e.target.value); setFormat(formatOf(hbt())); }
+        if (id === 'fi-pl-date') { state.date = e.target.value; state.tht = thtFromRecipe() || (state.years ? thtDate(state.date, state.years * 12) : state.tht); }
+        if (id === 'fi-pl-tht') { state.tht = e.target.value; state.years = null; }
+        if (id === 'fi-pl-per') state.perPallet = e.target.value.trim();
+        if (id === 'fi-pl-pallets') state.pallets = e.target.value.trim();
+        render();
+      });
+      render();
+      document.addEventListener('keydown', onKey);
+      document.body.appendChild(overlay);
     }
 
     // ------------------------------------------------------------ saving
@@ -244,8 +343,11 @@
         const hbt = hbtById(s.batch_hbt_id);
         const formats = hbt && hbt.intended_formats.length ? hbt.intended_formats : PACKAGE_FORMATS.map((f) => f.code);
         const field = (id, label, inner) => `<div class="br-field pr-field"><label class="br-label" for="${id}">${label}</label>${inner}</div>`;
-        const checks = CHECKS.filter(([, , only]) => !only || s.package_format === only).map(([f, label]) =>
-          `<label class="br-check pr-check"><input type="checkbox" data-session="${s.id}" data-field="${f}"${s[f] ? ' checked' : ''}${dis()}><span>${label}</span></label>`).join('');
+        const checks = CHECKS.filter(([, , only]) => !only || s.package_format === only).map(([f, label, , by]) => {
+          const unsigned = s[f] && by.every((b) => !s[b]);   // ticked before the signatures existed
+          return `<div class="pr-check fi-sign${s[f] ? ' done' : ''}"><span class="fi-sign-label">${s[f] ? '✓ ' : ''}${label}${unsigned ? ' <span class="br-note">· checked, no initials</span>' : ''}</span>
+            <span class="fi-sign-by">${by.map((b, i) => `<select class="br-in" data-session="${s.id}" data-sign="${f}" data-field="${b}" aria-label="${escapeHtml(label)} · operator${by.length > 1 ? ' ' + (i + 1) : ''}"${dis()}>${userOptions(s[b])}</select>`).join('')}</span></div>`;
+        }).join('');
         return `<div class="pr-hbt fi-session${s.is_hbt_finished ? ' finished' : ''}">
           <div class="pr-hbt-head">
             <b class="fi-title">Session ${s.session_number}${hbt ? ' · ' + escapeHtml(hbtName(hbt)) : ''}${s.package_format ? ' · ' + formatLabel(s.package_format) : ''}</b>
@@ -273,6 +375,7 @@
       document.getElementById('fi-sessions').innerHTML = `
         <div class="br-head" style="align-items:center;">
           <div class="br-label">Filling sessions</div>
+          ${page.hbts.length ? '<button class="br-ghost" type="button" id="fi-pallet-labels" style="margin-left:auto;">Print pallet label</button>' : ''}
           ${page.canEdit ? `<button class="br-primary" type="button" id="fi-add-session"${page.hbts.length ? '' : ' disabled title="Add the HBTs on Processing first"'}>+ Add filling session</button>` : ''}
         </div>
         ${blocks || `<div class="br-note">No filling session yet.${page.hbts.length ? ' The first filling date moves the batch to Filling; when every HBT is finished the batch is Filled.' : ' The HBTs come from Processing.'}</div>`}`;
@@ -304,6 +407,12 @@
         const f = el.dataset.field;
         if (el.dataset.session) {
           const s = page.sessions.find((x) => x.id === Number(el.dataset.session));
+          if (el.dataset.sign) {
+            const check = CHECKS.find((c) => c[0] === el.dataset.sign);
+            const patch = { [f]: el.value || null };
+            patch[check[0]] = check[3].every((b) => (b === f ? el.value : s[b]));
+            return saveRow('filling_sessions', s, patch);
+          }
           if (el.type === 'checkbox') return saveRow('filling_sessions', s, { [f]: el.checked });
           if (f === 'batch_hbt_id') {
             const hbt = hbtById(Number(el.value));
@@ -332,6 +441,7 @@
       main.addEventListener('click', (e) => {
         const t = e.target;
         if (t.closest('#fi-add-session')) return addSession();
+        if (t.closest('#fi-pallet-labels')) return openPalletLabelDialog();
         const delS = t.closest('button[data-delete-session]');
         if (delS) return deleteSession(page.sessions.find((x) => x.id === Number(delS.dataset.deleteSession)));
         const addM = t.closest('button[data-add-measurement]');
