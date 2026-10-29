@@ -50,7 +50,7 @@
   <script src="batch-ingredients.js"></script>
   <script src="batch-brews.js"></script>
   <script src="fermentation-log.js"></script>
-  <script src="processing.js"></script>
+  <script src="processing.js?v=20261029b"></script>
   <script src="splits.js"></script>
   <script src="dosing-checks.js"></script>
   <script src="batch-report-shell.js"></script>
@@ -297,10 +297,10 @@
       const sum = processingSummary(summaryData());
       const { data, error } = await supabaseClient.rpc('report_recipients', { p_report: 'processing' });
       const recipients = error ? [] : (data || []);
-      // a new Outlook message with the layout (.eml, X-Unsent): a mailto link can only carry plain text
-      const eml = emlMessage({ to: recipients.map((r) => r.email), subject: sum.subject, html: sum.html, text: sum.text });
-      const href = URL.createObjectURL(new Blob([eml], { type: 'message/rfc822' }));
-      const fileName = `${sum.subject.replace(/[^\w .-]+/g, '').trim()}.eml`;
+      // A mailto link can only carry plain text, and Outlook (web / new) cannot open a
+      // prepared message: the report goes on the clipboard and is pasted into a new
+      // message that has the recipients and subject filled in (Jaap, 29-10).
+      const mailto = `mailto:${recipients.map((r) => encodeURIComponent(r.email)).join(',')}?subject=${encodeURIComponent(sum.subject)}`;
       const overlay = document.createElement('div');
       overlay.className = 'br-dialog-overlay';
       overlay.id = 'pr-email-dialog';
@@ -309,21 +309,27 @@
         <div class="br-dialog-text">${error ? `Could not load the recipients: ${escapeHtml(error.message)}`
           : recipients.length ? `To: ${recipients.map((r) => escapeHtml(r.name)).join(', ')}`
             : 'No recipients yet: tick "Processing report" for them on the Users page.'}</div>
-        <div class="br-dialog-text">"Open in Outlook" downloads the message: open the downloaded file and Outlook shows a new e-mail with this report, the recipients and the subject, ready to send. "Copy report" is the alternative: paste (Ctrl+V) into a new message.</div>
+        <div class="br-dialog-text">"Copy &amp; open email" copies the report below and opens a new message with the recipients and subject. Paste the report into the message (Ctrl+V) and send.</div>
         <div style="max-height:360px; overflow:auto; border:1px solid var(--br-line-soft); border-radius:8px; padding:8px; background:#fff;">${sum.html}</div>
         <span class="br-note" id="pr-email-note"></span>
         <div class="br-dialog-buttons">
           <button type="button" class="br-ghost" id="pr-email-close">Close</button>
           <button type="button" class="br-ghost" id="pr-email-copy">Copy report</button>
-          <a class="br-primary" id="pr-email-open" href="${href}" download="${escapeHtml(fileName)}" style="text-decoration:none;">Open in Outlook</a>
+          <button type="button" class="br-primary" id="pr-email-open">Copy &amp; open email</button>
         </div></div>`;
-      const close = () => { overlay.remove(); URL.revokeObjectURL(href); document.removeEventListener('keydown', onKey); };
+      const close = () => { overlay.remove(); document.removeEventListener('keydown', onKey); };
       const onKey = (e) => { if (e.key === 'Escape') close(); };
       overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
       overlay.querySelector('#pr-email-close').addEventListener('click', close);
       overlay.querySelector('#pr-email-copy').addEventListener('click', async () => {
         overlay.querySelector('#pr-email-note').textContent = await copyRichText(sum.html, sum.text)
           ? 'Copied: paste it (Ctrl+V) into the message.' : 'Could not copy in this browser; use "Open email".';
+      });
+      overlay.querySelector('#pr-email-open').addEventListener('click', async () => {
+        const copied = await copyRichText(sum.html, sum.text);
+        overlay.querySelector('#pr-email-note').textContent = copied
+          ? 'Report copied: paste it (Ctrl+V) into the new message.' : 'Could not copy in this browser: select the report above and copy it by hand.';
+        window.location.href = mailto;
       });
       document.addEventListener('keydown', onKey);
       document.body.appendChild(overlay);
@@ -691,7 +697,14 @@
         const t = e.target;
         if (transfersCard.handleClick(t)) return;
         if (t.closest('#pr-add-session')) return addSession();
-        if (t.closest('#pr-email')) return openEmailDialog();
+        if (t.closest('#pr-email')) {
+          // an error here would otherwise leave the button silently doing nothing
+          return openEmailDialog().catch((err) => {
+            console.error(err);
+            showMessage(`Could not make the e-mail: ${err.message}. Reload the page (Ctrl+F5) and try again.`, true);
+            document.getElementById('pr-message').scrollIntoView({ behavior: 'smooth', block: 'center' });
+          });
+        }
         if (t.closest('#pr-delete-session')) return deleteSession(activeSession());
         const tab = t.closest('button[data-session-tab]');
         if (tab) { page.activeSessionId = Number(tab.dataset.sessionTab); return renderSoon(); }

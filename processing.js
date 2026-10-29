@@ -208,48 +208,9 @@ ${rows.join('\n')}`, 'margin-top:6px;');
   return { subject, text: t.join('\n'), html };
 }
 
-/** UTF-8 text → base64, in the browser and in Node. */
-function utf8Base64(text) {
-  if (typeof Buffer !== 'undefined') return Buffer.from(String(text), 'utf8').toString('base64');
-  const bytes = new TextEncoder().encode(String(text));
-  let bin = '';
-  bytes.forEach((b) => { bin += String.fromCharCode(b); });
-  return btoa(bin);
-}
-
-/**
- * An unsent e-mail as an .eml file: Outlook opens it as a new message with
- * the HTML layout, recipients and subject filled in (X-Unsent), ready to
- * send from the user's own account. A mailto link can only carry plain text.
- */
-function emlMessage({ to = [], subject, html, text }) {
-  const boundary = 'jopen-' + Math.random().toString(36).slice(2);
-  const wrap = (b64) => b64.replace(/.{1,76}/g, '$&\r\n');
-  return [
-    'X-Unsent: 1',
-    `To: ${to.join(', ')}`,
-    `Subject: =?UTF-8?B?${utf8Base64(subject)}?=`,
-    'MIME-Version: 1.0',
-    `Content-Type: multipart/alternative; boundary="${boundary}"`,
-    '',
-    `--${boundary}`,
-    'Content-Type: text/plain; charset="utf-8"',
-    'Content-Transfer-Encoding: base64',
-    '',
-    wrap(utf8Base64(text || '')),
-    `--${boundary}`,
-    'Content-Type: text/html; charset="utf-8"',
-    'Content-Transfer-Encoding: base64',
-    '',
-    wrap(utf8Base64(`<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;">${html}</body></html>`)),
-    `--${boundary}--`,
-    '',
-  ].join('\r\n');
-}
-
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    processingSummary, emlMessage,
+    processingSummary,
     O2_HBT_MAX_PPB, durationMinutes, durationText, hbtEnd, hbtFilledOn,
     co2Spec, co2Status, o2High, turbidityHigh, puOutOfSpec, maturation, cellarLoss,
   };
