@@ -21,15 +21,21 @@ assert.strictEqual(p.bestBeforeText('2026-10-29', 24), 'OCT 2028');
 assert.strictEqual(p.bestBeforeText('2026-11-15', 2), 'JAN 2027');
 assert.strictEqual(p.bestBeforeText('2026-10-29', null), '');
 assert.strictEqual(p.labelDate('2026-10-29'), '29-10-2026');
+// THT date = filling date + months (x years × 12)
+assert.strictEqual(p.thtDate('2026-10-29', 24), '2028-10-29');
+assert.strictEqual(p.thtDate('2027-01-31', 1), '2027-02-28');
+assert.strictEqual(p.thtDate('2028-02-29', 12), '2029-02-28');
+assert.strictEqual(p.thtDate('2026-10-29', ''), '');
+assert.strictEqual(p.thtMonthYear('2028-10-29'), 'OCT 2028');
 
 // Print document: one label per keg sheet, two per bottle/can sheet
-const keg = p.palletLabelsHtml({ kind: 'keg', beerName: 'So fresh, so clean', code: 'L26295/18', date: '2026-10-29', bestBefore: 'OCT 2028', sequence: [1, 1, 2] });
+const keg = p.palletLabelsHtml({ kind: 'keg', beerName: 'So fresh, so clean', code: 'L26295/18', tht: '2028-10-29', sequence: [1, 1, 2] });
 assert.strictEqual((keg.match(/<section class="sheet/g) || []).length, 3);
 assert.strictEqual((keg.match(/class="lbl keg"/g) || []).length, 3);
 assert.ok(keg.includes('L26295/18') && keg.includes('OCT 2028') && keg.includes(p.PALLET_LABEL_NOTE));
-const pack = p.palletLabelsHtml({ kind: 'pack', beerName: 'Meesterstuk <2027>', code: 'L26298/17', date: '2026-10-29', sequence: [1, 1] });
+const pack = p.palletLabelsHtml({ kind: 'pack', beerName: 'Meesterstuk <2027>', code: 'L26298/17', tht: '2027-10-29', sequence: [1, 1] });
 assert.strictEqual((pack.match(/class="lbl pack"/g) || []).length, 4);
-assert.ok(pack.includes('Meesterstuk &lt;2027&gt;') && pack.includes('29-10-2026'));
+assert.ok(pack.includes('Meesterstuk &lt;2027&gt;') && pack.includes('THT 29-10-2027'));
 assert.ok(!pack.includes('class="order"'));
 
 console.log('pallet-labels: all tests passed');

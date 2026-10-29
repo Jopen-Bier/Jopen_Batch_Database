@@ -114,7 +114,7 @@
       const tankNumber = (h) => { const t = page.tanks.find((x) => x.id === h.tank_id); return t ? t.number : null; };
       // the HBT of the latest filling session is the likely one
       const last = page.sessions.slice().sort((x, y) => y.session_number - x.session_number).find((s) => s.batch_hbt_id);
-      const state = { hbtId: last ? last.batch_hbt_id : page.hbts[0].id, kind: null, perPallet: '2', pallets: '1', date: (last && last.filling_date) || iso, bestBefore: null, order: '' };
+      const state = { hbtId: last ? last.batch_hbt_id : page.hbts[0].id, kind: null, perPallet: '2', pallets: '1', date: (last && last.filling_date) || iso, tht: '', order: '' };
       const hbt = () => hbtById(state.hbtId);
       const kindOf = (h) => {
         const s = page.sessions.find((x) => x.batch_hbt_id === h.id && x.package_format);
@@ -123,8 +123,11 @@
       };
       const months = () => (state.kind === 'keg' ? page.packaging.best_before_keg_months
         : (page.sessions.find((x) => x.batch_hbt_id === state.hbtId && x.package_format === 'can') ? page.packaging.best_before_can_months : page.packaging.best_before_bottle_months));
+      // THT = filling date + the recipe's THT months (Recipe › Packaging) when filled in,
+      // otherwise chosen here (+1/+2/+3 years or a date)
+      const thtFromRecipe = () => thtDate(state.date, months());
       state.kind = kindOf(hbt());
-      state.bestBefore = bestBeforeText(state.date, months());
+      state.tht = thtFromRecipe();
       const overlay = document.createElement('div');
       overlay.className = 'br-dialog-overlay';
       overlay.id = 'fi-pallet-dialog';
@@ -143,10 +146,15 @@
           </div>
           <div style="display:flex; gap:10px;">
             <div class="br-field" style="flex:1;"><label class="br-label" for="fi-pl-date">Filling date</label><input class="br-input" id="fi-pl-date" type="date" value="${escapeHtml(state.date)}"></div>
-            ${state.kind === 'keg'
-              ? `<div class="br-field" style="flex:1;"><label class="br-label" for="fi-pl-bb">Best before</label><input class="br-input" id="fi-pl-bb" value="${escapeHtml(state.bestBefore || '')}" placeholder="e.g. OCT 2028"></div>`
-              : `<div class="br-field" style="flex:1;"><label class="br-label" for="fi-pl-order">Number under the batch <span class="br-note">(optional)</span></label><input class="br-input" id="fi-pl-order" value="${escapeHtml(state.order)}"></div>`}
+            <div class="br-field" style="flex:1;"><label class="br-label" for="fi-pl-tht">THT (best before)</label><input class="br-input" id="fi-pl-tht" type="date" value="${escapeHtml(state.tht)}"></div>
           </div>
+          <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+            <span class="br-note">Filling date +</span>
+            ${[1, 2, 3].map((y) => `<button type="button" class="br-ghost" data-pl-years="${y}">${y} ${y === 1 ? 'year' : 'years'}</button>`).join('')}
+            <span class="br-note">${months() ? `· recipe: ${fmt(months())} months` : '· no THT in the recipe yet (Recipe › Packaging)'}</span>
+          </div>
+          ${state.kind === 'pack' ? `<div class="br-field"><label class="br-label" for="fi-pl-order">Number under the batch <span class="br-note">(optional)</span></label><input class="br-input" id="fi-pl-order" value="${escapeHtml(state.order)}"></div>` : ''}
+          ${state.tht ? '' : '<div class="br-note" style="color:var(--br-alert);">No THT date: the labels print without it.</div>'}
           <div class="br-note">${seq.length ? `${seq.length} ${seq.length === 1 ? 'sheet' : 'sheets'}, pallets 1–${state.pallets}, ${state.perPallet} of each · batch code <b>${escapeHtml(palletBatchCode(b.batch_number, tankNumber(hbt())))}</b>` : 'Fill in whole numbers for labels per pallet and pallets.'}</div>
           <div class="br-dialog-buttons">
             <button type="button" class="br-ghost" id="fi-pl-close">Close</button>
@@ -158,13 +166,15 @@
       overlay.addEventListener('click', (e) => {
         if (e.target === overlay || e.target.closest('#fi-pl-close')) return close();
         const k = e.target.closest('button[data-pl-kind]');
-        if (k) { state.kind = k.dataset.plKind; state.bestBefore = bestBeforeText(state.date, months()); return render(); }
+        if (k) { state.kind = k.dataset.plKind; state.tht = thtFromRecipe() || state.tht; return render(); }
+        const years = e.target.closest('button[data-pl-years]');
+        if (years) { state.years = Number(years.dataset.plYears); state.tht = thtDate(state.date, state.years * 12); return render(); }
         if (e.target.closest('#fi-pl-print')) {
           const win = window.open('', '_blank');
           if (!win) { showMessage('The browser blocked the print window: allow pop-ups for this site.', true); return; }
           win.document.write(palletLabelsHtml({
             kind: state.kind, beerName: b.name || page.ctx.recipe.name || '', code: palletBatchCode(b.batch_number, tankNumber(hbt())),
-            date: state.date, bestBefore: state.bestBefore, orderNumber: state.order.trim(),
+            tht: state.tht, orderNumber: state.order.trim(),
             sequence: palletLabelSequence(Number(state.perPallet), Number(state.pallets)),
           }));
           win.document.close();
@@ -173,11 +183,11 @@
       });
       overlay.addEventListener('change', (e) => {
         const id = e.target.id;
-        if (id === 'fi-pl-hbt') { state.hbtId = Number(e.target.value); state.kind = kindOf(hbt()); state.bestBefore = bestBeforeText(state.date, months()); }
-        if (id === 'fi-pl-date') { state.date = e.target.value; state.bestBefore = bestBeforeText(state.date, months()); }
+        if (id === 'fi-pl-hbt') { state.hbtId = Number(e.target.value); state.kind = kindOf(hbt()); state.tht = thtFromRecipe() || state.tht; }
+        if (id === 'fi-pl-date') { state.date = e.target.value; state.tht = thtFromRecipe() || (state.years ? thtDate(state.date, state.years * 12) : state.tht); }
+        if (id === 'fi-pl-tht') { state.tht = e.target.value; state.years = null; }
         if (id === 'fi-pl-per') state.perPallet = e.target.value.trim();
         if (id === 'fi-pl-pallets') state.pallets = e.target.value.trim();
-        if (id === 'fi-pl-bb') state.bestBefore = e.target.value.trim();
         if (id === 'fi-pl-order') state.order = e.target.value;
         render();
       });

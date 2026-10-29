@@ -30,13 +30,29 @@ function palletBatchCode(batchNumber, hbtNumber) {
   return `L${batchNumber}${hbt}`;
 }
 
-/** Best before as on the keg label: filling date ('YYYY-MM-DD') + months → 'OCT 2028'. */
-function bestBeforeText(date, months) {
+/**
+ * THT (best before) date: filling date ('YYYY-MM-DD') + months → 'YYYY-MM-DD';
+ * the day is clamped to the month (31 Jan + 1 month → 28/29 Feb). '' on bad input.
+ */
+function thtDate(date, months) {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(date || ''));
   const add = Number(months);
   if (!m || !Number.isFinite(add) || add <= 0) return '';
   const total = Number(m[1]) * 12 + Number(m[2]) - 1 + Math.round(add);
-  return `${MONTHS[total % 12]} ${Math.floor(total / 12)}`;
+  const year = Math.floor(total / 12), month = total % 12;
+  const day = Math.min(Number(m[3]), new Date(Date.UTC(year, month + 1, 0)).getUTCDate());
+  return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+/** THT as on the keg label: 'YYYY-MM-DD' → 'OCT 2028'. */
+function thtMonthYear(date) {
+  const m = /^(\d{4})-(\d{2})/.exec(String(date || ''));
+  return m ? `${MONTHS[Number(m[2]) - 1]} ${m[1]}` : '';
+}
+
+/** Best before as on the keg label: filling date + months → 'OCT 2028'. */
+function bestBeforeText(date, months) {
+  return thtMonthYear(thtDate(date, months));
 }
 
 /** 'YYYY-MM-DD' → 'DD-MM-YYYY'. */
@@ -51,7 +67,8 @@ function labelEscape(s) {
 
 /**
  * Full print document. opts = { kind: 'keg' | 'pack', beerName, code,
- * date ('YYYY-MM-DD'), bestBefore (keg), orderNumber (pack, optional),
+ * tht ('YYYY-MM-DD', the best before date: keg 'OCT 2028', bottle / can
+ * 'THT 29-10-2028'), orderNumber (pack, optional),
  * sequence (palletLabelSequence) }.
  */
 function palletLabelsHtml(opts) {
@@ -63,7 +80,7 @@ function palletLabelsHtml(opts) {
       <div class="row top"><div class="box"><span>palletnr.</span><b>${n}</b></div></div>
       <div class="fit code">${e(opts.code)}</div>
       <div class="fit beer">${e(opts.beerName)}</div>
-      <div class="row bottom"><div class="bb"><span>Best Before</span><b>${e(opts.bestBefore || '')}</b></div>
+      <div class="row bottom"><div class="bb"><span>Best Before</span><b>${e(thtMonthYear(opts.tht))}</b></div>
         <div class="box amount"><span>Aantal / Amount</span></div></div>
     </div>`;
   const packLabel = (n) => `<div class="lbl pack">
@@ -71,7 +88,7 @@ function palletLabelsHtml(opts) {
       <div class="fit code">${e(opts.code)}</div>
       ${opts.orderNumber ? `<div class="order">${e(opts.orderNumber)}</div>` : ''}
       <div class="row bottom"><div class="box"><span>Palletnr:</span><b>${n}</b></div>
-        <div class="date">${e(labelDate(opts.date))}</div>
+        <div class="date">${opts.tht ? `THT ${e(labelDate(opts.tht))}` : ''}</div>
         <div class="box amount"><span>Aantal:</span></div></div>
     </div>`;
   const sheets = (opts.sequence || []).map((n) => `<section class="sheet ${keg ? 'one' : 'two'}">
@@ -109,7 +126,7 @@ function palletLabelsHtml(opts) {
   .box.amount { min-width: 80mm; }
   .bb span { display: block; font-size: 28pt; font-weight: 700; }
   .bb b { font-size: 48pt; }
-  .date { font-size: 14pt; }
+  .date { font-size: 28pt; font-weight: 700; white-space: nowrap; }
   .note { position: absolute; bottom: 4mm; left: 0; right: 0; text-align: center; font-size: 8pt; font-weight: 700; }
   @media screen { body { background: #888; } .sheet { background: #fff; margin: 10px auto; } }
 </style></head><body>
@@ -126,5 +143,5 @@ ${sheets}
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { PALLET_LABEL_NOTE, palletLabelSequence, palletBatchCode, bestBeforeText, labelDate, palletLabelsHtml };
+  module.exports = { PALLET_LABEL_NOTE, palletLabelSequence, palletBatchCode, thtDate, thtMonthYear, bestBeforeText, labelDate, palletLabelsHtml };
 }
