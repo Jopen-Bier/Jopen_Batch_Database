@@ -3,9 +3,9 @@
 // (wishlist #2), after the Excel sheets "1. Palletbrief - vaten" (keg) and
 // "1. Palletbrief - fles en blik" (bottle / can).
 //
-// One label = one A4 sheet. A keg sheet has the label once; a bottle / can
-// sheet has it twice side by side, so it can be folded round the corner of
-// the pallet. Labels per pallet × pallets sheets, numbered 1..pallets.
+// One layout for every package (Jaap, 29-10): beer name, batch code, Best
+// Before + date. One label = one A4 sheet; a keg sheet has the label once, a
+// bottle / can sheet twice side by side, folded round the pallet corner. Labels per pallet × pallets sheets, numbered 1..pallets.
 // Batch code on the label: L<batch number>/<HBT tank number>.
 //
 // Browser: <script src="pallet-labels.js">. Node: require('../pallet-labels.js').
@@ -13,7 +13,6 @@
 // ============================================================================
 
 const PALLET_LABEL_NOTE = 'Deze palletlabel op de rechterhoek van de smalle kant opplakken svp.';
-const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 
 /** Pallet number of every sheet: 2 per pallet × 3 pallets → [1, 1, 2, 2, 3, 3]. [] on bad input. */
 function palletLabelSequence(labelsPerPallet, pallets) {
@@ -44,17 +43,6 @@ function thtDate(date, months) {
   return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
-/** THT as on the keg label: 'YYYY-MM-DD' → 'OCT 2028'. */
-function thtMonthYear(date) {
-  const m = /^(\d{4})-(\d{2})/.exec(String(date || ''));
-  return m ? `${MONTHS[Number(m[2]) - 1]} ${m[1]}` : '';
-}
-
-/** Best before as on the keg label: filling date + months → 'OCT 2028'. */
-function bestBeforeText(date, months) {
-  return thtMonthYear(thtDate(date, months));
-}
-
 /** 'YYYY-MM-DD' → 'DD-MM-YYYY'. */
 function labelDate(date) {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(date || ''));
@@ -66,33 +54,25 @@ function labelEscape(s) {
 }
 
 /**
- * Full print document. opts = { kind: 'keg' | 'pack', beerName, code,
- * tht ('YYYY-MM-DD', the best before date: keg 'OCT 2028', bottle / can
- * 'THT 29-10-2028'), orderNumber (pack, optional),
- * sequence (palletLabelSequence) }.
+ * Full print document. opts = { format: 'keg' | 'bottle' | 'can', beerName,
+ * code, tht ('YYYY-MM-DD', best before; differs per package type),
+ * sequence (palletLabelSequence) }. One layout for every package: beer name
+ * big, batch code under it, "Best Before" + date; a keg sheet has the label
+ * once, a bottle / can sheet twice (folded round the pallet corner).
  */
 function palletLabelsHtml(opts) {
   const e = labelEscape;
-  const keg = opts.kind === 'keg';
+  const one = opts.format === 'keg';
   // Each label is laid out landscape (as read on the pallet) and turned a
   // quarter on the portrait A4, like the rotated text in the Excel sheets.
-  const kegLabel = (n) => `<div class="lbl keg">
-      <div class="row top"><div class="box"><span>palletnr.</span><b>${n}</b></div></div>
-      <div class="fit code">${e(opts.code)}</div>
-      <div class="fit beer">${e(opts.beerName)}</div>
-      <div class="row bottom"><div class="bb"><span>Best Before</span><b>${e(thtMonthYear(opts.tht))}</b></div>
-        <div class="box amount"><span>Aantal / Amount</span></div></div>
-    </div>`;
-  const packLabel = (n) => `<div class="lbl pack">
+  const label = (n) => `<div class="lbl">
+      <div class="row"><div class="box"><span>Pallet no.</span><b>${n}</b></div><div class="box amount"><span>Aantal / Amount</span></div></div>
       <div class="fit beer">${e(opts.beerName)}</div>
       <div class="fit code">${e(opts.code)}</div>
-      ${opts.orderNumber ? `<div class="order">${e(opts.orderNumber)}</div>` : ''}
-      <div class="row bottom"><div class="box"><span>Palletnr:</span><b>${n}</b></div>
-        <div class="date">${opts.tht ? `THT ${e(labelDate(opts.tht))}` : ''}</div>
-        <div class="box amount"><span>Aantal:</span></div></div>
+      <div class="fit bb">Best Before <b>${e(labelDate(opts.tht))}</b></div>
     </div>`;
-  const sheets = (opts.sequence || []).map((n) => `<section class="sheet ${keg ? 'one' : 'two'}">
-      ${keg ? `<div class="half">${kegLabel(n)}</div>` : `<div class="half">${packLabel(n)}</div><div class="half">${packLabel(n)}</div>`}
+  const sheets = (opts.sequence || []).map((n) => `<section class="sheet ${one ? 'one' : 'two'}">
+      ${one ? `<div class="half">${label(n)}</div>` : `<div class="half">${label(n)}</div><div class="half">${label(n)}</div>`}
       <div class="note">${e(PALLET_LABEL_NOTE)}</div>
     </section>`).join('\n');
   return `<!doctype html><html><head><meta charset="utf-8"><title>Pallet labels ${e(opts.code)}</title>
@@ -109,24 +89,17 @@ function palletLabelsHtml(opts) {
     display: flex; flex-direction: column; justify-content: space-between; padding: 8mm 10mm 14mm; }
   .one .lbl { width: 297mm; height: 210mm; }
   .two .lbl { width: 297mm; height: 105mm; padding: 5mm 8mm 12mm; }
-  .fit { font-weight: 700; white-space: nowrap; line-height: 1; overflow: hidden; }
-  .keg .code { font-size: 120pt; }
-  .keg .beer { font-size: 72pt; }
-  .pack .beer { font-size: 80pt; }
-  .pack .code { font-size: 72pt; }
-  .order { font-size: 30pt; }
-  .row { display: flex; align-items: flex-end; gap: 8mm; }
-  .bottom { justify-content: space-between; }
-  .box { border: 2px solid #000; min-width: 40mm; min-height: 22mm; padding: 2mm 3mm; display: flex; flex-direction: column; }
-  .box span { font-size: 12pt; font-weight: 700; }
-  .box b { font-size: 34pt; line-height: 1; text-align: center; }
-  .keg .box { min-width: 50mm; min-height: 34mm; }
-  .keg .box span { font-size: 20pt; }
-  .keg .box b { font-size: 48pt; }
-  .box.amount { min-width: 80mm; }
-  .bb span { display: block; font-size: 28pt; font-weight: 700; }
-  .bb b { font-size: 48pt; }
-  .date { font-size: 28pt; font-weight: 700; white-space: nowrap; }
+  .fit { font-weight: 700; white-space: nowrap; line-height: 1.05; overflow: hidden; }
+  .row { display: flex; justify-content: space-between; gap: 8mm; }
+  .box { border: 2px solid #000; padding: 2mm 3mm; display: flex; flex-direction: column; }
+  .box span { font-weight: 700; }
+  .box b { line-height: 1; text-align: center; }
+  .one .beer { font-size: 110pt; }   .two .beer { font-size: 80pt; }
+  .one .code { font-size: 80pt; }    .two .code { font-size: 58pt; }
+  .one .bb { font-size: 48pt; }      .two .bb { font-size: 34pt; }
+  .one .box { min-width: 50mm; min-height: 34mm; } .one .box span { font-size: 18pt; } .one .box b { font-size: 48pt; }
+  .two .box { min-width: 36mm; min-height: 20mm; } .two .box span { font-size: 11pt; } .two .box b { font-size: 30pt; }
+  .one .box.amount { min-width: 100mm; } .two .box.amount { min-width: 80mm; }
   .note { position: absolute; bottom: 4mm; left: 0; right: 0; text-align: center; font-size: 8pt; font-weight: 700; }
   @media screen { body { background: #888; } .sheet { background: #fff; margin: 10px auto; } }
 </style></head><body>
@@ -143,5 +116,5 @@ ${sheets}
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { PALLET_LABEL_NOTE, palletLabelSequence, palletBatchCode, thtDate, thtMonthYear, bestBeforeText, labelDate, palletLabelsHtml };
+  module.exports = { PALLET_LABEL_NOTE, palletLabelSequence, palletBatchCode, thtDate, labelDate, palletLabelsHtml };
 }

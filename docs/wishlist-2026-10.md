@@ -44,7 +44,10 @@ changed in the live data:
   needs updating, niet af; unclear, not added: NPI, BOIL.
 - #22: same columns, labels "Yeast Beast used?" / "Temperature GLT checked?";
   the consumption forecast keeps the maximum dosage.
-- #2: batch code L<batch>/<HBT tank number> on both labels.
+- #2: one layout for every package (beer name, batch code L<batch>/<HBT tank
+  number>, Best Before + date); keg one label per A4, bottle / can two. Best
+  before per package type: filling date + the recipe's THT months for that
+  package, or +1/+2/+3 years / a date in the popup.
 
 ---
 
