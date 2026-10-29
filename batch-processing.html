@@ -50,7 +50,7 @@
   <script src="batch-ingredients.js"></script>
   <script src="batch-brews.js"></script>
   <script src="fermentation-log.js"></script>
-  <script src="processing.js"></script>
+  <script src="processing.js?v=20261029"></script>
   <script src="splits.js"></script>
   <script src="dosing-checks.js"></script>
   <script src="batch-report-shell.js"></script>
@@ -691,7 +691,14 @@
         const t = e.target;
         if (transfersCard.handleClick(t)) return;
         if (t.closest('#pr-add-session')) return addSession();
-        if (t.closest('#pr-email')) return openEmailDialog();
+        if (t.closest('#pr-email')) {
+          // an error here would otherwise leave the button silently doing nothing
+          return openEmailDialog().catch((err) => {
+            console.error(err);
+            showMessage(`Could not make the e-mail: ${err.message}. Reload the page (Ctrl+F5) and try again.`, true);
+            document.getElementById('pr-message').scrollIntoView({ behavior: 'smooth', block: 'center' });
+          });
+        }
         if (t.closest('#pr-delete-session')) return deleteSession(activeSession());
         const tab = t.closest('button[data-session-tab]');
         if (tab) { page.activeSessionId = Number(tab.dataset.sessionTab); return renderSoon(); }
