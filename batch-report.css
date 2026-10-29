@@ -338,6 +338,10 @@ select.br-in { text-align: left; cursor: pointer; }
 .fi-status.finished { background: var(--br-hop); color: #fff; }
 .fi-title { font-size: 15px; }
 .fi-session.finished { border-color: var(--br-ok-line); background: #fbfcf8; }
+.fi-sign { justify-content: space-between; align-items: center; flex-wrap: wrap; }
+.fi-sign.done .fi-sign-label { color: var(--br-hop-dark); }
+.fi-sign-by { display: flex; gap: 6px; }
+.fi-sign-by .br-in { width: 130px; }
 .fi-checks { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); column-gap: 18px; }
 .fi-finished { background: #eef0e6; border-radius: 6px; padding: 6px 8px; border-bottom: 0; }
 .br-ing td.fi-cpk { font-weight: 700; }

@@ -49,11 +49,13 @@
       ['pressure_bar', 'Pressure'], ['temp_c', 'Temp. (°C)'], ['co2_gl', 'CO2 g/l (20 °C)'],
     ];
     const KEG_FIELDS = [['keg_co2_gl', 'CO2 keg g/l'], ['keg_o2_ppb', 'Oxygen keg ppb']];
+    // Each check is signed off by the operator(s), chosen from a list (wishlist #28);
+    // the check counts as done (the boolean) once every signature is filled in.
     const CHECKS = [
-      ['is_first_package_checked', 'First package check (two operators)'],
-      ['is_fill_tube_checked_first', 'Fill tube detection check · first package'],
-      ['is_fill_tube_checked_end', 'Fill tube detection check · end of batch'],
-      ['are_burst_bottles_controlled', 'Burst bottles under control', 'bottle'],
+      ['is_first_package_checked', 'First package check (two operators)', null, ['first_package_checked_by', 'first_package_checked_by_2']],
+      ['is_fill_tube_checked_first', 'Fill tube detection check · first package', null, ['fill_tube_checked_first_by']],
+      ['is_fill_tube_checked_end', 'Fill tube detection check · end of batch', null, ['fill_tube_checked_end_by']],
+      ['are_burst_bottles_controlled', 'Burst bottles under control', 'bottle', ['burst_bottles_controlled_by']],
     ];
 
     const page = {
@@ -244,8 +246,11 @@
         const hbt = hbtById(s.batch_hbt_id);
         const formats = hbt && hbt.intended_formats.length ? hbt.intended_formats : PACKAGE_FORMATS.map((f) => f.code);
         const field = (id, label, inner) => `<div class="br-field pr-field"><label class="br-label" for="${id}">${label}</label>${inner}</div>`;
-        const checks = CHECKS.filter(([, , only]) => !only || s.package_format === only).map(([f, label]) =>
-          `<label class="br-check pr-check"><input type="checkbox" data-session="${s.id}" data-field="${f}"${s[f] ? ' checked' : ''}${dis()}><span>${label}</span></label>`).join('');
+        const checks = CHECKS.filter(([, , only]) => !only || s.package_format === only).map(([f, label, , by]) => {
+          const unsigned = s[f] && by.every((b) => !s[b]);   // ticked before the signatures existed
+          return `<div class="pr-check fi-sign${s[f] ? ' done' : ''}"><span class="fi-sign-label">${s[f] ? '✓ ' : ''}${label}${unsigned ? ' <span class="br-note">· checked, no initials</span>' : ''}</span>
+            <span class="fi-sign-by">${by.map((b, i) => `<select class="br-in" data-session="${s.id}" data-sign="${f}" data-field="${b}" aria-label="${escapeHtml(label)} · operator${by.length > 1 ? ' ' + (i + 1) : ''}"${dis()}>${userOptions(s[b])}</select>`).join('')}</span></div>`;
+        }).join('');
         return `<div class="pr-hbt fi-session${s.is_hbt_finished ? ' finished' : ''}">
           <div class="pr-hbt-head">
             <b class="fi-title">Session ${s.session_number}${hbt ? ' · ' + escapeHtml(hbtName(hbt)) : ''}${s.package_format ? ' · ' + formatLabel(s.package_format) : ''}</b>
@@ -304,6 +309,12 @@
         const f = el.dataset.field;
         if (el.dataset.session) {
           const s = page.sessions.find((x) => x.id === Number(el.dataset.session));
+          if (el.dataset.sign) {
+            const check = CHECKS.find((c) => c[0] === el.dataset.sign);
+            const patch = { [f]: el.value || null };
+            patch[check[0]] = check[3].every((b) => (b === f ? el.value : s[b]));
+            return saveRow('filling_sessions', s, patch);
+          }
           if (el.type === 'checkbox') return saveRow('filling_sessions', s, { [f]: el.checked });
           if (f === 'batch_hbt_id') {
             const hbt = hbtById(Number(el.value));
