@@ -229,6 +229,36 @@ function zincSulphateGrams(ml) {
   return v === null ? null : Math.round(v * ZINC_G_PER_ML * 100) / 100;
 }
 
+// --- Dry yeast (wishlist #22) -------------------------------------------------
+// Pitched on the first brewing day: ratio (g/hl) × hl per brew × brews that
+// day. The number of first-day brews is stored once on the batch
+// (batches.first_day_brew_count) and drives the zinc sulphate dose too.
+const CALCULATED_PREFIX = 'Calculated on brew day: ';
+
+/** { g, text } for a yeast ratio in g/hl, or null when an input is missing. */
+function yeastDose(ratioGPerHl, brewVolumeHl, brewsFirstDay) {
+  const r = toNumber(ratioGPerHl), hl = toNumber(brewVolumeHl), n = toNumber(brewsFirstDay);
+  if (!(r > 0) || !(hl > 0) || !(n > 0) || !Number.isInteger(n)) return null;
+  const g = Math.round(r * hl * n * 10) / 10;
+  return { g, text: `${CALCULATED_PREFIX}${r} g/hl × ${hl} hl × ${n} ${n === 1 ? 'brew' : 'brews'} = ${g} g` };
+}
+
+/**
+ * Ratio (g/hl) of a batch yeast line: its own amount while the unit is g/hl;
+ * after the calculation (unit g) the ratio is read back from the reason text,
+ * so a ratio changed on the Overview survives a recalculation. null otherwise.
+ */
+function yeastRatio(row) {
+  if (/^\s*g\s*\/\s*hl\s*$/i.test(String(row.unit || ''))) return toNumber(row.quantity);
+  const m = /^Calculated on brew day: ([\d.]+) g\/hl ×/.exec(String(row.deviation_reason || ''));
+  return m ? Number(m[1]) : null;
+}
+
+/** Whether a line's amount was set by a brew-day calculator. */
+function isCalculatedOnBrewDay(row) {
+  return String(row.deviation_reason || '').startsWith(CALCULATED_PREFIX);
+}
+
 /** Rows with the zinc sulphate lines last (stable otherwise). */
 function zincLast(rows, nameOf) {
   return rows.filter((r) => !isZincSulphate(nameOf(r))).concat(rows.filter((r) => isZincSulphate(nameOf(r))));
@@ -241,5 +271,6 @@ if (typeof module !== 'undefined' && module.exports) {
     deviationKind, alphaDiffers, colorDiffers, deviationDelta, inventoryEffect,
     formatAmount, deviationList, boilTimeMin, hopTotals,
     ZINC_ML_PER_HL, ZINC_G_PER_ML, isZincSulphate, zincSulphateDose, zincSulphateGrams, zincLast,
+    yeastDose, yeastRatio, isCalculatedOnBrewDay,
   };
 }

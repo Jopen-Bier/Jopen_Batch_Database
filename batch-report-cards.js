@@ -552,9 +552,9 @@ function openTimeSpanCalculator({ title, onApply }) {
   overlay.querySelector('#bw-span-start').focus();
 }
 
-function openZincCalculator({ brewVolumeHl, onApply }) {
+function openZincCalculator({ brewVolumeHl, brews, onApply }) {
   document.getElementById('bw-zinc-calc')?.remove();
-  const state = { hl: brewVolumeHl ?? '', brews: '' };
+  const state = { hl: brewVolumeHl ?? '', brews: brews ?? '' };
   const outHtml = (r) => (r ? `<div><span>Solution · all in the first brew</span><b style="white-space:nowrap;">${escapeHtml(formatAmount({ q: r.ml, unit: 'ml' }))}</b></div>`
     : '<span class="br-note">Fill in both values.</span>');
   const overlay = document.createElement('div');
@@ -564,7 +564,7 @@ function openZincCalculator({ brewVolumeHl, onApply }) {
     <div class="br-dialog-title" id="bw-zinc-title">Zinc sulphate</div>
     <div class="br-note">${ZINC_ML_PER_HL} ml solution per hl, only on the first brewing day, all in one go in the first brew.</div>
     <div class="br-field"><label class="br-label" for="bw-zinc-hl">Brew volume (hl)</label><input class="br-input" id="bw-zinc-hl" inputmode="decimal" value="${escapeHtml(String(state.hl))}"></div>
-    <div class="br-field"><label class="br-label" for="bw-zinc-brews">Brews on the first day</label><input class="br-input" id="bw-zinc-brews" inputmode="numeric" value=""></div>
+    <div class="br-field"><label class="br-label" for="bw-zinc-brews">Brews on the first day</label><input class="br-input" id="bw-zinc-brews" inputmode="numeric" value="${escapeHtml(String(state.brews))}"></div>
     <div class="fl-calc-out">${outHtml(null)}</div>
     <div class="br-dialog-buttons">
       <button type="button" class="br-ghost" id="bw-zinc-close">Close</button>
@@ -587,9 +587,15 @@ function openZincCalculator({ brewVolumeHl, onApply }) {
     const r = dose();
     if (!r) return;
     close();
-    onApply(r);
+    onApply(r, parseNumberInput(state.brews));
   });
   document.addEventListener('keydown', onKey);
   document.body.appendChild(overlay);
+  // prefilled (brews on the first day are stored on the batch): show the result straight away
+  if (dose()) {
+    overlay.querySelector('.fl-calc-out').innerHTML = outHtml(dose());
+    const btn = overlay.querySelector('#bw-zinc-apply');
+    if (btn) btn.disabled = false;
+  }
   overlay.querySelector('#bw-zinc-brews').focus();
 }
