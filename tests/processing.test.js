@@ -91,6 +91,15 @@ assert.strictEqual(p.hbtFilledOn({ id: 7 }, rd, sess), null);
   ['Processing · 26311 · Mooie Nel', '>Specifications<', '>Lagering<', '>Processing session 1<', '>Comments &amp; tasting<', '>Bright beer tanks (HBT)<', '>Total measured volumes<']
     .forEach((x) => assert.ok(sum.html.includes(x), x));
   assert.ok(sum.html.includes('Bypass &lt;closed&gt;') && !sum.html.includes('<closed>'));
+  // Outlook keeps tables only: no styled divs in the html
+  assert.ok(!/<div/.test(sum.html) && sum.html.startsWith('<table'));
+  // .eml: opens in Outlook as a new message with the layout
+  const eml = p.emlMessage({ to: ['a@jopen.nl', 'b@jopen.nl'], subject: sum.subject, html: sum.html, text: sum.text });
+  assert.ok(eml.startsWith('X-Unsent: 1\r\nTo: a@jopen.nl, b@jopen.nl\r\n'));
+  assert.ok(eml.includes(`Subject: =?UTF-8?B?${Buffer.from('Processing 26311 Mooie Nel').toString('base64')}?=`));
+  const b64 = /Content-Type: text\/html; charset="utf-8"\r\nContent-Transfer-Encoding: base64\r\n\r\n([\s\S]*?)\r\n--/.exec(eml)[1];
+  const htmlPart = Buffer.from(b64.replace(/\r\n/g, ''), 'base64').toString('utf8');
+  assert.ok(htmlPart.includes('Processing · 26311 · Mooie Nel') && htmlPart.includes('±0.2'));
   const empty = p.processingSummary({ batchNumber: '1', beerName: '', sessions: [], hbts: [], comments: [] });
   assert.strictEqual(empty.subject, 'Processing 1');
   assert.ok(empty.text.includes('TASTING: —') && empty.html.includes('No HBT readings yet.'));

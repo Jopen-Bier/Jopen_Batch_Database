@@ -297,9 +297,10 @@
       const sum = processingSummary(summaryData());
       const { data, error } = await supabaseClient.rpc('report_recipients', { p_report: 'processing' });
       const recipients = error ? [] : (data || []);
-      // a mailto link is limited in length; the full report is always on the clipboard button
-      const body = sum.text.length > 1800 ? sum.text.slice(0, 1800) + '\n…\n(Shortened: paste the full report with "Copy report".)' : sum.text;
-      const href = `mailto:${recipients.map((r) => encodeURIComponent(r.email)).join(',')}?subject=${encodeURIComponent(sum.subject)}&body=${encodeURIComponent(body)}`;
+      // a new Outlook message with the layout (.eml, X-Unsent): a mailto link can only carry plain text
+      const eml = emlMessage({ to: recipients.map((r) => r.email), subject: sum.subject, html: sum.html, text: sum.text });
+      const href = URL.createObjectURL(new Blob([eml], { type: 'message/rfc822' }));
+      const fileName = `${sum.subject.replace(/[^\w .-]+/g, '').trim()}.eml`;
       const overlay = document.createElement('div');
       overlay.className = 'br-dialog-overlay';
       overlay.id = 'pr-email-dialog';
@@ -308,15 +309,15 @@
         <div class="br-dialog-text">${error ? `Could not load the recipients: ${escapeHtml(error.message)}`
           : recipients.length ? `To: ${recipients.map((r) => escapeHtml(r.name)).join(', ')}`
             : 'No recipients yet: tick "Processing report" for them on the Users page.'}</div>
-        <div class="br-dialog-text">1. "Copy report" copies the sheet below. 2. "Open email" opens a new message in Outlook with recipients and subject. 3. Select the text in the message and paste (Ctrl+V) the sheet over it.</div>
+        <div class="br-dialog-text">"Open in Outlook" downloads the message: open the downloaded file and Outlook shows a new e-mail with this report, the recipients and the subject, ready to send. "Copy report" is the alternative: paste (Ctrl+V) into a new message.</div>
         <div style="max-height:360px; overflow:auto; border:1px solid var(--br-line-soft); border-radius:8px; padding:8px; background:#fff;">${sum.html}</div>
         <span class="br-note" id="pr-email-note"></span>
         <div class="br-dialog-buttons">
           <button type="button" class="br-ghost" id="pr-email-close">Close</button>
           <button type="button" class="br-ghost" id="pr-email-copy">Copy report</button>
-          <a class="br-primary" id="pr-email-open" href="${href}" style="text-decoration:none;">Open email</a>
+          <a class="br-primary" id="pr-email-open" href="${href}" download="${escapeHtml(fileName)}" style="text-decoration:none;">Open in Outlook</a>
         </div></div>`;
-      const close = () => { overlay.remove(); document.removeEventListener('keydown', onKey); };
+      const close = () => { overlay.remove(); URL.revokeObjectURL(href); document.removeEventListener('keydown', onKey); };
       const onKey = (e) => { if (e.key === 'Escape') close(); };
       overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
       overlay.querySelector('#pr-email-close').addEventListener('click', close);
