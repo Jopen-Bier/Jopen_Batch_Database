@@ -47,7 +47,7 @@ changed in the live data:
 - #2: one layout for every package (beer name, batch code L<batch>/<HBT tank
   number>, Best Before + date); keg one label per A4, bottle / can two. Best
   before per package type: filling date + the recipe's THT months for that
-  package, or +1/+2/+3 years / a date in the popup.
+  package, or +1 / +1,5 / +2 / +20 years or a date in the popup.
 
 ---
 

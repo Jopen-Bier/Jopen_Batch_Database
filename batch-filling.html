@@ -106,6 +106,9 @@
     }
 
     // ------------------------------------------------------------ pallet labels (wishlist #2)
+    // Standard best before periods in the pallet label popup (Jaap, 29-10)
+    const THT_YEAR_OPTIONS = [1, 1.5, 2, 20];
+
     function openPalletLabelDialog() {
       document.getElementById('fi-pallet-dialog')?.remove();
       const b = page.ctx.batch;
@@ -125,7 +128,7 @@
       // best before differs per package type (Recipe › Packaging, months)
       const months = () => page.packaging[{ keg: 'best_before_keg_months', bottle: 'best_before_bottle_months', can: 'best_before_can_months' }[state.format]];
       // THT = filling date + the recipe's THT months (Recipe › Packaging) when filled in,
-      // otherwise chosen here (+1/+2/+3 years or a date)
+      // otherwise chosen here (THT_YEAR_OPTIONS or a date)
       const thtFromRecipe = () => thtDate(state.date, months());
       const setFormat = (f) => {
         state.format = f;
@@ -153,8 +156,8 @@
             <div class="br-field" style="flex:1;"><label class="br-label" for="fi-pl-tht">Best before</label><input class="br-input" id="fi-pl-tht" type="date" value="${escapeHtml(state.tht)}"></div>
           </div>
           <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
-            <span class="br-note">Filling date +</span>
-            ${[1, 2, 3].map((y) => `<button type="button" class="br-ghost" data-pl-years="${y}">${y} ${y === 1 ? 'year' : 'years'}</button>`).join('')}
+            <span class="br-note">Filling date</span>
+            ${THT_YEAR_OPTIONS.map((y) => `<button type="button" class="br-ghost" data-pl-years="${y}">+${String(y).replace('.', ',')} ${y === 1 ? 'year' : 'years'}</button>`).join('')}
             <span class="br-note">${months() ? `· recipe (${state.format}): ${fmt(months())} months` : `· no ${state.format} THT in the recipe yet (Recipe › Packaging)`}</span>
           </div>
           ${state.tht ? '' : '<div class="br-note" style="color:var(--br-alert);">No best before date: the labels print without it.</div>'}
