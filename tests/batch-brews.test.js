@@ -14,6 +14,13 @@ assert.strictEqual(order.indexOf('wort_cooling_temp_c'), order.indexOf('aeration
 assert.strictEqual(order.indexOf('water_addition_hl'), order.indexOf('wort_cooling_temp_c') + 1);
 assert.strictEqual(b.BREW_LOG_ROWS.find((r) => r.key === 'wort_cooling_temp_c').recipe, 'pitching_temp');
 assert.strictEqual(b.BREW_LOG_ROWS.find((r) => r.key === 'boil_time_min').recipe, 'boil_time_min');
+// Filtration time from start/end (wishlist #24)
+assert.ok(b.BREW_LOG_ROWS.find((r) => r.key === 'lauter_time_min').timeSpan);
+assert.strictEqual(b.minutesBetween('10:15', '12:05'), 110);
+assert.strictEqual(b.minutesBetween('23:40', '01:10'), 90);
+assert.strictEqual(b.minutesBetween('8:00', '8:00'), 0);
+assert.strictEqual(b.minutesBetween('10:15', ''), null);
+assert.strictEqual(b.minutesBetween('25:00', '10:00'), null);
 assert.ok(!b.brewLogRows('wp').some((r) => r.key === 'ckt_cip_program'));
 assert.ok(b.brewLogRows('jk').some((r) => r.key === 'ckt_cip_program'));
 assert.ok(!b.brewLogRows('jk').some((r) => r.label === 'Filtration · mash filter'));

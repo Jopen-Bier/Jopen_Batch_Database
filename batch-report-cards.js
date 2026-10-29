@@ -511,6 +511,47 @@ function openCellarCalculator({ kind, volumeL, saveLabel = 'Save to log', onSave
  * 4 ml solution × hl per brew × brews on the first day (typed in), all added
  * in the first brew of that day. onApply(dose) gets zincSulphateDose().
  */
+/**
+ * Filtration time popup (wishlist #24): start and end time from the
+ * Brewmaxx graph → minutes, handed to onApply. Only the minutes are stored.
+ */
+function openTimeSpanCalculator({ title, onApply }) {
+  document.getElementById('bw-span-calc')?.remove();
+  const overlay = document.createElement('div');
+  overlay.className = 'br-dialog-overlay';
+  overlay.id = 'bw-span-calc';
+  overlay.innerHTML = `<div class="br-dialog" role="dialog" aria-modal="true" aria-labelledby="bw-span-title">
+    <div class="br-dialog-title" id="bw-span-title">${escapeHtml(title)}</div>
+    <div class="br-note">Start and end time from the graph; past midnight is fine.</div>
+    <div class="br-field"><label class="br-label" for="bw-span-start">Start</label><input class="br-input" id="bw-span-start" type="time"></div>
+    <div class="br-field"><label class="br-label" for="bw-span-end">End</label><input class="br-input" id="bw-span-end" type="time"></div>
+    <div class="fl-calc-out"><span class="br-note">Fill in both times.</span></div>
+    <div class="br-dialog-buttons">
+      <button type="button" class="br-ghost" id="bw-span-close">Close</button>
+      <button type="button" class="br-primary" id="bw-span-apply" disabled>Use minutes</button>
+    </div></div>`;
+  const minutes = () => minutesBetween(overlay.querySelector('#bw-span-start').value, overlay.querySelector('#bw-span-end').value);
+  const close = () => { overlay.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  overlay.addEventListener('input', () => {
+    const m = minutes();
+    overlay.querySelector('.fl-calc-out').innerHTML = m === null ? '<span class="br-note">Fill in both times.</span>'
+      : `<div><span>Duration</span><b>${m} min</b></div>`;
+    overlay.querySelector('#bw-span-apply').disabled = m === null;
+  });
+  overlay.querySelector('#bw-span-close').addEventListener('click', close);
+  overlay.querySelector('#bw-span-apply').addEventListener('click', () => {
+    const m = minutes();
+    if (m === null) return;
+    close();
+    onApply(m);
+  });
+  document.addEventListener('keydown', onKey);
+  document.body.appendChild(overlay);
+  overlay.querySelector('#bw-span-start').focus();
+}
+
 function openZincCalculator({ brewVolumeHl, onApply }) {
   document.getElementById('bw-zinc-calc')?.remove();
   const state = { hl: brewVolumeHl ?? '', brews: '' };

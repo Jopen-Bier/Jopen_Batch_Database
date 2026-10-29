@@ -32,7 +32,7 @@ const BREW_LOG_ROWS = [
   { key: 'first_wort_volume_hl', label: 'First runnings', unit: 'hl', kind: 'num', only: 'jk', recipe: 'first_wort' },
   { key: 'sparge_water_hl', label: 'Sparge water', unit: 'hl', kind: 'num', only: 'jk', recipe: 'sparge_water' },
   { key: 'sparge_runnings_hl', label: 'Sparge runnings', unit: 'hl', kind: 'num', only: 'jk', recipe: 'sparge_runoff' },
-  { key: 'lauter_time_min', label: 'Filtration time', unit: 'min', kind: 'num' },
+  { key: 'lauter_time_min', label: 'Filtration time', unit: 'min', kind: 'num', timeSpan: true },
   { kind: 'section', label: 'Boiling' },
   { key: 'boil_start_ph', label: 'pH start boil', kind: 'num', recipe: 'ph_boil_start' },
   { key: 'boil_start_extract', label: 'Extract start boil', unit: '°P', kind: 'num', recipe: 'expected_extract_boil_start' },
@@ -102,6 +102,17 @@ function extractToGlt(whirlpoolExtract, brewVolumeHl, waterAdditionHl) {
 function pauseMinutes(text) {
   const m = /^\s*(\d{1,2}):(\d{2})\s*$/.exec(String(text || ''));
   return m ? Number(m[1]) * 60 + Number(m[2]) : 0;
+}
+
+/**
+ * Minutes from start to end ('hh:mm', from the Brewmaxx graph); an end
+ * before the start runs past midnight. null when a time is missing/malformed.
+ */
+function minutesBetween(start, end) {
+  const t = (x) => { const m = /^\s*(\d{1,2}):(\d{2})\s*$/.exec(String(x || '')); return m && m[1] < 24 && m[2] < 60 ? Number(m[1]) * 60 + Number(m[2]) : null; };
+  const a = t(start), b = t(end);
+  if (a === null || b === null) return null;
+  return (b - a + 1440) % 1440;
 }
 
 /** Total brewing time in hours, minus the pause (JK). null when not complete. */
@@ -183,7 +194,7 @@ function nextBrewNumber(brews) {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     BREW_LOG_ROWS, VOLUME_TOL_HL, brewLogRows,
-    evaporationPct, volumeToGlt, extractToGlt, pauseMinutes, totalBrewingHours,
+    evaporationPct, volumeToGlt, extractToGlt, pauseMinutes, minutesBetween, totalBrewingHours,
     brewCalculations, toleranceValue, withinSpec, gltTotalCheck, nextBrewNumber,
   };
 }

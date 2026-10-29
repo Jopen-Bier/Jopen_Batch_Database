@@ -359,7 +359,12 @@
       if (row.kind === 'user') return `<td><select class="br-in" ${attrs}>${userOptions(value)}</select></td>`;
       if (row.kind === 'datetime') return `<td><input class="br-in l" type="datetime-local" ${attrs} value="${escapeHtml(toDateTimeLocal(value))}"></td>`;
       if (row.kind === 'text') return `<td><input class="br-in l" ${attrs} value="${escapeHtml(value || '')}"></td>`;
-      return `<td><input class="br-in" inputmode="decimal" ${attrs} value="${escapeHtml(value === null || value === undefined ? '' : String(value))}"></td>`;
+      const input = `<input class="br-in" inputmode="decimal" ${attrs} value="${escapeHtml(value === null || value === undefined ? '' : String(value))}">`;
+      // start/end time popup → minutes (wishlist #24)
+      if (row.timeSpan && page.canEdit) {
+        return `<td><div class="bw-span">${input}<button type="button" class="br-ghost bw-span-btn" data-span-brew="${brew.id}" data-span-field="${row.key}" title="From start and end time" aria-label="${escapeHtml(row.label)} from start and end time · brew ${brew.brew_number}">⏱</button></div></td>`;
+      }
+      return `<td>${input}</td>`;
     }
 
     function recipeValue(key) {
@@ -490,6 +495,12 @@
         const yn = e.target.closest('button[data-yesno]');
         if (yn) return saveBatch({ [yn.dataset.yesno]: page.ctx.batch[yn.dataset.yesno] === (yn.dataset.value === 'true') ? null : yn.dataset.value === 'true' });
         if (e.target.closest('#bw-add-brew')) return addBrew();
+        const span = e.target.closest('button[data-span-brew]');
+        if (span) {
+          const brew = page.brews.find((x) => x.id === Number(span.dataset.spanBrew));
+          const row = BREW_LOG_ROWS.find((r) => r.key === span.dataset.spanField);
+          return openTimeSpanCalculator({ title: `${row.label} · brew ${brew.brew_number}`, onApply: (min) => saveBrew(brew, { [row.key]: min }) });
+        }
         const zincCalc = e.target.closest('button[data-zinc-calc]');
         if (zincCalc) {
           const row = page.ingredients.find((x) => x.id === Number(zincCalc.dataset.zincCalc));
