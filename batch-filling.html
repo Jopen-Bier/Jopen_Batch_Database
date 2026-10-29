@@ -150,7 +150,7 @@
           </div>
           <div style="display:flex; gap:10px;">
             <div class="br-field" style="flex:1;"><label class="br-label" for="fi-pl-date">Filling date</label><input class="br-input" id="fi-pl-date" type="date" value="${escapeHtml(state.date)}"></div>
-            <div class="br-field" style="flex:1;"><label class="br-label" for="fi-pl-tht">Best before</label><input class="br-input" id="fi-pl-tht" type="date" value="${escapeHtml(state.tht)}"></div>
+            <div class="br-field" style="flex:1;"><label class="br-label" for="fi-pl-tht">Best before${state.format === 'keg' ? ' <span class="br-note">(prints month + year)</span>' : ''}</label><input class="br-input" id="fi-pl-tht" type="date" value="${escapeHtml(state.tht)}"></div>
           </div>
           <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
             <span class="br-note">Filling date +</span>
