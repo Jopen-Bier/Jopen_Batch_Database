@@ -62,7 +62,7 @@
     const page = {
       user: null, canEdit: false, canDelete: false, ctx: null, save: null,
       sessions: [], comments: [], hbts: [], readings: [], transfers: [], incoming: [], brews: [], tanks: [],
-      users: [], initialsOf: () => '', ferm: {}, packaging: {}, processSteps: {}, ingredients: [], names: {}, timings: [],
+      users: [], initialsOf: () => '', ferm: {}, packaging: {}, specs: {}, processSteps: {}, ingredients: [], names: {}, timings: [],
       activeSessionId: null, commentDraft: false,
     };
     const fmt = (v, digits) => (v === null || v === undefined || v === '' ? '—'
@@ -90,7 +90,7 @@
       const recipeId = page.ctx.batch.recipe_id;
       const one = (table) => supabaseClient.from(table).select('*').eq('recipe_id', recipeId).maybeSingle();
       const byBatch = (table) => supabaseClient.from(table).select('*').eq('batch_id', batchId);
-      const [sessions, comments, hbts, readings, transfers, brews, tanks, users, ferm, packaging, processSteps, ingredients, timings, fills, incoming, dosingChecks] = await Promise.all([
+      const [sessions, comments, hbts, readings, transfers, brews, tanks, users, ferm, packaging, processSteps, ingredients, timings, fills, incoming, dosingChecks, specs] = await Promise.all([
         byBatch('processing_sessions').order('session_number'),
         byBatch('processing_comments').order('comment_time', { nullsFirst: false }).order('id'),
         byBatch('batch_hbts').order('sort_order').order('id'),
@@ -105,6 +105,7 @@
         supabaseClient.from('filling_sessions').select('id, batch_hbt_id, is_hbt_finished').eq('batch_id', batchId),
         supabaseClient.from('batch_transfers').select(INCOMING_SELECT).eq('to_batch_id', batchId).order('transferred_at').order('id'),
         supabaseClient.from('batch_dosing_checks').select('*').eq('batch_id', batchId).not('batch_hbt_id', 'is', null),
+        one('recipe_specs'),   // CO2 specs bottle / can / keg (Recipe › Specifications)
       ]);
       page.fills = fills.error ? [] : fills.data;
       for (const res of [sessions, comments, hbts, readings, transfers, brews, tanks, ingredients, dosingChecks]) if (res.error) throw res.error;
@@ -112,7 +113,7 @@
       Object.assign(page, {
         sessions: sessions.data, comments: comments.data, hbts: hbts.data, readings: readings.data, transfers: transfers.data,
         brews: brews.data, tanks: tanks.data, users: users.users.filter((u) => u.is_active), initialsOf: users.initialsOf,
-        ferm: ferm.data || {}, packaging: packaging.data || {}, processSteps: processSteps.data || {},
+        ferm: ferm.data || {}, packaging: packaging.data || {}, specs: specs.data || {}, processSteps: processSteps.data || {},
         ingredients: ingredients.data.filter((r) => !r.is_removed), timings: timings.data || [],
       });
       if (incoming.error) throw incoming.error;
@@ -252,23 +253,22 @@
     // Opens a prefilled message in the default mail program (Outlook); the
     // recipients are the users with "Processing report" ticked on the Users page.
     function summaryData() {
-      const b = page.ctx.batch, f = page.ferm, pk = page.packaging;
+      const b = page.ctx.batch, f = page.ferm;
+      const co2 = (target) => co2Spec(page.specs, target) || {};
       const date = (d) => (d ? `${String(d).slice(8, 10)}-${String(d).slice(5, 7)}-${String(d).slice(0, 4)}` : null);
       const time = (t) => (t ? String(t).slice(0, 5) : null);
       const n = (x, digits) => (x === null || x === undefined || x === '' ? null : Number(Number(x).toFixed(digits ?? 2)));
       const formatName = (code) => (PACKAGE_FORMATS.find((x) => x.code === code) || {}).label || code || null;
       const lageringAt = page.ctx.stageRow && page.ctx.stageRow.lagering_started_at;
       const m = maturation(lageringAt, f.lagering_time);
-      const calcs = brewCalculations(page.brews);
-      const glt = calcs.length ? calcs[calcs.length - 1].glt : null;
       const ends = hbtsInOrder().map((h) => hbtEnd(readingsOf(h)));
       const total = ends.reduce((sum, e) => sum + (Number(e && e.level_hl) || 0), 0);
       const loss = cellarLoss({ gltVolumeHl: gltVolumeHl(), transfers: page.transfers, hbtTankIds: page.hbts.map((h) => h.tank_id), hbtEndTotalHl: total, incomingHl: page.ctx.stageRow && page.ctx.stageRow.incoming_volume_hl });
       return {
         batchNumber: b.batch_number, beerName: b.name || page.ctx.recipe.name || '', risk: f.beer_risk ? valueLabel(BEER_RISK_LABELS, f.beer_risk) : null,
         specs: { turbidity: f.turbidity_after_separation, pu: f.pasteurization, puTol: toleranceValue(f.pasteurization_tol), o2Max: O2_HBT_MAX_PPB,
-          co2Bottle: pk.co2_bottle_can_spec, co2BottleTol: pk.co2_bottle_can_tolerance, co2Keg: pk.co2_keg_spec, co2KegTol: pk.co2_keg_tolerance },
-        lagering: { ogGlt: glt && glt.volumeHl ? n(glt.extract, 2) : null, startDate: date(lageringAt), days: m.days === null ? null : Math.floor(m.days) },
+          co2Bottle: co2('bottle').spec, co2BottleTol: co2('bottle').tol, co2Can: co2('can').spec, co2CanTol: co2('can').tol, co2Keg: co2('keg').spec, co2KegTol: co2('keg').tol },
+        lagering: { startDate: date(lageringAt), days: m.days === null ? null : Math.floor(m.days) },
         sessions: page.sessions.slice().sort((x, y) => x.session_number - y.session_number).map((s) => ({
           number: s.session_number, date: date(s.processing_date), start: time(s.start_time), end: time(s.end_time),
           duration: durationText(durationMinutes(s.start_time, s.end_time)),
@@ -364,7 +364,8 @@
     }
 
     function renderSpecs() {
-      const f = page.ferm, p = page.packaging;
+      const f = page.ferm, sp = page.specs;
+      const co2Row = (label, target) => { const c = co2Spec(sp, target); return kv(label, c && c.spec, 'g/l', c ? '±' + fmt(c.tol, 2) : ''); };
       document.getElementById('pr-specs').innerHTML = `
         <div class="br-label">Specifications</div>
         <div class="br-specs">
@@ -376,8 +377,7 @@
           </div>
           <div>
             <div class="br-kv hd"><span class="k">CO2 in HBT</span><span class="v">Spec</span><span class="u">Unit</span><span class="t">Tol.</span></div>
-            ${kv('Bottle / Can', p.co2_bottle_can_spec, 'g/l', p.co2_bottle_can_spec != null ? '±' + fmt(p.co2_bottle_can_tolerance || 0, 1) : '')}
-            ${kv('Keg', p.co2_keg_spec, 'g/l', p.co2_keg_spec != null ? '±' + fmt(p.co2_keg_tolerance || 0, 1) : '')}
+            ${co2Row('Bottle', 'bottle')}${co2Row('Can', 'can')}${co2Row('Keg', 'keg')}
           </div>
         </div>`;
     }
@@ -513,7 +513,7 @@
     }
 
     function readingRow(r, isEnd) {
-      const spec = co2Spec(page.packaging, r.co2_target);
+      const spec = co2Spec(page.specs, r.co2_target);
       const status = co2Status(r.co2_gl, spec);
       const sessionOptions = '<option value="">—</option>' + page.sessions.map((s) =>
         `<option value="${s.id}"${s.id === r.processing_session_id ? ' selected' : ''}>${s.session_number} · ${sessionDay(s.processing_date)}</option>`).join('');

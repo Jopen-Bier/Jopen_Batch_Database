@@ -44,14 +44,16 @@ function hbtEnd(readings) {
   return sorted[sorted.length - 1] || null;
 }
 
-/** CO2 spec of a target from recipe_packaging: { spec, tol } or null. */
-function co2Spec(packaging, target) {
-  const p = packaging || {};
-  const kegLike = target === 'keg' || target === 'tank';   // tank beer has the keg spec
-  const spec = kegLike ? procNumber(p.co2_keg_spec) : target === 'bottle' || target === 'can' ? procNumber(p.co2_bottle_can_spec) : null;
+/**
+ * CO2 spec of a target from recipe_specs (Recipe › Specifications): bottle,
+ * can or keg, with its tolerance ('-' or text = 0). { spec, tol } or null.
+ */
+function co2Spec(specs, target) {
+  const p = specs || {};
+  const field = target === 'keg' || target === 'tank' ? 'co2_keg' : target === 'bottle' ? 'co2_bottle' : target === 'can' ? 'co2_can' : null;   // tank beer has the keg spec
+  const spec = field ? procNumber(p[field]) : null;
   if (spec === null) return null;
-  const tol = procNumber(kegLike ? p.co2_keg_tolerance : p.co2_bottle_can_tolerance) || 0;
-  return { spec, tol };
+  return { spec, tol: procNumber(p[field + '_tol']) || 0 };
 }
 
 /** 'OK' | 'High' | 'Low' | null (no value or no spec). */
@@ -113,8 +115,8 @@ function hbtFilledOn(hbt, readings, sessions) {
  * sheet "Verwerking" that used to be copied into the mail, in the app's look. Input is already
  * resolved to display values (null = empty):
  * { batchNumber, beerName, risk,
- *   specs: { turbidity, pu, puTol, o2Max, co2Bottle, co2BottleTol, co2Keg, co2KegTol },
- *   lagering: { ogGlt, startDate, days },
+ *   specs: { turbidity, pu, puTol, o2Max, co2Bottle, co2BottleTol, co2Can, co2CanTol, co2Keg, co2KegTol },
+ *   lagering: { startDate, days },
  *   sessions: [{ number, date, start, end, duration, operatorStart, operatorEnd, tank,
  *     outlet, discharges, interval, centrifugeIn: { time, o2, co2 }, centrifugeOut,
  *     startFlow, startTurbidity }],
@@ -139,8 +141,8 @@ function processingSummary(d) {
   const t = [subject, `Beer: ${v(d.beerName)} · Batch: ${v(d.batchNumber)} · Risk: ${v(d.risk)}`, '',
     'SPECIFICATIONS',
     `  Turbidity after centrifuge ≤ ${v(sp.turbidity, 'EBC')} · Pasteurisation ${v(sp.pu, 'PU')} ${tol(sp.puTol)} · O2 in HBT < ${v(sp.o2Max, 'ppb')}`,
-    `  CO2 bottle/can ${v(sp.co2Bottle, 'g/l')} ${tol(sp.co2BottleTol)} · CO2 keg ${v(sp.co2Keg, 'g/l')} ${tol(sp.co2KegTol)}`, '',
-    'LAGERING', `  O.G. GLT ${v(lg.ogGlt, '°P')} · Start ${v(lg.startDate)} · ${v(lg.days, 'days')}`];
+    `  CO2 bottle ${v(sp.co2Bottle, 'g/l')} ${tol(sp.co2BottleTol)} · CO2 can ${v(sp.co2Can, 'g/l')} ${tol(sp.co2CanTol)} · CO2 keg ${v(sp.co2Keg, 'g/l')} ${tol(sp.co2KegTol)}`, '',
+    'LAGERING', `  Start ${v(lg.startDate)} · ${v(lg.days, 'days')}`];
   sessions.forEach((s) => {
     t.push('', `PROCESSING · SESSION ${s.number}`,
       `  ${v(s.date)} · ${v(s.start)}–${v(s.end)} (${v(s.duration)}) · operator start ${v(s.operatorStart)}, end ${v(s.operatorEnd)}`,
@@ -171,6 +173,7 @@ function processingSummary(d) {
 ${rows.join('\n')}</table>`;
   const kv = (pairs) => `<table style="border-collapse:collapse;${F}">${pairs.map(([k, x]) =>
     `<tr><td style="padding:3px 16px 3px 0;color:${C.muted};">${esc(k)}</td><td style="padding:3px 0;font-weight:bold;">${esc(v(x))}</td></tr>`).join('')}</table>`;
+  const co2 = (spec, t) => (spec === null || spec === undefined || spec === '' ? null : `${spec} g/l ${tol(t)}`.trim());
   const goColor = tasting.result === 'go' ? C.hop : tasting.result === 'no_go' ? C.alert : C.muted;
   const html = [`<div style="${F}background:${C.paper};padding:14px;max-width:760px;">`,
     `<div style="font-size:20px;font-weight:bold;margin:0 0 2px;">Processing · ${esc(d.batchNumber)} · ${esc(d.beerName || '')}</div>`,
@@ -178,9 +181,9 @@ ${rows.join('\n')}</table>`;
     card('Specifications', `<table style="border-collapse:collapse;${F}width:100%;"><tr><td style="vertical-align:top;width:50%;">
       ${kv([['Turbidity after centrifuge', sp.turbidity == null ? null : `≤ ${sp.turbidity} EBC`], ['Pasteurisation', sp.pu == null ? null : `${sp.pu} PU ${tol(sp.puTol)}`.trim()], ['O2 in HBT', `< ${sp.o2Max} ppb`]])}
       </td><td style="vertical-align:top;">
-      ${kv([['CO2 bottle / can', sp.co2Bottle == null ? null : `${sp.co2Bottle} g/l ${tol(sp.co2BottleTol)}`.trim()], ['CO2 keg', sp.co2Keg == null ? null : `${sp.co2Keg} g/l ${tol(sp.co2KegTol)}`.trim()]])}
+      ${kv([['CO2 bottle', co2(sp.co2Bottle, sp.co2BottleTol)], ['CO2 can', co2(sp.co2Can, sp.co2CanTol)], ['CO2 keg', co2(sp.co2Keg, sp.co2KegTol)]])}
       </td></tr></table>`),
-    card('Lagering', kv([['O.G. GLT', lg.ogGlt == null ? null : `${lg.ogGlt} °P`], ['Start date lagering', lg.startDate], ['Days on lagering', lg.days]])),
+    card('Lagering', kv([['Start date lagering', lg.startDate], ['Days on lagering', lg.days]])),
     ...sessions.map((s) => card(`Processing session ${s.number}`, `<table style="border-collapse:collapse;${F}width:100%;margin:0 0 8px;"><tr><td style="vertical-align:top;width:50%;">
       ${kv([['Date', s.date], ['Start – end', `${v(s.start)} – ${v(s.end)}`], ['Duration', s.duration], ['Operators', `${v(s.operatorStart)} / ${v(s.operatorEnd)}`]])}
       </td><td style="vertical-align:top;">

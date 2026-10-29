@@ -1,6 +1,7 @@
 // ============================================================================
 // filling.js — calculations of the Filling tab: spec limits per measurement
-// (recipe_packaging, with the house limits as fallback), out-of-spec cells,
+// (TPO / HSO / DO / keg O2 from recipe_packaging with the house limits as
+// fallback, CO2 per package from recipe_specs), out-of-spec cells,
 // quality / process capability (Cpk, estimated share in spec), the HBT
 // filling status and the day number. Rules: docs/batch-report/business-rules.md
 // ("Filling"); formula as mockup Filling.dc.html. Test: tests/filling.test.js.
@@ -12,8 +13,10 @@
 const FILLING_DEFAULT_MAX = { tpo_ppb: 100, hso_ppb: 50, do_ppb: 50, keg_o2_ppb: 50 };
 
 // Quality rows: measurement column, label, decimals of the average.
+// CO2 is split by package: bottle and can have their own spec (recipe_specs).
 const QUALITY_PARAMETERS = [
-  { field: 'co2_gl', label: 'CO2 bottle/can', decimals: 2 },
+  { field: 'co2_gl', format: 'bottle', label: 'CO2 bottle', decimals: 2 },
+  { field: 'co2_gl', format: 'can', label: 'CO2 can', decimals: 2 },
   { field: 'hso_ppb', label: 'HSO bottle/can', decimals: 0 },
   { field: 'do_ppb', label: 'DO bottle/can', decimals: 0 },
   { field: 'tpo_ppb', label: 'TPO bottle/can', decimals: 0 },
@@ -29,10 +32,13 @@ function fillNumber(value) {
 
 /**
  * Spec limits per measurement column: { lo, hi } (lo null = maximum only),
- * or null when there is no spec. CO2 = spec ± tolerance.
+ * or null when there is no spec. CO2 = spec ± tolerance from recipe_specs
+ * (Recipe › Specifications), for the package of the session: format 'can'
+ * uses the can spec, otherwise the bottle spec; kegs the keg spec.
  */
-function fillingLimits(packaging) {
+function fillingLimits(packaging, specs, format) {
   const p = packaging || {};
+  const sp = specs || {};
   const max = (v, fallback) => ({ lo: null, hi: fillNumber(v) ?? fallback });
   const band = (spec, tol) => {
     const s = fillNumber(spec);
@@ -44,8 +50,8 @@ function fillingLimits(packaging) {
     tpo_ppb: max(p.tpo_spec, FILLING_DEFAULT_MAX.tpo_ppb),
     hso_ppb: max(p.hso_spec, FILLING_DEFAULT_MAX.hso_ppb),
     do_ppb: max(p.do_spec, FILLING_DEFAULT_MAX.do_ppb),
-    co2_gl: band(p.co2_bottle_can_spec, p.co2_bottle_can_tolerance),
-    keg_co2_gl: band(p.co2_keg_spec, p.co2_keg_tolerance),
+    co2_gl: format === 'can' ? band(sp.co2_can, sp.co2_can_tol) : band(sp.co2_bottle, sp.co2_bottle_tol),
+    keg_co2_gl: band(sp.co2_keg, sp.co2_keg_tol),
     keg_o2_ppb: max(p.o2_keg_spec, FILLING_DEFAULT_MAX.keg_o2_ppb),
   };
 }
@@ -90,10 +96,16 @@ function cpkClass(cpk) {
   return cpk >= 1.33 ? 'ok' : cpk >= 1 ? 'warn' : 'bad';
 }
 
-/** Quality rows over all filling measurements of the batch. */
-function qualityRows(measurements, packaging) {
-  const limits = fillingLimits(packaging);
-  return QUALITY_PARAMETERS.map((q) => ({ ...q, limit: limits[q.field], ...capability(measurements.map((m) => m[q.field]), limits[q.field]) }));
+/**
+ * Quality rows over all filling measurements of the batch; formatOf(m) gives
+ * the package of a measurement's session (the CO2 rows per package).
+ */
+function qualityRows(measurements, packaging, specs, formatOf = () => null) {
+  return QUALITY_PARAMETERS.map((q) => {
+    const limit = fillingLimits(packaging, specs, q.format)[q.field];
+    const own = q.format ? measurements.filter((m) => (formatOf(m) === 'can' ? 'can' : 'bottle') === q.format) : measurements;
+    return { ...q, limit, ...capability(own.map((m) => m[q.field]), limit) };
+  });
 }
 
 /**
