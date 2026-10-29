@@ -4,7 +4,7 @@
 // "1. Palletbrief - fles en blik" (bottle / can).
 //
 // One layout for every package (Jaap, 29-10): beer name, batch code, Best
-// Before + date (kegs month and year only). One label = one A4 sheet; a keg sheet has the label once, a
+// Before + date. One label = one A4 sheet; a keg sheet has the label once, a
 // bottle / can sheet twice side by side, folded round the pallet corner. Labels per pallet × pallets sheets, numbered 1..pallets.
 // Batch code on the label: L<batch number>/<HBT tank number>.
 //
@@ -43,15 +43,6 @@ function thtDate(date, months) {
   return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
-const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-
-/** Best before as printed: kegs month and year only ('OCT 2028'), bottle / can the full date. */
-function bestBeforeLabel(date, format) {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(date || ''));
-  if (!m) return '';
-  return format === 'keg' ? `${MONTHS[Number(m[2]) - 1]} ${m[1]}` : `${m[3]}-${m[2]}-${m[1]}`;
-}
-
 /** 'YYYY-MM-DD' → 'DD-MM-YYYY'. */
 function labelDate(date) {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(date || ''));
@@ -78,7 +69,7 @@ function palletLabelsHtml(opts) {
       <div class="row"><div class="box"><span>Pallet no.</span><b>${n}</b></div><div class="box amount"><span>Aantal / Amount</span></div></div>
       <div class="fit beer">${e(opts.beerName)}</div>
       <div class="fit code">${e(opts.code)}</div>
-      <div class="fit bb">Best Before <b>${e(bestBeforeLabel(opts.tht, opts.format))}</b></div>
+      <div class="fit bb">Best Before <b>${e(labelDate(opts.tht))}</b></div>
     </div>`;
   const sheets = (opts.sequence || []).map((n) => `<section class="sheet ${one ? 'one' : 'two'}">
       ${one ? `<div class="half">${label(n)}</div>` : `<div class="half">${label(n)}</div><div class="half">${label(n)}</div>`}
@@ -125,5 +116,5 @@ ${sheets}
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { PALLET_LABEL_NOTE, palletLabelSequence, palletBatchCode, thtDate, bestBeforeLabel, labelDate, palletLabelsHtml };
+  module.exports = { PALLET_LABEL_NOTE, palletLabelSequence, palletBatchCode, thtDate, labelDate, palletLabelsHtml };
 }

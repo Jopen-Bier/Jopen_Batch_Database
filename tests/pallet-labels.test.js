@@ -22,16 +22,12 @@ assert.strictEqual(p.thtDate('2026-10-29', 24), '2028-10-29');
 assert.strictEqual(p.thtDate('2027-01-31', 1), '2027-02-28');
 assert.strictEqual(p.thtDate('2028-02-29', 12), '2029-02-28');
 assert.strictEqual(p.thtDate('2026-10-29', ''), '');
-// Kegs show month and year only, bottle / can the full date
-assert.strictEqual(p.bestBeforeLabel('2028-10-29', 'keg'), 'OCT 2028');
-assert.strictEqual(p.bestBeforeLabel('2028-10-29', 'can'), '29-10-2028');
-assert.strictEqual(p.bestBeforeLabel('', 'keg'), '');
 
 // Print document: same layout for every package; one label per keg sheet, two per bottle/can sheet
 const keg = p.palletLabelsHtml({ format: 'keg', beerName: 'So fresh, so clean', code: 'L26295/18', tht: '2027-04-29', sequence: [1, 1, 2] });
 assert.strictEqual((keg.match(/<section class="sheet one/g) || []).length, 3);
 assert.strictEqual((keg.match(/class="lbl"/g) || []).length, 3);
-assert.ok(keg.includes('L26295/18') && keg.includes('Best Before <b>APR 2027</b>') && keg.includes(p.PALLET_LABEL_NOTE));
+assert.ok(keg.includes('L26295/18') && keg.includes('Best Before <b>29-04-2027</b>') && keg.includes(p.PALLET_LABEL_NOTE));
 const can = p.palletLabelsHtml({ format: 'can', beerName: 'Meesterstuk <2027>', code: 'L26298/17', tht: '2027-10-29', sequence: [1, 1] });
 assert.strictEqual((can.match(/<section class="sheet two/g) || []).length, 2);
 assert.strictEqual((can.match(/class="lbl"/g) || []).length, 4);
