@@ -404,6 +404,10 @@
             <input type="text" id="veld-bierstijl" />
           </div>
           <div class="re-field">
+            <label for="veld-brewery">Brewery</label>
+            <select id="veld-brewery"><option value="">—</option></select>
+          </div>
+          <div class="re-field">
             <label for="veld-locatie">Location</label>
             <select id="veld-locatie">
               <option value="">—</option>
@@ -2028,11 +2032,26 @@ document.getElementById('re-kleurwiel-cancel-btn').addEventListener('click', () 
 document.getElementById('re-kleurwiel-done-btn').addEventListener('click', () => sluitKleurModal(true));
 document.getElementById('re-kleurwiel-slider').addEventListener('input', renderKleurwielPreview);
 
+// Active breweries, plus an inactive one a recipe still points at.
+let breweryList = [];
+function fillBreweryOptions(list) {
+  breweryList = list;
+  setBrewery(null);
+}
+function setBrewery(selectedId) {
+  const select = document.getElementById('veld-brewery');
+  const pick = selectedId ?? (breweryList.find((b) => b.name === 'Jopen') || {}).id ?? null;
+  select.innerHTML = '<option value="">—</option>' + breweryList
+    .filter((b) => b.is_active || b.id === pick)
+    .map((b) => `<option value="${b.id}"${b.id === pick ? ' selected' : ''}>${escapeHtml(b.name)}</option>`).join('');
+}
+
 function leesBasisgegevens() {
   const brouwselVal = document.getElementById('veld-brouwsel_hl').value;
   return {
     naam: document.getElementById('veld-naam').value.trim(),
     bierstijl: document.getElementById('veld-bierstijl').value.trim() || null,
+    brewery_id: document.getElementById('veld-brewery').value ? Number(document.getElementById('veld-brewery').value) : null,
     locatie: document.getElementById('veld-locatie').value.trim() || null,
     brouwsel_hl: brouwselVal === '' ? null : Number(brouwselVal),
     status: document.getElementById('veld-status').value,
@@ -2203,6 +2222,10 @@ async function initReceptInvoer() {
     .select('id, code, label, sort_order')
     .order('sort_order');
   if (!eenhedenError) alleEenhedenLijst = eenhedenData || [];
+
+  // Brewery list from Settings -> Breweries (wishlist #18); a new recipe starts at Jopen.
+  const { data: breweries } = await supabaseClient.from('breweries').select('id, name, is_active').order('sort_order').order('name');
+  fillBreweryOptions(breweries || []);
 
   renderParamGrid('re-specs-grid', SPECS_FIELDS, null);
   renderParamGrid('re-ferm-grid', FERM_FIELDS, null);
@@ -2416,6 +2439,7 @@ document.getElementById('re-kopieer-btn').addEventListener('click', async () => 
   if (blokken.has('algemeen')) {
     document.getElementById('veld-naam').value = `Copy of ${bron.naam}`;
     document.getElementById('veld-bierstijl').value = bron.bierstijl || '';
+    setBrewery(bron.brewery_id ?? null);
     document.getElementById('veld-locatie').value = bron.locatie || '';
     document.getElementById('veld-brouwsel_hl').value = bron.brouwsel_hl ?? '';
     document.getElementById('veld-status').value = 'draft';
@@ -2514,6 +2538,7 @@ async function laadBestaandRecept(id) {
 
   document.getElementById('veld-naam').value = bestaandRecept.naam || '';
   document.getElementById('veld-bierstijl').value = bestaandRecept.bierstijl || '';
+  setBrewery(bestaandRecept.brewery_id ?? null);
   document.getElementById('veld-locatie').value = bestaandRecept.locatie || '';
   document.getElementById('veld-brouwsel_hl').value = bestaandRecept.brouwsel_hl ?? '';
   document.getElementById('veld-status').value = bestaandRecept.status || 'draft';

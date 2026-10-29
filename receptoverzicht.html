@@ -467,7 +467,7 @@ async function loadRecipes() {
   const [{ data, error }, { data: batchData, error: batchErr }, { data: revisieData, error: revisieErr }, { data: psData, error: psErr }] = await Promise.all([
     supabaseClient
       .from('recipes')
-      .select('id, naam:name, bierstijl:beer_style, locatie:location, status, versie_major:version_major, versie_minor:version_minor, recipe_group_id')
+      .select('id, naam:name, bierstijl:beer_style, locatie:location, status, versie_major:version_major, versie_minor:version_minor, recipe_group_id, brewery:breweries!recipes_brewery_id_fkey(name)')
       .order('name'),
     supabaseClient.from('batches').select('recipe_id, aangemaakt_op:created_at'),
     fetchAllRows(supabaseClient.from('recipe_revisions').select('recipe_id, datum:date, door:changed_by_name')),
@@ -608,6 +608,7 @@ function renderList(recipes) {
   const rows = recipes.map(r => `
     <tr data-id="${r.id}">
       <td class="rcp-naam">${escapeHtml(r.naam)}</td>
+      <td>${escapeHtml(r.brewery?.name || '—')}</td>
       <td>${escapeHtml(r.bierstijl || '—')}</td>
       <td>${escapeHtml(locatieLabel(r.locatie))}</td>
       <td>v${r.versie_major ?? 1}.${r.versie_minor ?? 0}</td>
@@ -621,6 +622,7 @@ function renderList(recipes) {
 
   const kolommen = [
     { veld: 'naam', label: 'Name' },
+    { veld: 'brewery', label: 'Brewery' },
     { veld: 'bierstijl', label: 'Beer style' },
     { veld: 'locatie', label: 'Location' },
     { veld: 'versie', label: 'Version' },
@@ -739,7 +741,7 @@ function pasFiltersToe() {
   const q = document.getElementById('search').value.trim().toLowerCase();
 
   let resultaat = allRecipes.filter(r => {
-    const matchtZoekterm = (r.naam || '').toLowerCase().includes(q) || (r.bierstijl || '').toLowerCase().includes(q);
+    const matchtZoekterm = (r.naam || '').toLowerCase().includes(q) || (r.bierstijl || '').toLowerCase().includes(q) || (r.brewery?.name || '').toLowerCase().includes(q);
     const matchtStatus = geselecteerdeStatussen.has(r.status);
     const matchtLocatie = !r.locatie || geselecteerdeLocaties.has(r.locatie);
     const psStatus = !(r.recipe_group_id in productSheetStatusPerGroep)
@@ -752,6 +754,7 @@ function pasFiltersToe() {
   const vergelijk = (a, b) => {
     switch (huidigSorteerVeld) {
       case 'bierstijl': return (a.bierstijl || '').localeCompare(b.bierstijl || '');
+      case 'brewery': return (a.brewery?.name || '').localeCompare(b.brewery?.name || '');
       case 'locatie': return (a.locatie || '').localeCompare(b.locatie || '');
       case 'versie': {
         const va = (a.versie_major ?? 1) * 1000 + (a.versie_minor ?? 0);
