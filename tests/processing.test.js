@@ -65,7 +65,7 @@ assert.strictEqual(p.hbtFilledOn({ id: 7 }, rd, sess), null);
 
 
 
-// E-mail summary (wishlist #30): the blocks of the Excel sheet "Verwerking"
+// E-mail summary (wishlist #30): the content of the Excel sheet "Verwerking", in the app's look
 {
   const sum = p.processingSummary({
     batchNumber: '26311', beerName: 'Mooie Nel', risk: 'Standard',
@@ -84,9 +84,9 @@ assert.strictEqual(p.hbtFilledOn({ id: 7 }, rd, sess), null);
   assert.ok(sum.text.includes('HBT18: 25 hl · 20 ppb · 5.07 g/l · Can · 30 hl/h · 8 EBC'));
   assert.ok(sum.text.includes('End value HBT18: 120 hl · O2 9 ppb · CO2 5 g/l'));
   assert.ok(sum.text.includes('Total end volume 120 hl · cellar loss 3.5 hl · GLT empty? No'));
-  ['>Processing<', '>Specifications<', '>Lagering<', '>Bright beer tanks (HBT)<', '>Total measured volumes<', 'Comments tasting', 'Go or Not go?']
+  ['Processing · 26311 · Mooie Nel', '>Specifications<', '>Lagering<', '>Processing session 1<', '>Comments &amp; tasting<', '>Bright beer tanks (HBT)<', '>Total measured volumes<']
     .forEach((x) => assert.ok(sum.html.includes(x), x));
-  assert.ok(sum.html.includes('Bypass &lt;closed&gt; (SB)') && !sum.html.includes('<closed>'));
+  assert.ok(sum.html.includes('Bypass &lt;closed&gt;') && !sum.html.includes('<closed>'));
   const empty = p.processingSummary({ batchNumber: '1', beerName: '', sessions: [], hbts: [], comments: [] });
   assert.strictEqual(empty.subject, 'Processing 1');
   assert.ok(empty.text.includes('TASTING: —') && empty.html.includes('No HBT readings yet.'));
