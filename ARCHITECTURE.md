@@ -45,6 +45,7 @@ waterzouten.js             water-salts calculation (shared module, has a test)
 brew-calculations.js       hop utilization, EBU, malt color (shared module, has a test)
 recipe-values.js           recipe value lists (codes -> labels, colours, report text; has a test)
 report-comments.js         recipe comments -> Brew Sheet comment rows of the Excel batch report (has a test)
+pallet-labels.js           printable pallet labels from the Filling page (has a test)
 batch-stages.js            batch stages + list logic of the batch-report pages (has a test)
 batch-ingredients.js       ingredient snapshot per batch: batch amounts, deviations (has a test)
 batch-brews.js             brew log rows and calculations (evaporation, GLT volume/extract; has a test)
@@ -231,8 +232,8 @@ Agreed table and column names per table: `supabase/rename-map.json`.
 |---|---|---|
 | `index.html` | — (tiles per module) | |
 | `login.html`, `accept-invite.html` | — | auth only |
-| `recept-invoer.html` | recipes | recipes, recipe_* (brewing_specs, fermentation, water, ingredients, costs, process_steps, specs, packaging, comments, revisions), ingredients, units, water_settings. Ingredient lines are saved with `save_recipe_ingredients()` (one transaction; existing lines keep their id); the cellar plan (`recipe_cellar_steps`, via `recipe-cellar-plan.js`) with `save_recipe_cellar_steps()`, which regenerates it; base beer lines (`addition_type = base_beer`, `recipe-base-beer.js`) go with the ingredient lines |
-| `receptoverzicht.html` | recipes | recipes, recipe_*, recipe_cellar_steps, cellar_action_tags, cellar_plan_parts, product_sheet_status (view), batches |
+| `recept-invoer.html` | recipes | recipes, recipe_* (brewing_specs, fermentation, water, ingredients, costs, process_steps, specs, packaging, comments, revisions), ingredients, units, water_settings, breweries. Ingredient lines are saved with `save_recipe_ingredients()` (one transaction; existing lines keep their id); the cellar plan (`recipe_cellar_steps`, via `recipe-cellar-plan.js`) with `save_recipe_cellar_steps()`, which regenerates it; base beer lines (`addition_type = base_beer`, `recipe-base-beer.js`) go with the ingredient lines |
+| `receptoverzicht.html` | recipes | recipes, recipe_*, breweries, recipe_cellar_steps, cellar_action_tags, cellar_plan_parts, product_sheet_status (view), batches |
 | `ingredienten.html` | ingredients | ingredients, ingredient_categories, ingredient_documents, ingredient_revisions, ingredient_declarations, ingredient_usage_counts (view), document_types, recipe_ingredients, units |
 | `productsheet.html`, `productsheet-invoer.html` | product_sheets | product_sheets, product_sheet_revisions, product_sheet_status (view), recipes |
 | `brouwplanning.html` | brewing_planning | brew_planning, brew_planning_splits, brew_capacity, brew_planning_history_detailed (view), recipes, users |
@@ -242,15 +243,15 @@ Agreed table and column names per table: `supabase/rename-map.json`.
 | `active-batches.html` | batches | batches, recipes, tanks, batch_stages (view) |
 | `batch-filling-report.html` | batches | batches, filling_sessions, filling_session_articles, filling_session_materials, packaging_articles/_materials/_article_materials, batch_hbts, hbt_readings, batch_transfers, batch_brews, tanks, incoming batch_transfers, `split_batch()` (Split / transfer popup), recipes, recipe_ingredients / batch_ingredients of the receiving batch, batch_documents + storage bucket `batch-documents` |
 | `batch-filling.html` | batches | batches, filling_sessions, filling_measurements, batch_hbts, hbt_readings, tanks, users, recipe_packaging/_fermentation |
-| `batch-processing.html` | batches | batches, processing_sessions, processing_comments, batch_hbts, hbt_readings, batch_transfers, batch_brews, batch_ingredients, tanks, users, cellar_plan_parts, recipe_fermentation/_packaging/_process_steps, incoming batch_transfers, `split_batch()` (Split / transfer popup), recipes, recipe_ingredients / batch_ingredients of the receiving batch, batch_dosing_checks |
+| `batch-processing.html` | batches | batches, processing_sessions, processing_comments, batch_hbts, hbt_readings, batch_transfers, batch_brews, batch_ingredients, tanks, users, cellar_plan_parts, recipe_fermentation/_packaging/_process_steps, incoming batch_transfers, `split_batch()` (Split / transfer popup), recipes, recipe_ingredients / batch_ingredients of the receiving batch, batch_dosing_checks, `report_recipients()` (Email report) |
 | `batch-fermentation.html` | batches | batches, batch_cellar_steps (`snapshot_batch_cellar_steps()`), fermentation_log_entries, fermentation_log_entry_tags, cellar_action_tags, batch_tank_moves, batch_transfers, batch_brews, batch_ingredients, tanks, users, recipe_specs/_fermentation, incoming batch_transfers, `split_batch()` (Split / transfer popup), recipes, recipe_ingredients / batch_ingredients of the receiving batch |
 | `batch-brewing.html` | batches | batches, batch_brews, batch_brew_comments, batch_ingredients, tanks, users, recipe_brewing_specs/_specs/_fermentation/_comments, batch_dosing_checks |
 | `batch-overview.html` | batches | batches, batch_ingredients, `snapshot_batch_ingredients()`, recipes + recipe_specs/_fermentation/_brewing_specs/_packaging/_water/_revisions, ingredients, stock_movements, lots |
 | `voorraad-overzicht/inboeken/uitboeken.html` | inventory | lots, stock_movements, ingredients, batches, users |
 | `analytics.html` | analytics (view for every role) | ingredients, ingredient_documents, document_types |
 | `recipe-analytics.html` | analytics | batch_volume_balance (view), recipes; Losses via `recipe-losses.js` + `filling-report.js`; Brewhouse efficiency via `brewhouse-efficiency.js` + `batch-ingredients.js` from batch_brews, batches, batch_ingredients (+ ingredients.extract_pct); writes batch_brews.efficiency_accepted_* (Mark as good, batches edit right) |
-| `settings.html` | settings | units, ingredient_categories, document_types, ingredient_declarations, water_settings (+ _history), cellar_action_tags, cellar_plan_parts (`apply_cellar_plan_order()`), recipe_ingredients (count), packaging_articles/_materials/_article_materials (+ filling_session_articles/_materials, count) |
-| `gebruikers.html` | admin only (`user_management`) | users, roles, `admin_get_last_logins()` |
+| `settings.html` | settings | units, ingredient_categories, document_types, ingredient_declarations, water_settings (+ _history), cellar_action_tags, cellar_plan_parts (`apply_cellar_plan_order()`), recipe_ingredients (count), packaging_articles/_materials/_article_materials (+ filling_session_articles/_materials, count), breweries (+ recipes, count) |
+| `gebruikers.html` | admin only (`user_management`) | users (incl. `report_subscriptions`), roles, `admin_get_last_logins()` |
 | `rollen.html` | admin only (`role_management`) | roles, role_permissions, permission_modules |
 | `status.html` | admin only | counts on batches, recipes, ingredients, users |
 

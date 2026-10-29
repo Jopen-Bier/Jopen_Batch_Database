@@ -16,21 +16,35 @@ Status: `open question` → waiting for Jaap · `ready` → can be built ·
 | 31 | Batch opens in a new tab | Batch lists | S | – | done |
 | 15 | Rename "Final batch volume" → "Final brew volume" | Recipe | S | – | done |
 | 13 | Unit in its own column (forecast + Excel) | Consumption forecast | S | – | done |
-| 23 | Zinc sulphate grams on the Overview | Batch report | S | – | open question |
-| 14 | Flow and turbidity in HBT readings | Processing | S | DB | ready |
-| 17 | Boil time field in the recipe (+ fill it for all recipes) | Recipe | S | DB + Data | open question |
-| 11 | Wort cooling temperature (recipe + brew log) | Recipe / Brewing | S | DB | open question |
-| 28 | Filling checks signed with initials | Filling | S | DB | open question |
-| 24 | Filtration time from start/end time (popup) | Brewing | S | – | open question |
-| 10 | Zinc sulphate line in every recipe, no amount | Recipe | S | Data | open question |
-| 18 | Brewery field + editable list in Settings | Recipe / Settings | M | DB | open question |
-| 22 | Yeast calculator + renamed yeast questions | Brewing / Overview / forecast | M | DB | open question |
-| 29 | "+ Add" extra addition on Brewing | Brewing / Overview | M | maybe | open question |
-| 30 | Email processing summary | Processing | M | DB | open question |
-| 2 | Printable pallet labels | Filling | L | – | needs files |
+| 23 | Zinc sulphate grams on the Overview | Batch report | S | – | done |
+| 14 | Flow and turbidity in HBT readings | Processing | S | DB | done |
+| 17 | Boil time field in the recipe (+ fill it for all recipes) | Recipe | S | DB + Data | done |
+| 11 | Wort cooling temperature (recipe + brew log) | Recipe / Brewing | S | DB | done |
+| 28 | Filling checks signed with initials | Filling | S | DB | done |
+| 24 | Filtration time from start/end time (popup) | Brewing | S | – | done |
+| 10 | Zinc sulphate line in every recipe, no amount | Recipe | S | Data | done |
+| 18 | Brewery field + editable list in Settings | Recipe / Settings | M | DB | done |
+| 22 | Yeast calculator + renamed yeast questions | Brewing / Overview / forecast | M | DB | done |
+| 29 | "+ Add" extra addition on Brewing | Brewing / Overview | M | maybe | done |
+| 30 | Email processing summary | Processing | M | DB | done |
+| 2 | Printable pallet labels | Filling | L | – | done |
 
-Suggested order: the S items first (quick wins, little risk), then 10 → 23 →
-22 (they share the calculator logic), then 18, 29, 30, and 2 last.
+All items built (29-10-2026). Decisions from Jaap's answers, and what was
+changed in the live data:
+- Migrations `20261029123501_wishlist_2026_10_columns` (via the connector)
+  and `20261029150000_wishlist_2026_10_breweries_report_recipients` (SQL
+  Editor, registered).
+- #17: boil time filled for 509 recipes (highest numeric boil hop timing,
+  10–180 min), no revisions; 97 stay empty (no boil hops, or 0/1/2000).
+- #10: active + draft recipes all have one Zinksulfaat (561) line, timing
+  Whirlpool: 70 added, 9 updated (timing, or 562 "(g/brew)" → 561).
+- #18: 20 breweries from the names in brackets; every recipe assigned (the
+  bracket name, otherwise Jopen) without touching `updated_at`. Left out as
+  not a brewery: Glutenvrij, BIO, Red Wine, Whisky, Jack Daniels, Fresh Hop,
+  needs updating, niet af; unclear, not added: NPI, BOIL.
+- #22: same columns, labels "Yeast Beast used?" / "Temperature GLT checked?";
+  the consumption forecast keeps the maximum dosage.
+- #2: batch code L<batch>/<HBT tank number> on both labels.
 
 ---
 
