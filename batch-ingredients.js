@@ -235,12 +235,17 @@ function zincSulphateGrams(ml) {
 // (batches.first_day_brew_count) and drives the zinc sulphate dose too.
 const CALCULATED_PREFIX = 'Calculated on brew day: ';
 
-/** { g, text } for a yeast ratio in g/hl, or null when an input is missing. */
+// Dry yeast comes in packs: always rounded up to the next whole 500 g
+// (Jaap, 29-10: 2.1 kg → 2.5 kg).
+const YEAST_ROUND_UP_G = 500;
+
+/** { g, text } for a yeast ratio in g/hl, rounded up to 500 g; null when an input is missing. */
 function yeastDose(ratioGPerHl, brewVolumeHl, brewsFirstDay) {
   const r = toNumber(ratioGPerHl), hl = toNumber(brewVolumeHl), n = toNumber(brewsFirstDay);
   if (!(r > 0) || !(hl > 0) || !(n > 0) || !Number.isInteger(n)) return null;
-  const g = Math.round(r * hl * n * 10) / 10;
-  return { g, text: `${CALCULATED_PREFIX}${r} g/hl × ${hl} hl × ${n} ${n === 1 ? 'brew' : 'brews'} = ${g} g` };
+  const exact = Math.round(r * hl * n * 10) / 10;
+  const g = Math.ceil(exact / YEAST_ROUND_UP_G - 1e-9) * YEAST_ROUND_UP_G;
+  return { g, text: `${CALCULATED_PREFIX}${r} g/hl × ${hl} hl × ${n} ${n === 1 ? 'brew' : 'brews'} = ${exact} g, rounded up to ${g} g` };
 }
 
 /**
@@ -306,7 +311,7 @@ if (typeof module !== 'undefined' && module.exports) {
     deviationKind, alphaDiffers, colorDiffers, deviationDelta, inventoryEffect,
     formatAmount, deviationList, boilTimeMin, hopTotals,
     ZINC_ML_PER_HL, ZINC_G_PER_ML, isZincSulphate, zincSulphateDose, zincSulphateGrams, zincLast,
-    yeastDose, yeastRatio, isCalculatedOnBrewDay,
+    YEAST_ROUND_UP_G, yeastDose, yeastRatio, isCalculatedOnBrewDay,
     extraAdditionUnit, isPerBatchAddition, brewingAdditionOrder, addedTotal,
   };
 }

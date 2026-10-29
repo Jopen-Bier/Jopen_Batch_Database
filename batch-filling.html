@@ -87,7 +87,7 @@
       const recipeId = page.ctx.batch.recipe_id;
       const byBatch = (table) => supabaseClient.from(table).select('*').eq('batch_id', batchId);
       const one = (table) => supabaseClient.from(table).select('*').eq('recipe_id', recipeId).maybeSingle();
-      const [sessions, measurements, hbts, readings, processingSessions, tanks, users, packaging, ferm] = await Promise.all([
+      const [sessions, measurements, hbts, readings, processingSessions, tanks, users, packaging, ferm, specs] = await Promise.all([
         byBatch('filling_sessions').order('session_number'),
         byBatch('filling_measurements').order('measured_time', { nullsFirst: false }).order('id'),
         byBatch('batch_hbts').order('sort_order').order('id'),
@@ -96,12 +96,13 @@
         supabaseClient.from('tanks').select('id, code, tank_type, number, volume_hl').eq('tank_type', 'hbt').order('number'),
         loadUserInitials(),
         one('recipe_packaging'), one('recipe_fermentation'),
+        one('recipe_specs'),   // CO2 specs bottle / can / keg (Recipe › Specifications)
       ]);
       for (const res of [sessions, measurements, hbts, readings, processingSessions, tanks]) if (res.error) throw res.error;
       Object.assign(page, {
         sessions: sessions.data, measurements: measurements.data, hbts: hbts.data, readings: readings.data, processingSessions: processingSessions.data, tanks: tanks.data,
         users: users.users.filter((u) => u.is_active), initialsOf: users.initialsOf,
-        packaging: packaging.data || {}, ferm: ferm.data || {},
+        packaging: packaging.data || {}, ferm: ferm.data || {}, specs: specs.data || {},
       });
     }
 
@@ -297,23 +298,23 @@
     }
 
     function renderSpecs() {
-      const lim = fillingLimits(page.packaging);
-      const p = page.packaging;
+      const lim = fillingLimits(page.packaging, page.specs, 'bottle');
+      const p = page.packaging, sp = page.specs;
       const maxRow = (label, field, recipeValue) => `<div class="br-kv"><span class="k">${escapeHtml(label)}${recipeValue == null ? ' <span class="br-note">· house limit</span>' : ''}</span>
         <span class="v">${fmt(lim[field].hi)}</span><span class="u">ppb</span><span class="t">&lt;</span></div>`;
       const bandRow = (label, spec, tol) => `<div class="br-kv"><span class="k">${escapeHtml(label)}</span>
-        <span class="v">${fmt(spec)}</span><span class="u">g/l</span><span class="t">${spec != null ? '±' + fmt(tol || 0) : ''}</span></div>`;
+        <span class="v">${fmt(spec)}</span><span class="u">g/l</span><span class="t">${spec != null ? '±' + fmt(Number.isFinite(Number(tol)) ? tol : 0) : ''}</span></div>`;
       document.getElementById('fi-specs').innerHTML = `
         <div class="br-label">Specifications · from recipe</div>
         <div class="br-specs">
           <div>
             <div class="br-kv hd"><span class="k">Bottle / can</span><span class="v">Spec</span><span class="u">Unit</span><span class="t">Tol.</span></div>
             ${maxRow('TPO', 'tpo_ppb', p.tpo_spec)}${maxRow('HSO', 'hso_ppb', p.hso_spec)}${maxRow('DO', 'do_ppb', p.do_spec)}
-            ${bandRow('CO2 (20 °C)', p.co2_bottle_can_spec, p.co2_bottle_can_tolerance)}
+            ${bandRow('CO2 bottle (20 °C)', sp.co2_bottle, sp.co2_bottle_tol)}${bandRow('CO2 can (20 °C)', sp.co2_can, sp.co2_can_tol)}
           </div>
           <div>
             <div class="br-kv hd"><span class="k">Keg</span><span class="v">Spec</span><span class="u">Unit</span><span class="t">Tol.</span></div>
-            ${bandRow('CO2', p.co2_keg_spec, p.co2_keg_tolerance)}${maxRow('Oxygen', 'keg_o2_ppb', p.o2_keg_spec)}
+            ${bandRow('CO2', sp.co2_keg, sp.co2_keg_tol)}${maxRow('Oxygen', 'keg_o2_ppb', p.o2_keg_spec)}
           </div>
         </div>`;
     }
@@ -327,7 +328,7 @@
       if (!s.package_format) return '<div class="br-note">Choose the package to enter measurements.</div>';
       const keg = s.package_format === 'keg' || s.package_format === 'tank';   // tank beer: measured like a keg
       const fields = keg ? KEG_FIELDS : PACK_FIELDS;
-      const lim = fillingLimits(page.packaging);
+      const lim = fillingLimits(page.packaging, page.specs, s.package_format);
       const rows = measurementsOf(s).map((m) => `<tr>
         <td><input class="br-in l" type="time" data-measurement="${m.id}" data-field="measured_time" value="${val((m.measured_time || '').slice(0, 5))}" aria-label="Time"${dis()}></td>
         ${fields.map(([f, label]) => `<td><input class="br-in${outOfSpec(m[f], lim[f]) ? ' bad' : ''}" data-measurement="${m.id}" data-field="${f}" value="${val(m[f])}" inputmode="decimal" aria-label="${label}"${dis()}></td>`).join('')}
@@ -382,7 +383,8 @@
     }
 
     function renderQuality() {
-      const rows = qualityRows(page.measurements, page.packaging).map((q) => {
+      const formatOf = (m) => (page.sessions.find((s) => s.id === m.filling_session_id) || {}).package_format;
+      const rows = qualityRows(page.measurements, page.packaging, page.specs, formatOf).map((q) => {
         const d = q.decimals;
         const cls = cpkClass(q.cpk);
         return `<tr><td><b>${escapeHtml(q.label)}</b>${q.limit ? '' : ' <span class="br-note">· no spec in recipe</span>'}</td><td class="n">${q.n}</td>

@@ -931,10 +931,8 @@ const VERPAKKING_FIELDS = [
   ['tpo_spec', 'TPO spec', '', 'number'],
   ['hso_spec', 'HSO spec', '', 'number'],
   ['do_spec', 'DO spec', '', 'number'],
-  ['co2_fles_can_spec', 'CO2 bottle/can spec', '', 'number'],
-  ['co2_fles_can_tolerantie', 'CO2 bottle/can tolerance', '', 'number'],
-  ['co2_fust_spec', 'CO2 keg spec', '', 'number'],
-  ['co2_fust_tolerantie', 'CO2 keg tolerance', '', 'number'],
+  // CO2 specs live in Specifications (co2_fles / co2_can / co2_fust + tol);
+  // the old duplicate CO2 columns of recipe_packaging are no longer shown.
   ['zuurstof_fust_spec', 'O2 keg spec', '', 'number'],
 ];
 const VERPAKKING_FORMATEN = ['12x33cl', '24x33cl', '6x75cl', '20L', '50L', '20L keykeg', '30L keykeg', '20L Polykeg', '12x33cl blik', '24x33cl blik', '6x4x33cl'];

@@ -123,13 +123,18 @@ assert.strictEqual(b.zincSulphateGrams(640), 28.16);
 assert.strictEqual(b.zincSulphateGrams('240'), 10.56);
 assert.strictEqual(b.zincSulphateGrams(null), null);
 // Yeast: ratio × hl per brew × brews on the first day (wishlist #22)
-assert.deepStrictEqual(b.yeastDose(50, 40, 3), { g: 6000, text: 'Calculated on brew day: 50 g/hl × 40 hl × 3 brews = 6000 g' });
+assert.deepStrictEqual(b.yeastDose(50, 40, 3), { g: 6000, text: 'Calculated on brew day: 50 g/hl × 40 hl × 3 brews = 6000 g, rounded up to 6000 g' });
 assert.strictEqual(b.yeastDose('62,5', 40, 1).g, 2500);
+// always rounded up to the next whole 500 g: 2.1 kg → 2.5 kg
+assert.strictEqual(b.yeastDose(52.5, 40, 1).g, 2500);   // 2100 g
+assert.strictEqual(b.yeastDose(50, 41, 1).g, 2500);     // 2050 g
+assert.strictEqual(b.yeastDose(50, 30, 1).g, 1500);     // exactly 1500 g stays
+assert.ok(b.yeastDose(52.5, 40, 1).text.endsWith('= 2100 g, rounded up to 2500 g'));
 assert.strictEqual(b.yeastDose(50, 40, 0), null);
 assert.strictEqual(b.yeastDose(50, 40, 2.5), null);
 assert.strictEqual(b.yeastDose(null, 40, 2), null);
 assert.strictEqual(b.yeastRatio({ unit: 'g/hl', quantity: 50 }), 50);
-assert.strictEqual(b.yeastRatio({ unit: 'g', quantity: 6000, deviation_reason: b.yeastDose(55, 40, 3).text }), 55);
+assert.strictEqual(b.yeastRatio({ unit: 'g', quantity: 6500, deviation_reason: b.yeastDose(55, 40, 3).text }), 55);
 assert.strictEqual(b.yeastRatio({ unit: 'g', quantity: 500, deviation_reason: 'typed by hand' }), null);
 assert.ok(b.isCalculatedOnBrewDay({ deviation_reason: b.zincSulphateDose(40, 2).text }));
 assert.ok(!b.isCalculatedOnBrewDay({ deviation_reason: null }));

@@ -398,7 +398,7 @@
       const weight = yeasts.map((r) => {
         if (/\/hl$/.test(r.unit || '')) return `${fmt(r.quantity)} ${escapeHtml(r.unit)} <span class="br-note">· fill in the brews on the first day</span>`;
         const a = batchAmount('yeast', r.unit, r.quantity, ctx);
-        return a ? `${formatAmount(a)}${isCalculatedOnBrewDay(r) ? ` <span class="br-note">(${escapeHtml(r.deviation_reason.replace(/^Calculated on brew day: /, '').replace(/ = .*$/, ''))})</span>` : ''}` : '—';
+        return a ? `${formatAmount(a)}${isCalculatedOnBrewDay(r) ? ` <span class="br-note">(${escapeHtml(r.deviation_reason.replace(/^Calculated on brew day: /, '').replace(/, rounded up to .*$/, ', rounded up to 500 g'))})</span>` : ''}` : '—';
       }).join(' + ') || '—';
       document.getElementById('bw-yeast').innerHTML = `
         <div class="br-label">Dry yeast pitching</div>

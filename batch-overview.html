@@ -249,12 +249,11 @@
       : num(tol) !== null ? '±' + String(tol).trim() : String(tol));
 
     function renderSpecs() {
-      const s = page.specs, f = page.ferm, p = page.packaging;
+      const s = page.specs, f = page.ferm;
       const kv = (label, value, unit, tol, calc) => `
         <div class="br-kv"><span class="k">${escapeHtml(label)}</span><span class="v${calc ? ' calc' : ''}">${escapeHtml(value === null || value === undefined || value === '' ? '—' : String(value))}</span>
           <span class="u">${escapeHtml(unit || '')}</span><span class="t">${escapeHtml(tolText(tol))}</span></div>`;
       const colour = calculatedColour();
-      const co2BottleCan = p.co2_bottle_can_spec ?? s.co2_bottle ?? s.co2_can;
       document.getElementById('ov-specs').innerHTML = `
         <div class="br-label">Specifications · from recipe</div>
         <div class="br-specs">
@@ -269,8 +268,9 @@
             ${kv('pH', s.ph, '', s.ph_tol)}
             ${kv('ADF', s.adf_pct, '%', s.adf_pct_tol)}
             ${kv('Turbidity (lab)', s.turbidity_lab, 'EBC', s.turbidity_lab_tol)}
-            ${kv('CO2 bottle · can', co2BottleCan, 'g/l', p.co2_bottle_can_tolerance ?? s.co2_bottle_tol)}
-            ${kv('CO2 keg', p.co2_keg_spec ?? s.co2_keg, 'g/l', p.co2_keg_tolerance ?? s.co2_keg_tol)}
+            ${kv('CO2 bottle', s.co2_bottle, 'g/l', s.co2_bottle_tol)}
+            ${kv('CO2 can', s.co2_can, 'g/l', s.co2_can_tol)}
+            ${kv('CO2 keg', s.co2_keg, 'g/l', s.co2_keg_tol)}
             ${kv('Headspace O2', s.headspace_o2, 'ppb', s.headspace_o2_tol)}
             ${kv('Dissolved O2', s.dissolved_o2, 'ppb', s.dissolved_o2_tol)}
           </div>

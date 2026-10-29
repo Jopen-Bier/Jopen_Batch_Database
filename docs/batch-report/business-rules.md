@@ -237,9 +237,11 @@ Steps are editable and reorderable in the recipe editor; edited steps get
   once keeps its plain code. "+ Add HBT" also offers a used tank ("fill
   again"). In the Split / transfer popup the tank is one "from" tank with
   the end value of its latest fill.
-- CO2 status per reading: spec by `co2_target` from `recipe_packaging`
-  (`co2_bottle_can_spec` ± `co2_bottle_can_tolerance`, keg: `co2_keg_spec` ±
-  `co2_keg_tolerance`) → OK / High / Low.
+- CO2 status per reading: spec by `co2_target` from `recipe_specs`
+  (bottle `co2_bottle` ± `co2_bottle_tol`, can `co2_can` ± `co2_can_tol`,
+  keg / tank `co2_keg` ± `co2_keg_tol`; a text tolerance such as '-' = 0)
+  → OK / High / Low. (Until 29-10-2026 read from the duplicate, mostly empty
+  CO2 columns of `recipe_packaging`.)
 - Red markers: O2 ≥ HBT spec (50 ppb), start turbidity and avg turbidity >
   `recipe_fermentation.turbidity_after_separation`, avg PU outside
   `pasteurization` ± tol.
@@ -250,7 +252,9 @@ Steps are editable and reorderable in the recipe editor; edited steps get
 
 ## Filling
 - Quality / Cpk over all filling measurements of the batch; limits from
-  `recipe_packaging` (TPO, HSO, DO, CO2 bottle/can, keg CO2/O2). Cpk ≥ 1.33
+  `recipe_packaging` (TPO, HSO, DO, keg O2) and `recipe_specs` (CO2 bottle,
+  can and keg; bottle and can are separate quality rows, each over the
+  sessions of that package). Cpk ≥ 1.33
   green, ≥ 1 amber, < 1 red. (Formula in mockup `Filling.dc.html`.)
   Built in `filling.js`: a maximum (TPO, HSO, DO, keg O2) is "< limit"; when
   the recipe has no value the house limit is used (TPO 100, HSO 50, DO 50,
