@@ -13,9 +13,9 @@ Status: `open question` → waiting for Jaap · `ready` → can be built ·
 
 | # | Item | Area | Size | DB | Status |
 |---|------|------|------|----|--------|
-| 31 | Batch opens in a new tab | Batch lists | S | – | ready |
-| 15 | Rename "Final batch volume" → "Final brew volume" | Recipe | S | – | ready |
-| 13 | Unit in its own column (forecast + Excel) | Consumption forecast | S | – | ready |
+| 31 | Batch opens in a new tab | Batch lists | S | – | done |
+| 15 | Rename "Final batch volume" → "Final brew volume" | Recipe | S | – | done |
+| 13 | Unit in its own column (forecast + Excel) | Consumption forecast | S | – | done |
 | 23 | Zinc sulphate grams on the Overview | Batch report | S | – | open question |
 | 14 | Flow and turbidity in HBT readings | Processing | S | DB | ready |
 | 17 | Boil time field in the recipe (+ fill it for all recipes) | Recipe | S | DB + Data | open question |
