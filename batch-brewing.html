@@ -366,6 +366,7 @@
       if (!key) return '';
       const v = key === 'original_extract' ? page.specs.original_extract
         : key === 'brew_volume_hl' ? page.ctx.recipe.brew_volume_hl
+        : key === 'pitching_temp' ? page.ferm.pitching_temp
         : page.brewing[key];
       return v === null || v === undefined ? '' : String(v).replace(/\s*-\s*/, ' – ');
     }
