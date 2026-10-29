@@ -39,6 +39,7 @@
   <script src="batch-stages.js"></script>
   <script src="processing.js"></script>
   <script src="filling.js"></script>
+  <script src="pallet-labels.js"></script>
   <script src="batch-report-shell.js"></script>
   <script src="batch-report-cards.js"></script>
   <script>
@@ -102,6 +103,87 @@
         users: users.users.filter((u) => u.is_active), initialsOf: users.initialsOf,
         packaging: packaging.data || {}, ferm: ferm.data || {},
       });
+    }
+
+    // ------------------------------------------------------------ pallet labels (wishlist #2)
+    function openPalletLabelDialog() {
+      document.getElementById('fi-pallet-dialog')?.remove();
+      const b = page.ctx.batch;
+      const today = new Date();
+      const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      const tankNumber = (h) => { const t = page.tanks.find((x) => x.id === h.tank_id); return t ? t.number : null; };
+      // the HBT of the latest filling session is the likely one
+      const last = page.sessions.slice().sort((x, y) => y.session_number - x.session_number).find((s) => s.batch_hbt_id);
+      const state = { hbtId: last ? last.batch_hbt_id : page.hbts[0].id, kind: null, perPallet: '2', pallets: '1', date: (last && last.filling_date) || iso, bestBefore: null, order: '' };
+      const hbt = () => hbtById(state.hbtId);
+      const kindOf = (h) => {
+        const s = page.sessions.find((x) => x.batch_hbt_id === h.id && x.package_format);
+        const f = (s && s.package_format) || (h.intended_formats || [])[0];
+        return f === 'keg' || f === 'tank' ? 'keg' : 'pack';
+      };
+      const months = () => (state.kind === 'keg' ? page.packaging.best_before_keg_months
+        : (page.sessions.find((x) => x.batch_hbt_id === state.hbtId && x.package_format === 'can') ? page.packaging.best_before_can_months : page.packaging.best_before_bottle_months));
+      state.kind = kindOf(hbt());
+      state.bestBefore = bestBeforeText(state.date, months());
+      const overlay = document.createElement('div');
+      overlay.className = 'br-dialog-overlay';
+      overlay.id = 'fi-pallet-dialog';
+      const render = () => {
+        const seq = palletLabelSequence(Number(state.perPallet), Number(state.pallets));
+        overlay.innerHTML = `<div class="br-dialog" role="dialog" aria-modal="true" aria-labelledby="fi-pallet-title" style="max-width:440px;">
+          <div class="br-dialog-title" id="fi-pallet-title">Print pallet label</div>
+          <div class="br-field"><label class="br-label" for="fi-pl-hbt">HBT</label><select class="br-input" id="fi-pl-hbt">
+            ${page.hbts.map((h) => `<option value="${h.id}"${h.id === state.hbtId ? ' selected' : ''}>${escapeHtml(hbtName(h))}</option>`).join('')}</select></div>
+          <div class="br-field"><span class="br-label">Label</span><div class="br-seg" role="group">
+            <button type="button" data-pl-kind="keg" class="${state.kind === 'keg' ? 'on' : ''}">Keg</button>
+            <button type="button" data-pl-kind="pack" class="${state.kind === 'pack' ? 'on' : ''}">Bottle / can · 2 per A4</button></div></div>
+          <div style="display:flex; gap:10px;">
+            <div class="br-field" style="flex:1;"><label class="br-label" for="fi-pl-per">Labels per pallet</label><input class="br-input" id="fi-pl-per" inputmode="numeric" value="${escapeHtml(state.perPallet)}"></div>
+            <div class="br-field" style="flex:1;"><label class="br-label" for="fi-pl-pallets">Pallets</label><input class="br-input" id="fi-pl-pallets" inputmode="numeric" value="${escapeHtml(state.pallets)}"></div>
+          </div>
+          <div style="display:flex; gap:10px;">
+            <div class="br-field" style="flex:1;"><label class="br-label" for="fi-pl-date">Filling date</label><input class="br-input" id="fi-pl-date" type="date" value="${escapeHtml(state.date)}"></div>
+            ${state.kind === 'keg'
+              ? `<div class="br-field" style="flex:1;"><label class="br-label" for="fi-pl-bb">Best before</label><input class="br-input" id="fi-pl-bb" value="${escapeHtml(state.bestBefore || '')}" placeholder="e.g. OCT 2028"></div>`
+              : `<div class="br-field" style="flex:1;"><label class="br-label" for="fi-pl-order">Number under the batch <span class="br-note">(optional)</span></label><input class="br-input" id="fi-pl-order" value="${escapeHtml(state.order)}"></div>`}
+          </div>
+          <div class="br-note">${seq.length ? `${seq.length} ${seq.length === 1 ? 'sheet' : 'sheets'}, pallets 1–${state.pallets}, ${state.perPallet} of each · batch code <b>${escapeHtml(palletBatchCode(b.batch_number, tankNumber(hbt())))}</b>` : 'Fill in whole numbers for labels per pallet and pallets.'}</div>
+          <div class="br-dialog-buttons">
+            <button type="button" class="br-ghost" id="fi-pl-close">Close</button>
+            <button type="button" class="br-primary" id="fi-pl-print"${seq.length ? '' : ' disabled'}>Print</button>
+          </div></div>`;
+      };
+      const close = () => { overlay.remove(); document.removeEventListener('keydown', onKey); };
+      const onKey = (e) => { if (e.key === 'Escape') close(); };
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay || e.target.closest('#fi-pl-close')) return close();
+        const k = e.target.closest('button[data-pl-kind]');
+        if (k) { state.kind = k.dataset.plKind; state.bestBefore = bestBeforeText(state.date, months()); return render(); }
+        if (e.target.closest('#fi-pl-print')) {
+          const win = window.open('', '_blank');
+          if (!win) { showMessage('The browser blocked the print window: allow pop-ups for this site.', true); return; }
+          win.document.write(palletLabelsHtml({
+            kind: state.kind, beerName: b.name || page.ctx.recipe.name || '', code: palletBatchCode(b.batch_number, tankNumber(hbt())),
+            date: state.date, bestBefore: state.bestBefore, orderNumber: state.order.trim(),
+            sequence: palletLabelSequence(Number(state.perPallet), Number(state.pallets)),
+          }));
+          win.document.close();
+          return close();
+        }
+      });
+      overlay.addEventListener('change', (e) => {
+        const id = e.target.id;
+        if (id === 'fi-pl-hbt') { state.hbtId = Number(e.target.value); state.kind = kindOf(hbt()); state.bestBefore = bestBeforeText(state.date, months()); }
+        if (id === 'fi-pl-date') { state.date = e.target.value; state.bestBefore = bestBeforeText(state.date, months()); }
+        if (id === 'fi-pl-per') state.perPallet = e.target.value.trim();
+        if (id === 'fi-pl-pallets') state.pallets = e.target.value.trim();
+        if (id === 'fi-pl-bb') state.bestBefore = e.target.value.trim();
+        if (id === 'fi-pl-order') state.order = e.target.value;
+        render();
+      });
+      render();
+      document.addEventListener('keydown', onKey);
+      document.body.appendChild(overlay);
     }
 
     // ------------------------------------------------------------ saving
@@ -278,6 +360,7 @@
       document.getElementById('fi-sessions').innerHTML = `
         <div class="br-head" style="align-items:center;">
           <div class="br-label">Filling sessions</div>
+          ${page.hbts.length ? '<button class="br-ghost" type="button" id="fi-pallet-labels" style="margin-left:auto;">Print pallet label</button>' : ''}
           ${page.canEdit ? `<button class="br-primary" type="button" id="fi-add-session"${page.hbts.length ? '' : ' disabled title="Add the HBTs on Processing first"'}>+ Add filling session</button>` : ''}
         </div>
         ${blocks || `<div class="br-note">No filling session yet.${page.hbts.length ? ' The first filling date moves the batch to Filling; when every HBT is finished the batch is Filled.' : ' The HBTs come from Processing.'}</div>`}`;
@@ -343,6 +426,7 @@
       main.addEventListener('click', (e) => {
         const t = e.target;
         if (t.closest('#fi-add-session')) return addSession();
+        if (t.closest('#fi-pallet-labels')) return openPalletLabelDialog();
         const delS = t.closest('button[data-delete-session]');
         if (delS) return deleteSession(page.sessions.find((x) => x.id === Number(delS.dataset.deleteSession)));
         const addM = t.closest('button[data-add-measurement]');
