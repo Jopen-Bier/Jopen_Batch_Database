@@ -83,7 +83,7 @@
       const title = `${row.batchNumber} · ${row.name}${issue ? ' · ' + issue : ''}`;
       // Each stage links to its own tab once that tab exists, else to the Overview.
       const href = batchHref(row.stage, row.id);
-      return `<a class="${cls}" href="${href}" title="${escapeHtml(title)}">
+      return `<a class="${cls}" href="${href}" target="_blank" rel="noopener" title="${escapeHtml(title)}">
         ${issue ? '<span class="br-bang" aria-label="Needs attention">!</span>' : ''}
         <div class="br-tile-top">
           ${row.tankCode ? `<span class="br-tank">${escapeHtml(row.tankCode)}</span>` : ''}
