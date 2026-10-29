@@ -172,6 +172,75 @@
       for (const row of page.ingredients.filter((r) => r.addition_type === 'brewhouse_addition' && isZincSulphate(name(r)))) await applyZinc(row, zinc);
     }
 
+    // ------------------------------------------------------------ extra addition (wishlist #29)
+    // An ingredient added during brewing that is not in the recipe: an "Added"
+    // batch line (also on the Overview); the tick boxes say which brews got it.
+    let ingredientChoices = null;
+    async function openAddAdditionDialog() {
+      document.getElementById('bw-add-dialog')?.remove();
+      if (!ingredientChoices) {
+        const { data, error } = await fetchAllRows(supabaseClient.from('ingredients').select('id, name, unit').order('name'));
+        if (error) { page.save.failed(error.message); return; }
+        ingredientChoices = data;
+      }
+      const overlay = document.createElement('div');
+      overlay.className = 'br-dialog-overlay';
+      overlay.id = 'bw-add-dialog';
+      overlay.innerHTML = `<div class="br-dialog" role="dialog" aria-modal="true" aria-labelledby="bw-add-title">
+        <div class="br-dialog-title" id="bw-add-title">Extra addition</div>
+        <div class="br-note">Not in the recipe, e.g. filtrase. It shows on the Overview as an added ingredient; tick the brews it went into.</div>
+        <div class="br-field"><label class="br-label" for="bw-add-ingredient">Ingredient</label>
+          <input class="br-input" id="bw-add-ingredient" list="bw-add-ingredients" placeholder="Search ingredient…" autocomplete="off">
+          <datalist id="bw-add-ingredients">${ingredientChoices.map((i) => `<option value="${escapeHtml(i.name)}"></option>`).join('')}</datalist></div>
+        <div style="display:flex; gap:10px;">
+          <div class="br-field" style="flex:1;"><label class="br-label" for="bw-add-qty">Amount</label><input class="br-input" id="bw-add-qty" inputmode="decimal"></div>
+          <div class="br-field" style="width:110px;"><label class="br-label" for="bw-add-unit">Unit</label>
+            <select class="br-input" id="bw-add-unit">${['g', 'kg', 'ml', 'l', 'pcs'].map((u) => `<option>${u}</option>`).join('')}</select></div>
+        </div>
+        <div class="br-field"><span class="br-label">Amount is</span><div class="br-seg" role="group" id="bw-add-basis">
+          <button type="button" data-basis="brew" class="on">Per brew</button><button type="button" data-basis="batch">Per batch</button></div></div>
+        <div class="br-field"><label class="br-label" for="bw-add-timing">Moment</label><input class="br-input" id="bw-add-timing" placeholder="e.g. Mash-in, Whirlpool"></div>
+        <span class="br-note" id="bw-add-note"></span>
+        <div class="br-dialog-buttons">
+          <button type="button" class="br-ghost" id="bw-add-close">Cancel</button>
+          <button type="button" class="br-primary" id="bw-add-save">Add</button>
+        </div></div>`;
+      let basis = 'brew';
+      const q = (sel) => overlay.querySelector(sel);
+      const close = () => { overlay.remove(); document.removeEventListener('keydown', onKey); };
+      const onKey = (e) => { if (e.key === 'Escape') close(); };
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) return close();
+        const b = e.target.closest('button[data-basis]');
+        if (b) { basis = b.dataset.basis; overlay.querySelectorAll('button[data-basis]').forEach((x) => x.classList.toggle('on', x === b)); }
+      });
+      q('#bw-add-ingredient').addEventListener('change', () => {
+        const ing = ingredientChoices.find((i) => i.name === q('#bw-add-ingredient').value);
+        const base = ing && String(ing.unit || '').split('/')[0].trim();
+        if (base && [...q('#bw-add-unit').options].some((o) => o.value === base)) q('#bw-add-unit').value = base;
+      });
+      q('#bw-add-close').addEventListener('click', close);
+      q('#bw-add-save').addEventListener('click', async () => {
+        const ing = ingredientChoices.find((i) => i.name === q('#bw-add-ingredient').value);
+        const quantity = parseNumberInput(q('#bw-add-qty').value);
+        if (!ing) { q('#bw-add-note').textContent = 'Choose an ingredient from the list.'; return; }
+        if (!(quantity > 0)) { q('#bw-add-note').textContent = 'Enter an amount above 0.'; return; }
+        const sortOrder = Math.max(0, ...page.ingredients.filter((r) => r.addition_type === 'brewhouse_addition').map((r) => r.sort_order || 0)) + 1;
+        const row = await insertRow('batch_ingredients', {
+          batch_id: page.ctx.batch.id, is_added: true, addition_type: 'brewhouse_addition', ingredient_id: ing.id,
+          quantity, unit: extraAdditionUnit(q('#bw-add-unit').value, basis), timing: q('#bw-add-timing').value.trim() || null,
+          sort_order: sortOrder, updated_by: page.user.id,
+        }, page.ingredients);
+        if (!row) return;
+        page.names[ing.id] = ing.name;
+        close();
+        renderSoon();
+      });
+      document.addEventListener('keydown', onKey);
+      document.body.appendChild(overlay);
+      q('#bw-add-ingredient').focus();
+    }
+
     async function addBrew() {
       const brew = await insertRow('batch_brews', { batch_id: page.ctx.batch.id, brew_number: nextBrewNumber(page.brews), brewer_id: page.user.id }, page.brews);
       if (brew) renderSoon(`[data-brew="${brew.id}"][data-field="software_order_number"]`);
@@ -279,8 +348,11 @@
             || '<tr><td colspan="4" class="small">No boil hops.</td></tr>'}</tbody></table>`;
       const ctx = amountContext(page.ctx.batch, page.ctx.recipe, page.ctx.stageRow);
       // zinc sulphate always last, under a thick line, with its calculator (Jaap, 23-10)
-      const adds = zincLast(page.ingredients.filter((r) => r.addition_type === 'brewhouse_addition'), name);
+      // extra additions per batch sit under the zinc sulphate (wishlist #29)
+      const adds = brewingAdditionOrder(page.ingredients.filter((r) => r.addition_type === 'brewhouse_addition'), name);
       const firstZinc = adds.find((r) => isZincSulphate(name(r)));
+      const firstPerBatch = adds.find((r) => isPerBatchAddition(r));
+      const ticked = (r) => page.dosingChecks.filter((c) => c.batch_ingredient_id === r.id && c.batch_brew_id).length;
       // a tick box per brew (batch_dosing_checks); a line "brew 1 only" has one in brew 1
       const brews = page.brews.slice().sort((a, b) => a.brew_number - b.brew_number);
       const progress = dosingProgress(adds, 'brew', (r) => brewColumns(r, brews).filter((c) => c.applies).map((c) => c.brew.id), page.dosingChecks);
@@ -293,10 +365,17 @@
             const amount = r.all_in_first_brew ? batchAmount(r.addition_type, r.unit, r.quantity, ctx) : brewAmount(r.addition_type, r.unit, r.quantity, ctx);
             const zinc = isZincSulphate(name(r));
             const calc = zinc && page.canEdit ? ` <button type="button" class="br-ghost bw-calc" data-zinc-calc="${r.id}" title="Calculate zinc sulphate">Calculate</button>` : '';
-            return `<tr${r === firstZinc && adds[0] !== r ? ' class="bw-zinc"' : ''}><td>${escapeHtml(name(r))}${calc}</td><td class="n">${escapeHtml(formatAmount(amount))}${r.all_in_first_brew ? ' <span class="br-note">brew 1 only</span>' : ''}</td><td>${escapeHtml(r.timing || '—')}</td>
+            const perBatch = isPerBatchAddition(r);
+            const total = r.is_added ? addedTotal(r, ticked(r)) : null;
+            const note = r.all_in_first_brew ? ' <span class="br-note">brew 1 only</span>'
+              : perBatch ? ' <span class="br-note">batch total</span>'
+                : r.is_added && total ? ` <span class="br-note">· ${ticked(r)} ${ticked(r) === 1 ? 'brew' : 'brews'} = ${escapeHtml(formatAmount(total))}</span>` : '';
+            const divider = (r === firstZinc && adds[0] !== r) || (r === firstPerBatch && adds[0] !== r);
+            return `<tr${divider ? ' class="bw-zinc"' : ''}><td>${escapeHtml(name(r))}${r.is_added ? '<span class="br-added">Added</span>' : ''}${calc}</td><td class="n">${escapeHtml(formatAmount(perBatch ? { q: toNumber(r.quantity), unit: r.unit } : amount))}${note}</td><td>${escapeHtml(r.timing || '—')}</td>
               ${brewColumns(r, brews).map((c) => (c.applies ? dosing.cellHtml(r, 'brew', c.brew.id) : '<td class="bd-check small">—</td>')).join('')}</tr>`;
           }).join('') || `<tr><td colspan="${3 + brews.length}" class="small">No brewing additions.</td></tr>`}</tbody></table></div>
-        ${adds.length && !brews.length ? '<div class="br-note">A tick column appears for every brew you add.</div>' : ''}`;
+        ${adds.length && !brews.length ? '<div class="br-note">A tick column appears for every brew you add.</div>' : ''}
+        ${page.canEdit ? '<div class="br-buttons"><button class="br-ghost" type="button" id="bw-add-addition">+ Add</button></div>' : ''}`;
     }
 
     function yesNo(id, value) {
@@ -522,6 +601,7 @@
         const yn = e.target.closest('button[data-yesno]');
         if (yn) return saveBatch({ [yn.dataset.yesno]: page.ctx.batch[yn.dataset.yesno] === (yn.dataset.value === 'true') ? null : yn.dataset.value === 'true' });
         if (e.target.closest('#bw-add-brew')) return addBrew();
+        if (e.target.closest('#bw-add-addition')) return openAddAdditionDialog();
         const span = e.target.closest('button[data-span-brew]');
         if (span) {
           const brew = page.brews.find((x) => x.id === Number(span.dataset.spanBrew));

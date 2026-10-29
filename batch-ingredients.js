@@ -264,6 +264,41 @@ function zincLast(rows, nameOf) {
   return rows.filter((r) => !isZincSulphate(nameOf(r))).concat(rows.filter((r) => isZincSulphate(nameOf(r))));
 }
 
+// --- Extra additions on Brewing (wishlist #29) --------------------------------
+// The brewer adds an ingredient that is not in the recipe (e.g. filtrase) as
+// an "Added" batch line, per brew or per batch. Per brew is stored as a /brew
+// unit (amount × brews ticked), per batch as a plain unit (the total). Per
+// brew lines sit with the other additions, per batch lines under the zinc.
+
+/** Unit to store for an extra addition: 'g' + 'brew' → 'g/brew'; per batch stays 'g'. */
+function extraAdditionUnit(unit, basis) {
+  const u = String(unit || '').trim();
+  if (!u || basis !== 'brew' || u.includes('/')) return u || null;
+  return `${u}/brew`;
+}
+
+/** An added (not in recipe) line whose amount is a batch total. */
+function isPerBatchAddition(row) {
+  const basis = amountBasis(row.addition_type, row.unit);
+  return !!row.is_added && !!basis && basis.per === 'batch';
+}
+
+/** Brewing additions in display order: the others, then zinc sulphate, then added per batch lines. */
+function brewingAdditionOrder(rows, nameOf) {
+  const perBatch = rows.filter((r) => isPerBatchAddition(r));
+  return zincLast(rows.filter((r) => !isPerBatchAddition(r)), nameOf).concat(perBatch);
+}
+
+/** Total of an added line: per brew × ticked brews, per batch as entered. { q, unit } or null. */
+function addedTotal(row, tickedBrews) {
+  const q = toNumber(row.quantity);
+  const basis = amountBasis(row.addition_type, row.unit);
+  if (q === null || !basis) return null;
+  if (basis.per === 'brew') return { q: q * (toNumber(tickedBrews) || 0), unit: basis.unit };
+  if (basis.per === 'batch') return { q, unit: basis.unit };
+  return null;
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     INGREDIENT_CARDS, ADDITION_CATEGORY,
@@ -272,5 +307,6 @@ if (typeof module !== 'undefined' && module.exports) {
     formatAmount, deviationList, boilTimeMin, hopTotals,
     ZINC_ML_PER_HL, ZINC_G_PER_ML, isZincSulphate, zincSulphateDose, zincSulphateGrams, zincLast,
     yeastDose, yeastRatio, isCalculatedOnBrewDay,
+    extraAdditionUnit, isPerBatchAddition, brewingAdditionOrder, addedTotal,
   };
 }

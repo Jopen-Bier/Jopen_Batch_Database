@@ -133,6 +133,24 @@ assert.strictEqual(b.yeastRatio({ unit: 'g', quantity: 6000, deviation_reason: b
 assert.strictEqual(b.yeastRatio({ unit: 'g', quantity: 500, deviation_reason: 'typed by hand' }), null);
 assert.ok(b.isCalculatedOnBrewDay({ deviation_reason: b.zincSulphateDose(40, 2).text }));
 assert.ok(!b.isCalculatedOnBrewDay({ deviation_reason: null }));
+// Extra additions on Brewing (wishlist #29)
+assert.strictEqual(b.extraAdditionUnit('g', 'brew'), 'g/brew');
+assert.strictEqual(b.extraAdditionUnit('ml', 'batch'), 'ml');
+assert.strictEqual(b.extraAdditionUnit('g/hl', 'brew'), 'g/hl');
+assert.strictEqual(b.extraAdditionUnit('', 'brew'), null);
+{
+  const salt = { id: 1, addition_type: 'brewhouse_addition', unit: 'g/hl', ingredient_id: 10 };
+  const zinc = { id: 2, addition_type: 'brewhouse_addition', unit: 'ml', ingredient_id: 561 };
+  const filtrasePerBatch = { id: 3, addition_type: 'brewhouse_addition', unit: 'ml', quantity: 150, is_added: true, ingredient_id: 20 };
+  const extraPerBrew = { id: 4, addition_type: 'brewhouse_addition', unit: 'g/brew', quantity: 200, is_added: true, ingredient_id: 30 };
+  const names = { 10: 'Calcium chloride', 561: 'Zinksulfaat', 20: 'Filtrase', 30: 'Gypsum' };
+  const order = b.brewingAdditionOrder([filtrasePerBatch, zinc, salt, extraPerBrew], (r) => names[r.ingredient_id]).map((r) => r.id);
+  assert.deepStrictEqual(order, [1, 4, 2, 3]);
+  assert.ok(b.isPerBatchAddition(filtrasePerBatch) && !b.isPerBatchAddition(extraPerBrew) && !b.isPerBatchAddition(zinc));
+  assert.deepStrictEqual(b.addedTotal(extraPerBrew, 3), { q: 600, unit: 'g' });
+  assert.deepStrictEqual(b.addedTotal(filtrasePerBatch, 2), { q: 150, unit: 'ml' });
+  assert.strictEqual(b.addedTotal({ ...extraPerBrew, quantity: null }, 3), null);
+}
 assert.strictEqual(b.zincSulphateDose('40', '1').ml, 160);
 assert.strictEqual(b.zincSulphateDose(40, ''), null);
 assert.strictEqual(b.zincSulphateDose(40, 1.5), null);
