@@ -140,18 +140,30 @@
 
     /**
      * Every log starts with a measurement at Time 0, with the GLT total extract
-     * of the brews (no pH: a pH cannot be averaged over brews). Added when the
-     * page opens for an editor and the log has nothing at or before Time 0.
+     * of the brews (no pH: a pH cannot be averaged over brews). Made when the
+     * page opens for an editor once brewing is complete (all planned brews
+     * ended) and the log has nothing at or before Time 0. When a later brew
+     * moves Time 0, the existing Time 0 measurement moves along and gets the
+     * new GLT total.
      */
     async function ensureTimeZeroEntry() {
       const t0 = timeZero();
-      if (!page.canEdit || !t0 || page.entries.some((e) => new Date(e.measured_at) <= new Date(t0))) return;
+      if (!page.canEdit || !t0 || !brewingComplete(page.brews, page.ctx.batch.brew_count)) return;
       const glt = gltTotal();
-      await insertRow('fermentation_log_entries', {
-        batch_id: page.ctx.batch.id, measured_at: new Date(t0).toISOString(),
+      const values = {
+        measured_at: new Date(t0).toISOString(),
         extract: glt ? Math.round(glt.extract * 100) / 100 : null,
         comment: glt ? `Time 0 · GLT total ${glt.volumeHl.toFixed(1)} hl` : 'Time 0',
-      }, page.entries);
+      };
+      const auto = page.entries.find(isTimeZeroEntry);
+      if (auto) {
+        // a hand-corrected Plato stays until Time 0 or the GLT total changes
+        const stale = !sameMoment(auto.measured_at, t0) || auto.comment !== values.comment;
+        if (stale) { await saveEntry(auto, values); sortEntries(); }
+        return;
+      }
+      if (page.entries.some((e) => new Date(e.measured_at) <= new Date(t0))) return;
+      await insertRow('fermentation_log_entries', { batch_id: page.ctx.batch.id, ...values }, page.entries);
       sortEntries();
     }
 

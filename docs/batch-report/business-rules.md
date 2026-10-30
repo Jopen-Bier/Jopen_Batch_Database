@@ -115,10 +115,14 @@ EBU total compared with `recipe_specs.bitterness` ± `bitterness_tol`.
   value in use.
 - Day of an entry = (measured_at − time_zero) in days, 1 decimal.
 - **The first measurement is always at Time 0** (Jaap, 20-10): added when the
-  Fermentation log opens for an editor and the log has nothing at or before
-  Time 0, with the GLT total of the brews (volume-weighted extract °P, no pH;
-  comment "Time 0 · GLT total … hl"). It moves along when Time 0 changes
-  and cannot be deleted.
+  Fermentation log opens for an editor, **brewing is complete** (every
+  planned brew has ended; a split batch without brews counts as complete)
+  and the log has nothing at or before Time 0, with the GLT total of the
+  brews (volume-weighted extract °P, no pH; comment "Time 0 · GLT total …
+  hl"). It moves along when Time 0 changes — set by hand or because a later
+  brew ends — and then gets the new GLT total; it cannot be deleted.
+  (Until 30-10-2026 it could be made after the first brews and stayed
+  behind: 26344, 26353, 26358, 26359 are corrected when the log is opened.)
 - Recipe days (`recipe_process_steps.dry_hop_1_day`, `cellar_addition_day`)
   count from Time 0.
 
