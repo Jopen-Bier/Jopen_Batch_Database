@@ -548,6 +548,27 @@ CREATE FUNCTION public.product_sheet_relevant_recipe_id(p_recipe_group_id uuid) 
 
 
 --
+-- Name: report_recipients(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.report_recipients(p_report text) RETURNS TABLE(name text, email text)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if not can_view('batches') then
+    raise exception 'Not authorized';
+  end if;
+  return query
+    select u.name, au.email::text
+    from users u join auth.users au on au.id = u.id
+    where u.is_active and p_report = any (u.report_subscriptions) and au.email is not null
+    order by u.name;
+end;
+$$;
+
+
+--
 -- Name: save_recipe_cellar_steps(bigint, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1114,6 +1135,7 @@ CREATE TABLE public.batch_brews (
     efficiency_accepted_at timestamp with time zone,
     efficiency_accepted_by uuid,
     efficiency_accepted_reason text,
+    wort_cooling_temp_c numeric,
     CONSTRAINT batch_brews_brew_number_check CHECK ((brew_number > 0)),
     CONSTRAINT batch_brews_ckt_cip_program_check CHECK ((ckt_cip_program = ANY (ARRAY['lo-de'::text, 'lo-zu-de'::text, 'lo-de-hw'::text, 'lo-zu-de-hw'::text]))),
     CONSTRAINT batch_brews_efficiency_accepted_check CHECK ((((efficiency_accepted_at IS NULL) AND (efficiency_accepted_by IS NULL) AND (efficiency_accepted_reason IS NULL)) OR ((efficiency_accepted_at IS NOT NULL) AND (efficiency_accepted_by IS NOT NULL) AND (NULLIF(btrim(efficiency_accepted_reason), ''::text) IS NOT NULL))))
@@ -1423,6 +1445,8 @@ CREATE TABLE public.batches (
     mdrank_processed_at timestamp with time zone,
     mdrank_processed_by uuid,
     lagering_started_at timestamp with time zone,
+    first_day_brew_count integer,
+    CONSTRAINT batches_first_day_brew_count_check CHECK ((first_day_brew_count > 0)),
     CONSTRAINT batches_status_check CHECK ((status = ANY (ARRAY['planned'::text, 'brewing'::text, 'fermenting'::text, 'processing'::text, 'filling'::text, 'completed'::text]))),
     CONSTRAINT batches_tasting_result_check CHECK ((tasting_result = ANY (ARRAY['go'::text, 'no_go'::text])))
 );
@@ -1506,6 +1530,11 @@ CREATE TABLE public.filling_sessions (
     created_by uuid DEFAULT auth.uid(),
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_by uuid,
+    first_package_checked_by uuid,
+    first_package_checked_by_2 uuid,
+    fill_tube_checked_first_by uuid,
+    fill_tube_checked_end_by uuid,
+    burst_bottles_controlled_by uuid,
     CONSTRAINT filling_sessions_package_format_check CHECK ((package_format = ANY (ARRAY['bottle'::text, 'can'::text, 'keg'::text, 'tank'::text]))),
     CONSTRAINT filling_sessions_session_number_check CHECK ((session_number > 0)),
     CONSTRAINT filling_sessions_volume_hl_check CHECK ((volume_hl >= (0)::numeric))
@@ -1829,6 +1858,8 @@ CREATE TABLE public.hbt_readings (
     created_by uuid DEFAULT auth.uid(),
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_by uuid,
+    flow_hl_h numeric,
+    turbidity_ebc numeric,
     CONSTRAINT hbt_readings_co2_target_check CHECK ((co2_target = ANY (ARRAY['bottle'::text, 'can'::text, 'keg'::text, 'tank'::text])))
 );
 
@@ -1881,6 +1912,7 @@ CREATE TABLE public.recipes (
     serving_temperature numeric,
     color_srm numeric,
     color_free_text text,
+    brewery_id bigint,
     CONSTRAINT recipes_location_check CHECK ((location = ANY (ARRAY['wp'::text, 'jk'::text]))),
     CONSTRAINT recipes_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'active'::text, 'archived'::text])))
 );
@@ -2042,7 +2074,9 @@ CREATE TABLE public.users (
     created_at timestamp with time zone DEFAULT now(),
     last_login_at timestamp with time zone,
     role_id integer,
-    initials text
+    initials text,
+    report_subscriptions text[] DEFAULT '{}'::text[] NOT NULL,
+    CONSTRAINT users_report_subscriptions_check CHECK ((report_subscriptions <@ ARRAY['processing'::text]))
 );
 
 
@@ -2076,6 +2110,33 @@ CREATE TABLE public.brew_planning_splits (
     hl numeric NOT NULL,
     sort_order integer DEFAULT 0 NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: breweries; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.breweries (
+    id bigint NOT NULL,
+    name text NOT NULL,
+    sort_order integer DEFAULT 0 NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: breweries_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.breweries ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.breweries_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
 );
 
 
@@ -2852,7 +2913,8 @@ CREATE TABLE public.recipe_brewing_specs (
     aeration numeric,
     original_gravity_correction_brewhouse numeric,
     brewhouse_recipe_name_wp text,
-    brewhouse_recipe_name_jk text
+    brewhouse_recipe_name_jk text,
+    boil_time_min numeric
 );
 
 
@@ -3517,6 +3579,14 @@ ALTER TABLE ONLY public.brew_planning_splits
 
 
 --
+-- Name: breweries breweries_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.breweries
+    ADD CONSTRAINT breweries_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: cellar_action_tags cellar_action_tags_code_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4050,6 +4120,13 @@ CREATE INDEX brew_planning_splits_brew_planning_id_idx ON public.brew_planning_s
 
 
 --
+-- Name: breweries_name_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX breweries_name_key ON public.breweries USING btree (lower(name));
+
+
+--
 -- Name: idx_batch_audit_log_batch_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4523,6 +4600,13 @@ CREATE INDEX idx_recipe_ingredients_source_group ON public.recipe_ingredients US
 --
 
 CREATE INDEX idx_recipe_revisions_recipe_id ON public.recipe_revisions USING btree (recipe_id);
+
+
+--
+-- Name: idx_recipes_brewery_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_recipes_brewery_id ON public.recipes USING btree (brewery_id);
 
 
 --
@@ -5575,11 +5659,51 @@ ALTER TABLE ONLY public.filling_sessions
 
 
 --
+-- Name: filling_sessions filling_sessions_burst_bottles_controlled_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.filling_sessions
+    ADD CONSTRAINT filling_sessions_burst_bottles_controlled_by_fkey FOREIGN KEY (burst_bottles_controlled_by) REFERENCES public.users(id);
+
+
+--
 -- Name: filling_sessions filling_sessions_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.filling_sessions
     ADD CONSTRAINT filling_sessions_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
+
+
+--
+-- Name: filling_sessions filling_sessions_fill_tube_checked_end_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.filling_sessions
+    ADD CONSTRAINT filling_sessions_fill_tube_checked_end_by_fkey FOREIGN KEY (fill_tube_checked_end_by) REFERENCES public.users(id);
+
+
+--
+-- Name: filling_sessions filling_sessions_fill_tube_checked_first_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.filling_sessions
+    ADD CONSTRAINT filling_sessions_fill_tube_checked_first_by_fkey FOREIGN KEY (fill_tube_checked_first_by) REFERENCES public.users(id);
+
+
+--
+-- Name: filling_sessions filling_sessions_first_package_checked_by_2_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.filling_sessions
+    ADD CONSTRAINT filling_sessions_first_package_checked_by_2_fkey FOREIGN KEY (first_package_checked_by_2) REFERENCES public.users(id);
+
+
+--
+-- Name: filling_sessions filling_sessions_first_package_checked_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.filling_sessions
+    ADD CONSTRAINT filling_sessions_first_package_checked_by_fkey FOREIGN KEY (first_package_checked_by) REFERENCES public.users(id);
 
 
 --
@@ -6012,6 +6136,14 @@ ALTER TABLE ONLY public.recipe_specs
 
 ALTER TABLE ONLY public.recipe_water
     ADD CONSTRAINT recipe_water_recipe_id_fkey FOREIGN KEY (recipe_id) REFERENCES public.recipes(id) ON DELETE CASCADE;
+
+
+--
+-- Name: recipes recipes_brewery_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recipes
+    ADD CONSTRAINT recipes_brewery_id_fkey FOREIGN KEY (brewery_id) REFERENCES public.breweries(id);
 
 
 --
@@ -6605,6 +6737,40 @@ CREATE POLICY brew_planning_splits_update ON public.brew_planning_splits FOR UPD
 --
 
 CREATE POLICY brew_planning_update ON public.brew_planning FOR UPDATE USING (( SELECT public.can_edit('brewing_planning'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('brewing_planning'::text) AS can_edit));
+
+
+--
+-- Name: breweries; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.breweries ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: breweries breweries_delete; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY breweries_delete ON public.breweries FOR DELETE TO authenticated USING (( SELECT public.can_delete('settings'::text) AS can_delete));
+
+
+--
+-- Name: breweries breweries_insert; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY breweries_insert ON public.breweries FOR INSERT TO authenticated WITH CHECK (( SELECT public.can_edit('settings'::text) AS can_edit));
+
+
+--
+-- Name: breweries breweries_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY breweries_select ON public.breweries FOR SELECT TO authenticated USING (true);
+
+
+--
+-- Name: breweries breweries_update; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY breweries_update ON public.breweries FOR UPDATE TO authenticated USING (( SELECT public.can_edit('settings'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('settings'::text) AS can_edit));
 
 
 --
@@ -8130,6 +8296,15 @@ GRANT ALL ON FUNCTION public.product_sheet_relevant_recipe_id(p_recipe_group_id 
 
 
 --
+-- Name: FUNCTION report_recipients(p_report text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.report_recipients(p_report text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.report_recipients(p_report text) TO service_role;
+GRANT ALL ON FUNCTION public.report_recipients(p_report text) TO authenticated;
+
+
+--
 -- Name: FUNCTION save_recipe_cellar_steps(p_recipe_id bigint, p_steps jsonb); Type: ACL; Schema: public; Owner: -
 --
 
@@ -8587,6 +8762,25 @@ GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.brew_planning_splits TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.brew_planning_splits TO authenticated;
 GRANT ALL ON TABLE public.brew_planning_splits TO service_role;
 GRANT SELECT ON TABLE public.brew_planning_splits TO claude_reader;
+
+
+--
+-- Name: TABLE breweries; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.breweries TO anon;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.breweries TO authenticated;
+GRANT ALL ON TABLE public.breweries TO service_role;
+GRANT SELECT ON TABLE public.breweries TO claude_reader;
+
+
+--
+-- Name: SEQUENCE breweries_id_seq; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,USAGE ON SEQUENCE public.breweries_id_seq TO anon;
+GRANT SELECT,USAGE ON SEQUENCE public.breweries_id_seq TO authenticated;
+GRANT ALL ON SEQUENCE public.breweries_id_seq TO service_role;
 
 
 --
