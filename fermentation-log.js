@@ -24,6 +24,23 @@ function effectiveTimeZero(batch, stageRow) {
   return (batch && batch.time_zero) || (stageRow && (stageRow.time_zero || stageRow.last_brew_ended_at)) || null;
 }
 
+/**
+ * Brewing is complete when every planned brew has ended (a split batch
+ * without brews counts as complete). Only then is the Time 0 measurement
+ * made: while brewing, the end of the last brew so far is not Time 0 yet.
+ */
+function brewingComplete(brews, plannedCount) {
+  const list = brews || [];
+  if (!list.length) return true;
+  const planned = Math.ceil(Number(plannedCount) || 0);
+  return list.length >= planned && list.every((b) => !!b.brewing_ended_at);
+}
+
+/** The automatic Time 0 measurement (comment "Time 0 …"). */
+function isTimeZeroEntry(entry) {
+  return /^Time 0\b/.test(String((entry && entry.comment) || ''));
+}
+
 /** Days since Time 0 as a number with 1 decimal, or null. */
 function daysSince(at, timeZero) {
   if (!at || !timeZero) return null;
@@ -170,7 +187,7 @@ function alginateDose(volumeL, rateLPerHl) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    effectiveTimeZero, daysSince, localDate, logLines, planProgress, openStepsForTag, attenuation, stepWhen,
+    effectiveTimeZero, brewingComplete, isTimeZeroEntry, daysSince, localDate, logLines, planProgress, openStepsForTag, attenuation, stepWhen,
     nagardoDose, alginateDose,
   };
 }

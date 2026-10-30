@@ -9,6 +9,15 @@ const at = (d, h, m = 0) => new Date(2026, 8, d, h, m).toISOString();
 assert.strictEqual(f.effectiveTimeZero({ time_zero: T0 }, { last_brew_ended_at: at(27, 9) }), T0);
 assert.strictEqual(f.effectiveTimeZero({ time_zero: null }, { last_brew_ended_at: T0 }), T0);
 assert.strictEqual(f.effectiveTimeZero({}, null), null);
+// Time 0 measurement only once brewing is complete (26358: made after brew 5 of 8)
+const brew = (n, ended) => ({ brew_number: n, brewing_ended_at: ended ? at(27, 9) : null });
+assert.strictEqual(f.brewingComplete([brew(1, true), brew(2, true)], 3), false);           // brew 3 not started
+assert.strictEqual(f.brewingComplete([brew(1, true), brew(2, true), brew(3, false)], 3), false);   // brew 3 still running
+assert.strictEqual(f.brewingComplete([brew(1, true), brew(2, true), brew(3, true)], 3), true);
+assert.strictEqual(f.brewingComplete([brew(1, true), brew(2, true)], 1.5), true);           // 1.5 brews planned = 2
+assert.strictEqual(f.brewingComplete([], 3), true);                                        // split batch, no brews
+assert.ok(f.isTimeZeroEntry({ comment: 'Time 0 · GLT total 192.7 hl' }) && f.isTimeZeroEntry({ comment: 'Time 0' }));
+assert.ok(!f.isTimeZeroEntry({ comment: 'last brew' }) && !f.isTimeZeroEntry({ comment: null }));
 // split batch: batch_stages.time_zero = the first incoming transfer
 assert.strictEqual(f.effectiveTimeZero({ time_zero: null }, { time_zero: T0, last_brew_ended_at: null }), T0);
 assert.strictEqual(f.daysSince(at(29, 8), T0), 0.8);
