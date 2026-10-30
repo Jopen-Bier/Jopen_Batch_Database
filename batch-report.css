@@ -8,8 +8,9 @@
 :root {
   --br-ink: #1c2b26;
   --br-paper: #f6f4ee;
-  --br-line: #e2ddd0;
-  --br-line-soft: #ece8dc;
+  --br-page: #ebe6da;      /* page background: a step darker than the cards' inner fills */
+  --br-line: #d3cbb8;
+  --br-line-soft: #e6e1d4;
   --br-muted: #6b6355;
   --br-faint: #a89f8e;
   --br-hop: #4c6b4f;
@@ -27,7 +28,7 @@
 }
 
 /* Colours only on the page content: the shared nav bar keeps its own look. */
-body.br-page { background: var(--br-paper); }
+body.br-page { background: var(--br-page); }
 .br-main { color: var(--br-ink); font-family: var(--br-font); }
 .br-main a { color: var(--br-hop-dark); }
 .br-main a:hover { color: var(--br-ink); }
@@ -62,7 +63,7 @@ body.br-page { background: var(--br-paper); }
 .br-jk { font-size: 10px; font-weight: 700; color: var(--br-jk-text); background: var(--br-jk-bg); border-radius: 6px; padding: 0 5px; margin-left: 6px; }
 
 /* Card + table */
-.br-card { background: #fff; border: 1px solid var(--br-line); border-radius: 10px; box-shadow: 0 1px 2px rgba(28, 43, 38, .05); }
+.br-card { background: #fff; border: 1px solid var(--br-line); border-radius: 10px; box-shadow: 0 1px 2px rgba(28, 43, 38, .08), 0 4px 10px -6px rgba(28, 43, 38, .18); }
 .br-table-wrap { overflow-x: auto; }
 .br-table { border-collapse: separate; border-spacing: 0; font-size: 13.5px; width: 100%; min-width: 860px; }
 .br-table th { text-align: left; padding: 0; border-bottom: 2px solid var(--br-hop-dark); white-space: nowrap; }
@@ -117,7 +118,7 @@ a.br-tile:hover { border-color: var(--br-hop-dark); background: #fff; }
 .br-tabbar .br-save { margin-left: auto; }
 .br-tabbar-batch { display: none; font-weight: 700; color: var(--br-hop-dark); white-space: nowrap; }
 @media (min-width: 700px) and (min-height: 600px) {
-  .br-tabbar { position: sticky; top: var(--jopen-nav-h, 0px); z-index: 20; background: var(--br-paper); padding: 6px 0; margin: -6px 0; }
+  .br-tabbar { position: sticky; top: var(--jopen-nav-h, 0px); z-index: 20; background: var(--br-page); padding: 6px 0; margin: -6px 0; }
   .br-tabbar.stuck { box-shadow: 0 6px 8px -8px rgba(28, 43, 38, .35); }
   .br-tabbar.stuck .br-tabbar-batch { display: inline; }
 }
@@ -148,6 +149,22 @@ a.br-tile:hover { border-color: var(--br-hop-dark); background: #fff; }
 /* Overview: cards, key/value lists, progress strip */
 .br-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .09em; color: var(--br-muted); }
 .br-cardpad { padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+/* Card title bar: the first label (or head row) of a card becomes a dark bar, as on the
+   recipe pages. Applies to every card on every tab, so new cards get it by starting with
+   a .br-label or .br-head. */
+.br-cardpad > .br-label:first-child,
+.br-cardpad > .br-head:first-child { margin: -14px -16px 4px; padding: 9px 16px; min-height: 38px; background: var(--br-hop-dark); border-radius: 9px 9px 0 0; }
+.br-cardpad > .br-label:first-child { display: flex; align-items: center; color: #fff; font-weight: 700; font-size: 11.5px; letter-spacing: .1em; }
+/* !important: the render functions set align-items inline (baseline/center) on these rows */
+.br-cardpad > .br-head:first-child { padding-block: 6px; align-items: center !important; color: #e9efe6; }
+.br-cardpad > .br-head:first-child .br-label,
+.br-cardpad > .br-head:first-child .fi-title { color: #fff; font-weight: 700; }
+.br-cardpad > .br-head:first-child > .br-label,
+.br-cardpad > .br-head:first-child > div > .br-label:first-child { font-size: 11.5px; letter-spacing: .1em; }
+.br-cardpad > .br-head:first-child .br-note { color: #c9d4c5; }
+.br-cardpad > .br-head:first-child .br-note.bd-done { color: #cfe6c2; }
+.br-cardpad > .br-head:first-child .br-del { color: #c9d4c5; }
+.br-cardpad > .br-head:first-child .fl-legend { background: #fff; color: var(--br-muted); border-radius: 12px; padding: 3px 10px; row-gap: 2px; }
 .br-row2 { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start; }
 .br-kr { display: flex; align-items: center; gap: 8px; padding: 3px 0; border-bottom: 1px solid #f1eee5; font-size: 13.5px; }
 .br-kr .k { flex: 1; }
