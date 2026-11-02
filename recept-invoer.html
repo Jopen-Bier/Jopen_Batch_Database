@@ -368,6 +368,7 @@
   <div id="re-loading" class="re-loading">Loading…</div>
 
   <div id="re-inhoud" style="display:none;">
+    <a href="receptoverzicht.html" style="display:inline-block; font-size:13px; color:#6b6b6b; margin-bottom:6px;">← Recipes</a>
     <h1 class="re-titel" id="re-titel">New recipe</h1>
     <div class="re-subtitel" id="re-subtitel"></div>
 
@@ -2192,6 +2193,26 @@ function vulExtraVeldenUit(fermData, procData) {
   document.getElementById('veld-comment_verwerken').value = (procData && procData.comment_verwerken) || '';
 }
 
+// After saving, the recipe opens again in the editor at the same place, so the
+// effect of a change (e.g. the regenerated cellar plan) is visible straight
+// away; before, saving went back to the recipe overview (Jaap, 02-11).
+const RE_STAY_KEY = 're-after-save';
+function blijfInRecept(recipeId, tekst) {
+  try { sessionStorage.setItem(RE_STAY_KEY, JSON.stringify({ id: String(recipeId), scrollY: window.scrollY, tekst })); } catch (e) { /* storage blocked: just reopen */ }
+  setTimeout(() => { window.location.href = `recept-invoer.html?id=${encodeURIComponent(recipeId)}`; }, 600);
+}
+function herstelNaOpslaan(recipeId) {
+  let info = null;
+  try { info = JSON.parse(sessionStorage.getItem(RE_STAY_KEY) || 'null'); sessionStorage.removeItem(RE_STAY_KEY); } catch (e) { info = null; }
+  if (!info || info.id !== String(recipeId)) return;
+  window.scrollTo(0, info.scrollY || 0);
+  const toast = document.createElement('div');
+  toast.textContent = info.tekst + ' The cellar plan and calculations are updated.';
+  toast.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#1c2b26;color:#fff;padding:10px 18px;border-radius:22px;font-size:14px;z-index:1000;box-shadow:0 8px 24px rgba(0,0,0,.2);';
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 4500);
+}
+
 async function initReceptInvoer() {
   huidigeGebruiker = await getCurrentUser();
   const magReceptenBewerken = !!huidigeGebruiker && await magBewerkenModule('recipes');
@@ -2246,7 +2267,7 @@ async function initReceptInvoer() {
   bindBaseBeerEvents();
   await Promise.all([loadCellarTimings(), loadBaseBeerGroups(null)]);   // dropdowns of Additions Cellar and Base beer
   fillBaseBeerLines([]);
-  loadCellarPlan(id || null);
+  const planGeladen = loadCellarPlan(id || null);
   if (id) {
     await laadBestaandRecept(id);
   } else {
@@ -2262,6 +2283,10 @@ async function initReceptInvoer() {
 
   document.getElementById('re-loading').style.display = 'none';
   document.getElementById('re-inhoud').style.display = 'block';
+  if (id) {
+    await planGeladen;   // full page height before scrolling back to where the user saved
+    herstelNaOpslaan(id);
+  }
 }
 
 // Blokken die de gebruiker aan/uit kan vinken bij "Copy into this form".
@@ -2650,9 +2675,9 @@ async function maakNieuwRecept() {
     gebruiker_id: gebruikerId,
   }));
 
-  melding.textContent = 'Recipe created! Redirecting…';
+  melding.textContent = 'Recipe created!';
   melding.className = 're-melding ok';
-  setTimeout(() => { window.location.href = 'receptoverzicht.html'; }, 1000);
+  blijfInRecept(nieuwId, 'Recipe created (v1.0).');
 }
 
 // -- Save-balk (altijd zichtbaar onderin) + opslaan-popup --
@@ -2728,9 +2753,8 @@ document.getElementById('re-savebar-btn').addEventListener('click', async () => 
     try {
       await maakNieuwRecept();
     } finally {
-      // Bij succes wordt na 1s doorgestuurd naar receptoverzicht.html, dus de
-      // knop hoeft dan niet meer expliciet vrijgegeven te worden. Bij een
-      // fout (melding, geen redirect) moet een nieuwe poging wel weer kunnen.
+      // On success the new recipe reopens in the editor (blijfInRecept); on an
+      // error (message, no reload) the user must be able to try again.
       opslaanBezig = false;
       zetOpslaanKnoppenDisabled(false);
     }
@@ -2817,9 +2841,9 @@ async function slaBestaandReceptOp(soort) {
       return;
     }
 
-    melding.textContent = `Saved (v${bestaandRecept.versie_major}.${bestaandRecept.versie_minor}, unregistered correction). Redirecting…`;
+    melding.textContent = `Saved (v${bestaandRecept.versie_major}.${bestaandRecept.versie_minor}, unregistered correction).`;
     melding.className = 're-melding ok';
-    setTimeout(() => { window.location.href = 'receptoverzicht.html'; }, 1000);
+    blijfInRecept(bestaandRecept.id, `Saved (v${bestaandRecept.versie_major}.${bestaandRecept.versie_minor}, unregistered correction).`);
     return;
   }
 
@@ -2854,9 +2878,9 @@ async function slaBestaandReceptOp(soort) {
       gebruiker_id: gebruikerId,
     }));
 
-    melding.textContent = `Saved as v${bestaandRecept.versie_major}.${nieuweMinor}. Redirecting…`;
+    melding.textContent = `Saved as v${bestaandRecept.versie_major}.${nieuweMinor}.`;
     melding.className = 're-melding ok';
-    setTimeout(() => { window.location.href = 'receptoverzicht.html'; }, 1000);
+    blijfInRecept(bestaandRecept.id, `Saved as v${bestaandRecept.versie_major}.${nieuweMinor}.`);
     return;
   }
 
@@ -2910,9 +2934,9 @@ async function slaBestaandReceptOp(soort) {
     gebruiker_id: gebruikerId,
   }));
 
-  melding.textContent = `Saved as new version v${nieuweMajor}.0. Redirecting…`;
+  melding.textContent = `Saved as new version v${nieuweMajor}.0.`;
   melding.className = 're-melding ok';
-  setTimeout(() => { window.location.href = 'receptoverzicht.html'; }, 1000);
+  blijfInRecept(nieuwRecept.id, `Saved as new version v${nieuweMajor}.0.`);
 }
 
 // Total WP hop / Total dry hop: aparte aggregaat-totalen naast de
