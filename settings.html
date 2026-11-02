@@ -24,7 +24,7 @@
     .settings-layout { display: flex; gap: 28px; align-items: flex-start; }
 
     .settings-sidebar {
-      width: 200px; flex-shrink: 0; background: #fff; border: 1px solid #ddd; border-radius: 8px;
+      width: 220px; flex-shrink: 0; background: #fff; border: 1px solid #ddd; border-radius: 8px;
       padding: 8px; position: sticky; top: calc(var(--jopen-nav-h, 0px) + 20px);
     }
     .settings-sidebar button {
@@ -34,6 +34,30 @@
     }
     .settings-sidebar button:hover { background: var(--jopen-red-tint); }
     .settings-sidebar button.actief { background: var(--jopen-red); color: #fff; font-weight: 600; }
+    .settings-search {
+      width: 100%; box-sizing: border-box; padding: 7px 10px; margin-bottom: 6px;
+      border: 1px solid #ccc; border-radius: 6px; font-size: 0.9em;
+    }
+    .settings-group-heading {
+      font-size: 0.72em; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+      color: #777; padding: 12px 12px 4px;
+    }
+    .settings-group-heading:first-of-type { padding-top: 6px; }
+    .settings-search-empty { font-size: 0.85em; color: #777; padding: 8px 12px; }
+    .settings-select { display: none; }
+
+    /* Phone width: the sidebar becomes one grouped dropdown above the content. */
+    @media (max-width: 699px) {
+      main.settings-main { padding: 16px; }
+      .settings-layout { flex-direction: column; gap: 12px; }
+      .settings-layout > .settings-sidebar { display: none; }
+      .settings-select {
+        display: block; width: 100%; padding: 9px 10px; font-size: 1em;
+        border: 1px solid #ccc; border-radius: 6px; background: #fff;
+      }
+      .settings-sectie { padding: 16px; }
+      .settings-sectie table.cat-tabel { display: block; overflow-x: auto; }
+    }
 
     .settings-inhoud { flex: 1; min-width: 0; }
     .settings-sectie { display: none; background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 20px 24px; }
@@ -75,7 +99,11 @@
 
     <div id="admin-inhoud" class="settings-layout" style="display:none;">
 
-      <nav class="settings-sidebar" id="settings-sidebar"></nav>
+      <nav class="settings-sidebar" aria-label="Settings sections">
+        <input type="search" id="settings-search" class="settings-search" placeholder="Search settings…" aria-label="Search settings" />
+        <div id="settings-sidebar"></div>
+      </nav>
+      <select id="settings-select" class="settings-select" aria-label="Settings section"></select>
 
       <div class="settings-inhoud">
 
@@ -267,20 +295,24 @@
   <script src="nav.js"></script>
   <script src="waterzouten.js"></script>
   <script>
-    // Nieuwe sectie toevoegen: hier een entry bijzetten (id moet matchen met
-    // het element-id in de HTML, zonder 'sectie-' voorvoegsel) en een eigen
-    // laadFn die de sectie-inhoud vult.
+    // Adding a section: add an entry here (id must match the element id in
+    // the HTML, without the 'sectie-' prefix), give it a group from
+    // SETTINGS_GROUPS and its own laadFn that fills the section content.
+    // The sidebar shows the groups in SETTINGS_GROUPS order, and the sections
+    // within a group in the order below.
+    const SETTINGS_GROUPS = ['Ingredients', 'Recipes', 'Cellar & fermentation', 'Packaging & filling', 'General'];
+
     const SETTINGS_SECTIES = [
-      { id: 'categorieen', titel: 'Ingredient categories', laadFn: laadCategorieenSectie },
-      { id: 'eenheden', titel: 'Units', laadFn: laadEenhedenSectie },
-      { id: 'documenttypen', titel: 'Document types', laadFn: laadDocumenttypenSectie },
-      { id: 'declaraties', titel: 'Ingredient declarations', laadFn: laadDeclaratiesSectie },
-      { id: 'water', titel: 'Water', laadFn: laadWaterSectie },
-      { id: 'cellar-plan', titel: 'Cellar plan', laadFn: loadCellarPlanSection },
-      { id: 'action-tags', titel: 'Cellar action tags', laadFn: loadActionTagsSection },
-      { id: 'packaging-articles', titel: 'Packaging articles', laadFn: loadPackagingSections },
-      { id: 'packaging-materials', titel: 'Packaging materials', laadFn: () => {} },
-      { id: 'breweries', titel: 'Breweries', laadFn: loadBreweriesSection },
+      { id: 'categorieen', group: 'Ingredients', titel: 'Ingredient categories', laadFn: laadCategorieenSectie },
+      { id: 'declaraties', group: 'Ingredients', titel: 'Ingredient declarations', laadFn: laadDeclaratiesSectie },
+      { id: 'documenttypen', group: 'Ingredients', titel: 'Document types', laadFn: laadDocumenttypenSectie },
+      { id: 'water', group: 'Recipes', titel: 'Water', laadFn: laadWaterSectie },
+      { id: 'cellar-plan', group: 'Cellar & fermentation', titel: 'Cellar plan', laadFn: loadCellarPlanSection },
+      { id: 'action-tags', group: 'Cellar & fermentation', titel: 'Cellar action tags', laadFn: loadActionTagsSection },
+      { id: 'packaging-articles', group: 'Packaging & filling', titel: 'Packaging articles', laadFn: loadPackagingSections },
+      { id: 'packaging-materials', group: 'Packaging & filling', titel: 'Packaging materials', laadFn: () => {} },
+      { id: 'eenheden', group: 'General', titel: 'Units', laadFn: laadEenhedenSectie },
+      { id: 'breweries', group: 'General', titel: 'Breweries', laadFn: loadBreweriesSection },
     ];
 
     let alleCategorieen = [];
@@ -291,17 +323,54 @@
     function toonSectie(id) {
       document.querySelectorAll('.settings-sectie').forEach(el => el.classList.toggle('actief', el.id === `sectie-${id}`));
       document.querySelectorAll('#settings-sidebar button').forEach(btn => btn.classList.toggle('actief', btn.dataset.id === id));
+      document.getElementById('settings-select').value = id;
       window.location.hash = id;
+    }
+
+    function sectionsInGroup(group) {
+      return SETTINGS_SECTIES.filter(s => s.group === group);
     }
 
     function bouwSidebar() {
       const sidebar = document.getElementById('settings-sidebar');
-      sidebar.innerHTML = SETTINGS_SECTIES.map(s =>
-        `<button type="button" data-id="${s.id}">${s.titel}</button>`
-      ).join('');
+      sidebar.innerHTML = SETTINGS_GROUPS.map(group =>
+        `<div class="settings-group-heading" data-group="${escapeHtml(group)}">${escapeHtml(group)}</div>` +
+        sectionsInGroup(group).map(s =>
+          `<button type="button" data-id="${s.id}" data-group="${escapeHtml(group)}">${escapeHtml(s.titel)}</button>`
+        ).join('')
+      ).join('') + '<div class="settings-search-empty" id="settings-search-empty" style="display:none;">No matching settings.</div>';
       sidebar.querySelectorAll('button').forEach(btn => {
         btn.addEventListener('click', () => toonSectie(btn.dataset.id));
       });
+
+      const select = document.getElementById('settings-select');
+      select.innerHTML = SETTINGS_GROUPS.map(group =>
+        `<optgroup label="${escapeHtml(group)}">` +
+        sectionsInGroup(group).map(s => `<option value="${s.id}">${escapeHtml(s.titel)}</option>`).join('') +
+        '</optgroup>'
+      ).join('');
+      select.addEventListener('change', () => toonSectie(select.value));
+
+      document.getElementById('settings-search').addEventListener('input', e => filterSidebar(e.target.value));
+    }
+
+    // Matches the search text against the section title, its group and its
+    // explanation text, so "keg" also finds Packaging articles.
+    function filterSidebar(query) {
+      const q = query.trim().toLowerCase();
+      const visibleGroups = new Set();
+      document.querySelectorAll('#settings-sidebar button').forEach(btn => {
+        const section = document.getElementById(`sectie-${btn.dataset.id}`);
+        const explanation = section?.querySelector('p.uitleg')?.textContent || '';
+        const haystack = `${btn.textContent} ${btn.dataset.group} ${explanation}`.toLowerCase();
+        const match = !q || haystack.includes(q);
+        btn.style.display = match ? '' : 'none';
+        if (match) visibleGroups.add(btn.dataset.group);
+      });
+      document.querySelectorAll('#settings-sidebar .settings-group-heading').forEach(h => {
+        h.style.display = visibleGroups.has(h.dataset.group) ? '' : 'none';
+      });
+      document.getElementById('settings-search-empty').style.display = visibleGroups.size ? 'none' : '';
     }
 
     async function initSettingsPagina() {
