@@ -197,6 +197,36 @@ Steps are editable and reorderable in the recipe editor; edited steps get
 - First open step: orange, "next".
 - Tasks x/y on the Active batches tile = done / total.
 
+## Brewhouse design (recipe page, WP mash filter)
+Brewcalc 1.00 in the recipe editor (Jaap, 23-10 / 03-11): card "Brewhouse
+design" under Malt & Grains; calculation `brewhouse-design.js` (tested
+against the sheet), card `recipe-brewhouse-design.js`.
+- Inputs: the malts of Malt & Grains with the **extract %** and **malt
+  equivalent** of their ingredient cards (empty malt equivalent = 1),
+  Brouwsel (hl) as the target, the original extract (°P at the GLT), and from
+  Brewing parameters mash thickness (l/kg, default 2.6), mash-in temp,
+  desired evaporation (default 2 %) and mash filter chambers (default 27, the
+  maximum and the most efficient). Own inputs, saved in `recipe_brewing_specs`
+  (`design_*`): extract at casting (empty = original extract; higher means
+  dilution water), **mash and filter loss % of the lab extract (default 7 %,
+  measured ~7 % over 62 WP brews)**, whirlpool loss % (default 2) × hop
+  factor (default 3; 2 for beers that are not hoppy).
+- Stages: lab extract − mash and filter loss = extract at the start of the
+  boil; no extract loss in the boil (measured ~0, only evaporation);
+  whirlpool and transfer loss = whirlpool loss % × hop factor (measured ~7 %).
+- Load per chamber = Σ kg × malt equivalent / chambers; good at 32–38 kg
+  (nominal 35). Volume to the GLT vs Brouwsel (hl): ✓ within ±0.5 hl.
+- Sparge water from a water balance (water in the wort at the start of the
+  boil + water held in the spent grains − mash water); Brewcalc's own sparge
+  formula gives ~4 hl more than the brew logs.
+- "Scale grist to … hl" multiplies the malts (same shares, whole kg) to hit
+  Brouwsel (hl). "Apply to brewing parameters" fills mash water, cumm.
+  sparging volume, boil volume, expected extract at start of boil, water
+  addition (back-cooling) and final brew volume, plus the shared parameters
+  that were empty. Nothing is saved until Save recipe.
+- Not included (Jaap): lauter tun / JK, kettle limit, cooling, air, cellar
+  losses (Recipe analytics › Losses). Later: real yield per recipe.
+
 ## Calculators (show only when relevant)
 - Zinc sulphate (Brewing, Additions brewers; Jaap, 23-10): calculator button
   on the zinc sulphate line (ingredient name "Zinksulfaat…"). Calculated on
