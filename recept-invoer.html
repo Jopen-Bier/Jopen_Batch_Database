@@ -337,6 +337,27 @@
   .re-loading { text-align: center; padding: 60px 20px; font-family: var(--mono); font-size: 13px; color: #7a7266; }
   .re-geen-rechten { text-align: center; padding: 60px 20px; font-family: var(--mono); font-size: 13px; color: #a33f2c; }
   .re-leeg { font-family: var(--mono); font-size: 12px; color: #7a7266; padding: 8px 0; }
+  /* Brewhouse design card (recipe-brewhouse-design.js) */
+  .re-bhd-shared { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+  .re-bhd-chip { font-size: 12px; background: #f3f1ec; border: 1px solid var(--line); border-radius: 12px; padding: 3px 10px; color: #6b6355; }
+  .re-bhd-chip b { color: var(--hop-dark); }
+  .re-bhd-chip i { color: #a3651f; font-style: normal; }
+  .re-bhd-grid { display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); gap: 24px; align-items: start; }
+  .re-bhd-grid .re-param-columns { column-count: 1; }
+  .re-bhd-grid .re-paramrow-simple { grid-template-columns: 200px 1fr; }
+  .re-bhd-results { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .re-bhd-results td { padding: 5px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .re-bhd-results td.re-bhd-n { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .re-bhd-results td.re-bhd-note { color: #6b6355; font-size: 12px; }
+  .re-bhd-results tr.ok td { background: #eef4ea; }
+  .re-bhd-results tr.ok td.re-bhd-note { color: #2f5d34; }
+  .re-bhd-results tr.bad td { background: #fbeae6; }
+  .re-bhd-results tr.bad td.re-bhd-note { color: #a33f2c; }
+  .re-bhd-problem { font-size: 13px; color: #7a4f17; background: #fdf1d8; border-radius: 6px; padding: 10px 12px; }
+  .re-bhd-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 12px; }
+  .re-bhd-msg { font-size: 12px; color: #2f5d34; }
+  input.re-bhd-filled { background: #eef4ea !important; transition: background .3s; }
+  @media (max-width: 800px) { .re-bhd-grid { grid-template-columns: minmax(0, 1fr); } }
   /* Base beer block (recipe-base-beer.js) */
   .re-bb-table tfoot td { font-weight: 700; padding-top: 6px; }
   .re-bb-off { color: #a33f2c; }
@@ -531,6 +552,12 @@
         </table>
         <p class="re-versie-uitleg" style="margin-top:-4px;">Calculated color: <strong id="re-mout-kleur-waarde">—</strong> EBC (weighted by weight/color per malt, ÷ Brouwsel (hl), + 1.75)</p>
         <button type="button" class="re-btn secundair" data-tbody="re-ing-mout-tbody" data-roles="malt" data-add-btn>+ Add malt/grain</button>
+      </div>
+
+      <div class="re-section">
+        <h2>Brewhouse design</h2>
+        <p class="re-cp-intro">Brewcalc in the recipe (WP mash filter): from the grist above, Brouwsel (hl) and the original extract to the volume at the GLT and the load on the mash filter. Uses the extract % and malt equivalent of the ingredient cards. "Apply" fills the brewing parameters; nothing is saved until Save recipe.</p>
+        <div id="re-brewhouse-design"><div class="re-leeg">Loading…</div></div>
       </div>
 
       <div class="re-section">
@@ -781,6 +808,8 @@
 <script src="brew-calculations.js"></script>
 <script src="recipe-cellar-plan.js"></script>
 <script src="recipe-base-beer.js"></script>
+<script src="brewhouse-design.js"></script>
+<script src="recipe-brewhouse-design.js"></script>
 <script>
 const SPECS_FIELDS = [
   ['origineel_extract', 'Original extract', '°P', 'number'],
@@ -1533,6 +1562,7 @@ function herberekenMoutTotalen() {
       kleurCel.textContent = maltColorEbc(malts, brouwselHl).toFixed(2);
     }
   }
+  updateBrewhouseDesign();   // the grist changed: Brewhouse design card (recipe-brewhouse-design.js)
 }
 
 // Brouwsel (hl) bepaalt mee de Calculated color, dus bij wijziging daar
@@ -2225,10 +2255,11 @@ async function initReceptInvoer() {
 
   const { data: ingData, error: ingError } = await supabaseClient
     .from('ingredients')
-    .select('id, naam:name, eenheid:unit, ingredient_categories(name)')
+    .select('id, naam:name, eenheid:unit, extract_pct, malt_equivalent, ingredient_categories(name)')
     .order('name');
   if (!ingError) {
-    alleIngredientenLijst = (ingData || []).map(i => ({ id: i.id, naam: i.naam, eenheid: i.eenheid, categorie_naam: i.ingredient_categories?.name }));
+    // extract_pct / malt_equivalent: for the Brewhouse design card (recipe-brewhouse-design.js)
+    alleIngredientenLijst = (ingData || []).map(i => ({ id: i.id, naam: i.naam, eenheid: i.eenheid, categorie_naam: i.ingredient_categories?.name, extract_pct: i.extract_pct, malt_equivalent: i.malt_equivalent }));
   }
 
   // Vaste eenhedenlijst uit Settings -> Units. De Unit-kolom op receptregels
@@ -2250,6 +2281,7 @@ async function initReceptInvoer() {
   renderParamGrid('re-ferm-grid', FERM_FIELDS, null);
   renderBrouwSecties('re-brouw-algemeen-grid', BROUW_ALGEMEEN_SECTIES, null);
   renderBrouwSecties('re-brouw-grid', BROUW_OVERIGE_SECTIES, null, true);
+  fillBrewhouseDesign(null);
   renderVeldenGrid('re-water-grid', WATER_FIELDS, null);
   renderVeldenGrid('re-verpakking-grid', VERPAKKING_FIELDS, null);
   renderFormatenCheckboxen('re-formaten-checkboxen', []);
@@ -2265,6 +2297,7 @@ async function initReceptInvoer() {
   const id = urlParam('id');
   bindCellarPlanEvents();
   bindBaseBeerEvents();
+  bindBrewhouseDesignEvents();
   await Promise.all([loadCellarTimings(), loadBaseBeerGroups(null)]);   // dropdowns of Additions Cellar and Base beer
   fillBaseBeerLines([]);
   const planGeladen = loadCellarPlan(id || null);
@@ -2485,6 +2518,7 @@ document.getElementById('re-kopieer-btn').addEventListener('click', async () => 
   if (blokken.has('brouw')) {
     renderBrouwSecties('re-brouw-algemeen-grid', BROUW_ALGEMEEN_SECTIES, brouw.data || {});
     renderBrouwSecties('re-brouw-grid', BROUW_OVERIGE_SECTIES, brouw.data || {}, true);
+    fillBrewhouseDesign(brouw.data);
   }
   if (blokken.has('water')) renderVeldenGrid('re-water-grid', WATER_FIELDS, water.data || {});
   if (blokken.has('verpakking')) {
@@ -2578,6 +2612,7 @@ async function laadBestaandRecept(id) {
   renderParamGrid('re-ferm-grid', FERM_FIELDS, ferm.data || {});
   renderBrouwSecties('re-brouw-algemeen-grid', BROUW_ALGEMEEN_SECTIES, brouw.data || {});
   renderBrouwSecties('re-brouw-grid', BROUW_OVERIGE_SECTIES, brouw.data || {}, true);
+  fillBrewhouseDesign(brouw.data);
   renderVeldenGrid('re-water-grid', WATER_FIELDS, water.data || {});
   renderVeldenGrid('re-verpakking-grid', VERPAKKING_FIELDS, verpakking.data || {});
   renderFormatenCheckboxen('re-formaten-checkboxen', (verpakking.data && verpakking.data.formaten) || []);
@@ -2998,7 +3033,7 @@ async function schrijfGerelateerdeData(recipeId) {
   const { error: fermErr } = await supabaseClient.from('recipe_fermentation').upsert(toDb('recipe_fermentation', { recipe_id: recipeId, ...ferm }));
   if (fermErr) return 'process parameters: ' + fermErr.message;
 
-  const { error: brouwErr } = await supabaseClient.from('recipe_brewing_specs').upsert(toDb('recipe_brewing_specs', { recipe_id: recipeId, ...brouw }));
+  const { error: brouwErr } = await supabaseClient.from('recipe_brewing_specs').upsert(toDb('recipe_brewing_specs', { recipe_id: recipeId, ...brouw, ...readBrewhouseDesign() }));
   if (brouwErr) return 'brewing parameters: ' + brouwErr.message;
 
   const { error: waterErr } = await supabaseClient.from('recipe_water').upsert(toDb('recipe_water', { recipe_id: recipeId, ...water }));

@@ -7,12 +7,18 @@
 // (Jaap, 23-10). Test: tests/brewhouse-design.test.js (checked against the
 // sheet's own values for Mooie Nel and a second grist).
 //
+// Change from the sheet: the mash and filter loss is a % of the lab extract
+// (the sheet: % of the grist kg), so it matches what the brew log measures
+// between the lab extract and the start of the boil. Kettle sugars have no
+// mash or filter loss.
+//
 // Browser: <script src="brewhouse-design.js">. Node: require('../brewhouse-design.js').
 // ============================================================================
 
 // House values of Brewcalc (the fixed values the brewers designed with).
 const BREWHOUSE_DEFAULTS = {
-  brewhouseLossPct: 1.5,      // O38: % of the grist kg below the lab extract
+  brewhouseLossPct: 7,        // mash and filter loss, % of the lab extract (Jaap, 03-11:
+                              // measured ~7 % over 62 WP brews; Brewcalc O38 used 1.5 % of the grist kg)
   waterGristRatio: 2.6,       // P42: l/kg
   mashInTemp: 52,             // P45: °C
   rinseWaterHl: 0.5,          // P55
@@ -71,12 +77,11 @@ function brewhouseDesign(grist, options) {
 
   // Raw materials (rows 12–38)
   const mashKg = sum(mash, (g) => g.kg);                                   // P49
-  const allKg = mashKg + sum(kettle, (g) => g.kg);
   const labExtractMashKg = sum(mash, (g) => g.kg * g.labYield);            // K31
   const labExtractKg = labExtractMashKg + sum(kettle, (g) => g.kg * g.labYield);   // K37
   const loss = o.brewhouseLossPct / 100;
-  const extractMashKg = labExtractMashKg - loss * mashKg;                  // L31
-  const extractKg = labExtractKg - loss * allKg;                           // L37
+  const extractMashKg = labExtractMashKg * (1 - loss);                     // L31
+  const extractKg = extractMashKg + (labExtractKg - labExtractMashKg);     // L37
   const meKg = sum(mash, (g) => g.kg * (g.meFactor ?? 1));                 // N32
 
   // Mash filter (rows 70–84): the chambers are chosen, the load follows
@@ -112,7 +117,15 @@ function brewhouseDesign(grist, options) {
     : mashTransferHl - filterVolumeHl;                                     // O78
   const lauteredCorrHl = boilStartHl * 1.0259 / 1.0437;                    // O86
   const spargeVolumeHl = lauteredCorrHl - pressedMainHl - filteredMainHl - pressedSpargeHl;   // O80
-  const spargeWaterHl = spargeVolumeHl + pressedMainHl;                    // P82
+  const spargeBrewcalcHl = spargeVolumeHl + pressedMainHl;                 // P82
+  // Sparge water from a water balance instead (Jaap, 03-11): the water in the
+  // wort at the start of the boil plus the water held in the spent grains,
+  // minus the mash water. Mooie Nel: 20.1 hl against 20.4 hl in the brew logs;
+  // the sheet's P82 gives 24.5 hl.
+  const boilStartColdHl = boilStartHl / 1.042;
+  const waterInWortKg = boilStartColdHl * platoToWv(boilStartPlato) * (100 / boilStartPlato - 1);
+  const waterInGrainsKg = spentGrainsKg * (1 - o.spentGrainsDryMatter);
+  const spargeWaterHl = (waterInWortKg + waterInGrainsKg) / 100 - mashWaterHl;
 
   // Whirlpool and dilution (rows 96–106)
   const wpLossFraction = o.hopCorrection * o.whirlpoolLossPct / 100;
@@ -130,9 +143,9 @@ function brewhouseDesign(grist, options) {
   const dilutionHl = hotHl - afterWpHl < 0.01 ? 0 : hotHl - afterWpHl;     // P104
 
   return {
-    mashKg, allKg, meKg, labExtractKg, extractKg, extractMashKg,
+    mashKg, meKg, labExtractKg, extractKg, extractMashKg,
     chambers, loadPerChamber, loadPerM2, loadOk: loadPerChamber !== null && loadPerChamber >= CHAMBER_LOAD.min && loadPerChamber <= CHAMBER_LOAD.max,
-    mashWaterHl, mashTransferHl, firstWortPlato, spargeWaterHl, spentGrainsKg,
+    mashWaterHl, mashTransferHl, firstWortPlato, spargeWaterHl, spargeBrewcalcHl, spentGrainsKg,
     boilStartHl, boilStartPlato, evaporationHl, boilEndHl, castColdHl, castHotHl,
     wpLossHl, extractAfterWpKg, dilutionHl, toGltHl,
   };

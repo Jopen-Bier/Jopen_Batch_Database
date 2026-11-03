@@ -106,6 +106,16 @@ Agreed with Jaap. Date = when decided. Do not change without asking.
 | 23-10 | Active batches: the stage pills at the top are filters, several at once; only the chosen blocks show (Jaap). |
 | 19-10 | All batches always shows all batches (no Active/Closed toggle); active batches are on Active batches. |
 
+## Recipe / brewhouse design
+| Date | Decision |
+|---|---|
+| 23-10 | Brewcalc goes into the recipe page, simplified to the WP mash filter: right volume at the right °P with a good filter load. JK, kettle limit, cooling and air are left out (Jaap). |
+| 23-10 | 27 mash filter chambers is the maximum and the most efficient; fewer is possible but kept to a minimum (Jaap). |
+| 23-10 | Lab yield from the ingredient's extract %; the malt equivalent (filter load) is stored per ingredient (Jaap). |
+| 03-11 | Malt equivalent is a field on the ingredient card, shown for categories with the Settings switch "Malt equivalent" (Malt/Grain); not required (Jaap). |
+| 03-11 | Mash and filter loss starts at 7 % of the lab extract; the whirlpool loss stays Brewcalc's 2 % × hop factor (Jaap). |
+| 03-11 | User-defined ingredient specifications: not now, later when really needed (Jaap). |
+
 ## Parked (do not build yet)
 - Closing the filling report (Completed / Signed) and the "Entered in Mdrank"
   fields: wait for Jaap's talk with the admin.
