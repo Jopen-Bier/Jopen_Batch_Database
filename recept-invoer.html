@@ -337,6 +337,9 @@
   .re-loading { text-align: center; padding: 60px 20px; font-family: var(--mono); font-size: 13px; color: #7a7266; }
   .re-geen-rechten { text-align: center; padding: 60px 20px; font-family: var(--mono); font-size: 13px; color: #a33f2c; }
   .re-leeg { font-family: var(--mono); font-size: 12px; color: #7a7266; padding: 8px 0; }
+  /* Malt & Grains: share of the grist (%) as an input */
+  .re-ing-percentage input { width: 70px; }
+  #re-mout-totaal-pct.re-pct-off { color: #a33f2c; }
   /* Brewhouse design card (recipe-brewhouse-design.js) */
   .re-bhd-shared { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
   .re-bhd-chip { font-size: 12px; background: #f3f1ec; border: 1px solid var(--line); border-radius: 12px; padding: 3px 10px; color: #6b6355; }
@@ -545,7 +548,7 @@
               <td id="re-mout-totaal-kg">0</td>
               <td></td>
               <td></td>
-              <td>100%</td>
+              <td id="re-mout-totaal-pct">100%</td>
               <td colspan="3"></td>
             </tr>
           </tfoot>
@@ -1247,7 +1250,8 @@ function voegIngredientRegelToe(tbodyId, rollenLijst, regel = {}) {
     </td>` : '';
   const alphaKolomHtml = isHopSectie ? `<td><input type="number" class="re-ing-alpha" value="${regel.alpha_pct ?? ''}" /></td>` : '';
   const ebcKolomHtml = isMoutSectie ? `<td><input type="number" class="re-ing-ebc" value="${regel.kleur_ebc ?? ''}" /></td>` : '';
-  const percentageKolomHtml = isMoutSectie ? `<td class="re-ing-percentage">—</td>` : '';
+  // Share of the grist: shows the share of the kg, or a typed % to calculate the kg from (Brewhouse design card)
+  const percentageKolomHtml = isMoutSectie ? `<td class="re-ing-percentage"><input type="number" step="any" min="0" class="re-ing-pct" aria-label="Share of the grist (%)" /></td>` : '';
   // Af te wegen hoeveelheid voor DIT brouwsel: alleen relevant bij additives
   // met een ratio-eenheid (X/hl of X/l) -- daar is de ingevoerde "Amount"
   // een tarief, geen absoluut gewicht. Berekend/bijgewerkt door
@@ -1538,11 +1542,19 @@ function herberekenMoutTotalen() {
   const gewichten = rijen.map(tr => Number(tr.querySelector('.re-ing-hoeveelheid').value) || 0);
   const totaalKg = gewichten.reduce((a, b) => a + b, 0);
 
+  // A typed % (data-pct-typed) stays until the kg are calculated from it; the others show the share of the kg.
+  let totaalPct = 0;
   rijen.forEach((tr, i) => {
-    const cel = tr.querySelector('.re-ing-percentage');
-    if (!cel) return;
-    cel.textContent = totaalKg > 0 ? `${((gewichten[i] / totaalKg) * 100).toFixed(1)}%` : '—';
+    const pct = tr.querySelector('.re-ing-pct');
+    if (!pct) return;
+    if (!tr.dataset.pctTyped) pct.value = totaalKg > 0 ? ((gewichten[i] / totaalKg) * 100).toFixed(1) : '';
+    totaalPct += Number(pct.value) || 0;
   });
+  const totaalPctCel = document.getElementById('re-mout-totaal-pct');
+  if (totaalPctCel) {
+    totaalPctCel.textContent = rijen.length ? `${Math.round(totaalPct * 10) / 10}%` : '100%';
+    totaalPctCel.classList.toggle('re-pct-off', rijen.length > 0 && Math.abs(totaalPct - 100) > 0.5);
+  }
 
   const totaalCel = document.getElementById('re-mout-totaal-kg');
   if (totaalCel) totaalCel.textContent = totaalKg.toFixed(1);
@@ -1569,6 +1581,10 @@ function herberekenMoutTotalen() {
 // meteen de moutkleur herberekenen.
 document.addEventListener('input', (e) => {
   if (e.target && e.target.id === 'veld-brouwsel_hl') { herberekenMoutTotalen(); herberekenAfweegHoeveelheden(); }
+  if (e.target && e.target.classList && e.target.classList.contains('re-ing-pct')) {
+    e.target.closest('tr').dataset.pctTyped = '1';
+    herberekenMoutTotalen();
+  }
 });
 
 // Additives met een ratio-eenheid (X/hl of X/l) hebben een tarief als

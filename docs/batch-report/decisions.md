@@ -114,6 +114,7 @@ Agreed with Jaap. Date = when decided. Do not change without asking.
 | 23-10 | Lab yield from the ingredient's extract %; the malt equivalent (filter load) is stored per ingredient (Jaap). |
 | 03-11 | Malt equivalent is a field on the ingredient card, shown for categories with the Settings switch "Malt equivalent" (Malt/Grain); not required (Jaap). |
 | 03-11 | Mash and filter loss starts at 7 % of the lab extract; the whirlpool loss stays Brewcalc's 2 % × hop factor (Jaap). |
+| 03-11 | A recipe's grist can be designed in %: the brewer enters the % per malt, the Brewhouse design card calculates the kg for Brouwsel (hl) at the original extract; the brewer rounds off (Jaap). |
 | 03-11 | User-defined ingredient specifications: not now, later when really needed (Jaap). |
 
 ## Parked (do not build yet)

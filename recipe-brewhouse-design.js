@@ -5,8 +5,9 @@
 // parameters it shares (mash thickness, mash-in temp, evaporation, mash
 // filter chambers); its own inputs are saved in recipe_brewing_specs
 // (design_*). The calculation is brewhouseDesign() of brewhouse-design.js.
-// "Scale grist" changes the malt amounts; "Apply" fills the brewing
-// parameters. Nothing is saved until Save recipe.
+// "Calculate malt kg" fills the malt kg from the % of Malt & Grains for
+// Brouwsel (hl) (Jaap, 03-11: design the grist in %); "Apply" fills the
+// brewing parameters. Nothing is saved until Save recipe.
 //
 // Page hooks: fillBrewhouseDesign(brewingSpecs) after the brewing parameters
 // are rendered, readBrewhouseDesign() into the recipe_brewing_specs upsert,
@@ -51,23 +52,27 @@ function bhdNumber(text) {
 const bhdField = (key) => document.getElementById('veld-' + key);
 const bhdFmt = (v, d = 1) => (v === null || v === undefined || !Number.isFinite(v) ? '—' : v.toLocaleString('en-GB', { minimumFractionDigits: d, maximumFractionDigits: d }));
 
-/** The malt rows of the Malt & Grains table with their ingredient data. */
-function bhdGrist() {
+/** The malt rows of the Malt & Grains table: kg, share of the grist (%) and ingredient data. */
+function bhdMaltRows() {
   const byId = new Map((typeof alleIngredientenLijst !== 'undefined' ? alleIngredientenLijst : []).map((i) => [i.id, i]));
   return Array.from(document.querySelectorAll('#re-ing-mout-tbody tr')).map((tr) => {
     const id = bhdNumber(tr.querySelector('.re-ing-ingredient')?.value);
     const ing = byId.get(id) || {};
     return {
       tr, name: ing.naam || '(no ingredient)', kg: bhdNumber(tr.querySelector('.re-ing-hoeveelheid')?.value) || 0,
+      pct: bhdNumber(tr.querySelector('.re-ing-pct')?.value) || 0, pctTyped: !!tr.dataset.pctTyped,
       labYield: ing.extract_pct === null || ing.extract_pct === undefined ? null : Number(ing.extract_pct) / 100,
       meFactor: ing.malt_equivalent === null || ing.malt_equivalent === undefined ? 1 : Number(ing.malt_equivalent),
     };
-  }).filter((g) => g.kg > 0);
+  });
 }
+const bhdGrist = () => bhdMaltRows().filter((g) => g.kg > 0);
+const bhdMissingYield = (rows) => rows.filter((g) => g.labYield === null).map((g) => g.name);
 
 /** Everything the calculation needs, with the defaults filled in, or a reason why not. */
 function bhdState() {
-  const grist = bhdGrist();
+  const rows = bhdMaltRows();
+  const grist = rows.filter((g) => g.kg > 0);
   const targetHl = bhdNumber(bhdField('brouwsel_hl')?.value);
   const originalExtract = bhdNumber(bhdField('origineel_extract')?.value);
   const shared = {};
@@ -78,16 +83,28 @@ function bhdState() {
   const own = {};
   BREWHOUSE_DESIGN_INPUTS.forEach(([col, , , def]) => { own[col] = bhd.values[col] ?? def; });
   const castPlato = own.design_cast_extract ?? originalExtract;
-  const missingYield = grist.filter((g) => g.labYield === null).map((g) => g.name);
+  const missingYield = bhdMissingYield(grist);
   let problem = '';
-  if (!grist.length) problem = 'Add the malts in Malt & Grains.';
-  else if (originalExtract === null) problem = 'Fill in the original extract (End product specifications).';
+  if (originalExtract === null) problem = 'Fill in the original extract (End product specifications).';
+  else if (!grist.length) problem = rows.some((g) => g.pct > 0)
+    ? 'Press "Calculate malt kg" to fill in the kg from the %.'
+    : 'Add the malts in Malt & Grains, with a % or the kg.';
   else if (missingYield.length) problem = `No extract % on the ingredient card of: ${missingYield.join(', ')}.`;
+  // Calculating the kg from the %: every malt needs a %, together 100 %
+  const pctRows = rows.filter((g) => g.pct > 0);
+  const pctTotal = rows.reduce((t, g) => t + g.pct, 0);
+  let calcProblem = '';
+  if (targetHl === null) calcProblem = 'Fill in Brouwsel (hl).';
+  else if (originalExtract === null) calcProblem = 'Fill in the original extract.';
+  else if (!pctRows.length) calcProblem = 'Enter a % per malt.';
+  else if (Math.abs(pctTotal - 100) > 0.5) calcProblem = `The % add up to ${Math.round(pctTotal * 10) / 10} %, not 100 %.`;
+  else if (bhdMissingYield(pctRows).length) calcProblem = `No extract % on the ingredient card of: ${bhdMissingYield(pctRows).join(', ')}.`;
+  const pctChanged = rows.some((g) => g.pctTyped);
   const options = {
     ...shared, castPlato, transferPlato: originalExtract,
     brewhouseLossPct: own.design_brewhouse_loss_pct, whirlpoolLossPct: own.design_whirlpool_loss_pct, hopCorrection: own.design_hop_correction,
   };
-  return { grist, targetHl, originalExtract, options, problem };
+  return { rows, grist, pctRows, targetHl, originalExtract, options, problem, calcProblem, pctChanged };
 }
 
 /** Draw the card: its inputs once, then the live part. */
@@ -106,7 +123,7 @@ function renderBrewhouseDesign() {
       <div id="bhd-results"></div>
     </div>
     <div class="re-bhd-actions">
-      <button type="button" class="re-btn secundair" id="bhd-scale" disabled></button>
+      <button type="button" class="re-btn" id="bhd-calc" disabled></button>
       <button type="button" class="re-btn secundair" id="bhd-apply" disabled>Apply to brewing parameters</button>
       <span class="re-bhd-msg" id="bhd-msg"></span>
     </div>`;
@@ -143,9 +160,11 @@ function updateBrewhouseDesign() {
   }
   document.getElementById('bhd-shared').innerHTML = shared;
   document.getElementById('bhd-results').innerHTML = results;
-  const scale = document.getElementById('bhd-scale');
-  scale.textContent = `Scale grist to ${st.targetHl === null ? 'Brouwsel (hl)' : bhdFmt(st.targetHl) + ' hl'}`;
-  scale.disabled = !(r && st.targetHl);
+  if (r && st.pctChanged) document.getElementById('bhd-results').insertAdjacentHTML('afterbegin', '<div class="re-bhd-problem">The % changed: these results are still for the kg in the table. Press "Calculate malt kg" to update the kg.</div>');
+  const calc = document.getElementById('bhd-calc');
+  calc.textContent = `Calculate malt kg for ${st.targetHl === null ? 'Brouwsel (hl)' : bhdFmt(st.targetHl) + ' hl'}`;
+  calc.disabled = !!st.calcProblem;
+  calc.title = st.calcProblem || 'Malt kg from the % in Malt & Grains, for Brouwsel (hl) at the original extract';
   document.getElementById('bhd-apply').disabled = !r;
   document.getElementById('bhd-msg').textContent = bhd.message;
 }
@@ -190,16 +209,21 @@ function bhdApply() {
   updateBrewhouseDesign();
 }
 
-function bhdScale() {
+/** Malt kg from the % (Malt & Grains) for Brouwsel (hl) at the original extract, whole kg. */
+function bhdCalculateKg() {
   const st = bhdState();
-  if (st.problem || !st.targetHl) return;
-  const f = gristFactorForVolume(st.grist, st.options, st.targetHl);
-  st.grist.forEach((g) => {
+  if (st.calcProblem) return;
+  const grist = st.pctRows.map((g) => ({ ...g, kg: g.pct }));   // the % as kg: the factor gives kg per %
+  const f = gristFactorForVolume(grist, st.options, st.targetHl);
+  st.rows.forEach((g) => {
+    delete g.tr.dataset.pctTyped;
     const el = g.tr.querySelector('.re-ing-hoeveelheid');
-    el.value = Math.round(g.kg * f);
+    el.value = g.pct > 0 ? Math.round(g.pct * f) : '';
     el.dispatchEvent(new Event('input', { bubbles: true }));
   });
-  bhd.message = `Grist × ${f.toFixed(3)}: malt amounts rounded to whole kg. Save the recipe to keep them.`;
+  herberekenMoutTotalen();
+  const total = st.pctRows.reduce((t, g) => t + Math.round(g.pct * f), 0);
+  bhd.message = `Malt kg calculated from the % for ${bhdFmt(st.targetHl)} hl: ${total} kg in total. Round off where needed; save the recipe to keep them.`;
   updateBrewhouseDesign();
 }
 
@@ -216,7 +240,7 @@ function bindBrewhouseDesignEvents() {
   document.addEventListener('change', (e) => { if (e.target.closest && e.target.closest('#re-ing-mout-tbody')) soon(); });
   document.addEventListener('click', (e) => {
     if (e.target.closest('#bhd-apply')) return bhdApply();
-    if (e.target.closest('#bhd-scale')) return bhdScale();
+    if (e.target.closest('#bhd-calc')) return bhdCalculateKg();
     if (e.target.closest('#re-ing-mout-tbody')) soon();
   });
 }

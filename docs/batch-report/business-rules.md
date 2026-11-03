@@ -219,8 +219,11 @@ against the sheet), card `recipe-brewhouse-design.js`.
 - Sparge water from a water balance (water in the wort at the start of the
   boil + water held in the spent grains − mash water); Brewcalc's own sparge
   formula gives ~4 hl more than the brew logs.
-- "Scale grist to … hl" multiplies the malts (same shares, whole kg) to hit
-  Brouwsel (hl). "Apply to brewing parameters" fills mash water, cumm.
+- **Design the grist in %** (Jaap, 03-11): the % column of Malt & Grains is
+  an input. Untyped it shows the share of the kg; a typed % stays until the
+  kg are calculated. "Calculate malt kg for … hl" fills the kg from the %
+  (together 100 % ±0.5) for Brouwsel (hl) at the original extract, whole kg;
+  the brewer rounds off afterwards. With untyped % it scales the grist. "Apply to brewing parameters" fills mash water, cumm.
   sparging volume, boil volume, expected extract at start of boil, water
   addition (back-cooling) and final brew volume, plus the shared parameters
   that were empty. Nothing is saved until Save recipe.
