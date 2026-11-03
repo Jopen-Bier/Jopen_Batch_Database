@@ -2359,8 +2359,16 @@ CREATE TABLE public.ingredient_categories (
     uses_extract_pct boolean DEFAULT false NOT NULL,
     uses_yeast_factor boolean DEFAULT false NOT NULL,
     sort_order integer DEFAULT 0 NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    uses_malt_equivalent boolean DEFAULT false NOT NULL
 );
+
+
+--
+-- Name: COLUMN ingredient_categories.uses_malt_equivalent; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.ingredient_categories.uses_malt_equivalent IS 'Ingredients of this category show the Malt equivalent field (mash filter load).';
 
 
 --
@@ -2534,6 +2542,8 @@ CREATE TABLE public.ingredients (
     price_per_kg_2 numeric,
     price_per_kg_3 numeric,
     minimum_stock numeric,
+    malt_equivalent numeric,
+    CONSTRAINT ingredients_malt_equivalent_check CHECK (((malt_equivalent > (0)::numeric) AND (malt_equivalent <= 1.5))),
     CONSTRAINT ingredients_shelf_life_after_opening_unit_check CHECK (((shelf_life_after_opening_unit IS NULL) OR (shelf_life_after_opening_unit = ANY (ARRAY['hours'::text, 'days'::text, 'weeks'::text, 'months'::text, 'years'::text])))),
     CONSTRAINT ingredients_shelf_life_unit_check CHECK (((shelf_life_unit IS NULL) OR (shelf_life_unit = ANY (ARRAY['hours'::text, 'days'::text, 'weeks'::text, 'months'::text, 'years'::text])))),
     CONSTRAINT ingredients_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'active'::text, 'phasing_out'::text]))),
@@ -2567,6 +2577,13 @@ COMMENT ON COLUMN public.ingredients.price_per_kg_3 IS 'Prijs per kg voor Suppli
 --
 
 COMMENT ON COLUMN public.ingredients.minimum_stock IS 'Ondergrens voor de Stock overview-pagina ("bijna leeg"-signaal). Eenheid wordt afgeleid uit ingredients.eenheid (het deel vóór een eventuele ''/'', dus g/hl -> g) -- geen apart eenheid-veld nodig.';
+
+
+--
+-- Name: COLUMN ingredients.malt_equivalent; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.ingredients.malt_equivalent IS 'Mash filter load per kg relative to malt (Brewcalc ME factor). Empty = 1.';
 
 
 --
@@ -2914,8 +2931,41 @@ CREATE TABLE public.recipe_brewing_specs (
     original_gravity_correction_brewhouse numeric,
     brewhouse_recipe_name_wp text,
     brewhouse_recipe_name_jk text,
-    boil_time_min numeric
+    boil_time_min numeric,
+    design_cast_extract numeric,
+    design_hop_correction numeric,
+    design_whirlpool_loss_pct numeric,
+    design_brewhouse_loss_pct numeric,
+    CONSTRAINT recipe_brewing_specs_design_check CHECK ((((design_cast_extract IS NULL) OR ((design_cast_extract > (0)::numeric) AND (design_cast_extract < (40)::numeric))) AND ((design_hop_correction IS NULL) OR ((design_hop_correction >= (0)::numeric) AND (design_hop_correction <= (10)::numeric))) AND ((design_whirlpool_loss_pct IS NULL) OR ((design_whirlpool_loss_pct >= (0)::numeric) AND (design_whirlpool_loss_pct < (100)::numeric))) AND ((design_brewhouse_loss_pct IS NULL) OR ((design_brewhouse_loss_pct >= (0)::numeric) AND (design_brewhouse_loss_pct < (100)::numeric)))))
 );
+
+
+--
+-- Name: COLUMN recipe_brewing_specs.design_cast_extract; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.recipe_brewing_specs.design_cast_extract IS 'Brewhouse design: extract at casting (deg P); above the original extract means dilution water.';
+
+
+--
+-- Name: COLUMN recipe_brewing_specs.design_hop_correction; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.recipe_brewing_specs.design_hop_correction IS 'Brewhouse design: factor on the whirlpool loss for the hop load (Brewcalc 3 for hoppy beers).';
+
+
+--
+-- Name: COLUMN recipe_brewing_specs.design_whirlpool_loss_pct; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.recipe_brewing_specs.design_whirlpool_loss_pct IS 'Brewhouse design: standard whirlpool loss in % (Brewcalc 2).';
+
+
+--
+-- Name: COLUMN recipe_brewing_specs.design_brewhouse_loss_pct; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.recipe_brewing_specs.design_brewhouse_loss_pct IS 'Brewhouse design: brewhouse loss in % of the grist kg below the lab extract (Brewcalc 1.5).';
 
 
 --
