@@ -26,10 +26,11 @@ const BREW_LOG_ROWS = [
   { kind: 'section', label: 'Filtration · mash filter', only: 'wp' },
   { kind: 'section', label: 'Filtration · lauter tun', only: 'jk' },
   { key: 'first_wort_extract', label: 'Plato first wort', unit: '°P', kind: 'num' },
+  // both brewhouses (was JK only, as "First runnings"); recipe value: JK first runnings
+  { key: 'first_wort_volume_hl', label: 'Volume first wort', unit: 'hl', kind: 'num', recipe: 'first_wort' },
   { key: 'last_runnings_extract', label: 'Extract last runnings', unit: '°P', kind: 'num' },
   { key: 'cumulative_sparge_volume_hl', label: 'Cumulative sparging volume', unit: 'hl', kind: 'num', only: 'wp', recipe: 'cumulative_sparge_volume' },
   { key: 'last_runnings_ph', label: 'Last runnings pH', kind: 'num', only: 'wp' },
-  { key: 'first_wort_volume_hl', label: 'First runnings', unit: 'hl', kind: 'num', only: 'jk', recipe: 'first_wort' },
   { key: 'sparge_water_hl', label: 'Sparge water', unit: 'hl', kind: 'num', only: 'jk', recipe: 'sparge_water' },
   { key: 'sparge_runnings_hl', label: 'Sparge runnings', unit: 'hl', kind: 'num', only: 'jk', recipe: 'sparge_runoff' },
   { key: 'lauter_time_min', label: 'Filtration time', unit: 'min', kind: 'num', timeSpan: true },
