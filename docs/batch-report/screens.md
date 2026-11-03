@@ -122,8 +122,8 @@ their own screen). Filters: search, status, year (default all years), WP/JK.
   Step · What · When · Tag · Done. Done = green ✓ with date, time, initials;
   first open = orange "next". Calculators (Nagardo, PGA/alginate, Nano Flavor)
   only when relevant; "Manage action tags" link to Settings.
-- **Measurements & actions**: Days · Plato · Temp. high · Temp. low · pH ·
-  Plato decr. · Hours · Date · Time · Action (tag chips + "+ tag") ·
+- **Measurements & actions**: Days · Date · Time · Hours · Plato ·
+  Plato decr. · Temp. high · Temp. low · pH · Action (tag chips + "+ tag") ·
   Comments · Op. Missing days shown as dashed rows "+ measurement this day".
   Removing a tag chip asks for confirmation.
 - **Splits / transfers out** (`batch_transfers`), same record as on

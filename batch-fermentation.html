@@ -522,19 +522,21 @@
       };
       const body = expanded.map((l) => {
         if (l.kind === 'gap') {
-          return `<tr class="fl-gap"><td class="n">${l.days === null ? '' : dayText(l.days)}</td><td colspan="6" class="n">—</td>
+          return `<tr class="fl-gap"><td class="n">${l.days === null ? '' : dayText(l.days)}</td>
             <td${l.count ? ' colspan="2"' : ''}>${dmyOf(l.date)}${l.count ? ` – ${dmyOf(l.lastDate)} · ${l.count} days without a measurement` : ''}</td>
-            <td colspan="${l.count ? 4 : 5}">${page.canEdit ? `<button class="fl-fillbtn" type="button" data-gap-date="${l.date}">+ measurement ${l.count ? 'on ' + dmyOf(l.date).slice(0, 5) : 'this day'}</button>` : ''}</td></tr>`;
+            <td colspan="${l.count ? 6 : 7}" class="n">—</td>
+            <td colspan="4">${page.canEdit ? `<button class="fl-fillbtn" type="button" data-gap-date="${l.date}">+ measurement ${l.count ? 'on ' + dmyOf(l.date).slice(0, 5) : 'this day'}</button>` : ''}</td></tr>`;
         }
         const e = l.entry;
         const chips = page.entryTags.filter((t) => t.entry_id === e.id).map((t) => `<span class="br-chip"${stepOfTag.get(t.id) ? ` title="Ticks off: ${escapeHtml(stepOfTag.get(t.id).title)}"` : ''}>${escapeHtml(chipLabel(t))}${page.canEdit
           ? `<button type="button" data-remove-tag="${t.id}" aria-label="Remove tag ${escapeHtml(tagById(t.tag_id).label)}">×</button>` : ''}</span>`).join('');
         return `<tr>
           <td class="n"><b>${dayText(l.days)}</b></td>
-          <td>${input(e, 'extract', 'Plato')}</td><td>${input(e, 'temp_high', 'Temperature high')}</td><td>${input(e, 'temp_low', 'Temperature low')}</td><td>${input(e, 'ph', 'pH')}</td>
-          <td class="cv">${l.decrease === null ? '' : fmt(l.decrease, 1)}</td><td class="cv">${l.hours === null ? '' : l.hours}</td>
           <td><input class="br-in l" type="date" data-entry="${e.id}" data-field="date" value="${escapeHtml(localDate(e.measured_at))}" aria-label="Date"${isT0(e) ? ' disabled title="Moves with Time 0"' : dis()}></td>
           <td><input class="br-in l" type="time" data-entry="${e.id}" data-field="time" value="${escapeHtml(hm(e.measured_at))}" aria-label="Time"${isT0(e) ? ' disabled title="Moves with Time 0"' : dis()}></td>
+          <td class="cv">${l.hours === null ? '' : l.hours}</td>
+          <td>${input(e, 'extract', 'Plato')}</td><td class="cv">${l.decrease === null ? '' : fmt(l.decrease, 1)}</td>
+          <td>${input(e, 'temp_high', 'Temperature high')}</td><td>${input(e, 'temp_low', 'Temperature low')}</td><td>${input(e, 'ph', 'pH')}</td>
           <td><div class="fl-tags">${chips}${page.canEdit ? tagSelect(e.id) : ''}</div></td>
           <td>${input(e, 'comment', 'Comments', ' l')}</td>
           <td class="small" style="text-align:center;">${escapeHtml(page.initialsOf(e.created_by))}</td>
@@ -546,10 +548,10 @@
           ${page.canEdit ? '<button class="br-primary" type="button" id="fl-add-entry">+ Add measurement</button>' : ''}
         </div>
         ${page.entries.length ? `<div class="br-table-wrap"><table class="br-ing fl-log" style="min-width:1210px;">
-          <thead><tr><th class="r" style="width:50px;">Days</th><th class="r" style="width:66px;">Plato</th><th class="r" style="width:72px;">Temp. high</th>
-            <th class="r" style="width:72px;">Temp. low</th><th class="r" style="width:60px;">pH</th><th class="r" style="width:72px;">Plato decr.</th>
-            <th class="r" style="width:60px;">Hours</th><th style="width:132px;">Date</th><th style="width:90px;">Time</th><th style="width:260px;">Action</th>
-            <th>Comments</th><th style="width:46px;">Op.</th><th style="width:34px;"></th></tr></thead>
+          <thead><tr><th class="r" style="width:50px;">Days</th><th style="width:132px;">Date</th><th style="width:90px;">Time</th>
+            <th class="r" style="width:60px;">Hours</th><th class="r" style="width:66px;">Plato</th><th class="r" style="width:72px;">Plato decr.</th>
+            <th class="r" style="width:72px;">Temp. high</th><th class="r" style="width:72px;">Temp. low</th><th class="r" style="width:60px;">pH</th>
+            <th style="width:260px;">Action</th><th>Comments</th><th style="width:46px;">Op.</th><th style="width:34px;"></th></tr></thead>
           <tbody>${body}</tbody></table></div>`
           : `<div class="br-note">No measurements yet.${t0 ? '' : ' Days count from Time 0, the end of the last brew.'}</div>`}
         <div class="br-note">Days count from Time 0. The first measurement is at Time 0, with the GLT total from Brewing (Plato and pH); it moves when Time 0 changes. A tag on a measurement ticks off the next plan step with that tag.</div>`;
