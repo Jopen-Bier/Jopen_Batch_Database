@@ -202,6 +202,7 @@
   .ing-main { padding-bottom: 90px; }
 
   .ing-edit-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; gap: 10px; }
+  .ing-field-hint { font-size: 0.8em; color: #6b6355; margin: -2px 0 6px; line-height: 1.35; }
   .ing-edit-row label { color: #6b6355; font-size: 14px; }
   .ing-edit-row input, .ing-edit-row select, .ing-edit-row textarea {
     font-family: var(--mono); font-size: 14px; padding: 5px 8px; border: 1px solid var(--line);
@@ -775,7 +776,7 @@ async function initIngredientenPagina() {
 
   const { data: categorieData, error: categorieError } = await supabaseClient
     .from('ingredient_categories')
-    .select('id, name, uses_alpha_pct, uses_extract_pct, uses_gistfactor:uses_yeast_factor')
+    .select('id, name, uses_alpha_pct, uses_extract_pct, uses_gistfactor:uses_yeast_factor, uses_malt_equivalent')
     .order('sort_order');
   if (!categorieError) alleCategorieen = categorieData || [];
 
@@ -822,7 +823,7 @@ async function laadIngredienten() {
   const [ingResult, usageResult, revisieResult, productSheetResult] = await Promise.all([
     supabaseClient
       .from('ingredients')
-      .select('id, naam:name, category_id, eenheid:unit, prijs:price, prijs_per_kg:price_per_kg, prijs_2:price_2, prijs_per_kg_2:price_per_kg_2, eenheid_prijs_1:price_unit_1, eenheid_prijs_2:price_unit_2, extract_pct, alpha_pct, gistfactor:yeast_factor, leverancier:supplier, leverancier_2:supplier_2, leverancier_3:supplier_3, prijs_3:price_3, prijs_per_kg_3:price_per_kg_3, eenheid_prijs_3:price_unit_3, kleur_ebc:color_ebc, allergenen:allergens, ingredient_declaratie:ingredient_declaration, bewaartemperatuur:storage_temperature, houdbaarheid:shelf_life, houdbaarheid_eenheid:shelf_life_unit, houdbaarheid_na_openen:shelf_life_after_opening, houdbaarheid_na_openen_eenheid:shelf_life_after_opening_unit, dichtheid:density, alcohol_pct, minimum_voorraad:minimum_stock, status, versie_major:version_major, versie_minor:version_minor, ingredient_group_id, versie_status:version_status, aangemaakt_op:created_at, gewijzigd_op:updated_at, ingredient_categories(name, uses_alpha_pct, uses_extract_pct, uses_gistfactor:uses_yeast_factor)')
+      .select('id, naam:name, category_id, eenheid:unit, prijs:price, prijs_per_kg:price_per_kg, prijs_2:price_2, prijs_per_kg_2:price_per_kg_2, eenheid_prijs_1:price_unit_1, eenheid_prijs_2:price_unit_2, extract_pct, alpha_pct, gistfactor:yeast_factor, leverancier:supplier, leverancier_2:supplier_2, leverancier_3:supplier_3, prijs_3:price_3, prijs_per_kg_3:price_per_kg_3, eenheid_prijs_3:price_unit_3, kleur_ebc:color_ebc, allergenen:allergens, ingredient_declaratie:ingredient_declaration, bewaartemperatuur:storage_temperature, houdbaarheid:shelf_life, houdbaarheid_eenheid:shelf_life_unit, houdbaarheid_na_openen:shelf_life_after_opening, houdbaarheid_na_openen_eenheid:shelf_life_after_opening_unit, dichtheid:density, alcohol_pct, malt_equivalent, minimum_voorraad:minimum_stock, status, versie_major:version_major, versie_minor:version_minor, ingredient_group_id, versie_status:version_status, aangemaakt_op:created_at, gewijzigd_op:updated_at, ingredient_categories(name, uses_alpha_pct, uses_extract_pct, uses_gistfactor:uses_yeast_factor, uses_malt_equivalent)')
       .eq('version_status', 'current')
       .order('name'),
     // Server-side geaggregeerd (ingredient_gebruik_counts-view) i.p.v. alle
@@ -1676,6 +1677,8 @@ function renderDetailAlleen(id) {
   if (!cat || cat.uses_alpha_pct) parameterRows.push(['Alpha %', i.alpha_pct, '%']);
   if (!cat || cat.uses_gistfactor) parameterRows.push(['Yeast factor', i.gistfactor, '']);
   if (!cat || cat.uses_extract_pct) parameterRows.push(['Extract %', i.extract_pct, '%']);
+  // Mash filter load per kg relative to malt (brewhouse design); empty counts as 1
+  if (!cat || cat.uses_malt_equivalent) parameterRows.push(['Malt equivalent', i.malt_equivalent ?? (cat ? '— (counts as 1)' : null), '']);
   parameterRows.push(['Colour', i.kleur_ebc, 'EBC']);
   parameterRows.push(['Allergens', allergenenLabel(i.allergenen), '']);
   parameterRows.push(['Ingredient declaration', i.ingredient_declaratie, '']);
@@ -1906,6 +1909,7 @@ function renderDetailBewerken(i) {  const container = document.getElementById('i
       <div id="veld-alpha_pct-rij">${veld('Alpha %', 'alpha_pct', '%', 'number')}</div>
       <div id="veld-gistfactor-rij">${veld('Yeast factor', 'gistfactor', '', 'number')}</div>
       <div id="veld-extract_pct-rij">${veld('Extract %', 'extract_pct', '%', 'number')}</div>
+      <div id="veld-malt_equivalent-rij">${veld('Malt equivalent', 'malt_equivalent', '× malt', 'number')}<div class="ing-field-hint">Mash filter load per kg relative to malt: malt 1, wheat 0.7, oat flakes 0.75, barley flakes 0.85. Empty counts as 1.</div></div>
       ${veld('Colour', 'kleur_ebc', 'EBC', 'number')}
       <div class="ing-edit-row">
         <label>Allergens</label>
@@ -1940,6 +1944,7 @@ function renderDetailBewerken(i) {  const container = document.getElementById('i
     document.getElementById('veld-extract_pct-rij').style.display = (!gekozen || gekozen.uses_extract_pct) ? 'block' : 'none';
     document.getElementById('veld-alpha_pct-rij').style.display = (!gekozen || gekozen.uses_alpha_pct) ? 'block' : 'none';
     document.getElementById('veld-gistfactor-rij').style.display = (!gekozen || gekozen.uses_gistfactor) ? 'block' : 'none';
+    document.getElementById('veld-malt_equivalent-rij').style.display = (!gekozen || gekozen.uses_malt_equivalent) ? 'block' : 'none';
   };
   categorieSelect.addEventListener('change', pasVeldZichtbaarheidToe);
   pasVeldZichtbaarheidToe();
@@ -2055,6 +2060,7 @@ async function slaIngredientOp(i, soort, wijziging) {
     extract_pct: (!gekozenCategorie || gekozenCategorie.uses_extract_pct) ? getal('veld-extract_pct') : null,
     alpha_pct: (!gekozenCategorie || gekozenCategorie.uses_alpha_pct) ? getal('veld-alpha_pct') : null,
     gistfactor: (!gekozenCategorie || gekozenCategorie.uses_gistfactor) ? getal('veld-gistfactor') : null,
+    malt_equivalent: (!gekozenCategorie || gekozenCategorie.uses_malt_equivalent) ? getal('veld-malt_equivalent') : null,
     kleur_ebc: getal('veld-kleur_ebc'),
     allergenen: bewerkAllergenenState,
     ingredient_declaratie: leesDeclaratieWaarde('veld'),
@@ -2157,7 +2163,7 @@ async function slaIngredientOp(i, soort, wijziging) {
       aangemaakt_door: gebruikerId,
       gewijzigd_door: gebruikerId,
     }))
-    .select('id, naam:name, category_id, eenheid:unit, prijs:price, prijs_per_kg:price_per_kg, prijs_2:price_2, prijs_per_kg_2:price_per_kg_2, eenheid_prijs_1:price_unit_1, eenheid_prijs_2:price_unit_2, extract_pct, alpha_pct, gistfactor:yeast_factor, leverancier:supplier, leverancier_2:supplier_2, leverancier_3:supplier_3, prijs_3:price_3, prijs_per_kg_3:price_per_kg_3, eenheid_prijs_3:price_unit_3, kleur_ebc:color_ebc, allergenen:allergens, ingredient_declaratie:ingredient_declaration, bewaartemperatuur:storage_temperature, houdbaarheid:shelf_life, houdbaarheid_eenheid:shelf_life_unit, houdbaarheid_na_openen:shelf_life_after_opening, houdbaarheid_na_openen_eenheid:shelf_life_after_opening_unit, dichtheid:density, alcohol_pct, minimum_voorraad:minimum_stock, status, versie_major:version_major, versie_minor:version_minor, ingredient_group_id, versie_status:version_status, aangemaakt_op:created_at, gewijzigd_op:updated_at, ingredient_categories(name, uses_alpha_pct, uses_extract_pct, uses_gistfactor:uses_yeast_factor)')
+    .select('id, naam:name, category_id, eenheid:unit, prijs:price, prijs_per_kg:price_per_kg, prijs_2:price_2, prijs_per_kg_2:price_per_kg_2, eenheid_prijs_1:price_unit_1, eenheid_prijs_2:price_unit_2, extract_pct, alpha_pct, gistfactor:yeast_factor, leverancier:supplier, leverancier_2:supplier_2, leverancier_3:supplier_3, prijs_3:price_3, prijs_per_kg_3:price_per_kg_3, eenheid_prijs_3:price_unit_3, kleur_ebc:color_ebc, allergenen:allergens, ingredient_declaratie:ingredient_declaration, bewaartemperatuur:storage_temperature, houdbaarheid:shelf_life, houdbaarheid_eenheid:shelf_life_unit, houdbaarheid_na_openen:shelf_life_after_opening, houdbaarheid_na_openen_eenheid:shelf_life_after_opening_unit, dichtheid:density, alcohol_pct, malt_equivalent, minimum_voorraad:minimum_stock, status, versie_major:version_major, versie_minor:version_minor, ingredient_group_id, versie_status:version_status, aangemaakt_op:created_at, gewijzigd_op:updated_at, ingredient_categories(name, uses_alpha_pct, uses_extract_pct, uses_gistfactor:uses_yeast_factor, uses_malt_equivalent)')
     .single();
 
   if (insertErr) {
@@ -2316,6 +2322,7 @@ function toonNieuwFormulier() {
       <div id="nieuw-alpha_pct-rij">${veld('Alpha %', 'nieuw-alpha_pct', '%', 'number')}</div>
       <div id="nieuw-gistfactor-rij">${veld('Yeast factor', 'nieuw-gistfactor', '', 'number')}</div>
       <div id="nieuw-extract_pct-rij">${veld('Extract %', 'nieuw-extract_pct', '%', 'number')}</div>
+      <div id="nieuw-malt_equivalent-rij">${veld('Malt equivalent', 'nieuw-malt_equivalent', '× malt', 'number')}<div class="ing-field-hint">Mash filter load per kg relative to malt: malt 1, wheat 0.7, oat flakes 0.75, barley flakes 0.85. Empty counts as 1.</div></div>
       ${veld('Colour', 'nieuw-kleur_ebc', 'EBC', 'number')}
       <div class="ing-edit-row">
         <label>Allergens</label>
@@ -2346,6 +2353,7 @@ function toonNieuwFormulier() {
     document.getElementById('nieuw-extract_pct-rij').style.display = gekozen?.uses_extract_pct ? 'block' : 'none';
     document.getElementById('nieuw-alpha_pct-rij').style.display = gekozen?.uses_alpha_pct ? 'block' : 'none';
     document.getElementById('nieuw-gistfactor-rij').style.display = gekozen?.uses_gistfactor ? 'block' : 'none';
+    document.getElementById('nieuw-malt_equivalent-rij').style.display = gekozen?.uses_malt_equivalent ? 'block' : 'none';
   };
   categorieSelect.addEventListener('change', pasVeldZichtbaarheidToe);
   pasVeldZichtbaarheidToe(); // nothing visible until a category is chosen
@@ -2403,6 +2411,7 @@ async function slaNieuwIngredientOp() {
     extract_pct: gekozenCategorie?.uses_extract_pct ? getal('nieuw-extract_pct') : null,
     alpha_pct: gekozenCategorie?.uses_alpha_pct ? getal('nieuw-alpha_pct') : null,
     gistfactor: gekozenCategorie?.uses_gistfactor ? getal('nieuw-gistfactor') : null,
+    malt_equivalent: gekozenCategorie?.uses_malt_equivalent ? getal('nieuw-malt_equivalent') : null,
     kleur_ebc: getal('nieuw-kleur_ebc'),
     allergenen: nieuwAllergenenState,
     ingredient_declaratie: leesDeclaratieWaarde('nieuw'),
@@ -2426,7 +2435,7 @@ async function slaNieuwIngredientOp() {
   const { data, error } = await supabaseClient
     .from('ingredients')
     .insert(toDb('ingredients', nieuw))
-    .select('id, naam:name, category_id, eenheid:unit, prijs:price, prijs_per_kg:price_per_kg, prijs_2:price_2, prijs_per_kg_2:price_per_kg_2, eenheid_prijs_1:price_unit_1, eenheid_prijs_2:price_unit_2, extract_pct, alpha_pct, gistfactor:yeast_factor, leverancier:supplier, leverancier_2:supplier_2, leverancier_3:supplier_3, prijs_3:price_3, prijs_per_kg_3:price_per_kg_3, eenheid_prijs_3:price_unit_3, kleur_ebc:color_ebc, allergenen:allergens, ingredient_declaratie:ingredient_declaration, bewaartemperatuur:storage_temperature, houdbaarheid:shelf_life, houdbaarheid_eenheid:shelf_life_unit, houdbaarheid_na_openen:shelf_life_after_opening, houdbaarheid_na_openen_eenheid:shelf_life_after_opening_unit, dichtheid:density, alcohol_pct, minimum_voorraad:minimum_stock, status, versie_major:version_major, versie_minor:version_minor, ingredient_group_id, versie_status:version_status, aangemaakt_op:created_at, gewijzigd_op:updated_at, ingredient_categories(name, uses_alpha_pct, uses_extract_pct, uses_gistfactor:uses_yeast_factor)')
+    .select('id, naam:name, category_id, eenheid:unit, prijs:price, prijs_per_kg:price_per_kg, prijs_2:price_2, prijs_per_kg_2:price_per_kg_2, eenheid_prijs_1:price_unit_1, eenheid_prijs_2:price_unit_2, extract_pct, alpha_pct, gistfactor:yeast_factor, leverancier:supplier, leverancier_2:supplier_2, leverancier_3:supplier_3, prijs_3:price_3, prijs_per_kg_3:price_per_kg_3, eenheid_prijs_3:price_unit_3, kleur_ebc:color_ebc, allergenen:allergens, ingredient_declaratie:ingredient_declaration, bewaartemperatuur:storage_temperature, houdbaarheid:shelf_life, houdbaarheid_eenheid:shelf_life_unit, houdbaarheid_na_openen:shelf_life_after_opening, houdbaarheid_na_openen_eenheid:shelf_life_after_opening_unit, dichtheid:density, alcohol_pct, malt_equivalent, minimum_voorraad:minimum_stock, status, versie_major:version_major, versie_minor:version_minor, ingredient_group_id, versie_status:version_status, aangemaakt_op:created_at, gewijzigd_op:updated_at, ingredient_categories(name, uses_alpha_pct, uses_extract_pct, uses_gistfactor:uses_yeast_factor, uses_malt_equivalent)')
     .single();
 
   if (error) {
