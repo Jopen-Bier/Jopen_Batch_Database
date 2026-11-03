@@ -16,7 +16,8 @@ function check(result, expected, label) {
 
 // brew1: 830 kg Pale Ale malt + 117 kg oat flakes, 15.5 °P, chambers as the sheet (load 35)
 const brew1 = [{ kg: 830, labYield: 0.81, meFactor: 1 }, { kg: 117, labYield: 0.55, meFactor: 0.75 }];
-const o1 = { castPlato: 15.5, transferPlato: 15.5, chambers: 917.75 / 35, brewhouseLossPct: sheetLoss(1.5, 947, 736.65) };
+// The sheet's brew1/brew3 have no whirlpool dilution (P90 = P91).
+const o1 = { castPlato: 15.5, transferPlato: 15.5, chambers: 917.75 / 35, brewhouseLossPct: sheetLoss(1.5, 947, 736.65), whirlpoolDilutionHl: 0 };
 check(d.brewhouseDesign(brew1, o1), {
   labExtractKg: 736.65, extractKg: 722.445, meKg: 917.75, loadPerChamber: 35,
   mashWaterHl: 24.622, firstWortPlato: 23.25718910781737, mashTransferHl: 31.693006160164277,
@@ -32,7 +33,7 @@ assert.strictEqual(d.brewhouseDesign(brew1, o1).dilutionHl, 0, 'brew1 dilution')
 
 // brew3: Pils 385, Pale Ale 390, wheat malt 75, barley flakes 50; 15 °P, 2 % loss, hop factor 2, mash-in 67 °C, cool 18 °C
 const brew3 = [{ kg: 385, labYield: 0.81 }, { kg: 390, labYield: 0.81 }, { kg: 75, labYield: 0.81, meFactor: 0.7 }, { kg: 50, labYield: 0.55, meFactor: 0.85 }];
-const o3 = { castPlato: 15, transferPlato: 15, chambers: 870 / 35, brewhouseLossPct: sheetLoss(2, 900, 716), hopCorrection: 2, mashInTemp: 67, coolTemp: 18 };
+const o3 = { whirlpoolDilutionHl: 0, castPlato: 15, transferPlato: 15, chambers: 870 / 35, brewhouseLossPct: sheetLoss(2, 900, 716), hopCorrection: 2, mashInTemp: 67, coolTemp: 18 };
 check(d.brewhouseDesign(brew3, o3), {
   labExtractKg: 716, extractKg: 698, meKg: 870, mashWaterHl: 23.4, firstWortPlato: 23.796141882329064,
   mashTransferHl: 30.11971252566735, spargeBrewcalcHl: 25.1690212743616, boilStartHl: 46.69270110508525,
@@ -64,12 +65,22 @@ near(nelR.extractKg, 727.45 * 0.93, 1e-6, 'Mooie Nel extract');
 assert.ok(nelR.toGltHl > 38.5 && nelR.toGltHl < 40.5, String(nelR.toGltHl));   // real brews 36.8-40.8 hl
 // sparge water from the water balance: Mooie Nel brew logs 25.7 hl mash water, 20.4 hl sparge
 near(nelR.mashWaterHl, 25.5, 0.01, 'Mooie Nel mash water');
-near(nelR.spargeWaterHl, 20.4, 1, 'Mooie Nel sparge (water balance)');
+// with 0.7 hl whirlpool dilution, 0.7 hl less sparge water is needed (19.3 hl)
+near(nelR.spargeWaterHl, 20.4, 1.5, 'Mooie Nel sparge (water balance)');
 
 // kettle sugar: no mash or filter loss, no filter load
 const withSugar = d.brewhouseDesign([...brew1, { kg: 100, labYield: 1, kettle: true }], { castPlato: 15.5, transferPlato: 15.5 });
 near(withSugar.extractKg - at27.extractKg, 100, 1e-9, 'sugar extract');
 near(withSugar.meKg, at27.meKg, 1e-9, 'sugar no load');
+
+// whirlpool dilution: the boil ends smaller and stronger, the GLT is the same
+const rinse0 = d.brewhouseDesign(nel, { castPlato: 15, transferPlato: 15, evaporationPct: 4, mashInTemp: 65, waterGristRatio: 2.85, whirlpoolDilutionHl: 0 });
+assert.strictEqual(nelR.boilEndHl < rinse0.boilEndHl, true);
+near(rinse0.boilEndHl - nelR.boilEndHl, 0.7, 0.01, 'boil ends 0.7 hl smaller');
+near(nelR.boilEndPlato - 15, 0.24, 0.03, 'boil ends ~0.24 °P stronger');   // measured drop 0.2-0.3 °P
+assert.ok(nelR.boilStartPlato > rinse0.boilStartPlato);
+near(nelR.toGltHl, rinse0.toGltHl, 1e-9, 'same volume at the GLT');
+near(rinse0.boilEndPlato, 15, 1e-9, 'no dilution: boil ends at the casting °P');
 
 // densities
 near(d.platoToWv(15.5), 16.4509259924, 1e-9, 'w/v 15.5');

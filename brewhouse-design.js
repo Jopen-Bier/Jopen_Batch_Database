@@ -26,6 +26,8 @@ const BREWHOUSE_DEFAULTS = {
   maltVolumeLPerKg: 0.7,      // P52: volume of malt in water
   spentGrainsDryMatter: 0.25, // O83
   evaporationPct: 2,          // O88: % of the volume at the end of boiling
+  whirlpoolDilutionHl: 0.7,   // whirlpool dilution: water from the end of the boil to the whirlpool,
+                              // a fixed value (P92; Jaap, 03-11: 522 WP brews, -0.30 °P, ~0.6-0.8 hl)
   hopCorrection: 3,           // O99: factor on the whirlpool loss (hops)
   whirlpoolLossPct: 2,        // P99: standard whirlpool loss
   precoolTemp: 85,            // O98: °C
@@ -99,12 +101,16 @@ function brewhouseDesign(grist, options) {
 
   // Boiling (rows 85–94)
   const kettleVolumeHl = sum(kettle, (g) => g.kg / (g.dryMatter ?? 1) / (g.syrup ? 126.8 : 150.7));   // O89
-  const boilEndHl = 1.042 * extractKg / platoToWv(o.castPlato);             // P89 (hot)
+  const castColdHl = extractKg / platoToWv(o.castPlato) * waterDensity(20) / waterDensity(o.coolTemp);   // P93
+  const castHotHl = waterDensity(o.coolTemp) / waterDensity(100) * castColdHl;   // O93
+  // Whirlpool dilution: water between the end of the boil and the whirlpool
+  // (P90 before, P91 after rinsing): the boil ends that much smaller and stronger.
+  const rinseShare = castHotHl > 0 ? Math.min(0.5, Math.max(0, o.whirlpoolDilutionHl) / castHotHl) : 0;
+  const boilEndHl = 1.042 * extractKg / platoToWv(o.castPlato) * (1 - rinseShare);   // P89 (hot)
+  const boilEndPlato = rinseShare ? wvToPlato(platoToWv(o.castPlato) / (1 - rinseShare)) : o.castPlato;   // P90
   const evaporationHl = boilEndHl * o.evaporationPct / 100;                // P88
   const boilStartHl = boilEndHl + evaporationHl - kettleVolumeHl;          // P86 (lautered wort)
   const boilStartPlato = wvToPlato(extractMashKg / (boilStartHl / 1.042)); // P87
-  const castColdHl = extractKg / platoToWv(o.castPlato) * waterDensity(20) / waterDensity(o.coolTemp);   // P93
-  const castHotHl = waterDensity(o.coolTemp) / waterDensity(100) * castColdHl;   // O93
 
   // Main wort and sparging in the filter (rows 76–82)
   const firstWortPlato = labExtractMashKg / (mashWaterKg + labExtractMashKg) * 100;   // P76
@@ -146,7 +152,7 @@ function brewhouseDesign(grist, options) {
     mashKg, meKg, labExtractKg, extractKg, extractMashKg,
     chambers, loadPerChamber, loadPerM2, loadOk: loadPerChamber !== null && loadPerChamber >= CHAMBER_LOAD.min && loadPerChamber <= CHAMBER_LOAD.max,
     mashWaterHl, mashTransferHl, firstWortPlato, spargeWaterHl, spargeBrewcalcHl, spentGrainsKg,
-    boilStartHl, boilStartPlato, evaporationHl, boilEndHl, castColdHl, castHotHl,
+    boilStartHl, boilStartPlato, evaporationHl, boilEndHl, boilEndPlato, castColdHl, castHotHl,
     wpLossHl, extractAfterWpKg, dilutionHl, toGltHl,
   };
 }
