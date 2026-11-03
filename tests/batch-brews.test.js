@@ -8,6 +8,11 @@ const close = (a, e, msg) => assert.ok(Math.abs(a - e) < 1e-6, `${msg}: ${a} ≠
 const keys = b.BREW_LOG_ROWS.filter((r) => r.kind !== 'section' && r.kind !== 'calc').map((r) => r.key);
 assert.strictEqual(new Set(keys).size, keys.length, 'no duplicate rows');
 assert.ok(b.brewLogRows('wp').some((r) => r.key === 'cumulative_sparge_volume_hl'));
+// Volume first wort right after Plato first wort, for both brewhouses
+['wp', 'jk'].forEach((loc) => {
+  const keys = b.brewLogRows(loc).map((r) => r.key);
+  assert.strictEqual(keys.indexOf('first_wort_volume_hl'), keys.indexOf('first_wort_extract') + 1, loc);
+});
 // Wort cooling temp. between Aeration and Water addition, against the recipe pitching temp (wishlist #11)
 const order = b.BREW_LOG_ROWS.map((r) => r.key);
 assert.strictEqual(order.indexOf('wort_cooling_temp_c'), order.indexOf('aeration_ppm') + 1);
