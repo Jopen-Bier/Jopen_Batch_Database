@@ -153,7 +153,8 @@ function updateBrewhouseDesign() {
       ${row('Mash water', `${bhdFmt(r.mashWaterHl)} hl`, `${bhdFmt(r.mashKg, 0)} kg × ${bhdFmt(st.options.waterGristRatio, 2)} l/kg`)}
       ${row('Sparge water', `${bhdFmt(r.spargeWaterHl)} hl`, 'water balance: wort at the start of the boil + water in the spent grains − mash water')}
       ${row('Start of boil', `${bhdFmt(r.boilStartHl)} hl · ${bhdFmt(r.boilStartPlato)} °P`, 'hot')}
-      ${row('End of boil', `${bhdFmt(r.boilEndHl)} hl · ${bhdFmt(st.options.castPlato)} °P`, `hot · ${bhdFmt(st.options.evaporationPct)} % evaporation`)}
+      ${row('End of boil', `${bhdFmt(r.boilEndHl)} hl · ${bhdFmt(r.boilEndPlato, 2)} °P`, `hot · ${bhdFmt(st.options.evaporationPct)} % evaporation`)}
+      ${row('Whirlpool dilution', `${bhdFmt(BREWHOUSE_DEFAULTS.whirlpoolDilutionHl)} hl`, `fixed (measured ~0.6–0.8 hl over 522 WP brews) · whirlpool at ${bhdFmt(st.options.castPlato, 2)} °P (−${bhdFmt(r.boilEndPlato - st.options.castPlato, 2)} °P)`)}
       ${row('Whirlpool loss', `${bhdFmt(r.wpLossHl)} hl`, `${bhdFmt(st.options.whirlpoolLossPct)} % × ${bhdFmt(st.options.hopCorrection)}`)}
       ${row('Dilution water', `${bhdFmt(r.dilutionHl)} hl`, r.dilutionHl > 0 ? 'casting above the original extract' : '')}
     </tbody></table>`;

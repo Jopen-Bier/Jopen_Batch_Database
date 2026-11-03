@@ -213,6 +213,9 @@ against the sheet), card `recipe-brewhouse-design.js`.
   factor (default 3; 2 for beers that are not hoppy).
 - Stages: lab extract − mash and filter loss = extract at the start of the
   boil; no extract loss in the boil (measured ~0, only evaporation);
+  **whirlpool dilution** a fixed 0.7 hl of water from the end of the boil to
+  the whirlpool (Jaap, 03-11: 522 WP brews, −0.30 °P, middle half 0.3–0.9
+  hl), so the boil ends ~0.2–0.3 °P above the casting °P;
   whirlpool and transfer loss = whirlpool loss % × hop factor (measured ~7 %).
 - Load per chamber = Σ kg × malt equivalent / chambers; good at 32–38 kg
   (nominal 35). Volume to the GLT vs Brouwsel (hl): ✓ within ±0.5 hl.
