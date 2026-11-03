@@ -20,6 +20,7 @@
        script, en een bijbehorend <div class="settings-sectie" id="sectie-...">
        blok in de HTML -- verschijnt dan automatisch in de sidebar.
        ------------------------------------------------------------------ */
+    :root { --hop-dark: #33473a; }
     main.settings-main { max-width: 1000px; margin: 0 auto; padding: 24px; }
     .settings-layout { display: flex; gap: 28px; align-items: flex-start; }
 
@@ -38,11 +39,14 @@
       width: 100%; box-sizing: border-box; padding: 7px 10px; margin-bottom: 6px;
       border: 1px solid #ccc; border-radius: 6px; font-size: 0.9em;
     }
+    /* Group headings use the same dark green bar as the section titles on
+       the product sheet and recipe pages. */
     .settings-group-heading {
       font-size: 0.72em; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
-      color: #777; padding: 12px 12px 4px;
+      background: var(--hop-dark); color: #fff; padding: 6px 12px; border-radius: 6px;
+      margin: 12px 0 4px;
     }
-    .settings-group-heading:first-of-type { padding-top: 6px; }
+    .settings-group-heading:first-child { margin-top: 0; }
     .settings-search-empty { font-size: 0.85em; color: #777; padding: 8px 12px; }
     .settings-select { display: none; }
 
