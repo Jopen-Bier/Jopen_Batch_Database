@@ -20,7 +20,7 @@
        SKUs and derives the expected material use from the bill of materials.
        ------------------------------------------------------------------ */
     :root { --hop-dark: #33473a; }
-    main.pk-main { max-width: 1150px; margin: 0 auto; padding: 24px; }
+    main.pk-main { max-width: none; margin: 0; padding: 24px; }
 
     .pk-tabs { display: flex; gap: 4px; border-bottom: 2px solid var(--hop-dark); margin: 18px 0 0; }
     .pk-tabs button {
@@ -40,7 +40,9 @@
     .pk-filter.active { background: var(--hop-dark); border-color: var(--hop-dark); color: #fff; }
 
     .pk-table-wrap { overflow-x: auto; }
-    table.pk-table { width: 100%; border-collapse: collapse; margin: 0 0 12px; min-width: 820px; }
+    table.pk-table { width: 100%; border-collapse: collapse; margin: 0 0 12px; min-width: 760px; }
+    table.pk-table th.pk-name-col { min-width: 280px; }
+    table.pk-table select.pk-category { min-width: 110px; }
     table.pk-table th, table.pk-table td { text-align: left; padding: 7px 8px; border-bottom: 1px solid #eee; font-size: 0.9em; vertical-align: middle; }
     table.pk-table th { font-size: 0.78em; text-transform: uppercase; letter-spacing: 0.04em; color: #666; }
     table.pk-table input[type="text"], table.pk-table select { width: 100%; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; padding: 4px 6px; font-size: 0.95em; }
@@ -233,7 +235,7 @@
       const q = page.skuSearch.trim().toLowerCase();
       if (!q) return true;
       const bomNames = page.bom.filter((b) => b.article_id === s.id).map((b) => materialName(b.material_id)).join(' ');
-      return `${s.name} ${s.ean || ''} ${s.mdrank_article_number || ''} ${bomNames}`.toLowerCase().includes(q);
+      return `${s.name} ${bomNames}`.toLowerCase().includes(q);
     }
 
     function bomBlock(s) {
@@ -272,8 +274,6 @@
           <td><input type="text" class="pk-name" value="${escapeHtml(s.name)}" aria-label="Name"${disabled()} /></td>
           <td><select class="pk-format" aria-label="Package"${disabled()}>${options(PACKAGE_FORMATS, s.package_format)}</select></td>
           <td><input type="text" class="pk-litres" value="${escapeHtml(String(s.liters_per_unit))}" inputmode="decimal" aria-label="Litres per SKU" style="max-width:80px;"${disabled()} /></td>
-          <td><input type="text" class="pk-ean" value="${escapeHtml(s.ean || '')}" aria-label="EAN"${disabled()} /></td>
-          <td><input type="text" class="pk-mdrank" value="${escapeHtml(s.mdrank_article_number || '')}" aria-label="MDrank article number"${disabled()} /></td>
           <td class="c"><input type="checkbox" class="pk-active"${s.is_active ? ' checked' : ''} aria-label="Active"${disabled()} /></td>
           <td class="pk-muted">${used ? `${used}× booked` : '—'}</td>
           <td>${page.canEdit ? `<div class="pk-actions">
@@ -281,21 +281,21 @@
             <button type="button" class="pk-copy" title="New SKU with the same bill of materials">Copy</button>
             ${page.canDelete && !used ? '<button type="button" class="pk-delete-btn pk-delete">Delete</button>' : ''}</div>` : ''}</td>
         </tr>
-        <tr class="pk-bom-row" data-bom-of="${s.id}"><td colspan="8">${bomBlock(s)}</td></tr>`;
+        <tr class="pk-bom-row" data-bom-of="${s.id}"><td colspan="6">${bomBlock(s)}</td></tr>`;
       }).join('');
       const newRow = page.canEdit ? `
         <tr class="pk-new">
           <td><input type="text" id="pk-new-sku-name" placeholder="New SKU, e.g. 'Box 24x33cl'…" aria-label="New SKU name" /></td>
           <td><select id="pk-new-sku-format" aria-label="Package">${options(PACKAGE_FORMATS, page.formatFilter || 'bottle')}</select></td>
           <td><input type="text" id="pk-new-sku-litres" placeholder="Litres" inputmode="decimal" aria-label="Litres per SKU" style="max-width:80px;" /></td>
-          <td colspan="4" class="pk-muted" style="white-space:normal;">Add the materials in its bill of materials after adding.</td>
+          <td colspan="2" class="pk-muted" style="white-space:normal;">Add the materials in its bill of materials after adding.</td>
           <td><button type="button" id="pk-new-sku-add">Add SKU</button></td>
         </tr>` : '';
       container.innerHTML = `
         <table class="pk-table">
-          <thead><tr><th>Name</th><th style="width:100px;">Package</th><th style="width:90px;">Litres</th><th style="width:140px;">EAN</th>
-            <th style="width:120px;">MDrank no.</th><th class="c" style="width:60px;">Active</th><th style="width:90px;">Used</th><th style="width:190px;"></th></tr></thead>
-          <tbody>${rows || '<tr><td colspan="8" class="pk-muted">No SKUs match.</td></tr>'}${newRow}</tbody>
+          <thead><tr><th class="pk-name-col">Name</th><th style="width:110px;">Package</th><th style="width:90px;">Litres</th>
+            <th class="c" style="width:60px;">Active</th><th style="width:110px;">Used</th><th style="width:200px;"></th></tr></thead>
+          <tbody>${rows || '<tr><td colspan="6" class="pk-muted">No SKUs match.</td></tr>'}${newRow}</tbody>
         </table>`;
       container.querySelectorAll('tr.pk-bom-row').forEach((tr) => { if (open.has(tr.dataset.bomOf)) tr.querySelector('details').open = true; });
 
@@ -321,7 +321,6 @@
       if (!litres || litres <= 0) return showMessage('skus', 'Litres per SKU must be a number above 0.', 'fout');
       return write('skus', supabaseClient.from('packaging_articles').update({
         name, package_format: tr.querySelector('.pk-format').value, liters_per_unit: litres,
-        ean: tr.querySelector('.pk-ean').value.trim() || null, mdrank_article_number: tr.querySelector('.pk-mdrank').value.trim() || null,
         is_active: tr.querySelector('.pk-active').checked,
       }).eq('id', tr.dataset.id), 'Saved.');
     }
@@ -341,8 +340,7 @@
       openBom(data.id);
     }
 
-    // A copy gets the same package, litres and bill of materials; EAN and
-    // MDrank number stay empty (they belong to one SKU).
+    // A copy gets the same package, litres and bill of materials.
     async function copySku(id) {
       const source = page.skus.find((s) => s.id === id);
       const name = prompt('Name of the new SKU:', `${source.name} · copy`);
@@ -422,9 +420,9 @@
         </tr>` : '';
       container.innerHTML = `
         <table class="pk-table">
-          <thead><tr><th>Name</th><th style="width:120px;">Code</th><th style="width:110px;">Category</th><th style="width:80px;">Unit</th>
-            <th style="width:120px;">MDrank no.</th><th style="width:100px;">Reorder level</th><th class="c" style="width:60px;">Active</th>
-            <th style="width:120px;">Used</th><th style="width:120px;"></th></tr></thead>
+          <thead><tr><th class="pk-name-col">Name</th><th style="width:110px;">Code</th><th style="width:120px;">Category</th><th style="width:70px;">Unit</th>
+            <th style="width:110px;">MDrank no.</th><th style="width:90px;">Reorder level</th><th class="c" style="width:55px;">Active</th>
+            <th style="width:125px;">Used</th><th style="width:120px;"></th></tr></thead>
           <tbody>${groups || '<tr><td colspan="9" class="pk-muted">No materials match.</td></tr>'}${newRow}</tbody>
         </table>`;
       container.querySelectorAll('tr[data-id]').forEach((tr) => {

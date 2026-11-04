@@ -353,16 +353,15 @@
       const options = [...page.articles.values()].filter((a) => a.is_active && !booked.has(a.id) && (!s.package_format || a.package_format === s.package_format)).sort(byOrder);
       const rows = book.articles.map(({ row, article, litres }) => `<tr>
         <td><b>${escapeHtml(article ? article.name : '?')}</b>${commentInput('filling_session_articles', row, article)}</td>
-        <td class="small">${escapeHtml((article && article.ean) || '—')}</td>
         <td><input class="br-in" inputmode="numeric" data-article-row="${row.id}" value="${val(row.quantity)}" aria-label="Count"${dis()}></td>
         <td class="c">${fmt(litres)}</td>
         <td>${page.canDelete ? `<button class="br-del" type="button" data-delete-article="${row.id}" aria-label="Delete article">${TRASH_ICON}</button>` : ''}</td></tr>`).join('');
       return `<div class="fr-book">
         <div class="br-label" style="color:var(--br-hop-dark);">Book in (+) · produced</div>
         <div class="br-table-wrap"><table class="br-ing" style="min-width:440px;">
-          <thead><tr><th>Article</th><th style="width:120px;">EAN</th><th class="r" style="width:90px;">Count</th><th class="r" style="width:80px;">Litres</th><th style="width:34px;"></th></tr></thead>
-          <tbody>${rows || '<tr><td colspan="5" class="small">No articles booked yet.</td></tr>'}
-            <tr class="tot"><td colspan="3">Total</td><td class="n">${fmt(book.litres)}</td><td></td></tr></tbody></table></div>
+          <thead><tr><th>Article</th><th class="r" style="width:90px;">Count</th><th class="r" style="width:80px;">Litres</th><th style="width:34px;"></th></tr></thead>
+          <tbody>${rows || '<tr><td colspan="4" class="small">No articles booked yet.</td></tr>'}
+            <tr class="tot"><td colspan="2">Total</td><td class="n">${fmt(book.litres)}</td><td></td></tr></tbody></table></div>
         ${page.canEdit ? `<div style="max-width:280px;"><select class="br-input" data-add-article="${s.id}" aria-label="Add article">
           <option value="">+ Article</option>${options.map((a) => `<option value="${a.id}">${escapeHtml(a.name)}</option>`).join('')}</select></div>` : ''}
       </div>`;
