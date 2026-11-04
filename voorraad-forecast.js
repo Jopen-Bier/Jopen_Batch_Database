@@ -42,6 +42,27 @@ async function vfHaalAlleRijenOp(query) {
 
 function vfWeekSleutel(jaar, week) { return `${jaar}-W${String(week).padStart(2, '0')}`; }
 
+// A planned brew (and a split) stores both recipe_id and recipe_group_id. A primary
+// recipe save archives the old row and inserts a new one in the same group, so the
+// stored recipe_id goes stale. Like brouwplanning.html, always use the newest version
+// in the group (highest version_major.version_minor, regardless of status) and only
+// fall back to the stored recipe_id when the group is unknown.
+function vfNewestVersionPerGroup(recipes) {
+  const newest = {};
+  (recipes || []).forEach(r => {
+    if (!r.recipe_group_id) return;
+    const version = (r.version_major ?? 1) * 1000 + (r.version_minor ?? 0);
+    const current = newest[r.recipe_group_id];
+    const currentVersion = current ? (current.version_major ?? 1) * 1000 + (current.version_minor ?? 0) : -1;
+    if (version > currentVersion) newest[r.recipe_group_id] = r;
+  });
+  return newest;
+}
+function vfResolveRecipeId(row, newestPerGroup) {
+  const newest = row.recipe_group_id ? newestPerGroup[row.recipe_group_id] : null;
+  return newest ? newest.id : row.recipe_id;
+}
+
 async function vfBerekenVerbruik(supabaseClient, periodes) {
   if (!periodes || periodes.length === 0) {
     return { perRol: {}, perIngredient: {}, aantalBrouwsels: 0, aantalRecepten: 0 };
@@ -53,7 +74,7 @@ async function vfBerekenVerbruik(supabaseClient, periodes) {
   for (const { jaar, vanWeek, totWeek } of periodes) {
     const { data, error } = await supabaseClient
       .from('brew_planning')
-      .select('id, recipe_id, aantal_brouwsels:brew_count, iso_year, week_number')
+      .select('id, recipe_id, recipe_group_id, aantal_brouwsels:brew_count, iso_year, week_number')
       .eq('iso_year', jaar)
       .gte('week_number', vanWeek)
       .lte('week_number', totWeek);
@@ -62,6 +83,24 @@ async function vfBerekenVerbruik(supabaseClient, periodes) {
   }
   if (planning.length === 0) {
     return { perRol: {}, perIngredient: {}, aantalBrouwsels: 0, aantalRecepten: 0 };
+  }
+
+  // 1a. Splits (see 1b) are fetched up front so that planned brews and split target
+  // recipes can both be resolved to the newest version of their recipe group.
+  const { data: splits, error: splitErr } = await vfHaalAlleRijenOp(
+    supabaseClient.from('brew_planning_splits').select('brew_planning_id, recipe_id, recipe_group_id, hl').in('brew_planning_id', planning.map(p => p.id))
+  );
+  if (splitErr) return { error: splitErr };
+
+  const groupIds = [...new Set([...planning, ...(splits || [])].map(r => r.recipe_group_id).filter(Boolean))];
+  if (groupIds.length > 0) {
+    const { data: groupRecipes, error: groupErr } = await vfHaalAlleRijenOp(
+      supabaseClient.from('recipes').select('id, recipe_group_id, version_major, version_minor').in('recipe_group_id', groupIds)
+    );
+    if (groupErr) return { error: groupErr };
+    const newestPerGroup = vfNewestVersionPerGroup(groupRecipes);
+    planning = planning.map(p => ({ ...p, recipe_id: vfResolveRecipeId(p, newestPerGroup) }));
+    (splits || []).forEach(s => { s.recipe_id = vfResolveRecipeId(s, newestPerGroup); });
   }
 
   const brouwselsPerRecept = {};
@@ -75,10 +114,6 @@ async function vfBerekenVerbruik(supabaseClient, periodes) {
   // nergens anders in de prognose voorkomen omdat dat recept nooit direct gebrouwen
   // wordt. Apart meegeteld, geschaald op het daadwerkelijke split-volume, toegeschreven
   // aan de week van het brouwsel waar de split bij hoort.
-  const { data: splits, error: splitErr } = await vfHaalAlleRijenOp(
-    supabaseClient.from('brew_planning_splits').select('brew_planning_id, recipe_id, hl').in('brew_planning_id', planning.map(p => p.id))
-  );
-  if (splitErr) return { error: splitErr };
   const splitHlPerRecept = {};
   const splitWeekPerRecept = {}; // recipe_id -> [{week, hl}]
   (splits || []).forEach(s => {
@@ -251,4 +286,8 @@ function vfLoopVoorraadVooruit(huidigeVoorraad, perWeek) {
     if (resterend < 0) return week;
   }
   return null;
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { vfBerekenVerbruik, vfNewestVersionPerGroup, vfResolveRecipeId };
 }
