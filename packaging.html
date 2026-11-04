@@ -55,6 +55,7 @@
       letter-spacing: 0.06em; text-transform: uppercase; padding: 6px 10px;
     }
     .pk-actions { display: flex; gap: 6px; white-space: nowrap; }
+    table.pk-table button { white-space: nowrap; }
     .pk-delete-btn { background: #fff; border: 1px solid #a33f2c; color: #a33f2c; border-radius: 4px; padding: 3px 10px; cursor: pointer; font-size: 0.85em; }
     .pk-delete-btn:hover { background: #fbeae6; }
     .pk-muted { color: #777; font-size: 0.85em; }
@@ -69,6 +70,27 @@
     .pk-bom input[type="text"] { max-width: 80px; }
     .pk-bom select { min-width: 240px; }
     .pk-no-access { padding: 40px 0; color: #555; }
+
+    /* One save for the whole page: edits are kept until "Save changes". */
+    .pk-savebar {
+      position: sticky; top: calc(var(--jopen-nav-h, 0px) + 8px); z-index: 20;
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      margin: 14px 0 0; padding: 9px 14px; border-radius: 8px;
+      background: #fff; border: 1px solid #ddd; font-size: 0.9em; color: #555;
+    }
+    .pk-savebar.dirty { background: #fff7e0; border-color: #e7c66b; color: #6b4e00; }
+    .pk-savebar .pk-savebar-text { flex: 1; }
+    .pk-savebar button { padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.95em; }
+    .pk-save-all { background: var(--hop-dark); color: #fff; border: 1px solid var(--hop-dark); font-weight: 600; }
+    .pk-save-all:disabled, .pk-discard:disabled { opacity: 0.45; cursor: default; }
+    .pk-discard { background: #fff; border: 1px solid #bbb; color: #333; }
+    table.pk-table tr.pk-dirty > td { background: #fff7e0; }
+    table.pk-table input.pk-invalid { border-color: #b3261e; background: #fdecea; }
+
+    /* Drag handle for the material order (within a category) */
+    td.pk-drag { width: 22px; cursor: grab; color: #999; text-align: center; user-select: none; }
+    td.pk-drag:active { cursor: grabbing; }
+    tr.pk-dragging { opacity: 0.4; }
 
     @media (max-width: 699px) {
       main.pk-main { padding: 16px; }
@@ -88,6 +110,11 @@
     <div id="pk-no-access" class="pk-no-access" style="display:none;">You do not have access to Packaging. Ask an admin for view rights on "Packaging".</div>
 
     <div id="pk-content" style="display:none;">
+      <div class="pk-savebar" id="pk-savebar" style="display:none;">
+        <span class="pk-savebar-text" id="pk-savebar-text">No unsaved changes.</span>
+        <button type="button" class="pk-discard" id="pk-discard" disabled>Discard</button>
+        <button type="button" class="pk-save-all" id="pk-save-all" disabled>Save changes</button>
+      </div>
       <nav class="pk-tabs" role="tablist">
         <button type="button" role="tab" data-tab="skus">SKUs<span class="pk-count" id="pk-count-skus"></span></button>
         <button type="button" role="tab" data-tab="materials">Materials<span class="pk-count" id="pk-count-materials"></span></button>
@@ -106,7 +133,7 @@
 
       <!-- Tab: Materials -->
       <section class="pk-panel" id="pk-panel-materials" role="tabpanel">
-        <p class="explanation">The materials booked out on the Filling report. They make up the bill of materials of the SKUs. The reorder level is the minimum stock in the material's unit, for the packaging stock keeping to come. A material that is used can only be made inactive.</p>
+        <p class="explanation">The materials booked out on the Filling report. They make up the bill of materials of the SKUs. The reorder level is the minimum stock in the material's unit, for the packaging stock keeping to come. A material that is used can only be made inactive. Drag a material by its handle to change the order within its category (also the order of the + Material list on the Filling report).</p>
         <div class="pk-toolbar">
           <input type="search" id="pk-material-search" placeholder="Search materials…" aria-label="Search materials" />
         </div>
@@ -130,6 +157,10 @@
       canEdit: false, canDelete: false,
       skus: [], materials: [], bom: [], skuUse: new Map(), materialUse: new Map(),
       formatFilter: '', skuSearch: '', materialSearch: '',
+      // Unsaved edits, per row id: { field: value }. They survive re-renders
+      // (search, filter, reload after an add or delete) until "Save changes"
+      // or "Discard". bom: id -> { quantity }.
+      pending: { skus: new Map(), materials: new Map(), bom: new Map() },
     };
 
     const parseNumber = (text) => {
@@ -138,7 +169,6 @@
       const n = Number(t.replace(',', '.'));
       return Number.isFinite(n) ? n : undefined;
     };
-    const formatLabel = (key) => (PACKAGE_FORMATS.find(([k]) => k === key) || [key, key])[1];
     const materialName = (id) => (page.materials.find((m) => m.id === id) || {}).name || '?';
     const nextSortOrder = (rows) => Math.max(0, ...rows.map((r) => r.sort_order || 0)) + 10;
     const disabled = () => (page.canEdit ? '' : ' disabled');
@@ -158,6 +188,144 @@
       const el = document.getElementById(`pk-${tab}-message`);
       el.textContent = text;
       el.className = 'jopen-form-melding' + (kind ? ' ' + kind : '');
+    }
+
+    // ----------------------------------------------------------------
+    // Unsaved edits
+    // ----------------------------------------------------------------
+    const ROWS = { skus: () => page.skus, materials: () => page.materials, bom: () => page.bom };
+
+    /** The value to show: the unsaved edit if there is one, else the database value. */
+    function current(kind, row, field) {
+      const edit = page.pending[kind].get(row.id);
+      return edit && field in edit ? edit[field] : row[field];
+    }
+
+    // Compared as text, so typing a value back to what is saved clears the edit.
+    const asText = (v) => (v === null || v === undefined ? '' : String(v));
+
+    function setPending(kind, id, field, value) {
+      const row = ROWS[kind]().find((r) => r.id === id);
+      if (!row) return;
+      const edit = { ...(page.pending[kind].get(id) || {}) };
+      if (asText(value) === asText(row[field])) delete edit[field];
+      else edit[field] = value;
+      if (Object.keys(edit).length) page.pending[kind].set(id, edit);
+      else page.pending[kind].delete(id);
+    }
+
+    const pendingCount = () => page.pending.skus.size + page.pending.materials.size + page.pending.bom.size;
+
+    function updateSaveBar() {
+      if (!page.canEdit) return;
+      const n = pendingCount();
+      const bar = document.getElementById('pk-savebar');
+      bar.classList.toggle('dirty', n > 0);
+      document.getElementById('pk-savebar-text').textContent = n
+        ? `${n} unsaved change${n === 1 ? '' : 's'} (marked yellow).`
+        : 'No unsaved changes.';
+      document.getElementById('pk-save-all').disabled = !n;
+      document.getElementById('pk-discard').disabled = !n;
+    }
+
+    // Every input in the two lists writes into page.pending; the row turns
+    // yellow while it has unsaved edits.
+    function trackEdits(container, kind) {
+      const onEdit = (e) => {
+        const el = e.target;
+        if (!el.dataset.field) return;
+        const tr = el.closest('tr[data-id], tr[data-bom-id]');
+        const rowKind = tr.dataset.bomId ? 'bom' : kind;
+        const id = Number(tr.dataset.bomId || tr.dataset.id);
+        setPending(rowKind, id, el.dataset.field, el.type === 'checkbox' ? el.checked : el.value);
+        tr.classList.toggle('pk-dirty', page.pending[rowKind].has(id));
+        el.classList.remove('pk-invalid');
+        updateSaveBar();
+      };
+      container.addEventListener('input', onEdit);
+      container.addEventListener('change', onEdit);
+    }
+
+    /** Checks all edits; returns the list of problems (empty = fine to save). */
+    function validatePending() {
+      const problems = [];
+      page.pending.skus.forEach((edit, id) => {
+        const name = (current('skus', page.skus.find((s) => s.id === id), 'name') || '').trim();
+        if ('name' in edit && !name) problems.push({ kind: 'skus', id, field: 'name', text: 'An SKU name cannot be empty.' });
+        if ('liters_per_unit' in edit) {
+          const n = parseNumber(edit.liters_per_unit);
+          if (!n || n <= 0) problems.push({ kind: 'skus', id, field: 'liters_per_unit', text: `Litres of "${name}" must be a number above 0.` });
+        }
+      });
+      page.pending.bom.forEach((edit, id) => {
+        const n = parseNumber(edit.quantity);
+        if (!n || n <= 0) problems.push({ kind: 'bom', id, field: 'quantity', text: 'A quantity in a bill of materials must be a number above 0.' });
+      });
+      page.pending.materials.forEach((edit, id) => {
+        const name = (current('materials', page.materials.find((m) => m.id === id), 'name') || '').trim();
+        if ('name' in edit && !name) problems.push({ kind: 'materials', id, field: 'name', text: 'A material name cannot be empty.' });
+        if ('reorder_level' in edit) {
+          const n = parseNumber(edit.reorder_level);
+          if (n === undefined || (n !== null && n < 0)) problems.push({ kind: 'materials', id, field: 'reorder_level', text: `Reorder level of "${name}" must be empty or 0 or more.` });
+        }
+      });
+      return problems;
+    }
+
+    /** An edit as a database payload: numbers parsed, text trimmed. */
+    function payload(kind, edit) {
+      const out = {};
+      Object.entries(edit).forEach(([field, value]) => {
+        if (['liters_per_unit', 'quantity', 'reorder_level'].includes(field)) out[field] = parseNumber(value);
+        else if (field === 'unit') out[field] = String(value).trim() || 'pcs';
+        else if (typeof value === 'string') out[field] = value.trim();
+        else out[field] = value;
+      });
+      return out;
+    }
+
+    const TABLE_OF = { skus: 'packaging_articles', materials: 'packaging_materials', bom: 'packaging_article_materials' };
+
+    async function saveAll() {
+      const problems = validatePending();
+      document.querySelectorAll('.pk-invalid').forEach((el) => el.classList.remove('pk-invalid'));
+      if (problems.length) {
+        problems.forEach((p) => {
+          const sel = p.kind === 'bom' ? `tr[data-bom-id="${p.id}"]` : `#pk-${p.kind === 'skus' ? 'sku' : 'material'}-list tr[data-id="${p.id}"]`;
+          document.querySelector(`${sel} [data-field="${p.field}"]`)?.classList.add('pk-invalid');
+        });
+        document.getElementById('pk-savebar-text').textContent = `Not saved: ${problems[0].text}${problems.length > 1 ? ` (+${problems.length - 1} more)` : ''}`;
+        return;
+      }
+      const jobs = [];
+      ['skus', 'bom', 'materials'].forEach((kind) => page.pending[kind].forEach((edit, id) => {
+        jobs.push({ kind, id, request: supabaseClient.from(TABLE_OF[kind]).update(payload(kind, edit)).eq('id', id) });
+      }));
+      const saveBtn = document.getElementById('pk-save-all');
+      saveBtn.disabled = true;
+      document.getElementById('pk-savebar-text').textContent = `Saving ${jobs.length} change${jobs.length === 1 ? '' : 's'}…`;
+      const results = await Promise.all(jobs.map((j) => j.request));
+      const failed = [];
+      results.forEach(({ error }, i) => {
+        if (error) failed.push({ ...jobs[i], error });
+        else page.pending[jobs[i].kind].delete(jobs[i].id); // saved: no longer pending
+      });
+      await loadAll();
+      if (failed.length) {
+        const e = failed[0].error;
+        document.getElementById('pk-savebar-text').textContent = `${failed.length} change${failed.length === 1 ? '' : 's'} not saved: ${e.code === '23505' ? 'that name already exists.'
+          : e.code === '42501' ? 'you do not have edit rights on Packaging.' : e.message}`;
+      } else {
+        document.getElementById('pk-savebar-text').textContent = `Saved ${jobs.length} change${jobs.length === 1 ? '' : 's'}.`;
+      }
+    }
+
+    function discardAll() {
+      if (!confirm(`Discard ${pendingCount()} unsaved change(s)?`)) return;
+      Object.values(page.pending).forEach((m) => m.clear());
+      renderSkus();
+      renderMaterials();
+      updateSaveBar();
     }
 
     // ----------------------------------------------------------------
@@ -195,12 +363,19 @@
         skus: skus.data || [], materials: materials.data || [], bom: bom.data || [],
         skuUse: count(bookedSkus.data, 'article_id'), materialUse: count(bookedMaterials.data, 'material_id'),
       });
+      // Edits of rows that no longer exist (deleted) are dropped.
+      Object.entries(page.pending).forEach(([kind, map]) => {
+        [...map.keys()].forEach((id) => { if (!ROWS[kind]().some((r) => r.id === id)) map.delete(id); });
+      });
       document.getElementById('pk-count-skus').textContent = `(${page.skus.filter((s) => s.is_active).length})`;
       document.getElementById('pk-count-materials').textContent = `(${page.materials.filter((m) => m.is_active).length})`;
       renderSkus();
       renderMaterials();
+      updateSaveBar();
     }
 
+    // Adds, copies and deletes are saved straight away; unsaved edits of
+    // other rows stay pending.
     async function write(tab, request, okText) {
       const { error } = await request;
       if (error) {
@@ -231,25 +406,25 @@
     }
 
     function skuMatches(s) {
-      if (page.formatFilter && s.package_format !== page.formatFilter) return false;
+      if (page.formatFilter && current('skus', s, 'package_format') !== page.formatFilter) return false;
       const q = page.skuSearch.trim().toLowerCase();
       if (!q) return true;
       const bomNames = page.bom.filter((b) => b.article_id === s.id).map((b) => materialName(b.material_id)).join(' ');
-      return `${s.name} ${bomNames}`.toLowerCase().includes(q);
+      return `${current('skus', s, 'name')} ${bomNames}`.toLowerCase().includes(q);
     }
 
     function bomBlock(s) {
       const bom = page.bom.filter((b) => b.article_id === s.id);
       const inBom = new Set(bom.map((b) => b.material_id));
-      const summary = bom.map((b) => `${b.quantity} × ${materialName(b.material_id)}`).join(' · ') || 'no materials';
+      const summary = bom.map((b) => `${current('bom', b, 'quantity')} × ${materialName(b.material_id)}`).join(' · ') || 'no materials';
       const choices = page.materials.filter((m) => m.is_active && !inBom.has(m.id));
       return `<details class="pk-bom">
         <summary>Bill of materials · ${escapeHtml(summary)}</summary>
         <table><tbody>
-          ${bom.map((b) => `<tr data-bom-id="${b.id}">
+          ${bom.map((b) => `<tr data-bom-id="${b.id}"${page.pending.bom.has(b.id) ? ' class="pk-dirty"' : ''}>
             <td>${escapeHtml(materialName(b.material_id))}</td>
-            <td><input type="text" class="pk-bom-qty" value="${escapeHtml(String(b.quantity))}" inputmode="decimal" aria-label="Quantity per SKU"${disabled()} /></td>
-            <td>${page.canEdit ? '<div class="pk-actions"><button type="button" class="pk-bom-save">Save</button>' : ''}${page.canDelete ? '<button type="button" class="pk-delete-btn pk-bom-delete">Delete</button>' : ''}${page.canEdit ? '</div>' : ''}</td></tr>`).join('')}
+            <td><input type="text" data-field="quantity" value="${escapeHtml(asText(current('bom', b, 'quantity')))}" inputmode="decimal" aria-label="Quantity per SKU"${disabled()} /></td>
+            <td>${page.canDelete ? '<button type="button" class="pk-delete-btn pk-bom-delete">Delete</button>' : ''}</td></tr>`).join('')}
           ${page.canEdit ? `<tr>
             <td><select class="pk-bom-new-material" aria-label="Material"><option value="">+ Material…</option>
               ${MATERIAL_CATEGORIES.map(([k, l]) => {
@@ -269,15 +444,15 @@
       const shown = page.skus.filter(skuMatches);
       const rows = shown.map((s) => {
         const used = page.skuUse.get(s.id) || 0;
+        const cls = [current('skus', s, 'is_active') ? '' : 'inactive', page.pending.skus.has(s.id) ? 'pk-dirty' : ''].filter(Boolean).join(' ');
         return `
-        <tr data-id="${s.id}"${s.is_active ? '' : ' class="inactive"'}>
-          <td><input type="text" class="pk-name" value="${escapeHtml(s.name)}" aria-label="Name"${disabled()} /></td>
-          <td><select class="pk-format" aria-label="Package"${disabled()}>${options(PACKAGE_FORMATS, s.package_format)}</select></td>
-          <td><input type="text" class="pk-litres" value="${escapeHtml(String(s.liters_per_unit))}" inputmode="decimal" aria-label="Litres per SKU" style="max-width:80px;"${disabled()} /></td>
-          <td class="c"><input type="checkbox" class="pk-active"${s.is_active ? ' checked' : ''} aria-label="Active"${disabled()} /></td>
+        <tr data-id="${s.id}"${cls ? ` class="${cls}"` : ''}>
+          <td><input type="text" data-field="name" value="${escapeHtml(current('skus', s, 'name'))}" aria-label="Name"${disabled()} /></td>
+          <td><select data-field="package_format" aria-label="Package"${disabled()}>${options(PACKAGE_FORMATS, current('skus', s, 'package_format'))}</select></td>
+          <td><input type="text" data-field="liters_per_unit" value="${escapeHtml(asText(current('skus', s, 'liters_per_unit')))}" inputmode="decimal" aria-label="Litres per SKU" style="max-width:80px;"${disabled()} /></td>
+          <td class="c"><input type="checkbox" data-field="is_active"${current('skus', s, 'is_active') ? ' checked' : ''} aria-label="Active"${disabled()} /></td>
           <td class="pk-muted">${used ? `${used}× booked` : '—'}</td>
           <td>${page.canEdit ? `<div class="pk-actions">
-            <button type="button" class="pk-save">Save</button>
             <button type="button" class="pk-copy" title="New SKU with the same bill of materials">Copy</button>
             ${page.canDelete && !used ? '<button type="button" class="pk-delete-btn pk-delete">Delete</button>' : ''}</div>` : ''}</td>
         </tr>
@@ -288,41 +463,28 @@
           <td><input type="text" id="pk-new-sku-name" placeholder="New SKU, e.g. 'Box 24x33cl'…" aria-label="New SKU name" /></td>
           <td><select id="pk-new-sku-format" aria-label="Package">${options(PACKAGE_FORMATS, page.formatFilter || 'bottle')}</select></td>
           <td><input type="text" id="pk-new-sku-litres" placeholder="Litres" inputmode="decimal" aria-label="Litres per SKU" style="max-width:80px;" /></td>
-          <td colspan="2" class="pk-muted" style="white-space:normal;">Add the materials in its bill of materials after adding.</td>
+          <td colspan="2" class="pk-muted" style="white-space:normal;">Added straight away; then add its materials below it.</td>
           <td><button type="button" id="pk-new-sku-add">Add SKU</button></td>
         </tr>` : '';
       container.innerHTML = `
         <table class="pk-table">
           <thead><tr><th class="pk-name-col">Name</th><th style="width:110px;">Package</th><th style="width:90px;">Litres</th>
-            <th class="c" style="width:60px;">Active</th><th style="width:110px;">Used</th><th style="width:200px;"></th></tr></thead>
+            <th class="c" style="width:60px;">Active</th><th style="width:110px;">Used</th><th style="width:150px;"></th></tr></thead>
           <tbody>${rows || '<tr><td colspan="6" class="pk-muted">No SKUs match.</td></tr>'}${newRow}</tbody>
         </table>`;
       container.querySelectorAll('tr.pk-bom-row').forEach((tr) => { if (open.has(tr.dataset.bomOf)) tr.querySelector('details').open = true; });
 
       container.querySelectorAll('tr[data-id]').forEach((tr) => {
-        tr.querySelector('.pk-save')?.addEventListener('click', () => saveSku(tr));
         tr.querySelector('.pk-copy')?.addEventListener('click', () => copySku(Number(tr.dataset.id)));
         tr.querySelector('.pk-delete')?.addEventListener('click', () => deleteRow('skus', 'packaging_articles', tr.dataset.id, 'SKU'));
       });
       container.querySelectorAll('tr.pk-bom-row').forEach((tr) => {
         tr.querySelectorAll('tr[data-bom-id]').forEach((row) => {
-          row.querySelector('.pk-bom-save')?.addEventListener('click', () => saveBomLine(row));
           row.querySelector('.pk-bom-delete')?.addEventListener('click', () => deleteRow('skus', 'packaging_article_materials', row.dataset.bomId, 'material line'));
         });
         tr.querySelector('.pk-bom-add')?.addEventListener('click', () => addBomLine(tr));
       });
       document.getElementById('pk-new-sku-add')?.addEventListener('click', addSku);
-    }
-
-    function saveSku(tr) {
-      const name = tr.querySelector('.pk-name').value.trim();
-      const litres = parseNumber(tr.querySelector('.pk-litres').value);
-      if (!name) return showMessage('skus', 'Name cannot be empty.', 'fout');
-      if (!litres || litres <= 0) return showMessage('skus', 'Litres per SKU must be a number above 0.', 'fout');
-      return write('skus', supabaseClient.from('packaging_articles').update({
-        name, package_format: tr.querySelector('.pk-format').value, liters_per_unit: litres,
-        is_active: tr.querySelector('.pk-active').checked,
-      }).eq('id', tr.dataset.id), 'Saved.');
     }
 
     async function addSku() {
@@ -340,7 +502,7 @@
       openBom(data.id);
     }
 
-    // A copy gets the same package, litres and bill of materials.
+    // A copy gets the same package, litres and bill of materials (as saved).
     async function copySku(id) {
       const source = page.skus.find((s) => s.id === id);
       const name = prompt('Name of the new SKU:', `${source.name} · copy`);
@@ -363,12 +525,6 @@
       row.previousElementSibling.scrollIntoView({ block: 'center', behavior: 'smooth' });
     }
 
-    function saveBomLine(row) {
-      const quantity = parseNumber(row.querySelector('.pk-bom-qty').value);
-      if (!quantity || quantity <= 0) return showMessage('skus', 'Quantity must be a number above 0.', 'fout');
-      return write('skus', supabaseClient.from('packaging_article_materials').update({ quantity }).eq('id', row.dataset.bomId), 'Saved.');
-    }
-
     function addBomLine(tr) {
       const materialId = Number(tr.querySelector('.pk-bom-new-material').value);
       const quantity = parseNumber(tr.querySelector('.pk-bom-new-qty').value);
@@ -379,69 +535,104 @@
     }
 
     // ----------------------------------------------------------------
-    // Tab: Materials (grouped by category)
+    // Tab: Materials (grouped by category, drag to reorder within one)
     // ----------------------------------------------------------------
     function materialMatches(m) {
       const q = page.materialSearch.trim().toLowerCase();
-      return !q || `${m.name} ${m.code} ${m.mdrank_article_number || ''}`.toLowerCase().includes(q);
+      return !q || `${current('materials', m, 'name')} ${m.code} ${m.mdrank_article_number || ''}`.toLowerCase().includes(q);
     }
+
+    const effectiveOrder = (m) => Number(current('materials', m, 'sort_order')) || 0;
 
     function renderMaterials() {
       const container = document.getElementById('pk-material-list');
+      // Dragging only makes sense on the full list, not on search results.
+      const canDrag = page.canEdit && !page.materialSearch.trim();
+      const cols = 10;
       const groups = MATERIAL_CATEGORIES.map(([k, label]) => {
-        const items = page.materials.filter((m) => m.category === k && materialMatches(m));
+        const items = page.materials.filter((m) => current('materials', m, 'category') === k && materialMatches(m))
+          .sort((a, b) => effectiveOrder(a) - effectiveOrder(b) || a.id - b.id);
         if (!items.length) return '';
-        return `<tr class="pk-group-heading"><td colspan="9">${escapeHtml(label)}</td></tr>` + items.map((m) => {
+        return `<tbody data-category="${k}"><tr class="pk-group-heading"><td colspan="${cols}">${escapeHtml(label)}</td></tr>` + items.map((m) => {
           const inSkus = page.bom.filter((b) => b.material_id === m.id).length;
           const booked = page.materialUse.get(m.id) || 0;
+          const cls = [current('materials', m, 'is_active') ? '' : 'inactive', page.pending.materials.has(m.id) ? 'pk-dirty' : ''].filter(Boolean).join(' ');
           return `
-          <tr data-id="${m.id}"${m.is_active ? '' : ' class="inactive"'}>
-            <td><input type="text" class="pk-name" value="${escapeHtml(m.name)}" aria-label="Name"${disabled()} /></td>
+          <tr data-id="${m.id}"${cls ? ` class="${cls}"` : ''}>
+            <td class="pk-drag"${canDrag ? ' draggable="true" title="Drag to reorder"' : ''}>${canDrag ? '⋮⋮' : ''}</td>
+            <td><input type="text" data-field="name" value="${escapeHtml(current('materials', m, 'name'))}" aria-label="Name"${disabled()} /></td>
             <td class="pk-code">${escapeHtml(m.code)}</td>
-            <td><select class="pk-category" aria-label="Category"${disabled()}>${options(MATERIAL_CATEGORIES, m.category)}</select></td>
-            <td><input type="text" class="pk-unit" value="${escapeHtml(m.unit)}" aria-label="Unit" style="max-width:70px;"${disabled()} /></td>
-            <td><input type="text" class="pk-mdrank" value="${escapeHtml(m.mdrank_article_number || '')}" aria-label="MDrank article number"${disabled()} /></td>
-            <td><input type="text" class="pk-reorder" value="${m.reorder_level == null ? '' : escapeHtml(String(m.reorder_level))}" inputmode="decimal" aria-label="Reorder level" style="max-width:90px;"${disabled()} /></td>
-            <td class="c"><input type="checkbox" class="pk-active"${m.is_active ? ' checked' : ''} aria-label="Active"${disabled()} /></td>
+            <td><select class="pk-category" data-field="category" aria-label="Category"${disabled()}>${options(MATERIAL_CATEGORIES, current('materials', m, 'category'))}</select></td>
+            <td><input type="text" data-field="unit" value="${escapeHtml(current('materials', m, 'unit'))}" aria-label="Unit" style="max-width:70px;"${disabled()} /></td>
+            <td><input type="text" data-field="mdrank_article_number" value="${escapeHtml(asText(current('materials', m, 'mdrank_article_number')))}" aria-label="MDrank article number"${disabled()} /></td>
+            <td><input type="text" data-field="reorder_level" value="${escapeHtml(asText(current('materials', m, 'reorder_level')))}" inputmode="decimal" aria-label="Reorder level" style="max-width:90px;"${disabled()} /></td>
+            <td class="c"><input type="checkbox" data-field="is_active"${current('materials', m, 'is_active') ? ' checked' : ''} aria-label="Active"${disabled()} /></td>
             <td class="pk-muted">${inSkus} SKU${inSkus === 1 ? '' : 's'} · ${booked} booked</td>
-            <td>${page.canEdit ? `<div class="pk-actions"><button type="button" class="pk-save">Save</button>
-              ${page.canDelete && !(inSkus + booked) ? '<button type="button" class="pk-delete-btn pk-delete">Delete</button>' : ''}</div>` : ''}</td>
+            <td>${page.canDelete && !(inSkus + booked) ? '<button type="button" class="pk-delete-btn pk-delete">Delete</button>' : ''}</td>
           </tr>`;
-        }).join('');
+        }).join('') + '</tbody>';
       }).join('');
-      const newRow = page.canEdit ? `
+      const newRow = page.canEdit ? `<tbody>
         <tr class="pk-new">
+          <td></td>
           <td><input type="text" id="pk-new-material-name" placeholder="New material, e.g. 'Crown cork'…" aria-label="New material name" /></td>
           <td></td>
           <td><select id="pk-new-material-category" aria-label="Category">${options(MATERIAL_CATEGORIES, 'other')}</select></td>
           <td><input type="text" id="pk-new-material-unit" value="pcs" aria-label="Unit" style="max-width:70px;" /></td>
-          <td colspan="4"></td>
+          <td colspan="4" class="pk-muted" style="white-space:normal;">Added straight away, at the end of its category.</td>
           <td><button type="button" id="pk-new-material-add">Add material</button></td>
-        </tr>` : '';
+        </tr></tbody>` : '';
       container.innerHTML = `
         <table class="pk-table">
-          <thead><tr><th class="pk-name-col">Name</th><th style="width:110px;">Code</th><th style="width:120px;">Category</th><th style="width:70px;">Unit</th>
+          <thead><tr><th style="width:22px;"></th><th class="pk-name-col">Name</th><th style="width:110px;">Code</th><th style="width:120px;">Category</th><th style="width:70px;">Unit</th>
             <th style="width:110px;">MDrank no.</th><th style="width:90px;">Reorder level</th><th class="c" style="width:55px;">Active</th>
-            <th style="width:125px;">Used</th><th style="width:120px;"></th></tr></thead>
-          <tbody>${groups || '<tr><td colspan="9" class="pk-muted">No materials match.</td></tr>'}${newRow}</tbody>
+            <th style="width:125px;">Used</th><th style="width:90px;"></th></tr></thead>
+          ${groups || `<tbody><tr><td colspan="${cols}" class="pk-muted">No materials match.</td></tr></tbody>`}${newRow}
         </table>`;
       container.querySelectorAll('tr[data-id]').forEach((tr) => {
-        tr.querySelector('.pk-save')?.addEventListener('click', () => saveMaterial(tr));
         tr.querySelector('.pk-delete')?.addEventListener('click', () => deleteRow('materials', 'packaging_materials', tr.dataset.id, 'material'));
       });
       document.getElementById('pk-new-material-add')?.addEventListener('click', addMaterial);
+      if (canDrag) container.querySelectorAll('tbody[data-category]').forEach(makeSortable);
     }
 
-    function saveMaterial(tr) {
-      const name = tr.querySelector('.pk-name').value.trim();
-      const reorder = parseNumber(tr.querySelector('.pk-reorder').value);
-      if (!name) return showMessage('materials', 'Name cannot be empty.', 'fout');
-      if (reorder === undefined || (reorder !== null && reorder < 0)) return showMessage('materials', 'Reorder level must be empty or a number of 0 or more.', 'fout');
-      return write('materials', supabaseClient.from('packaging_materials').update({
-        name, category: tr.querySelector('.pk-category').value, unit: tr.querySelector('.pk-unit').value.trim() || 'pcs',
-        mdrank_article_number: tr.querySelector('.pk-mdrank').value.trim() || null, reorder_level: reorder,
-        is_active: tr.querySelector('.pk-active').checked,
-      }).eq('id', tr.dataset.id), 'Saved.');
+    // Drag a material row by its handle within its category; on drop, the
+    // category's existing sort_order values are handed out again in the new
+    // order, so only the moved rows change (and become unsaved edits).
+    function makeSortable(tbody) {
+      let dragged = null;
+      tbody.addEventListener('dragstart', (e) => {
+        const handle = e.target.closest('td.pk-drag');
+        if (!handle) { e.preventDefault(); return; }
+        dragged = handle.closest('tr');
+        dragged.classList.add('pk-dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        try { e.dataTransfer.setData('text/plain', dragged.dataset.id); } catch (err) { /* Firefox needs setData */ }
+        try { e.dataTransfer.setDragImage(dragged, 10, 10); } catch (err) { /* not critical */ }
+      });
+      tbody.addEventListener('dragover', (e) => {
+        if (!dragged) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const over = e.target.closest('tr[data-id]');
+        if (!over || over === dragged || !tbody.contains(over)) return;
+        const rect = over.getBoundingClientRect();
+        tbody.insertBefore(dragged, (e.clientY - rect.top) / rect.height > 0.5 ? over.nextSibling : over);
+      });
+      tbody.addEventListener('drop', (e) => e.preventDefault());
+      tbody.addEventListener('dragend', () => {
+        if (!dragged) return;
+        dragged.classList.remove('pk-dragging');
+        dragged = null;
+        const ids = [...tbody.querySelectorAll('tr[data-id]')].map((tr) => Number(tr.dataset.id));
+        const rows = ids.map((id) => page.materials.find((m) => m.id === id));
+        const slots = rows.map(effectiveOrder).sort((a, b) => a - b);
+        // Equal sort_order values would not keep the new order: spread them.
+        for (let i = 1; i < slots.length; i++) if (slots[i] <= slots[i - 1]) slots[i] = slots[i - 1] + 1;
+        rows.forEach((m, i) => setPending('materials', m.id, 'sort_order', slots[i]));
+        renderMaterials();
+        updateSaveBar();
+      });
     }
 
     async function addMaterial() {
@@ -467,6 +658,18 @@
       page.canEdit = await magBewerkenModule('packaging');
       page.canDelete = await magVerwijderenModule('packaging');
       document.getElementById('pk-content').style.display = 'block';
+      if (page.canEdit) {
+        document.getElementById('pk-savebar').style.display = '';
+        document.getElementById('pk-save-all').addEventListener('click', saveAll);
+        document.getElementById('pk-discard').addEventListener('click', discardAll);
+        trackEdits(document.getElementById('pk-sku-list'), 'skus');
+        trackEdits(document.getElementById('pk-material-list'), 'materials');
+        window.addEventListener('beforeunload', (e) => {
+          if (!pendingCount()) return;
+          e.preventDefault();
+          e.returnValue = '';
+        });
+      }
 
       document.querySelectorAll('.pk-tabs button').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
       document.getElementById('pk-sku-search').addEventListener('input', (e) => { page.skuSearch = e.target.value; renderSkus(); });

@@ -246,8 +246,10 @@ window).
 - Databases › Packaging (`packaging.html`, module `packaging`): tab SKUs
   (name, package, litres, active, bill of materials per SKU, Copy; no EAN /
   Mdrank no.: an SKU does not say which beer is in it) and tab Materials grouped by category (name, category, unit,
-  Mdrank no., reorder level, active). Booked SKUs / used materials can only
-  be made inactive.
+  Mdrank no., reorder level, active; drag to reorder within a category).
+  Edits are kept (yellow) until one "Save changes" for the whole page; adds,
+  copies and deletes are saved straight away. Booked SKUs / used materials
+  can only be made inactive.
 
 ## Popups
 - Calculators (`mockup/Calculators.dc.html`): Nagardo, PGA/alginate; "Save
