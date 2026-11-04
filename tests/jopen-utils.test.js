@@ -1,6 +1,6 @@
 // node tests/jopen-utils.test.js
 const assert = require('assert');
-const { escapeHtml, fetchAllRows, formatDate } = require('../jopen-utils.js');
+const { escapeHtml, fetchAllRows, formatDate, codeFromLabel } = require('../jopen-utils.js');
 
 // escapeHtml: text and attribute contexts, empty values
 assert.strictEqual(escapeHtml('Bier & Brood <b>'), 'Bier &amp; Brood &lt;b&gt;');
@@ -14,6 +14,13 @@ assert.strictEqual(escapeHtml(26351), '26351');
 assert.strictEqual(formatDate(null), '—');
 assert.strictEqual(formatDate(''), '—');
 assert.strictEqual(formatDate('2026-10-16'), '16 Oct 2026');
+
+// codeFromLabel: accents dropped, everything else becomes one underscore
+assert.strictEqual(codeFromLabel('Dry hop @2 °C'), 'dry_hop_2_c');
+assert.strictEqual(codeFromLabel('Box 24x33cl · blank'), 'box_24x33cl_blank');
+assert.strictEqual(codeFromLabel('Crème brûlée'), 'creme_brulee');
+assert.strictEqual(codeFromLabel('  ·  '), '');
+assert.strictEqual(codeFromLabel(null), '');
 
 // fetchAllRows: fake Supabase query with 2.500 rows → 3 pages
 function fakeQuery(total, failOnPage = -1) {

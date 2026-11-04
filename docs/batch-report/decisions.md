@@ -117,6 +117,7 @@ Agreed with Jaap. Date = when decided. Do not change without asking.
 | 03-11 | A recipe's grist can be designed in %: the brewer enters the % per malt, the Brewhouse design card calculates the kg for Brouwsel (hl) at the original extract; the brewer rounds off (Jaap). |
 | 03-11 | Whirlpool dilution (water from the end of the boil to the whirlpool) is a fixed 0.7 hl in the brewhouse design, not a per-recipe input (Jaap). |
 | 03-11 | User-defined ingredient specifications: not now, later when really needed (Jaap). |
+| 04-11 | Packaging is its own database (Databases › Packaging, tabs SKUs and Materials), out of Settings, with its own permission module `packaging` (admin and Head brewer for now). Materials get a category and a reorder level to prepare packaging stock keeping. On the Filling report "Used" stays empty next to Expected: the operator fills in the real count, so losses stay visible. |
 
 ## Parked (do not build yet)
 - Closing the filling report (Completed / Signed) and the "Entered in Mdrank"
