@@ -244,8 +244,8 @@ window).
   Active batches: Filling and Filled tiles show "Documents n/3" (green at
   3/3) and "· +n other".
 - Databases › Packaging (`packaging.html`, module `packaging`): tab SKUs
-  (name, package, litres, EAN, Mdrank no., active, bill of materials per
-  SKU, Copy) and tab Materials grouped by category (name, category, unit,
+  (name, package, litres, active, bill of materials per SKU, Copy; no EAN /
+  Mdrank no.: an SKU does not say which beer is in it) and tab Materials grouped by category (name, category, unit,
   Mdrank no., reorder level, active). Booked SKUs / used materials can only
   be made inactive.
 
