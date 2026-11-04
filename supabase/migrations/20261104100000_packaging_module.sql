@@ -3,8 +3,9 @@
 -- moved out of Settings.
 -- 1. New permission module 'packaging'; writes on the three packaging tables
 --    check it instead of 'settings'. Reads stay open (the Filling report
---    needs them). Admin only for now: no role_permissions rows are added, so
---    only is_admin() passes until roles are ticked in the role matrix.
+--    needs them). Admins, plus Head brewer with the same rights it has on
+--    Settings today (Jaap, 04-11), so nobody loses access; other roles are
+--    ticked later in the role matrix.
 -- 2. Preparation for packaging stock keeping: a category per material and a
 --    reorder level (minimum stock). The categories of the existing materials
 --    are filled from their names. Plain ASCII.
@@ -14,6 +15,13 @@ begin;
 insert into public.permission_modules (module_key, name, sort_order)
 values ('packaging', 'Packaging', 12)
 on conflict (module_key) do nothing;
+
+insert into public.role_permissions (role_id, module_key, can_view, can_edit, can_delete)
+select rp.role_id, 'packaging', rp.can_view, rp.can_edit, rp.can_delete
+from public.role_permissions rp
+join public.roles r on r.id = rp.role_id
+where rp.module_key = 'settings' and r.name = 'Head brewer'
+on conflict (role_id, module_key) do nothing;
 
 alter policy packaging_articles_insert on public.packaging_articles
   with check ((select can_edit('packaging')));
