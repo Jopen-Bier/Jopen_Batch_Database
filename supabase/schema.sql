@@ -2965,7 +2965,7 @@ COMMENT ON COLUMN public.recipe_brewing_specs.design_whirlpool_loss_pct IS 'Brew
 -- Name: COLUMN recipe_brewing_specs.design_brewhouse_loss_pct; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON COLUMN public.recipe_brewing_specs.design_brewhouse_loss_pct IS 'Brewhouse design: brewhouse loss in % of the grist kg below the lab extract (Brewcalc 1.5).';
+COMMENT ON COLUMN public.recipe_brewing_specs.design_brewhouse_loss_pct IS 'Brewhouse design: mash and filter loss in % of the lab extract (lab extract to the start of the boil). Empty = 7.';
 
 
 --
