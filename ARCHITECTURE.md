@@ -250,7 +250,8 @@ Agreed table and column names per table: `supabase/rename-map.json`.
 | `voorraad-overzicht/inboeken/uitboeken.html` | inventory | lots, stock_movements, ingredients, batches, users |
 | `analytics.html` | analytics (view for every role) | ingredients, ingredient_documents, document_types |
 | `recipe-analytics.html` | analytics | batch_volume_balance (view), recipes; Losses via `recipe-losses.js` + `filling-report.js`; Brewhouse efficiency via `brewhouse-efficiency.js` + `batch-ingredients.js` from batch_brews, batches, batch_ingredients (+ ingredients.extract_pct); writes batch_brews.efficiency_accepted_* (Mark as good, batches edit right) |
-| `settings.html` | settings | units, ingredient_categories, document_types, ingredient_declarations, water_settings (+ _history), cellar_action_tags, cellar_plan_parts (`apply_cellar_plan_order()`), recipe_ingredients (count), packaging_articles/_materials/_article_materials (+ filling_session_articles/_materials, count), breweries (+ recipes, count) |
+| `settings.html` | settings | units, ingredient_categories, document_types, ingredient_declarations, water_settings (+ _history), cellar_action_tags, cellar_plan_parts (`apply_cellar_plan_order()`), recipe_ingredients (count), breweries (+ recipes, count) |
+| `packaging.html` | packaging | packaging_articles (SKUs) + packaging_article_materials (bill of materials), packaging_materials (category, reorder level for the packaging stock to come), filling_session_articles/_materials (count, to block deleting what is booked) |
 | `gebruikers.html` | admin only (`user_management`) | users (incl. `report_subscriptions`), roles, `admin_get_last_logins()` |
 | `rollen.html` | admin only (`role_management`) | roles, role_permissions, permission_modules |
 | `status.html` | admin only | counts on batches, recipes, ingredients, users |

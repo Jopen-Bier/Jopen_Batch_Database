@@ -387,7 +387,7 @@
           <tbody>${rows || '<tr><td colspan="5" class="small">Book the articles first; their materials appear here.</td></tr>'}</tbody></table></div>
         ${page.canEdit ? `<div style="max-width:280px;"><select class="br-input" data-add-material="${s.id}" aria-label="Add material">
           <option value="">+ Material</option>${options.map((m) => `<option value="${m.id}">${escapeHtml(m.name)}</option>`).join('')}</select></div>` : ''}
-        <div class="br-note">Expected = count × material per article (bill of materials, Settings). Loss above 0 = material lost; below 0 = check the count.</div>
+        <div class="br-note">Expected = count × material per article (bill of materials, <a href="packaging.html">Packaging</a>). Loss above 0 = material lost; below 0 = check the count.</div>
       </div>`;
     }
 

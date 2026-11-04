@@ -556,7 +556,8 @@ Built 20-10 (migration `20261020151500_batch_report_splits`):
 |---|---|---|---|
 | all batch tables above (`batch_*`, `fermentation_*`, `processing_*`, `hbt_readings`, `filling_*`) | `can_view('batches')` | `can_edit('batches')` | `can_delete('batches')` |
 | `batch_audit_log` | `can_view('batches')` | trigger only | none |
-| `tanks`, `cellar_action_tags`, `packaging_*` | every logged-in user | `can_edit('settings')` | `can_delete('settings')` |
+| `tanks`, `cellar_action_tags` | every logged-in user | `can_edit('settings')` | `can_delete('settings')` |
+| `packaging_*` | every logged-in user | `can_edit('packaging')` | `can_delete('packaging')` |
 | `recipe_cellar_steps` | `can_view('recipes')` | `can_edit('recipes')` | `can_delete('recipes')` |
 
 Split `FOR ALL` into separate insert/update/delete policies (advisor fix of

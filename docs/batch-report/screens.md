@@ -243,10 +243,11 @@ window).
   plus **Other**: any number of files ("+ Add", several at once).
   Active batches: Filling and Filled tiles show "Documents n/3" (green at
   3/3) and "· +n other".
-- Settings › Packaging articles (name, package, litres, EAN, Mdrank no.,
-  active, bill of materials per article) and › Packaging materials (name,
-  unit, Mdrank no., active). Booked articles / used materials can only be
-  made inactive.
+- Databases › Packaging (`packaging.html`, module `packaging`): tab SKUs
+  (name, package, litres, EAN, Mdrank no., active, bill of materials per
+  SKU, Copy) and tab Materials grouped by category (name, category, unit,
+  Mdrank no., reorder level, active). Booked SKUs / used materials can only
+  be made inactive.
 
 ## Popups
 - Calculators (`mockup/Calculators.dc.html`): Nagardo, PGA/alginate; "Save

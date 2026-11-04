@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jopen Brouwerij — Packaging</title>
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="stylesheet" href="jopen-shared.css" />
+  <style>
+    /* ------------------------------------------------------------------
+       Packaging database: two tabs. SKUs = packaging_articles with their
+       bill of materials (packaging_article_materials); Materials =
+       packaging_materials, grouped by category. The Filling report books
+       SKUs and derives the expected material use from the bill of materials.
+       ------------------------------------------------------------------ */
+    :root { --hop-dark: #33473a; }
+    main.pk-main { max-width: 1150px; margin: 0 auto; padding: 24px; }
+
+    .pk-tabs { display: flex; gap: 4px; border-bottom: 2px solid var(--hop-dark); margin: 18px 0 0; }
+    .pk-tabs button {
+      background: #fff; border: 1px solid #ddd; border-bottom: none; border-radius: 8px 8px 0 0;
+      padding: 9px 18px; font-size: 0.95em; cursor: pointer; color: #1f1f1f;
+    }
+    .pk-tabs button.active { background: var(--hop-dark); border-color: var(--hop-dark); color: #fff; font-weight: 600; }
+    .pk-tabs .pk-count { font-size: 0.8em; opacity: 0.75; margin-left: 4px; }
+
+    .pk-panel { display: none; background: #fff; border: 1px solid #ddd; border-top: none; border-radius: 0 0 8px 8px; padding: 18px 22px; }
+    .pk-panel.active { display: block; }
+    .pk-panel p.explanation { color: #555; font-size: 0.9em; margin-top: 0; }
+
+    .pk-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 4px 0 12px; }
+    .pk-toolbar input[type="search"] { flex: 1; min-width: 180px; max-width: 320px; padding: 7px 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 0.9em; }
+    .pk-filter { background: #fff; border: 1px solid #ccc; border-radius: 16px; padding: 5px 12px; font-size: 0.85em; cursor: pointer; }
+    .pk-filter.active { background: var(--hop-dark); border-color: var(--hop-dark); color: #fff; }
+
+    .pk-table-wrap { overflow-x: auto; }
+    table.pk-table { width: 100%; border-collapse: collapse; margin: 0 0 12px; min-width: 820px; }
+    table.pk-table th, table.pk-table td { text-align: left; padding: 7px 8px; border-bottom: 1px solid #eee; font-size: 0.9em; vertical-align: middle; }
+    table.pk-table th { font-size: 0.78em; text-transform: uppercase; letter-spacing: 0.04em; color: #666; }
+    table.pk-table input[type="text"], table.pk-table select { width: 100%; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; padding: 4px 6px; font-size: 0.95em; }
+    table.pk-table input:disabled, table.pk-table select:disabled { background: #f6f6f4; color: #555; border-color: #e2e2e2; }
+    table.pk-table td.c { text-align: center; }
+    table.pk-table tr.inactive td { color: #999; }
+    table.pk-table tr.pk-new td { background: #fafaf7; }
+    .pk-group-heading td {
+      background: var(--hop-dark); color: #fff; font-size: 0.75em; font-weight: 700;
+      letter-spacing: 0.06em; text-transform: uppercase; padding: 6px 10px;
+    }
+    .pk-actions { display: flex; gap: 6px; white-space: nowrap; }
+    .pk-delete-btn { background: #fff; border: 1px solid #a33f2c; color: #a33f2c; border-radius: 4px; padding: 3px 10px; cursor: pointer; font-size: 0.85em; }
+    .pk-delete-btn:hover { background: #fbeae6; }
+    .pk-muted { color: #777; font-size: 0.85em; }
+    td.pk-muted { white-space: nowrap; }
+    .pk-code { font-family: monospace; font-size: 0.85em; color: #777; }
+
+    /* Bill of materials under each SKU */
+    tr.pk-bom-row > td { padding-top: 0; }
+    .pk-bom summary { cursor: pointer; font-size: 0.85em; color: #555; padding: 2px 0 6px; }
+    .pk-bom table { border-collapse: collapse; margin: 0 0 10px 18px; min-width: 0; width: auto; }
+    .pk-bom td { border-bottom: 1px solid #f0f0ec; padding: 4px 8px; font-size: 0.88em; }
+    .pk-bom input[type="text"] { max-width: 80px; }
+    .pk-bom select { min-width: 240px; }
+    .pk-no-access { padding: 40px 0; color: #555; }
+
+    @media (max-width: 699px) {
+      main.pk-main { padding: 16px; }
+      .pk-panel { padding: 14px; }
+      .pk-tabs button { padding: 8px 12px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="jopen-nav"></div>
+
+  <main class="jopen-pagina pk-main">
+    <h1>Packaging</h1>
+    <p class="jopen-subtitel">The SKUs booked on the Filling report and the packaging materials they are made of.</p>
+
+    <div id="pk-no-access" class="pk-no-access" style="display:none;">You do not have access to Packaging. Ask an admin for view rights on "Packaging".</div>
+
+    <div id="pk-content" style="display:none;">
+      <nav class="pk-tabs" role="tablist">
+        <button type="button" role="tab" data-tab="skus">SKUs<span class="pk-count" id="pk-count-skus"></span></button>
+        <button type="button" role="tab" data-tab="materials">Materials<span class="pk-count" id="pk-count-materials"></span></button>
+      </nav>
+
+      <!-- Tab: SKUs -->
+      <section class="pk-panel" id="pk-panel-skus" role="tabpanel">
+        <p class="explanation">An SKU is what the Filling report books in: package, litres per SKU and its bill of materials (materials per SKU). The expected material use of a filling session is count × bill of materials. Inactive SKUs are no longer offered but stay on old reports; an SKU that is booked can only be made inactive.</p>
+        <div class="pk-toolbar">
+          <input type="search" id="pk-sku-search" placeholder="Search SKUs…" aria-label="Search SKUs" />
+          <span id="pk-format-filters"></span>
+        </div>
+        <div class="pk-table-wrap" id="pk-sku-list"><p class="jopen-subtitel">Loading…</p></div>
+        <p id="pk-skus-message" class="jopen-form-melding"></p>
+      </section>
+
+      <!-- Tab: Materials -->
+      <section class="pk-panel" id="pk-panel-materials" role="tabpanel">
+        <p class="explanation">The materials booked out on the Filling report. They make up the bill of materials of the SKUs. The reorder level is the minimum stock in the material's unit, for the packaging stock keeping to come. A material that is used can only be made inactive.</p>
+        <div class="pk-toolbar">
+          <input type="search" id="pk-material-search" placeholder="Search materials…" aria-label="Search materials" />
+        </div>
+        <div class="pk-table-wrap" id="pk-material-list"><p class="jopen-subtitel">Loading…</p></div>
+        <p id="pk-materials-message" class="jopen-form-melding"></p>
+      </section>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2"></script>
+  <script src="config.js"></script>
+  <script src="jopen-utils.js"></script>
+  <script src="nav.js"></script>
+  <script>
+    const PACKAGE_FORMATS = [['bottle', 'Bottle'], ['can', 'Can'], ['keg', 'Keg'], ['tank', 'Tank']];
+    const MATERIAL_CATEGORIES = [['bottle', 'Bottles'], ['can', 'Cans'], ['label', 'Labels'], ['closure', 'Closures'],
+      ['box', 'Boxes'], ['keg', 'Kegs'], ['other', 'Other']];
+    const TABS = ['skus', 'materials'];
+
+    const page = {
+      canEdit: false, canDelete: false,
+      skus: [], materials: [], bom: [], skuUse: new Map(), materialUse: new Map(),
+      formatFilter: '', skuSearch: '', materialSearch: '',
+    };
+
+    const parseNumber = (text) => {
+      const t = String(text ?? '').trim();
+      if (t === '') return null;
+      const n = Number(t.replace(',', '.'));
+      return Number.isFinite(n) ? n : undefined;
+    };
+    const formatLabel = (key) => (PACKAGE_FORMATS.find(([k]) => k === key) || [key, key])[1];
+    const materialName = (id) => (page.materials.find((m) => m.id === id) || {}).name || '?';
+    const nextSortOrder = (rows) => Math.max(0, ...rows.map((r) => r.sort_order || 0)) + 10;
+    const disabled = () => (page.canEdit ? '' : ' disabled');
+    const options = (pairs, selected) => pairs.map(([k, l]) => `<option value="${k}"${k === selected ? ' selected' : ''}>${escapeHtml(l)}</option>`).join('');
+
+    /** A code that is not taken yet: 'box_24x33cl', else 'box_24x33cl_2', … */
+    function freeCode(name, rows) {
+      const base = codeFromLabel(name);
+      if (!base) return '';
+      const taken = new Set(rows.map((r) => r.code));
+      let code = base;
+      for (let i = 2; taken.has(code); i++) code = `${base}_${i}`;
+      return code;
+    }
+
+    function showMessage(tab, text, kind) {
+      const el = document.getElementById(`pk-${tab}-message`);
+      el.textContent = text;
+      el.className = 'jopen-form-melding' + (kind ? ' ' + kind : '');
+    }
+
+    // ----------------------------------------------------------------
+    // Tabs (the tab is kept in the URL hash: packaging.html#materials)
+    // ----------------------------------------------------------------
+    function showTab(tab) {
+      document.querySelectorAll('.pk-tabs button').forEach((b) => {
+        b.classList.toggle('active', b.dataset.tab === tab);
+        b.setAttribute('aria-selected', b.dataset.tab === tab);
+      });
+      document.querySelectorAll('.pk-panel').forEach((p) => p.classList.toggle('active', p.id === `pk-panel-${tab}`));
+      window.location.hash = tab;
+    }
+
+    // ----------------------------------------------------------------
+    // Loading
+    // ----------------------------------------------------------------
+    async function loadAll() {
+      const [skus, materials, bom, bookedSkus, bookedMaterials] = await Promise.all([
+        supabaseClient.from('packaging_articles').select('*').order('sort_order').order('id'),
+        supabaseClient.from('packaging_materials').select('*').order('sort_order').order('id'),
+        supabaseClient.from('packaging_article_materials').select('id, article_id, material_id, quantity').order('id'),
+        fetchAllRows(supabaseClient.from('filling_session_articles').select('article_id').order('id')),
+        fetchAllRows(supabaseClient.from('filling_session_materials').select('material_id').order('id')),
+      ]);
+      const failed = [skus, materials, bom, bookedSkus, bookedMaterials].find((r) => r.error);
+      if (failed) {
+        ['sku', 'material'].forEach((w) => {
+          document.getElementById(`pk-${w}-list`).innerHTML = `<p class="jopen-form-melding fout">Could not load packaging data: ${escapeHtml(failed.error.message)}</p>`;
+        });
+        return;
+      }
+      const count = (rows, key) => (rows || []).reduce((m, r) => m.set(r[key], (m.get(r[key]) || 0) + 1), new Map());
+      Object.assign(page, {
+        skus: skus.data || [], materials: materials.data || [], bom: bom.data || [],
+        skuUse: count(bookedSkus.data, 'article_id'), materialUse: count(bookedMaterials.data, 'material_id'),
+      });
+      document.getElementById('pk-count-skus').textContent = `(${page.skus.filter((s) => s.is_active).length})`;
+      document.getElementById('pk-count-materials').textContent = `(${page.materials.filter((m) => m.is_active).length})`;
+      renderSkus();
+      renderMaterials();
+    }
+
+    async function write(tab, request, okText) {
+      const { error } = await request;
+      if (error) {
+        showMessage(tab, error.code === '23505' ? 'That name or material already exists.'
+          : error.code === '23503' ? 'Could not delete: it is in use. Make it inactive instead.'
+            : error.code === '42501' ? 'You do not have edit rights on Packaging.'
+              : 'Save failed: ' + error.message, 'fout');
+        return false;
+      }
+      showMessage(tab, okText, 'ok');
+      await loadAll();
+      return true;
+    }
+
+    function deleteRow(tab, table, id, label) {
+      if (!confirm(`Delete this ${label}?`)) return;
+      return write(tab, supabaseClient.from(table).delete().eq('id', id), 'Deleted.');
+    }
+
+    // ----------------------------------------------------------------
+    // Tab: SKUs
+    // ----------------------------------------------------------------
+    function renderFormatFilters() {
+      const el = document.getElementById('pk-format-filters');
+      el.innerHTML = [['', 'All'], ...PACKAGE_FORMATS].map(([k, l]) =>
+        `<button type="button" class="pk-filter${page.formatFilter === k ? ' active' : ''}" data-format="${k}">${escapeHtml(l)}</button>`).join(' ');
+      el.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => { page.formatFilter = b.dataset.format; renderSkus(); }));
+    }
+
+    function skuMatches(s) {
+      if (page.formatFilter && s.package_format !== page.formatFilter) return false;
+      const q = page.skuSearch.trim().toLowerCase();
+      if (!q) return true;
+      const bomNames = page.bom.filter((b) => b.article_id === s.id).map((b) => materialName(b.material_id)).join(' ');
+      return `${s.name} ${s.ean || ''} ${s.mdrank_article_number || ''} ${bomNames}`.toLowerCase().includes(q);
+    }
+
+    function bomBlock(s) {
+      const bom = page.bom.filter((b) => b.article_id === s.id);
+      const inBom = new Set(bom.map((b) => b.material_id));
+      const summary = bom.map((b) => `${b.quantity} × ${materialName(b.material_id)}`).join(' · ') || 'no materials';
+      const choices = page.materials.filter((m) => m.is_active && !inBom.has(m.id));
+      return `<details class="pk-bom">
+        <summary>Bill of materials · ${escapeHtml(summary)}</summary>
+        <table><tbody>
+          ${bom.map((b) => `<tr data-bom-id="${b.id}">
+            <td>${escapeHtml(materialName(b.material_id))}</td>
+            <td><input type="text" class="pk-bom-qty" value="${escapeHtml(String(b.quantity))}" inputmode="decimal" aria-label="Quantity per SKU"${disabled()} /></td>
+            <td>${page.canEdit ? '<div class="pk-actions"><button type="button" class="pk-bom-save">Save</button>' : ''}${page.canDelete ? '<button type="button" class="pk-delete-btn pk-bom-delete">Delete</button>' : ''}${page.canEdit ? '</div>' : ''}</td></tr>`).join('')}
+          ${page.canEdit ? `<tr>
+            <td><select class="pk-bom-new-material" aria-label="Material"><option value="">+ Material…</option>
+              ${MATERIAL_CATEGORIES.map(([k, l]) => {
+                const inCat = choices.filter((m) => m.category === k);
+                return inCat.length ? `<optgroup label="${escapeHtml(l)}">${inCat.map((m) => `<option value="${m.id}">${escapeHtml(m.name)}</option>`).join('')}</optgroup>` : '';
+              }).join('')}</select></td>
+            <td><input type="text" class="pk-bom-new-qty" placeholder="Qty" inputmode="decimal" /></td>
+            <td><button type="button" class="pk-bom-add">Add</button></td></tr>` : ''}
+        </tbody></table>
+      </details>`;
+    }
+
+    function renderSkus() {
+      renderFormatFilters();
+      const container = document.getElementById('pk-sku-list');
+      const open = new Set([...container.querySelectorAll('tr.pk-bom-row details[open]')].map((d) => d.closest('tr').dataset.bomOf));
+      const shown = page.skus.filter(skuMatches);
+      const rows = shown.map((s) => {
+        const used = page.skuUse.get(s.id) || 0;
+        return `
+        <tr data-id="${s.id}"${s.is_active ? '' : ' class="inactive"'}>
+          <td><input type="text" class="pk-name" value="${escapeHtml(s.name)}" aria-label="Name"${disabled()} /></td>
+          <td><select class="pk-format" aria-label="Package"${disabled()}>${options(PACKAGE_FORMATS, s.package_format)}</select></td>
+          <td><input type="text" class="pk-litres" value="${escapeHtml(String(s.liters_per_unit))}" inputmode="decimal" aria-label="Litres per SKU" style="max-width:80px;"${disabled()} /></td>
+          <td><input type="text" class="pk-ean" value="${escapeHtml(s.ean || '')}" aria-label="EAN"${disabled()} /></td>
+          <td><input type="text" class="pk-mdrank" value="${escapeHtml(s.mdrank_article_number || '')}" aria-label="MDrank article number"${disabled()} /></td>
+          <td class="c"><input type="checkbox" class="pk-active"${s.is_active ? ' checked' : ''} aria-label="Active"${disabled()} /></td>
+          <td class="pk-muted">${used ? `${used}× booked` : '—'}</td>
+          <td>${page.canEdit ? `<div class="pk-actions">
+            <button type="button" class="pk-save">Save</button>
+            <button type="button" class="pk-copy" title="New SKU with the same bill of materials">Copy</button>
+            ${page.canDelete && !used ? '<button type="button" class="pk-delete-btn pk-delete">Delete</button>' : ''}</div>` : ''}</td>
+        </tr>
+        <tr class="pk-bom-row" data-bom-of="${s.id}"><td colspan="8">${bomBlock(s)}</td></tr>`;
+      }).join('');
+      const newRow = page.canEdit ? `
+        <tr class="pk-new">
+          <td><input type="text" id="pk-new-sku-name" placeholder="New SKU, e.g. 'Box 24x33cl'…" aria-label="New SKU name" /></td>
+          <td><select id="pk-new-sku-format" aria-label="Package">${options(PACKAGE_FORMATS, page.formatFilter || 'bottle')}</select></td>
+          <td><input type="text" id="pk-new-sku-litres" placeholder="Litres" inputmode="decimal" aria-label="Litres per SKU" style="max-width:80px;" /></td>
+          <td colspan="4" class="pk-muted" style="white-space:normal;">Add the materials in its bill of materials after adding.</td>
+          <td><button type="button" id="pk-new-sku-add">Add SKU</button></td>
+        </tr>` : '';
+      container.innerHTML = `
+        <table class="pk-table">
+          <thead><tr><th>Name</th><th style="width:100px;">Package</th><th style="width:90px;">Litres</th><th style="width:140px;">EAN</th>
+            <th style="width:120px;">MDrank no.</th><th class="c" style="width:60px;">Active</th><th style="width:90px;">Used</th><th style="width:190px;"></th></tr></thead>
+          <tbody>${rows || '<tr><td colspan="8" class="pk-muted">No SKUs match.</td></tr>'}${newRow}</tbody>
+        </table>`;
+      container.querySelectorAll('tr.pk-bom-row').forEach((tr) => { if (open.has(tr.dataset.bomOf)) tr.querySelector('details').open = true; });
+
+      container.querySelectorAll('tr[data-id]').forEach((tr) => {
+        tr.querySelector('.pk-save')?.addEventListener('click', () => saveSku(tr));
+        tr.querySelector('.pk-copy')?.addEventListener('click', () => copySku(Number(tr.dataset.id)));
+        tr.querySelector('.pk-delete')?.addEventListener('click', () => deleteRow('skus', 'packaging_articles', tr.dataset.id, 'SKU'));
+      });
+      container.querySelectorAll('tr.pk-bom-row').forEach((tr) => {
+        tr.querySelectorAll('tr[data-bom-id]').forEach((row) => {
+          row.querySelector('.pk-bom-save')?.addEventListener('click', () => saveBomLine(row));
+          row.querySelector('.pk-bom-delete')?.addEventListener('click', () => deleteRow('skus', 'packaging_article_materials', row.dataset.bomId, 'material line'));
+        });
+        tr.querySelector('.pk-bom-add')?.addEventListener('click', () => addBomLine(tr));
+      });
+      document.getElementById('pk-new-sku-add')?.addEventListener('click', addSku);
+    }
+
+    function saveSku(tr) {
+      const name = tr.querySelector('.pk-name').value.trim();
+      const litres = parseNumber(tr.querySelector('.pk-litres').value);
+      if (!name) return showMessage('skus', 'Name cannot be empty.', 'fout');
+      if (!litres || litres <= 0) return showMessage('skus', 'Litres per SKU must be a number above 0.', 'fout');
+      return write('skus', supabaseClient.from('packaging_articles').update({
+        name, package_format: tr.querySelector('.pk-format').value, liters_per_unit: litres,
+        ean: tr.querySelector('.pk-ean').value.trim() || null, mdrank_article_number: tr.querySelector('.pk-mdrank').value.trim() || null,
+        is_active: tr.querySelector('.pk-active').checked,
+      }).eq('id', tr.dataset.id), 'Saved.');
+    }
+
+    async function addSku() {
+      const name = document.getElementById('pk-new-sku-name').value.trim();
+      const litres = parseNumber(document.getElementById('pk-new-sku-litres').value);
+      const code = freeCode(name, page.skus);
+      if (!code) return showMessage('skus', 'Enter a name for the new SKU.', 'fout');
+      if (!litres || litres <= 0) return showMessage('skus', 'Litres per SKU must be a number above 0.', 'fout');
+      const { data, error } = await supabaseClient.from('packaging_articles').insert({
+        code, name, package_format: document.getElementById('pk-new-sku-format').value, liters_per_unit: litres,
+        sort_order: nextSortOrder(page.skus),
+      }).select('id').single();
+      if (error) return write('skus', Promise.resolve({ error }));
+      await write('skus', Promise.resolve({ error: null }), 'SKU added · add its materials in the bill of materials below it.');
+      openBom(data.id);
+    }
+
+    // A copy gets the same package, litres and bill of materials; EAN and
+    // MDrank number stay empty (they belong to one SKU).
+    async function copySku(id) {
+      const source = page.skus.find((s) => s.id === id);
+      const name = prompt('Name of the new SKU:', `${source.name} · copy`);
+      if (!name || !name.trim()) return;
+      const { data, error } = await supabaseClient.from('packaging_articles').insert({
+        code: freeCode(name.trim(), page.skus), name: name.trim(), package_format: source.package_format,
+        liters_per_unit: source.liters_per_unit, sort_order: (source.sort_order || 0) + 1,
+      }).select('id').single();
+      if (error) return write('skus', Promise.resolve({ error }));
+      const lines = page.bom.filter((b) => b.article_id === id).map((b) => ({ article_id: data.id, material_id: b.material_id, quantity: b.quantity }));
+      const ok = await write('skus', lines.length ? supabaseClient.from('packaging_article_materials').insert(lines) : Promise.resolve({ error: null }),
+        `Copied to "${name.trim()}" with ${lines.length} materials.`);
+      if (ok) openBom(data.id);
+    }
+
+    function openBom(skuId) {
+      const row = document.querySelector(`tr.pk-bom-row[data-bom-of="${skuId}"]`);
+      if (!row) return;
+      row.querySelector('details').open = true;
+      row.previousElementSibling.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+
+    function saveBomLine(row) {
+      const quantity = parseNumber(row.querySelector('.pk-bom-qty').value);
+      if (!quantity || quantity <= 0) return showMessage('skus', 'Quantity must be a number above 0.', 'fout');
+      return write('skus', supabaseClient.from('packaging_article_materials').update({ quantity }).eq('id', row.dataset.bomId), 'Saved.');
+    }
+
+    function addBomLine(tr) {
+      const materialId = Number(tr.querySelector('.pk-bom-new-material').value);
+      const quantity = parseNumber(tr.querySelector('.pk-bom-new-qty').value);
+      if (!materialId) return showMessage('skus', 'Choose a material.', 'fout');
+      if (!quantity || quantity <= 0) return showMessage('skus', 'Quantity must be a number above 0.', 'fout');
+      return write('skus', supabaseClient.from('packaging_article_materials')
+        .insert({ article_id: Number(tr.dataset.bomOf), material_id: materialId, quantity }), 'Material added.');
+    }
+
+    // ----------------------------------------------------------------
+    // Tab: Materials (grouped by category)
+    // ----------------------------------------------------------------
+    function materialMatches(m) {
+      const q = page.materialSearch.trim().toLowerCase();
+      return !q || `${m.name} ${m.code} ${m.mdrank_article_number || ''}`.toLowerCase().includes(q);
+    }
+
+    function renderMaterials() {
+      const container = document.getElementById('pk-material-list');
+      const groups = MATERIAL_CATEGORIES.map(([k, label]) => {
+        const items = page.materials.filter((m) => m.category === k && materialMatches(m));
+        if (!items.length) return '';
+        return `<tr class="pk-group-heading"><td colspan="9">${escapeHtml(label)}</td></tr>` + items.map((m) => {
+          const inSkus = page.bom.filter((b) => b.material_id === m.id).length;
+          const booked = page.materialUse.get(m.id) || 0;
+          return `
+          <tr data-id="${m.id}"${m.is_active ? '' : ' class="inactive"'}>
+            <td><input type="text" class="pk-name" value="${escapeHtml(m.name)}" aria-label="Name"${disabled()} /></td>
+            <td class="pk-code">${escapeHtml(m.code)}</td>
+            <td><select class="pk-category" aria-label="Category"${disabled()}>${options(MATERIAL_CATEGORIES, m.category)}</select></td>
+            <td><input type="text" class="pk-unit" value="${escapeHtml(m.unit)}" aria-label="Unit" style="max-width:70px;"${disabled()} /></td>
+            <td><input type="text" class="pk-mdrank" value="${escapeHtml(m.mdrank_article_number || '')}" aria-label="MDrank article number"${disabled()} /></td>
+            <td><input type="text" class="pk-reorder" value="${m.reorder_level == null ? '' : escapeHtml(String(m.reorder_level))}" inputmode="decimal" aria-label="Reorder level" style="max-width:90px;"${disabled()} /></td>
+            <td class="c"><input type="checkbox" class="pk-active"${m.is_active ? ' checked' : ''} aria-label="Active"${disabled()} /></td>
+            <td class="pk-muted">${inSkus} SKU${inSkus === 1 ? '' : 's'} · ${booked} booked</td>
+            <td>${page.canEdit ? `<div class="pk-actions"><button type="button" class="pk-save">Save</button>
+              ${page.canDelete && !(inSkus + booked) ? '<button type="button" class="pk-delete-btn pk-delete">Delete</button>' : ''}</div>` : ''}</td>
+          </tr>`;
+        }).join('');
+      }).join('');
+      const newRow = page.canEdit ? `
+        <tr class="pk-new">
+          <td><input type="text" id="pk-new-material-name" placeholder="New material, e.g. 'Crown cork'…" aria-label="New material name" /></td>
+          <td></td>
+          <td><select id="pk-new-material-category" aria-label="Category">${options(MATERIAL_CATEGORIES, 'other')}</select></td>
+          <td><input type="text" id="pk-new-material-unit" value="pcs" aria-label="Unit" style="max-width:70px;" /></td>
+          <td colspan="4"></td>
+          <td><button type="button" id="pk-new-material-add">Add material</button></td>
+        </tr>` : '';
+      container.innerHTML = `
+        <table class="pk-table">
+          <thead><tr><th>Name</th><th style="width:120px;">Code</th><th style="width:110px;">Category</th><th style="width:80px;">Unit</th>
+            <th style="width:120px;">MDrank no.</th><th style="width:100px;">Reorder level</th><th class="c" style="width:60px;">Active</th>
+            <th style="width:120px;">Used</th><th style="width:120px;"></th></tr></thead>
+          <tbody>${groups || '<tr><td colspan="9" class="pk-muted">No materials match.</td></tr>'}${newRow}</tbody>
+        </table>`;
+      container.querySelectorAll('tr[data-id]').forEach((tr) => {
+        tr.querySelector('.pk-save')?.addEventListener('click', () => saveMaterial(tr));
+        tr.querySelector('.pk-delete')?.addEventListener('click', () => deleteRow('materials', 'packaging_materials', tr.dataset.id, 'material'));
+      });
+      document.getElementById('pk-new-material-add')?.addEventListener('click', addMaterial);
+    }
+
+    function saveMaterial(tr) {
+      const name = tr.querySelector('.pk-name').value.trim();
+      const reorder = parseNumber(tr.querySelector('.pk-reorder').value);
+      if (!name) return showMessage('materials', 'Name cannot be empty.', 'fout');
+      if (reorder === undefined || (reorder !== null && reorder < 0)) return showMessage('materials', 'Reorder level must be empty or a number of 0 or more.', 'fout');
+      return write('materials', supabaseClient.from('packaging_materials').update({
+        name, category: tr.querySelector('.pk-category').value, unit: tr.querySelector('.pk-unit').value.trim() || 'pcs',
+        mdrank_article_number: tr.querySelector('.pk-mdrank').value.trim() || null, reorder_level: reorder,
+        is_active: tr.querySelector('.pk-active').checked,
+      }).eq('id', tr.dataset.id), 'Saved.');
+    }
+
+    async function addMaterial() {
+      const name = document.getElementById('pk-new-material-name').value.trim();
+      const code = freeCode(name, page.materials);
+      if (!code) return showMessage('materials', 'Enter a name for the new material.', 'fout');
+      await write('materials', supabaseClient.from('packaging_materials').insert({
+        code, name, category: document.getElementById('pk-new-material-category').value,
+        unit: document.getElementById('pk-new-material-unit').value.trim() || 'pcs', sort_order: nextSortOrder(page.materials),
+      }), 'Material added.');
+    }
+
+    // ----------------------------------------------------------------
+    // Start
+    // ----------------------------------------------------------------
+    async function initPackagingPage() {
+      const user = await getCurrentUser();
+      if (!user) return; // nav.js redirects to login
+      if (!(await magBekijkenModule('packaging'))) {
+        document.getElementById('pk-no-access').style.display = 'block';
+        return;
+      }
+      page.canEdit = await magBewerkenModule('packaging');
+      page.canDelete = await magVerwijderenModule('packaging');
+      document.getElementById('pk-content').style.display = 'block';
+
+      document.querySelectorAll('.pk-tabs button').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
+      document.getElementById('pk-sku-search').addEventListener('input', (e) => { page.skuSearch = e.target.value; renderSkus(); });
+      document.getElementById('pk-material-search').addEventListener('input', (e) => { page.materialSearch = e.target.value; renderMaterials(); });
+      const requested = window.location.hash.replace('#', '');
+      showTab(TABS.includes(requested) ? requested : 'skus');
+      await loadAll();
+    }
+
+    document.addEventListener('DOMContentLoaded', initPackagingPage);
+  </script>
+</body>
+</html>

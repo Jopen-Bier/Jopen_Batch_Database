@@ -84,6 +84,16 @@ async function copyRichText(html, text) {
   }
 }
 
+/**
+ * Code for a new row from its label, for the `code` columns of reference
+ * tables (check '^[a-z0-9_]+$'): 'Dry hop @2 °C' -> 'dry_hop_2_c'.
+ * Empty when the label has no letters or digits.
+ */
+function codeFromLabel(label) {
+  return String(label ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { escapeHtml, fetchAllRows, formatDate, toggleDropdownPanel, copyRichText };
+  module.exports = { escapeHtml, fetchAllRows, formatDate, toggleDropdownPanel, copyRichText, codeFromLabel };
 }
