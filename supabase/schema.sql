@@ -2703,8 +2703,26 @@ CREATE TABLE public.packaging_materials (
     created_by uuid DEFAULT auth.uid(),
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_by uuid,
-    CONSTRAINT packaging_materials_code_check CHECK ((code ~ '^[a-z0-9_]+$'::text))
+    category text DEFAULT 'other'::text NOT NULL,
+    reorder_level numeric,
+    CONSTRAINT packaging_materials_category_check CHECK ((category = ANY (ARRAY['bottle'::text, 'can'::text, 'label'::text, 'closure'::text, 'box'::text, 'keg'::text, 'other'::text]))),
+    CONSTRAINT packaging_materials_code_check CHECK ((code ~ '^[a-z0-9_]+$'::text)),
+    CONSTRAINT packaging_materials_reorder_level_check CHECK ((reorder_level >= (0)::numeric))
 );
+
+
+--
+-- Name: COLUMN packaging_materials.category; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.packaging_materials.category IS 'Kind of material, groups the Materials list and later the packaging stock: bottle, can, label, closure, box, keg, other.';
+
+
+--
+-- Name: COLUMN packaging_materials.reorder_level; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.packaging_materials.reorder_level IS 'Minimum stock in the material unit; below this the material should be ordered. Empty = no warning. For the packaging stock keeping to come.';
 
 
 --
@@ -7363,14 +7381,14 @@ ALTER TABLE public.packaging_article_materials ENABLE ROW LEVEL SECURITY;
 -- Name: packaging_article_materials packaging_article_materials_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY packaging_article_materials_delete ON public.packaging_article_materials FOR DELETE TO authenticated USING (( SELECT public.can_delete('settings'::text) AS can_delete));
+CREATE POLICY packaging_article_materials_delete ON public.packaging_article_materials FOR DELETE TO authenticated USING (( SELECT public.can_delete('packaging'::text) AS can_delete));
 
 
 --
 -- Name: packaging_article_materials packaging_article_materials_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY packaging_article_materials_insert ON public.packaging_article_materials FOR INSERT TO authenticated WITH CHECK (( SELECT public.can_edit('settings'::text) AS can_edit));
+CREATE POLICY packaging_article_materials_insert ON public.packaging_article_materials FOR INSERT TO authenticated WITH CHECK (( SELECT public.can_edit('packaging'::text) AS can_edit));
 
 
 --
@@ -7384,7 +7402,7 @@ CREATE POLICY packaging_article_materials_select ON public.packaging_article_mat
 -- Name: packaging_article_materials packaging_article_materials_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY packaging_article_materials_update ON public.packaging_article_materials FOR UPDATE TO authenticated USING (( SELECT public.can_edit('settings'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('settings'::text) AS can_edit));
+CREATE POLICY packaging_article_materials_update ON public.packaging_article_materials FOR UPDATE TO authenticated USING (( SELECT public.can_edit('packaging'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('packaging'::text) AS can_edit));
 
 
 --
@@ -7397,14 +7415,14 @@ ALTER TABLE public.packaging_articles ENABLE ROW LEVEL SECURITY;
 -- Name: packaging_articles packaging_articles_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY packaging_articles_delete ON public.packaging_articles FOR DELETE TO authenticated USING (( SELECT public.can_delete('settings'::text) AS can_delete));
+CREATE POLICY packaging_articles_delete ON public.packaging_articles FOR DELETE TO authenticated USING (( SELECT public.can_delete('packaging'::text) AS can_delete));
 
 
 --
 -- Name: packaging_articles packaging_articles_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY packaging_articles_insert ON public.packaging_articles FOR INSERT TO authenticated WITH CHECK (( SELECT public.can_edit('settings'::text) AS can_edit));
+CREATE POLICY packaging_articles_insert ON public.packaging_articles FOR INSERT TO authenticated WITH CHECK (( SELECT public.can_edit('packaging'::text) AS can_edit));
 
 
 --
@@ -7418,7 +7436,7 @@ CREATE POLICY packaging_articles_select ON public.packaging_articles FOR SELECT 
 -- Name: packaging_articles packaging_articles_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY packaging_articles_update ON public.packaging_articles FOR UPDATE TO authenticated USING (( SELECT public.can_edit('settings'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('settings'::text) AS can_edit));
+CREATE POLICY packaging_articles_update ON public.packaging_articles FOR UPDATE TO authenticated USING (( SELECT public.can_edit('packaging'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('packaging'::text) AS can_edit));
 
 
 --
@@ -7431,14 +7449,14 @@ ALTER TABLE public.packaging_materials ENABLE ROW LEVEL SECURITY;
 -- Name: packaging_materials packaging_materials_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY packaging_materials_delete ON public.packaging_materials FOR DELETE TO authenticated USING (( SELECT public.can_delete('settings'::text) AS can_delete));
+CREATE POLICY packaging_materials_delete ON public.packaging_materials FOR DELETE TO authenticated USING (( SELECT public.can_delete('packaging'::text) AS can_delete));
 
 
 --
 -- Name: packaging_materials packaging_materials_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY packaging_materials_insert ON public.packaging_materials FOR INSERT TO authenticated WITH CHECK (( SELECT public.can_edit('settings'::text) AS can_edit));
+CREATE POLICY packaging_materials_insert ON public.packaging_materials FOR INSERT TO authenticated WITH CHECK (( SELECT public.can_edit('packaging'::text) AS can_edit));
 
 
 --
@@ -7452,7 +7470,7 @@ CREATE POLICY packaging_materials_select ON public.packaging_materials FOR SELEC
 -- Name: packaging_materials packaging_materials_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY packaging_materials_update ON public.packaging_materials FOR UPDATE TO authenticated USING (( SELECT public.can_edit('settings'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('settings'::text) AS can_edit));
+CREATE POLICY packaging_materials_update ON public.packaging_materials FOR UPDATE TO authenticated USING (( SELECT public.can_edit('packaging'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('packaging'::text) AS can_edit));
 
 
 --
