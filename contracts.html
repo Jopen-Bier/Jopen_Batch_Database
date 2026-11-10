@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jopen Brouwerij — Contracts</title>
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="stylesheet" href="jopen-shared.css" />
+  <style>
+    /* ------------------------------------------------------------------
+       Contracts: per supplier its contracts (contracts) with their lines
+       (contract_lines: ingredient, amount, price). Booked / open come from
+       the view contract_line_status; a book-in (lots) is linked to a line
+       automatically on Book in material (trigger on lots).
+       ------------------------------------------------------------------ */
+    :root { --hop-dark: #33473a; --line: #e4e1d8; --paper: #f6f4ee; }
+    main.ct-main { max-width: 1400px; margin: 0 auto; padding: 24px; }
+    .ct-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 16px 0; }
+    .ct-toolbar input[type="search"] { flex: 1; min-width: 200px; max-width: 360px; padding: 8px 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 0.95em; }
+    .ct-toolbar label { font-size: 0.9em; color: #444; display: flex; align-items: center; gap: 6px; }
+    .ct-spacer { flex: 1; }
+    .ct-btn { padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 0.95em; border: 1px solid #bbb; background: #fff; }
+    .ct-btn-primary { background: var(--hop-dark); border-color: var(--hop-dark); color: #fff; font-weight: 600; }
+    .ct-btn-small { padding: 3px 10px; font-size: 0.85em; }
+    .ct-btn-danger { border-color: #a33f2c; color: #a33f2c; }
+
+    .ct-supplier { background: #fff; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
+    .ct-supplier > summary {
+      list-style: none; cursor: pointer; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+      padding: 12px 16px; background: var(--hop-dark); color: #fff; font-weight: 700;
+    }
+    .ct-supplier > summary::-webkit-details-marker { display: none; }
+    .ct-supplier > summary::before { content: '▸'; font-size: 0.9em; }
+    .ct-supplier[open] > summary::before { content: '▾'; }
+    .ct-supplier .ct-sum-meta { font-weight: 400; font-size: 0.85em; opacity: 0.85; }
+    .ct-contract { padding: 12px 16px 4px; border-top: 1px solid var(--line); }
+    .ct-contract:first-of-type { border-top: none; }
+    .ct-contract-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; margin-bottom: 6px; }
+    .ct-contract-head b { font-size: 1.02em; }
+    .ct-contract-head .ct-note { color: #666; font-size: 0.88em; flex-basis: 100%; }
+    .ct-pill { font-size: 0.75em; font-weight: 700; padding: 2px 8px; border-radius: 10px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .ct-pill.active { background: #e1ead9; color: #33473a; }
+    .ct-pill.upcoming { background: #dde7f0; color: #2c4a66; }
+    .ct-pill.ended { background: #ece8dc; color: #6b6355; }
+
+    table.ct-lines { width: 100%; border-collapse: collapse; margin: 4px 0 10px; min-width: 760px; }
+    table.ct-lines th, table.ct-lines td { padding: 7px 8px; border-bottom: 1px solid #eee; font-size: 0.9em; text-align: left; vertical-align: middle; }
+    table.ct-lines th { font-size: 0.75em; text-transform: uppercase; letter-spacing: 0.04em; color: #666; }
+    table.ct-lines td.n, table.ct-lines th.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    table.ct-lines tr.ct-line { cursor: pointer; }
+    table.ct-lines tr.ct-line:hover td { background: #faf9f5; }
+    table.ct-lines tr.ct-highlight td { background: #fff7e0; }
+    .ct-open-neg { color: #b3261e; font-weight: 700; }
+    .ct-bar { width: 110px; height: 8px; background: #eee; border-radius: 4px; overflow: hidden; display: inline-block; vertical-align: middle; }
+    .ct-bar > span { display: block; height: 100%; background: #6f8f5f; }
+    .ct-bar.over > span { background: #b3261e; }
+    tr.ct-bookins > td { background: var(--paper); padding: 8px 12px 10px 28px; }
+    table.ct-bookin-table { border-collapse: collapse; font-size: 0.88em; }
+    table.ct-bookin-table th, table.ct-bookin-table td { padding: 4px 10px; border-bottom: 1px solid var(--line); text-align: left; }
+    table.ct-bookin-table td.n { text-align: right; }
+    .ct-wrap { overflow-x: auto; }
+    .ct-empty { color: #666; padding: 30px 0; }
+    .ct-muted { color: #777; font-size: 0.88em; }
+
+    /* Add / edit contract dialog */
+    .ct-overlay { position: fixed; inset: 0; background: rgba(28,43,38,.35); display: flex; align-items: flex-start; justify-content: center; z-index: 100; overflow-y: auto; padding: 40px 16px; }
+    .ct-dialog { background: #fff; border-radius: 10px; padding: 20px 22px; width: 100%; max-width: 860px; box-shadow: 0 12px 40px rgba(0,0,0,.2); }
+    .ct-dialog h2 { margin: 0 0 14px; font-size: 1.15em; }
+    .ct-form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px 14px; }
+    .ct-form-grid label, .ct-note-field label { display: flex; flex-direction: column; gap: 4px; font-size: 0.82em; color: #555; }
+    .ct-dialog input, .ct-dialog select, .ct-dialog textarea { padding: 6px 8px; border: 1px solid #ccc; border-radius: 5px; font-size: 0.95em; width: 100%; box-sizing: border-box; font-family: inherit; }
+    .ct-note-field { margin-top: 10px; }
+    .ct-dialog h3 { font-size: 0.95em; margin: 18px 0 6px; }
+    table.ct-edit-lines { width: 100%; border-collapse: collapse; }
+    table.ct-edit-lines th { font-size: 0.75em; text-transform: uppercase; color: #666; text-align: left; padding: 4px 4px; }
+    table.ct-edit-lines td { padding: 3px 4px; }
+    .ct-dialog-buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+    .ct-dialog .ct-msg { color: #b3261e; font-size: 0.9em; min-height: 1.2em; margin-top: 8px; }
+    .ct-no-access { padding: 40px 0; color: #555; }
+
+    @media (max-width: 699px) {
+      main.ct-main { padding: 16px; }
+      .ct-contract { padding: 10px 10px 2px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="jopen-nav"></div>
+
+  <main class="jopen-pagina ct-main">
+    <h1>Contracts</h1>
+    <p class="jopen-subtitel">What is still open under contract per supplier. A book-in on Book in material counts against the oldest contract of that supplier and ingredient that still has an amount open.</p>
+
+    <div id="ct-no-access" class="ct-no-access" style="display:none;">You do not have access to Inventory. Ask an admin for view rights on "Inventory".</div>
+
+    <div id="ct-content" style="display:none;">
+      <div class="ct-toolbar">
+        <input type="search" id="ct-search" placeholder="Search supplier, ingredient or contract number…" aria-label="Search contracts" />
+        <label><input type="checkbox" id="ct-show-ended" /> Show ended contracts</label>
+        <span class="ct-spacer"></span>
+        <button type="button" class="ct-btn ct-btn-primary" id="ct-add" style="display:none;">+ Add contract</button>
+      </div>
+      <div id="ct-list"><p class="jopen-subtitel">Loading…</p></div>
+      <p id="ct-message" class="jopen-form-melding"></p>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2"></script>
+  <script src="config.js"></script>
+  <script src="jopen-utils.js"></script>
+  <script src="nav.js"></script>
+  <script>
+    const UNITS = ['kg', 'g', 'l', 'ml', 'pcs'];
+
+    const page = {
+      canEdit: false, canDelete: false,
+      suppliers: [], ingredients: [], contracts: [], lines: [], lots: [],
+      openSuppliers: new Set(), openLines: new Set(), highlightGroup: null,
+    };
+
+    const fmt = (v, digits = 2) => (v === null || v === undefined || v === '' ? '—'
+      : Number(v).toLocaleString('en-GB', { maximumFractionDigits: digits }));
+    const dmy = (iso) => (iso ? iso.split('-').reverse().join('-') : '—');
+    const today = () => new Date().toISOString().slice(0, 10);
+    const parseNumber = (text) => {
+      const t = String(text ?? '').trim();
+      if (t === '') return null;
+      const n = Number(t.replace(',', '.'));
+      return Number.isFinite(n) ? n : undefined;
+    };
+    const ingredientOf = (id) => page.ingredients.find((i) => i.id === id);
+
+    function contractState(c) {
+      const t = today();
+      if (c.end_date < t) return 'ended';
+      if (c.start_date > t) return 'upcoming';
+      return 'active';
+    }
+
+    function showMessage(text, kind) {
+      const el = document.getElementById('ct-message');
+      el.textContent = text;
+      el.className = 'jopen-form-melding' + (kind ? ' ' + kind : '');
+    }
+
+    // ----------------------------------------------------------------
+    // Loading
+    // ----------------------------------------------------------------
+    async function loadAll() {
+      const [suppliers, ingredients, contracts, lines, lots] = await Promise.all([
+        supabaseClient.from('suppliers').select('name, is_active').order('name'),
+        fetchAllRows(supabaseClient.from('ingredients').select('id, name, unit, supplier, supplier_2, supplier_3, ingredient_group_id, version_status').order('id')),
+        supabaseClient.from('contracts').select('id, supplier, contract_number, start_date, end_date, note').order('start_date'),
+        fetchAllRows(supabaseClient.from('contract_line_status').select('id, contract_id, ingredient_id, ingredient_group_id, quantity, unit, price, booked, open, book_ins').order('id')),
+        fetchAllRows(supabaseClient.from('lots').select('id, contract_line_id, lot_code, order_number, order_date, received_date, quantity_received, unit').not('contract_line_id', 'is', null).order('received_date')),
+      ]);
+      const failed = [suppliers, ingredients, contracts, lines, lots].find((r) => r.error);
+      if (failed) {
+        document.getElementById('ct-list').innerHTML = `<p class="jopen-form-melding fout">Could not load contracts: ${escapeHtml(failed.error.message)}</p>`;
+        return;
+      }
+      Object.assign(page, {
+        suppliers: suppliers.data || [], ingredients: ingredients.data || [], contracts: contracts.data || [],
+        lines: (lines.data || []).map((l) => ({ ...l, quantity: Number(l.quantity), booked: Number(l.booked), open: Number(l.open) })),
+        lots: lots.data || [],
+      });
+      render();
+    }
+
+    // ----------------------------------------------------------------
+    // List: supplier > contract > lines > book-ins
+    // ----------------------------------------------------------------
+    function lineMatches(line, c, q) {
+      if (!q) return true;
+      const ing = ingredientOf(line.ingredient_id);
+      return `${c.supplier} ${c.contract_number || ''} ${ing ? ing.name : ''}`.toLowerCase().includes(q);
+    }
+
+    function render() {
+      const q = document.getElementById('ct-search').value.trim().toLowerCase();
+      const showEnded = document.getElementById('ct-show-ended').checked;
+      const bySupplier = new Map();
+      page.contracts.forEach((c) => {
+        if (!showEnded && contractState(c) === 'ended' && page.highlightGroup === null) return;
+        const lines = page.lines.filter((l) => l.contract_id === c.id && lineMatches(l, c, q));
+        const contractHit = !q || `${c.supplier} ${c.contract_number || ''}`.toLowerCase().includes(q);
+        if (!lines.length && !contractHit) return;
+        if (page.highlightGroup !== null && !page.lines.some((l) => l.contract_id === c.id && l.ingredient_group_id === page.highlightGroup)) return;
+        if (!bySupplier.has(c.supplier)) bySupplier.set(c.supplier, []);
+        bySupplier.get(c.supplier).push({ c, lines: contractHit && !lines.length ? page.lines.filter((l) => l.contract_id === c.id) : lines });
+      });
+      const list = document.getElementById('ct-list');
+      if (!bySupplier.size) {
+        list.innerHTML = `<div class="ct-empty">${page.contracts.length ? 'No contracts match.' : 'No contracts yet.' + (page.canEdit ? ' Use “+ Add contract” to add the first.' : '')}</div>`;
+        return;
+      }
+      const filtering = !!q || page.highlightGroup !== null;
+      list.innerHTML = [...bySupplier.entries()].sort(([a], [b]) => a.localeCompare(b, 'en', { sensitivity: 'base' })).map(([supplier, items]) => {
+        const nLines = items.reduce((n, x) => n + x.lines.length, 0);
+        const open = filtering || page.openSuppliers.has(supplier);
+        return `<details class="ct-supplier" data-supplier="${escapeHtml(supplier)}"${open ? ' open' : ''}>
+          <summary>${escapeHtml(supplier)} <span class="ct-sum-meta">${items.length} contract${items.length === 1 ? '' : 's'} · ${nLines} ingredient${nLines === 1 ? '' : 's'}</span></summary>
+          ${items.map(({ c, lines }) => contractBlock(c, lines)).join('')}
+        </details>`;
+      }).join('') + (page.highlightGroup !== null ? '<p><button type="button" class="ct-btn ct-btn-small" id="ct-show-all">Show all contracts</button></p>' : '');
+
+      list.querySelectorAll('details.ct-supplier').forEach((d) => d.addEventListener('toggle', () => {
+        if (d.open) page.openSuppliers.add(d.dataset.supplier); else page.openSuppliers.delete(d.dataset.supplier);
+      }));
+      list.querySelectorAll('tr.ct-line').forEach((tr) => tr.addEventListener('click', () => {
+        const id = Number(tr.dataset.line);
+        if (page.openLines.has(id)) page.openLines.delete(id); else page.openLines.add(id);
+        render();
+      }));
+      list.querySelectorAll('[data-edit-contract]').forEach((b) => b.addEventListener('click', () => openContractDialog(page.contracts.find((c) => c.id === Number(b.dataset.editContract)))));
+      list.querySelectorAll('[data-delete-contract]').forEach((b) => b.addEventListener('click', () => deleteContract(Number(b.dataset.deleteContract))));
+      document.getElementById('ct-show-all')?.addEventListener('click', () => {
+        page.highlightGroup = null;
+        history.replaceState(null, '', location.pathname);
+        render();
+      });
+    }
+
+    function contractBlock(c, lines) {
+      const state = contractState(c);
+      const booked = page.lines.filter((l) => l.contract_id === c.id).some((l) => l.book_ins > 0);
+      const rows = lines.map((l) => {
+        const ing = ingredientOf(l.ingredient_id);
+        const share = l.quantity ? Math.min(100, (l.booked / l.quantity) * 100) : 0;
+        const isOpen = page.openLines.has(l.id);
+        const highlight = page.highlightGroup !== null && l.ingredient_group_id === page.highlightGroup;
+        return `<tr class="ct-line${highlight ? ' ct-highlight' : ''}" data-line="${l.id}" title="Show the book-ins of this ingredient">
+            <td>${isOpen ? '▾' : '▸'} ${escapeHtml(ing ? ing.name : `#${l.ingredient_id}`)}</td>
+            <td class="n">${fmt(l.quantity)} ${escapeHtml(l.unit)}</td>
+            <td class="n">${fmt(l.booked)} ${escapeHtml(l.unit)}</td>
+            <td class="n${l.open < 0 ? ' ct-open-neg' : ''}"><b>${fmt(l.open)} ${escapeHtml(l.unit)}</b></td>
+            <td><span class="ct-bar${l.open < 0 ? ' over' : ''}"><span style="width:${share.toFixed(0)}%"></span></span></td>
+            <td class="n">${l.price === null ? '—' : `€ ${fmt(l.price, 4)} / ${escapeHtml(l.unit)}`}</td>
+            <td class="n">${l.book_ins}</td>
+          </tr>${isOpen ? bookInRow(l) : ''}`;
+      }).join('');
+      return `<div class="ct-contract">
+        <div class="ct-contract-head">
+          <b>${c.contract_number ? `Contract ${escapeHtml(c.contract_number)}` : 'Contract (no number)'}</b>
+          <span>${dmy(c.start_date)} – ${dmy(c.end_date)}</span>
+          <span class="ct-pill ${state}">${state}</span>
+          ${page.canEdit ? `<button type="button" class="ct-btn ct-btn-small" data-edit-contract="${c.id}">Edit</button>` : ''}
+          ${page.canDelete && !booked ? `<button type="button" class="ct-btn ct-btn-small ct-btn-danger" data-delete-contract="${c.id}">Delete</button>` : ''}
+          ${c.note ? `<span class="ct-note">${escapeHtml(c.note)}</span>` : ''}
+        </div>
+        <div class="ct-wrap"><table class="ct-lines">
+          <thead><tr><th>Ingredient</th><th class="n">Contracted</th><th class="n">Booked in</th><th class="n">Open</th><th></th><th class="n">Price</th><th class="n">Book-ins</th></tr></thead>
+          <tbody>${rows || '<tr><td colspan="7" class="ct-muted">No ingredients on this contract.</td></tr>'}</tbody>
+        </table></div>
+      </div>`;
+    }
+
+    function bookInRow(line) {
+      const lots = page.lots.filter((l) => l.contract_line_id === line.id);
+      return `<tr class="ct-bookins"><td colspan="7">${lots.length ? `
+        <table class="ct-bookin-table">
+          <thead><tr><th>Order number</th><th>Order date</th><th>Received</th><th>Lot code</th><th class="n">Quantity</th></tr></thead>
+          <tbody>${lots.map((l) => `<tr>
+            <td>${escapeHtml(l.order_number || '—')}</td><td>${dmy(l.order_date)}</td><td>${dmy(l.received_date)}</td>
+            <td>${escapeHtml(l.lot_code || '—')}</td><td class="n">${fmt(l.quantity_received, 3)} ${escapeHtml(l.unit || '')}</td></tr>`).join('')}</tbody>
+        </table>` : '<span class="ct-muted">Nothing booked in against this line yet.</span>'}</td></tr>`;
+    }
+
+    // ----------------------------------------------------------------
+    // Add / edit contract
+    // ----------------------------------------------------------------
+    function ingredientOptions(supplier, selectedId) {
+      const current = page.ingredients.filter((i) => i.version_status === 'current' || i.id === selectedId)
+        .sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }));
+      const own = current.filter((i) => supplier && [i.supplier, i.supplier_2, i.supplier_3].includes(supplier));
+      const opt = (i) => `<option value="${i.id}"${i.id === selectedId ? ' selected' : ''}>${escapeHtml(i.name)}</option>`;
+      return '<option value="">Choose an ingredient…</option>' + (own.length
+        ? `<optgroup label="Ingredients of ${escapeHtml(supplier)}">${own.map(opt).join('')}</optgroup><optgroup label="All ingredients">${current.filter((i) => !own.includes(i)).map(opt).join('')}</optgroup>`
+        : current.map(opt).join(''));
+    }
+
+    function lineRow(line, supplier) {
+      return `<tr data-line-id="${line.id || ''}">
+        <td style="min-width:240px;"><select class="ct-l-ing" aria-label="Ingredient">${ingredientOptions(supplier, line.ingredient_id || null)}</select></td>
+        <td style="width:110px;"><input class="ct-l-qty" inputmode="decimal" value="${line.quantity ?? ''}" aria-label="Amount" /></td>
+        <td style="width:80px;"><select class="ct-l-unit" aria-label="Unit">${UNITS.map((u) => `<option${u === (line.unit || 'kg') ? ' selected' : ''}>${u}</option>`).join('')}</select></td>
+        <td style="width:120px;"><input class="ct-l-price" inputmode="decimal" value="${line.price ?? ''}" placeholder="€ per unit" aria-label="Price per unit" /></td>
+        <td style="width:30px;">${line.book_ins ? `<span class="ct-muted" title="Has book-ins: cannot be removed">🔒</span>` : '<button type="button" class="ct-btn ct-btn-small ct-l-remove" aria-label="Remove ingredient">×</button>'}</td>
+      </tr>`;
+    }
+
+    function openContractDialog(contract) {
+      const editing = !!contract;
+      const c = contract || { supplier: '', contract_number: '', start_date: today(), end_date: '', note: '' };
+      const lines = editing ? page.lines.filter((l) => l.contract_id === c.id) : [{}];
+      const suppliers = page.suppliers.filter((s) => s.is_active || s.name === c.supplier);
+      const overlay = document.createElement('div');
+      overlay.className = 'ct-overlay';
+      overlay.innerHTML = `<div class="ct-dialog" role="dialog" aria-modal="true" aria-labelledby="ct-dialog-title">
+        <h2 id="ct-dialog-title">${editing ? 'Edit contract' : 'Add contract'}</h2>
+        <div class="ct-form-grid">
+          <label>Supplier *<select id="ct-f-supplier"><option value="">Choose a supplier…</option>${suppliers.map((s) => `<option${s.name === c.supplier ? ' selected' : ''}>${escapeHtml(s.name)}</option>`).join('')}</select></label>
+          <label>Contract number<input id="ct-f-number" value="${escapeHtml(c.contract_number || '')}" /></label>
+          <label>Start date *<input type="date" id="ct-f-start" value="${c.start_date || ''}" /></label>
+          <label>End date *<input type="date" id="ct-f-end" value="${c.end_date || ''}" /></label>
+        </div>
+        <div class="ct-note-field"><label>Note<textarea id="ct-f-note" rows="2">${escapeHtml(c.note || '')}</textarea></label></div>
+        <h3>Ingredients under this contract</h3>
+        <table class="ct-edit-lines">
+          <thead><tr><th>Ingredient</th><th>Amount</th><th>Unit</th><th>Price per unit</th><th></th></tr></thead>
+          <tbody id="ct-f-lines">${lines.map((l) => lineRow(l, c.supplier)).join('')}</tbody>
+        </table>
+        <button type="button" class="ct-btn ct-btn-small" id="ct-f-add-line" style="margin-top:6px;">+ Ingredient</button>
+        <div class="ct-msg" id="ct-f-msg"></div>
+        <div class="ct-dialog-buttons">
+          <button type="button" class="ct-btn" id="ct-f-cancel">Cancel</button>
+          <button type="button" class="ct-btn ct-btn-primary" id="ct-f-save">${editing ? 'Save contract' : 'Add contract'}</button>
+        </div>
+      </div>`;
+      const $ = (sel) => overlay.querySelector(sel);
+      const close = () => { overlay.remove(); document.removeEventListener('keydown', onKey); };
+      const onKey = (e) => { if (e.key === 'Escape') close(); };
+      const linesBody = $('#ct-f-lines');
+      const wireRow = (tr) => {
+        tr.querySelector('.ct-l-remove')?.addEventListener('click', () => tr.remove());
+        // The unit follows the ingredient's stock unit (g/hl -> g), until changed by hand.
+        tr.querySelector('.ct-l-ing').addEventListener('change', (e) => {
+          const ing = ingredientOf(Number(e.target.value));
+          const unit = ing && ing.unit ? ing.unit.split('/')[0] : '';
+          if (UNITS.includes(unit)) tr.querySelector('.ct-l-unit').value = unit;
+        });
+      };
+      linesBody.querySelectorAll('tr').forEach(wireRow);
+      $('#ct-f-add-line').addEventListener('click', () => {
+        linesBody.insertAdjacentHTML('beforeend', lineRow({}, $('#ct-f-supplier').value));
+        wireRow(linesBody.lastElementChild);
+      });
+      // A different supplier puts its own ingredients first in the lists.
+      $('#ct-f-supplier').addEventListener('change', (e) => {
+        linesBody.querySelectorAll('.ct-l-ing').forEach((sel) => { sel.innerHTML = ingredientOptions(e.target.value, Number(sel.value) || null); });
+      });
+      $('#ct-f-cancel').addEventListener('click', close);
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+      $('#ct-f-save').addEventListener('click', () => saveContract(overlay, editing ? c : null, close));
+      document.addEventListener('keydown', onKey);
+      document.body.appendChild(overlay);
+      $('#ct-f-supplier').focus();
+    }
+
+    async function saveContract(overlay, existing, close) {
+      const $ = (sel) => overlay.querySelector(sel);
+      const msg = (t) => { $('#ct-f-msg').textContent = t; };
+      const head = {
+        supplier: $('#ct-f-supplier').value,
+        contract_number: $('#ct-f-number').value.trim() || null,
+        start_date: $('#ct-f-start').value, end_date: $('#ct-f-end').value,
+        note: $('#ct-f-note').value.trim() || null,
+      };
+      if (!head.supplier) return msg('Choose the supplier.');
+      if (!head.start_date || !head.end_date) return msg('Fill in the start and end date.');
+      if (head.end_date < head.start_date) return msg('The end date is before the start date.');
+      const rows = [...overlay.querySelectorAll('#ct-f-lines tr')].map((tr) => ({
+        id: Number(tr.dataset.lineId) || null,
+        ingredient_id: Number(tr.querySelector('.ct-l-ing').value) || null,
+        quantity: parseNumber(tr.querySelector('.ct-l-qty').value),
+        unit: tr.querySelector('.ct-l-unit').value,
+        price: parseNumber(tr.querySelector('.ct-l-price').value),
+      }));
+      if (!rows.length) return msg('Add at least one ingredient.');
+      if (rows.some((r) => !r.ingredient_id)) return msg('Choose an ingredient on every line (or remove the line).');
+      if (rows.some((r) => !r.quantity || r.quantity <= 0)) return msg('Every amount must be a number above 0.');
+      if (rows.some((r) => r.price === undefined || (r.price !== null && r.price < 0))) return msg('A price must be empty or a number of 0 or more.');
+      if (new Set(rows.map((r) => r.ingredient_id)).size !== rows.length) return msg('An ingredient is on this contract twice.');
+
+      $('#ct-f-save').disabled = true;
+      msg('Saving…');
+      const fail = (error) => {
+        $('#ct-f-save').disabled = false;
+        msg(error.code === '23503' ? 'A removed ingredient already has book-ins and cannot be removed.' : 'Save failed: ' + error.message);
+      };
+      let contractId = existing ? existing.id : null;
+      if (existing) {
+        const { error } = await supabaseClient.from('contracts').update(head).eq('id', contractId);
+        if (error) return fail(error);
+      } else {
+        const { data, error } = await supabaseClient.from('contracts').insert(head).select('id').single();
+        if (error) return fail(error);
+        contractId = data.id;
+      }
+      const before = existing ? page.lines.filter((l) => l.contract_id === contractId) : [];
+      const removed = before.filter((l) => !rows.some((r) => r.id === l.id));
+      for (const l of removed) {
+        const { error } = await supabaseClient.from('contract_lines').delete().eq('id', l.id);
+        if (error) return fail(error);
+      }
+      for (const r of rows) {
+        const values = { ingredient_id: r.ingredient_id, quantity: r.quantity, unit: r.unit, price: r.price };
+        const { error } = r.id
+          ? await supabaseClient.from('contract_lines').update(values).eq('id', r.id)
+          : await supabaseClient.from('contract_lines').insert({ ...values, contract_id: contractId });
+        if (error) return fail(error);
+      }
+      close();
+      page.openSuppliers.add(head.supplier);
+      showMessage(existing ? 'Contract saved.' : 'Contract added.', 'ok');
+      await loadAll();
+    }
+
+    async function deleteContract(id) {
+      const c = page.contracts.find((x) => x.id === id);
+      if (!confirm(`Delete ${c.contract_number ? 'contract ' + c.contract_number : 'this contract'} of ${c.supplier} with all its ingredients?`)) return;
+      const { error } = await supabaseClient.from('contracts').delete().eq('id', id);
+      if (error) return showMessage(error.code === '23503' ? 'Could not delete: material has been booked in against it.' : 'Delete failed: ' + error.message, 'fout');
+      showMessage('Contract deleted.', 'ok');
+      await loadAll();
+    }
+
+    // ----------------------------------------------------------------
+    // Start. contracts.html#ingredient-<id> (from the Stock overview) shows
+    // only the contracts with that ingredient, its lines highlighted.
+    // ----------------------------------------------------------------
+    async function initContractsPage() {
+      const user = await getCurrentUser();
+      if (!user) return; // nav.js redirects to login
+      if (!(await magBekijkenModule('inventory'))) {
+        document.getElementById('ct-no-access').style.display = 'block';
+        return;
+      }
+      page.canEdit = await magBewerkenModule('inventory');
+      page.canDelete = await magVerwijderenModule('inventory');
+      document.getElementById('ct-content').style.display = 'block';
+      if (page.canEdit) {
+        const add = document.getElementById('ct-add');
+        add.style.display = '';
+        add.addEventListener('click', () => openContractDialog(null));
+      }
+      document.getElementById('ct-search').addEventListener('input', render);
+      document.getElementById('ct-show-ended').addEventListener('change', render);
+      await loadAll();
+      const m = location.hash.match(/^#ingredient-(\d+)$/);
+      if (m) {
+        const ing = ingredientOf(Number(m[1]));
+        if (ing) { page.highlightGroup = ing.ingredient_group_id; render(); }
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', initContractsPage);
+  </script>
+</body>
+</html>

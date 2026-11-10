@@ -117,6 +117,7 @@
     font-family: var(--mono); font-size: 11px; color: var(--hop-dark); text-decoration: none; white-space: nowrap;
   }
   .vo-forecast-btn:hover { border-color: var(--hop-dark); background: #f4f2ea; }
+  .vo-contract-btn { background: #e1ead9; border-color: #b9cbb0; white-space: nowrap; }
 
   .vo-subrij td { padding: 0; border-bottom: 1px solid var(--line); background: #faf9f5; }
   .vo-subrij-inhoud { padding: 16px 24px 20px 40px; }
@@ -250,16 +251,26 @@
     const container = document.getElementById('vo-list-container');
     container.innerHTML = '<div class="vo-loading">Loading stock…</div>';
 
-    const [ingrRes, lotsRes, mutRes, forecastRes] = await Promise.all([
+    const [ingrRes, lotsRes, mutRes, forecastRes, contractRes] = await Promise.all([
       supabaseClient.from('ingredients')
-        .select('id, naam:name, eenheid:unit, minimum_voorraad:minimum_stock, category_id, ingredient_categories(name)')
+        .select('id, naam:name, eenheid:unit, minimum_voorraad:minimum_stock, category_id, ingredient_group_id, ingredient_categories(name)')
         .eq('version_status', 'current'),
       supabaseClient.from('lots')
-        .select('id, ingredient_id, lotcode:lot_code, leverancier:supplier, ontvangstdatum:received_date, hoeveelheid_ontvangen:quantity_received, eenheid:unit, tht_datum:best_before_date, locatie:location, status')
+        .select('id, ingredient_id, lotcode:lot_code, leverancier:supplier, ontvangstdatum:received_date, hoeveelheid_ontvangen:quantity_received, eenheid:unit, tht_datum:best_before_date, locatie:location, status, order_date, order_number, contract_line_id')
         .eq('status', 'active'),
       supabaseClient.from('stock_movements').select('lot_id, hoeveelheid:quantity').eq('movement_type', 'consumption'),
       vfBerekenVerbruik(supabaseClient, vfVooruitkijkPeriodes(WEKEN_VOORUITKIJK)),
+      supabaseClient.from('contract_line_status').select('ingredient_group_id, unit, open, end_date').gt('open', 0)
+        .gte('end_date', new Date().toISOString().slice(0, 10)),
     ]);
+
+    // Open amount under a running contract per ingredient (any version), per unit.
+    const openUnderContract = new Map();
+    (contractRes && !contractRes.error ? contractRes.data : []).forEach(c => {
+      const perUnit = openUnderContract.get(c.ingredient_group_id) || {};
+      perUnit[c.unit] = (perUnit[c.unit] || 0) + Number(c.open);
+      openUnderContract.set(c.ingredient_group_id, perUnit);
+    });
 
     if (ingrRes.error || lotsRes.error) {
       container.innerHTML = `<div class="vo-error">Could not load stock: ${escapeHtml((ingrRes.error || lotsRes.error).message)}</div>`;
@@ -289,6 +300,7 @@
           categorie: ing?.ingredient_categories?.name || null,
           categorieId: ing?.category_id != null ? String(ing.category_id) : null,
           minimum: ing?.minimum_voorraad != null ? Number(ing.minimum_voorraad) : null,
+          contract: ing ? openUnderContract.get(ing.ingredient_group_id) || null : null,
           totaal: 0, lots: [],
         });
       }
@@ -297,14 +309,17 @@
       g.lots.push(l);
     });
 
+    // Ingredients without stock still show when they have a minimum or a
+    // running contract (a reminder for purchasing).
     (ingrRes.data || []).forEach(i => {
-      if (i.minimum_voorraad == null) return;
+      const contract = openUnderContract.get(i.ingredient_group_id) || null;
+      if (i.minimum_voorraad == null && !contract) return;
       if ([...groepenMap.values()].some(g => g.ingredientId === i.id)) return;
       groepenMap.set(`${i.id}|leeg`, {
         ingredientId: i.id, naam: i.naam, eenheid: (i.eenheid || '').split('/')[0] || '',
         categorie: i.ingredient_categories?.name || null,
         categorieId: i.category_id != null ? String(i.category_id) : null,
-        minimum: Number(i.minimum_voorraad), totaal: 0, lots: [],
+        minimum: i.minimum_voorraad != null ? Number(i.minimum_voorraad) : null, contract, totaal: 0, lots: [],
       });
     });
 
@@ -433,7 +448,7 @@
     if (vwWeek > vfIsoWeeksInJaar(huidige.jaar)) { vwJaar++; vwWeek = 1; }
     const volgendeWeekSleutel = vfWeekSleutel(vwJaar, vwWeek);
 
-    const kolommen = [['naam', 'Name'], ['categorie', 'Category'], ['eenheid', 'Unit'], ['voorraad', 'Current stock'], ['minimum', 'Minimum'], ['status', 'Status'], ['loopt_leeg', 'Runs out'], ['acties', '']];
+    const kolommen = [['naam', 'Name'], ['categorie', 'Category'], ['eenheid', 'Unit'], ['voorraad', 'Current stock'], ['minimum', 'Minimum'], ['status', 'Status'], ['loopt_leeg', 'Runs out'], ['contract', 'Contract'], ['acties', '']];
 
     const rijenHtml = groepen.map(g => {
       const sleutel = `${g.ingredientId}|${g.eenheid}`;
@@ -500,6 +515,8 @@
           <td>${g.minimum != null ? vfmt(g.minimum) : '—'}</td>
           <td>${onderMin ? '<span class="status-pill status-onder-min">Below minimum</span>' : '<span class="status-pill status-ok">OK</span>'}</td>
           <td class="${g.loopLeegWeek ? 'vo-loopt-leeg-urgent' : ''}">${loopLeegTekst}</td>
+          <td>${g.contract ? `<a href="contracts.html#ingredient-${g.ingredientId}" target="_blank" rel="noopener" class="vo-forecast-btn vo-contract-btn" title="Open under a running contract">${
+            Object.entries(g.contract).map(([unit, open]) => `${vfmt(open)} ${escapeHtml(unit)}`).join(' + ')} open</a>` : ''}</td>
           <td><a href="${forecastUrl}" target="_blank" rel="noopener" class="vo-forecast-btn">Forecast</a> <a href="${detailsUrl}" target="_blank" rel="noopener" class="vo-forecast-btn">Details</a></td>
         </tr>${subrijHtml}`;
     }).join('');
@@ -533,7 +550,7 @@
         const g = vrGroepen.find(x => `${x.ingredientId}|${x.eenheid}` === key);
         if (!vrHistorieCache[key]) {
           const { data, error } = await supabaseClient.from('lots')
-            .select('id, ingredient_id, lotcode:lot_code, leverancier:supplier, ontvangstdatum:received_date, hoeveelheid_ontvangen:quantity_received, eenheid:unit, tht_datum:best_before_date, locatie:location, status')
+            .select('id, ingredient_id, lotcode:lot_code, leverancier:supplier, ontvangstdatum:received_date, hoeveelheid_ontvangen:quantity_received, eenheid:unit, tht_datum:best_before_date, locatie:location, status, order_date, order_number, contract_line_id')
             .eq('ingredient_id', g.ingredientId).eq('unit', g.eenheid).neq('status', 'active')
             .order('received_date', { ascending: false });
           if (error) { alert('Could not load lot history: ' + error.message); return; }
@@ -565,6 +582,9 @@
     const rijen = [
       ['Ingredient', groep?.naam || '—'],
       ['Supplier', l.leverancier || '—'],
+      ['Order number', l.order_number || '—'],
+      ['Order date', l.order_date || '—'],
+      ['Contract', l.contract_line_id ? 'Counted against a contract (see Contracts)' : '—'],
       ['Lot / batch code', l.lotcode || '—'],
       ['Receiving date', l.ontvangstdatum || '—'],
       ['Quantity received', `${l.hoeveelheid_ontvangen ?? '—'} ${l.eenheid || ''}`],

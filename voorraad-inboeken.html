@@ -76,6 +76,9 @@
   #vr-ontv-melding { margin-left: 12px; font-size: 13px; }
   .vr-melding.fout { color: #a33f2c; }
   .vr-melding.ok { color: var(--hop-dark); }
+  .vr-contract-note { margin: 2px 0 14px; padding: 9px 12px; border-radius: 6px; background: #e1ead9; color: #33473a; font-size: 0.9em; }
+  .vr-contract-note.over { background: #fdf1d8; color: #7a4f17; }
+  .vr-contract-note.none { background: #f3f1ea; color: #6b6355; }
   .vr-geen-rechten { color: #6b6355; font-size: 14px; }
   .bc-geen { color: #9a927f; cursor: default; }
 </style>
@@ -118,6 +121,7 @@
             <div class="vr-field"><label for="vr-ontv-order-date">Order date</label><input type="date" id="vr-ontv-order-date" /></div>
             <div class="vr-field"><label for="vr-ontv-order-number">Order number</label><input type="text" id="vr-ontv-order-number" /></div>
           </div>
+          <div id="vr-ontv-contract" class="vr-contract-note" style="display:none;"></div>
           <div class="vr-grid3">
             <div class="vr-field"><label for="vr-ontv-datum">Receiving date</label><input type="date" id="vr-ontv-datum" /></div>
             <div class="vr-field"><label for="vr-ontv-hoeveelheid">Quantity received</label><input type="number" step="0.001" id="vr-ontv-hoeveelheid" /></div>
@@ -243,6 +247,7 @@
       document.getElementById('vr-ontv-resultaten').style.display = 'none';
       document.getElementById('vr-ontv-alpha-veld').style.display = ing.usesAlphaPct ? 'block' : 'none';
       fillSupplierSelect(ing);
+      updateContractPreview();
       // Unit vooraf invullen vanuit de ingredient-kaart. Bij additives staat hier een
       // tarief (bv. g/hl, de doseer-eenheid uit het recept) -- de fysieke voorraad-eenheid
       // is dan het deel vóór de "/" (g/hl -> g), dus die pakken we, niet de hele rate.
@@ -257,6 +262,40 @@
       const results = document.getElementById('vr-ontv-resultaten');
       if (e.target !== wrap && !results.contains(e.target)) results.style.display = 'none';
     });
+
+    // Shows which contract this book-in will count against (the database
+    // picks it on save with the same function: pick_contract_line).
+    let contractPreviewSeq = 0;
+    async function updateContractPreview() {
+      const box = document.getElementById('vr-ontv-contract');
+      const supplier = document.getElementById('vr-ontv-leverancier').value;
+      const seq = ++contractPreviewSeq;
+      if (!geselecteerdIngredientOntv || !supplier) { box.style.display = 'none'; return; }
+      const date = document.getElementById('vr-ontv-order-date').value || document.getElementById('vr-ontv-datum').value || vandaag();
+      const unit = document.getElementById('vr-ontv-eenheid').value || null;
+      const { data: lineId, error } = await supabaseClient.rpc('pick_contract_line',
+        { p_supplier: supplier, p_ingredient_id: geselecteerdIngredientOntv.id, p_date: date, p_unit: unit });
+      if (seq !== contractPreviewSeq) return;
+      if (error || !lineId) {
+        box.style.display = error ? 'none' : 'block';
+        box.className = 'vr-contract-note none';
+        box.textContent = 'Not under contract with this supplier.';
+        return;
+      }
+      const { data: line } = await supabaseClient.from('contract_line_status')
+        .select('contract_number, start_date, end_date, quantity, unit, open').eq('id', lineId).single();
+      if (seq !== contractPreviewSeq || !line) return;
+      const num = (v) => Number(v).toLocaleString('en-GB', { maximumFractionDigits: 2 });
+      box.style.display = 'block';
+      box.className = 'vr-contract-note' + (Number(line.open) <= 0 ? ' over' : '');
+      box.innerHTML = `Counts against contract <b>${escapeHtml(line.contract_number || '(no number)')}</b> `
+        + `(${line.start_date.split('-').reverse().join('-')} – ${line.end_date.split('-').reverse().join('-')}): `
+        + `<b>${num(line.open)} ${escapeHtml(line.unit)}</b> still open of ${num(line.quantity)} ${escapeHtml(line.unit)}.`
+        + (Number(line.open) <= 0 ? ' Fully used: this book-in goes over the contract.' : '')
+        + ' <a href="contracts.html" target="_blank" rel="noopener">Contracts</a>';
+    }
+    ['vr-ontv-leverancier', 'vr-ontv-order-date', 'vr-ontv-datum', 'vr-ontv-eenheid']
+      .forEach((id) => document.getElementById(id).addEventListener('change', updateContractPreview));
 
     function werkOntvKnopBij() {
       const hoeveelheid = document.getElementById('vr-ontv-hoeveelheid').value.trim();
@@ -278,7 +317,7 @@
       const { data: { session } } = await supabaseClient.auth.getSession();
 
       melding.textContent = 'Saving…'; melding.className = 'vr-melding';
-      const { error } = await supabaseClient.from('lots').insert(toDb('lots', {
+      const { data: savedLot, error } = await supabaseClient.from('lots').insert(toDb('lots', {
         ingredient_id: geselecteerdIngredientOntv.id,
         leverancier: document.getElementById('vr-ontv-leverancier').value,
         order_date: document.getElementById('vr-ontv-order-date').value || null,
@@ -298,14 +337,14 @@
         notitie: document.getElementById('vr-ontv-notitie').value.trim() || null,
         ontvangen_door: document.getElementById('vr-ontv-ontvangen-door').value || null,
         aangemaakt_door: session?.user?.id ?? null,
-      }));
+      })).select('contract_line_id').single();
 
       if (error) {
         melding.textContent = 'Could not save: ' + error.message;
         melding.className = 'vr-melding fout';
         return;
       }
-      melding.textContent = 'Lot registered.';
+      melding.textContent = savedLot && savedLot.contract_line_id ? 'Lot registered · counted against the contract.' : 'Lot registered.';
       melding.className = 'vr-melding ok';
       ['vr-ontv-leverancier','vr-ontv-order-date','vr-ontv-order-number','vr-ontv-lotcode','vr-ontv-hoeveelheid','vr-ontv-eenheid','vr-ontv-colli','vr-ontv-locatie','vr-ontv-tht','vr-ontv-alpha','vr-ontv-notitie']
         .forEach(id => document.getElementById(id).value = '');
@@ -315,6 +354,7 @@
       document.getElementById('vr-ontv-alpha-veld').style.display = 'none';
       geselecteerdIngredientOntv = null;
       fillSupplierSelect(null);
+      updateContractPreview();
       werkOntvKnopBij();
     });
 
