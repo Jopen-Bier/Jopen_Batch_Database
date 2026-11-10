@@ -189,7 +189,9 @@ Steps are editable and reorderable in the recipe editor; edited steps get
   `measured_at`: the n-th of them ticks off the n-th step with that tag that
   no tag names (a tag twice on one entry counts twice).
 - Adding the tag **Addition** while two or more Addition steps are open asks
-  "Which step is this addition?"; the chip then shows the step
+  which steps are done with this entry: a checkbox list (with "Select all"),
+  so several additions done in one go are logged at once. Each chosen step
+  gets its own tag on the entry; its chip shows the step
   ("Addition · Super F"). Other tags (cooling, dry hop, …) follow the plan
   order without asking. The n-th occurrence of tag T ticks off the n-th
   `batch_cellar_steps` row (by `sort_order`) with tag T.

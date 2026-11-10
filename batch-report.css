@@ -313,8 +313,10 @@ select.br-in { text-align: left; cursor: pointer; }
 .fl-legend i.dash { height: 0; border-top: 2px dashed #b4772c; }
 .fl-legend i.dot { height: 0; border-top: 2px dotted #a80016; }
 .fl-svg { width: 100%; height: auto; display: block; }
-.fl-step-choice { display: flex; flex-direction: column; gap: 6px; }
-.fl-step-choice .br-ghost { justify-content: flex-start; text-align: left; }
+.fl-step-choice { display: flex; flex-direction: column; gap: 2px; max-height: 50vh; overflow-y: auto; }
+.fl-step-choice label, .fl-step-all { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: 14px; }
+.fl-step-choice label:hover { background: #f6f4ee; }
+.fl-step-all { font-weight: 700; border-bottom: 1px solid var(--br-line); border-radius: 0; margin-bottom: 4px; }
 .fl-calc-out { display: flex; flex-direction: column; gap: 6px; background: #eef0e6; border-radius: 8px; padding: 10px 12px; margin-top: 8px; }
 .fl-calc-out div { display: flex; justify-content: space-between; gap: 12px; }
 .fl-calc-out b { color: var(--br-hop-dark); font-variant-numeric: tabular-nums; }

@@ -195,16 +195,20 @@
     const CHOOSE_STEP_TAGS = ['addition'];
 
     /**
-     * An Addition with two or more open Addition steps asks which one this
-     * is; otherwise the tag ticks off the next open step, as before.
+     * An Addition with two or more open Addition steps asks which ones this
+     * entry covers (several can be added in one go); each chosen step gets
+     * its own tag. Otherwise the tag ticks off the next open step, as before.
      */
     async function addTagWithChoice(entryId, tagId) {
       if (tagById(tagId).code === 'transfer') return addTransferTag(entryId, tagId);
       const open = CHOOSE_STEP_TAGS.includes(tagById(tagId).code) ? openStepsForTag(page.steps, page.entries, page.entryTags, tagId) : [];
       if (open.length < 2) return addTag(entryId, tagId);
-      const choice = await chooseStepDialog(tagById(tagId).label, open);
-      if (choice === undefined) return renderSoon();   // cancelled
-      return addTag(entryId, tagId, choice);
+      const chosen = await chooseStepsDialog(tagById(tagId).label, open);
+      if (!chosen) return renderSoon();   // cancelled
+      // One at a time: each insert lands in page.entryTags before the next.
+      for (const stepId of chosen) {
+        if (!(await addTag(entryId, tagId, stepId))) break;
+      }
     }
 
     // "Transfer" = pushing the beer to another tank of this batch: the popup asks
@@ -262,25 +266,41 @@
       });
     }
 
-    // Resolves the chosen step id, null for "next open step", undefined when cancelled.
-    function chooseStepDialog(tagLabel, steps) {
+    // Resolves the chosen step ids (in plan order), or null when cancelled.
+    function chooseStepsDialog(tagLabel, steps) {
       return new Promise((resolve) => {
         const overlay = document.createElement('div');
         overlay.className = 'br-dialog-overlay';
         overlay.innerHTML = `<div class="br-dialog" role="dialog" aria-modal="true" aria-labelledby="fl-step-title">
-          <div class="br-dialog-title" id="fl-step-title">Which step is this ${escapeHtml(tagLabel.toLowerCase())}?</div>
-          <div class="fl-step-choice">${steps.map((st) => `<button type="button" class="br-ghost" data-step-choice="${st.id}">${escapeHtml(st.title)}</button>`).join('')}</div>
-          <div class="br-dialog-buttons"><button type="button" class="br-ghost" data-step-choice="cancel">Cancel</button></div></div>`;
+          <div class="br-dialog-title" id="fl-step-title">Which ${escapeHtml(tagLabel.toLowerCase())} steps are done with this entry?</div>
+          <label class="fl-step-all"><input type="checkbox" data-step-all> Select all (${steps.length})</label>
+          <div class="fl-step-choice">${steps.map((st) => `<label><input type="checkbox" data-step-choice="${st.id}"> ${escapeHtml(st.title)}</label>`).join('')}</div>
+          <div class="br-dialog-buttons"><button type="button" class="br-ghost" data-step-btn="cancel">Cancel</button>
+            <button type="button" class="br-primary" data-step-btn="ok" disabled>Add selected</button></div></div>`;
+        const boxes = [...overlay.querySelectorAll('[data-step-choice]')];
+        const all = overlay.querySelector('[data-step-all]');
+        const okBtn = overlay.querySelector('[data-step-btn="ok"]');
+        const sync = () => {
+          const n = boxes.filter((b) => b.checked).length;
+          okBtn.disabled = !n;
+          okBtn.textContent = n ? `Add selected (${n})` : 'Add selected';
+          all.checked = n === boxes.length;
+          all.indeterminate = n > 0 && n < boxes.length;
+        };
         const close = (value) => { overlay.remove(); document.removeEventListener('keydown', onKey); resolve(value); };
-        const onKey = (e) => { if (e.key === 'Escape') close(undefined); };
+        const onKey = (e) => { if (e.key === 'Escape') close(null); };
+        overlay.addEventListener('change', (e) => {
+          if (e.target === all) boxes.forEach((b) => { b.checked = all.checked; });
+          sync();
+        });
         overlay.addEventListener('click', (e) => {
-          const b = e.target.closest('button[data-step-choice]');
-          if (b) close(b.dataset.stepChoice === 'cancel' ? undefined : Number(b.dataset.stepChoice));
-          else if (e.target === overlay) close(undefined);
+          const b = e.target.closest('button[data-step-btn]');
+          if (b) close(b.dataset.stepBtn === 'cancel' ? null : boxes.filter((x) => x.checked).map((x) => Number(x.dataset.stepChoice)));
+          else if (e.target === overlay) close(null);
         });
         document.addEventListener('keydown', onKey);
         document.body.appendChild(overlay);
-        overlay.querySelector('[data-step-choice]').focus();
+        boxes[0].focus();
       });
     }
 
