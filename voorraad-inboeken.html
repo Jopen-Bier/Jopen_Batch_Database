@@ -109,11 +109,14 @@
 
           <div class="vr-grid2">
             <div class="vr-field">
-              <label for="vr-ontv-leverancier">Supplier</label>
-              <input type="text" id="vr-ontv-leverancier" list="vr-ontv-leverancier-lijst" placeholder="Select or type a supplier…" />
-              <datalist id="vr-ontv-leverancier-lijst"></datalist>
+              <label for="vr-ontv-leverancier">Supplier *</label>
+              <select id="vr-ontv-leverancier"><option value="">Choose a supplier…</option></select>
             </div>
             <div class="vr-field"><label for="vr-ontv-lotcode">Lot / batch code</label><input type="text" id="vr-ontv-lotcode" /></div>
+          </div>
+          <div class="vr-grid2">
+            <div class="vr-field"><label for="vr-ontv-order-date">Order date</label><input type="date" id="vr-ontv-order-date" /></div>
+            <div class="vr-field"><label for="vr-ontv-order-number">Order number</label><input type="text" id="vr-ontv-order-number" /></div>
           </div>
           <div class="vr-grid3">
             <div class="vr-field"><label for="vr-ontv-datum">Receiving date</label><input type="date" id="vr-ontv-datum" /></div>
@@ -153,6 +156,7 @@
   <script src="nav.js"></script>
   <script>
     let alleIngredienten = [];       // {id, naam, eenheid, leveranciers, usesAlphaPct}
+    let allSuppliers = [];           // active suppliers (Settings > Suppliers)
     let magBewerken = false;
     let geselecteerdIngredientOntv = null;
 
@@ -179,6 +183,25 @@
         leveranciers: [i.leverancier, i.leverancier_2, i.leverancier_3].filter(Boolean),
         usesAlphaPct: !!(i.ingredient_categories && i.ingredient_categories.uses_alpha_pct),
       }));
+    }
+
+    async function loadSuppliers() {
+      const { data, error } = await supabaseClient.from('suppliers').select('name').eq('is_active', true).order('name');
+      if (error) { console.error('Could not load suppliers:', error); return; }
+      allSuppliers = (data || []).map((s) => s.name);
+      fillSupplierSelect(null);
+    }
+
+    // The suppliers of the chosen ingredient (its card) come first; any other
+    // supplier can still be chosen, a delivery can come from elsewhere.
+    function fillSupplierSelect(ing) {
+      const select = document.getElementById('vr-ontv-leverancier');
+      const own = ing ? ing.leveranciers : [];
+      const others = allSuppliers.filter((n) => !own.includes(n));
+      const opt = (n) => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`;
+      select.innerHTML = '<option value="">Choose a supplier…</option>'
+        + (own.length ? `<optgroup label="Suppliers of this ingredient">${own.map(opt).join('')}</optgroup><optgroup label="All suppliers">${others.map(opt).join('')}</optgroup>` : others.map(opt).join(''));
+      if (own.length === 1) select.value = own[0];
     }
 
     async function laadOntvangenDoorOpties() {
@@ -219,11 +242,7 @@
       document.getElementById('vr-ontv-ingredient-zoek').value = ing.naam;
       document.getElementById('vr-ontv-resultaten').style.display = 'none';
       document.getElementById('vr-ontv-alpha-veld').style.display = ing.usesAlphaPct ? 'block' : 'none';
-      // Leverancier-datalist vullen met de tot-3 leveranciers van de ingredient-kaart
-      // (Supplier #1/#2/#3) -- blijft een vrij invoerveld, dit is alleen een suggestielijst,
-      // want een ontvangst kan altijd van een afwijkende leverancier komen.
-      document.getElementById('vr-ontv-leverancier-lijst').innerHTML =
-        ing.leveranciers.map(l => `<option value="${escapeHtml(l)}"></option>`).join('');
+      fillSupplierSelect(ing);
       // Unit vooraf invullen vanuit de ingredient-kaart. Bij additives staat hier een
       // tarief (bv. g/hl, de doseer-eenheid uit het recept) -- de fysieke voorraad-eenheid
       // is dan het deel vóór de "/" (g/hl -> g), dus die pakken we, niet de hele rate.
@@ -241,21 +260,29 @@
 
     function werkOntvKnopBij() {
       const hoeveelheid = document.getElementById('vr-ontv-hoeveelheid').value.trim();
-      document.getElementById('vr-ontv-btn').disabled = !(magBewerken && geselecteerdIngredientOntv && hoeveelheid !== '');
+      const supplier = document.getElementById('vr-ontv-leverancier').value;
+      document.getElementById('vr-ontv-btn').disabled = !(magBewerken && geselecteerdIngredientOntv && hoeveelheid !== '' && supplier);
     }
-    ['vr-ontv-hoeveelheid'].forEach(id => document.getElementById(id).addEventListener('input', werkOntvKnopBij));
+    ['vr-ontv-hoeveelheid', 'vr-ontv-leverancier'].forEach(id => document.getElementById(id).addEventListener('input', werkOntvKnopBij));
+    document.getElementById('vr-ontv-leverancier').addEventListener('change', werkOntvKnopBij);
 
     document.getElementById('vr-ontv-datum').value = vandaag();
 
     document.getElementById('vr-ontv-btn').addEventListener('click', async () => {
       const melding = document.getElementById('vr-ontv-melding');
       if (!geselecteerdIngredientOntv) return;
+      if (!document.getElementById('vr-ontv-leverancier').value) {
+        melding.textContent = 'Choose the supplier.'; melding.className = 'vr-melding fout';
+        return;
+      }
       const { data: { session } } = await supabaseClient.auth.getSession();
 
       melding.textContent = 'Saving…'; melding.className = 'vr-melding';
       const { error } = await supabaseClient.from('lots').insert(toDb('lots', {
         ingredient_id: geselecteerdIngredientOntv.id,
-        leverancier: document.getElementById('vr-ontv-leverancier').value.trim() || null,
+        leverancier: document.getElementById('vr-ontv-leverancier').value,
+        order_date: document.getElementById('vr-ontv-order-date').value || null,
+        order_number: document.getElementById('vr-ontv-order-number').value.trim() || null,
         lotcode: document.getElementById('vr-ontv-lotcode').value.trim() || null,
         ontvangstdatum: document.getElementById('vr-ontv-datum').value || vandaag(),
         hoeveelheid_ontvangen: Number(document.getElementById('vr-ontv-hoeveelheid').value),
@@ -280,13 +307,14 @@
       }
       melding.textContent = 'Lot registered.';
       melding.className = 'vr-melding ok';
-      ['vr-ontv-leverancier','vr-ontv-lotcode','vr-ontv-hoeveelheid','vr-ontv-eenheid','vr-ontv-colli','vr-ontv-locatie','vr-ontv-tht','vr-ontv-alpha','vr-ontv-notitie']
+      ['vr-ontv-leverancier','vr-ontv-order-date','vr-ontv-order-number','vr-ontv-lotcode','vr-ontv-hoeveelheid','vr-ontv-eenheid','vr-ontv-colli','vr-ontv-locatie','vr-ontv-tht','vr-ontv-alpha','vr-ontv-notitie']
         .forEach(id => document.getElementById(id).value = '');
       document.getElementById('vr-ontv-ontvangstcontrole').checked = false;
       document.getElementById('vr-ontv-ingangscontrole').checked = false;
       document.getElementById('vr-ontv-ingredient-zoek').value = '';
       document.getElementById('vr-ontv-alpha-veld').style.display = 'none';
       geselecteerdIngredientOntv = null;
+      fillSupplierSelect(null);
       werkOntvKnopBij();
     });
 
@@ -302,6 +330,7 @@
 
       vrVulEenhedenSelect(document.getElementById('vr-ontv-eenheid'), VR_FYSIEKE_EENHEDEN);
       await laadIngredienten();
+      await loadSuppliers();
       await laadOntvangenDoorOpties();
       werkOntvKnopBij();
     });

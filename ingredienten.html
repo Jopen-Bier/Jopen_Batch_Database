@@ -513,6 +513,19 @@
 <script>
 let alleIngredienten = [];
 let alleCategorieen = [];
+let allSuppliers = [];   // { name, is_active } from Settings > Suppliers
+
+/**
+ * Supplier dropdown for the ingredient card: active suppliers, plus the
+ * current value when that supplier has been made inactive since.
+ */
+function supplierSelect(id, current) {
+  const names = allSuppliers.filter((s) => s.is_active || s.name === current).map((s) => s.name);
+  return `<select id="${id}" style="width:280px;">
+    <option value="">—</option>
+    ${names.map((n) => `<option value="${escapeHtml(n)}"${n === current ? ' selected' : ''}>${escapeHtml(n)}</option>`).join('')}
+  </select>`;
+}
 let alleEenheden = [];
 let alleDeclaraties = [];
 let huidigeGebruikerRol = null; // filled with the role name, or null (not logged in)
@@ -779,6 +792,9 @@ async function initIngredientenPagina() {
     .select('id, name, uses_alpha_pct, uses_extract_pct, uses_gistfactor:uses_yeast_factor, uses_malt_equivalent')
     .order('sort_order');
   if (!categorieError) alleCategorieen = categorieData || [];
+
+  const { data: supplierData } = await supabaseClient.from('suppliers').select('name, is_active').order('name');
+  allSuppliers = supplierData || [];
 
   // Vaste eenhedenlijst uit Settings -> Units (zelfde bron als straks de
   // recipe-regels) -- de Unit-selectie op de ingrediëntkaart komt hieruit
@@ -1832,7 +1848,7 @@ function renderDetailBewerken(i) {  const container = document.getElementById('i
   const leverancierBlok = (nr, naamKey, prijsKey, eenheidKey, perKgKey) => `
       <div class="ing-edit-row wide">
         <label for="veld-${naamKey}">Supplier #${nr}</label>
-        <input type="text" id="veld-${naamKey}" style="width:280px; text-align:left;" value="${i[naamKey] ?? ''}" />
+        ${supplierSelect(`veld-${naamKey}`, i[naamKey] ?? '')}
       </div>
       ${prijsMetEenheidVeld(`Price #${nr}`, prijsKey, eenheidKey)}
       ${prijsPerKgVeld(`Price #${nr} per kg`, perKgKey)}`;
@@ -2250,7 +2266,7 @@ function toonNieuwFormulier() {
   const leverancierBlok = (nr, naamId, prijsId, eenheidId, perKgId) => `
       <div class="ing-edit-row wide">
         <label for="${naamId}">Supplier #${nr}</label>
-        <input type="text" id="${naamId}" style="width:280px; text-align:left;" />
+        ${supplierSelect(naamId, '')}
       </div>
       ${prijsMetEenheidVeld(`Price #${nr}`, prijsId, eenheidId)}
       ${prijsPerKgVeld(`Price #${nr} per kg`, perKgId)}`;
