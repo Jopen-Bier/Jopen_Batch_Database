@@ -141,6 +141,24 @@ $$;
 
 
 --
+-- Name: convert_quantity(numeric, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.convert_quantity(q numeric, p_from text, p_to text) RETURNS numeric
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO 'public'
+    AS $$
+  select case
+    when p_from = p_to then q
+    when p_from = 'g' and p_to = 'kg' then q / 1000
+    when p_from = 'kg' and p_to = 'g' then q * 1000
+    when p_from = 'ml' and p_to = 'l' then q / 1000
+    when p_from = 'l' and p_to = 'ml' then q * 1000
+  end;
+$$;
+
+
+--
 -- Name: current_role_id(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -470,6 +488,47 @@ begin
   end if;
   return null;
 end;
+$$;
+
+
+--
+-- Name: lots_pick_contract_line(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.lots_pick_contract_line() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'public'
+    AS $$
+begin
+  if new.contract_line_id is null and new.supplier is not null then
+    new.contract_line_id := pick_contract_line(new.supplier, new.ingredient_id,
+      coalesce(new.order_date, new.received_date), new.unit);
+  end if;
+  return new;
+end;
+$$;
+
+
+--
+-- Name: pick_contract_line(text, bigint, date, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.pick_contract_line(p_supplier text, p_ingredient_id bigint, p_date date, p_unit text) RETURNS bigint
+    LANGUAGE sql STABLE
+    SET search_path TO 'public'
+    AS $$
+  with candidates as (
+    select s.id, s.open, s.start_date
+    from contract_line_status s
+    join ingredients i on i.id = p_ingredient_id
+    where s.supplier = p_supplier
+      and s.ingredient_group_id = i.ingredient_group_id
+      and s.start_date <= coalesce(p_date, current_date)
+      and convert_quantity(1, coalesce(p_unit, s.unit), s.unit) is not null
+  )
+  select coalesce(
+    (select id from candidates where open > 0 order by start_date, id limit 1),
+    (select id from candidates order by start_date desc, id desc limit 1));
 $$;
 
 
@@ -2194,6 +2253,98 @@ ALTER TABLE public.cellar_plan_parts ALTER COLUMN id ADD GENERATED ALWAYS AS IDE
 
 
 --
+-- Name: contract_line_status; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.contract_line_status AS
+SELECT
+    NULL::bigint AS id,
+    NULL::bigint AS contract_id,
+    NULL::bigint AS ingredient_id,
+    NULL::uuid AS ingredient_group_id,
+    NULL::numeric AS quantity,
+    NULL::text AS unit,
+    NULL::numeric AS price,
+    NULL::text AS supplier,
+    NULL::text AS contract_number,
+    NULL::date AS start_date,
+    NULL::date AS end_date,
+    NULL::numeric AS booked,
+    NULL::numeric AS open,
+    NULL::bigint AS book_ins;
+
+
+--
+-- Name: contract_lines; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.contract_lines (
+    id bigint NOT NULL,
+    contract_id bigint NOT NULL,
+    ingredient_id bigint NOT NULL,
+    quantity numeric NOT NULL,
+    unit text NOT NULL,
+    price numeric,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT contract_lines_price_check CHECK ((price >= (0)::numeric)),
+    CONSTRAINT contract_lines_quantity_check CHECK ((quantity > (0)::numeric)),
+    CONSTRAINT contract_lines_unit_check CHECK ((unit = ANY (ARRAY['g'::text, 'kg'::text, 'ml'::text, 'l'::text, 'pcs'::text])))
+);
+
+
+--
+-- Name: COLUMN contract_lines.price; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.contract_lines.price IS 'Price per unit of the line (e.g. EUR per kg).';
+
+
+--
+-- Name: contract_lines_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.contract_lines ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.contract_lines_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: contracts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.contracts (
+    id bigint NOT NULL,
+    supplier text NOT NULL,
+    contract_number text,
+    start_date date NOT NULL,
+    end_date date NOT NULL,
+    note text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid DEFAULT auth.uid(),
+    CONSTRAINT contracts_period_check CHECK ((end_date >= start_date))
+);
+
+
+--
+-- Name: contracts_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.contracts ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.contracts_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
 -- Name: document_types; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2624,8 +2775,32 @@ CREATE TABLE public.lots (
     created_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     received_by uuid,
+    order_date date,
+    order_number text,
+    contract_line_id bigint,
     CONSTRAINT lots_status_check CHECK ((status = ANY (ARRAY['active'::text, 'empty'::text, 'closed'::text])))
 );
+
+
+--
+-- Name: COLUMN lots.order_date; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.lots.order_date IS 'Date the material was ordered (Book in material). Decides which contract a book-in counts against.';
+
+
+--
+-- Name: COLUMN lots.order_number; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.lots.order_number IS 'Order number at the supplier (Book in material).';
+
+
+--
+-- Name: COLUMN lots.contract_line_id; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.lots.contract_line_id IS 'Contract line this book-in counts against; set on insert by lots_pick_contract_line().';
 
 
 --
@@ -3338,6 +3513,33 @@ ALTER TABLE public.stock_movements ALTER COLUMN id ADD GENERATED ALWAYS AS IDENT
 
 
 --
+-- Name: suppliers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.suppliers (
+    id bigint NOT NULL,
+    name text NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT suppliers_name_check CHECK ((btrim(name) <> ''::text))
+);
+
+
+--
+-- Name: suppliers_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.suppliers ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.suppliers_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
 -- Name: tanks_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
@@ -3684,6 +3886,30 @@ ALTER TABLE ONLY public.cellar_plan_parts
 
 ALTER TABLE ONLY public.cellar_plan_parts
     ADD CONSTRAINT cellar_plan_parts_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: contract_lines contract_lines_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_lines
+    ADD CONSTRAINT contract_lines_key UNIQUE (contract_id, ingredient_id);
+
+
+--
+-- Name: contract_lines contract_lines_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_lines
+    ADD CONSTRAINT contract_lines_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: contracts contracts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contracts
+    ADD CONSTRAINT contracts_pkey PRIMARY KEY (id);
 
 
 --
@@ -4111,6 +4337,22 @@ ALTER TABLE ONLY public.stock_movements
 
 
 --
+-- Name: suppliers suppliers_name_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.suppliers
+    ADD CONSTRAINT suppliers_name_key UNIQUE (name);
+
+
+--
+-- Name: suppliers suppliers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.suppliers
+    ADD CONSTRAINT suppliers_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: tanks tanks_code_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4454,6 +4696,20 @@ CREATE INDEX idx_cellar_plan_parts_tag_id ON public.cellar_plan_parts USING btre
 
 
 --
+-- Name: idx_contract_lines_ingredient; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_contract_lines_ingredient ON public.contract_lines USING btree (ingredient_id);
+
+
+--
+-- Name: idx_contracts_supplier; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_contracts_supplier ON public.contracts USING btree (supplier);
+
+
+--
 -- Name: idx_fermentation_log_entries_batch_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4601,6 +4857,13 @@ CREATE INDEX idx_ingredients_group_id ON public.ingredients USING btree (ingredi
 
 
 --
+-- Name: idx_lots_contract_line; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_lots_contract_line ON public.lots USING btree (contract_line_id);
+
+
+--
 -- Name: idx_lots_ingredient; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4612,6 +4875,13 @@ CREATE INDEX idx_lots_ingredient ON public.lots USING btree (ingredient_id);
 --
 
 CREATE INDEX idx_lots_status ON public.lots USING btree (status);
+
+
+--
+-- Name: idx_lots_supplier; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_lots_supplier ON public.lots USING btree (supplier);
 
 
 --
@@ -4727,10 +4997,43 @@ CREATE UNIQUE INDEX product_sheets_recipe_group_id_active_idx ON public.product_
 
 
 --
+-- Name: suppliers_name_lower_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX suppliers_name_lower_key ON public.suppliers USING btree (lower(name));
+
+
+--
 -- Name: users_initials_key; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX users_initials_key ON public.users USING btree (upper(initials)) WHERE (initials IS NOT NULL);
+
+
+--
+-- Name: contract_line_status _RETURN; Type: RULE; Schema: public; Owner: -
+--
+
+CREATE OR REPLACE VIEW public.contract_line_status WITH (security_invoker='true') AS
+ SELECT cl.id,
+    cl.contract_id,
+    cl.ingredient_id,
+    i.ingredient_group_id,
+    cl.quantity,
+    cl.unit,
+    cl.price,
+    c.supplier,
+    c.contract_number,
+    c.start_date,
+    c.end_date,
+    COALESCE(sum(public.convert_quantity(l.quantity_received, COALESCE(l.unit, cl.unit), cl.unit)), (0)::numeric) AS booked,
+    (cl.quantity - COALESCE(sum(public.convert_quantity(l.quantity_received, COALESCE(l.unit, cl.unit), cl.unit)), (0)::numeric)) AS open,
+    count(l.id) AS book_ins
+   FROM (((public.contract_lines cl
+     JOIN public.contracts c ON ((c.id = cl.contract_id)))
+     JOIN public.ingredients i ON ((i.id = cl.ingredient_id)))
+     LEFT JOIN public.lots l ON ((l.contract_line_id = cl.id)))
+  GROUP BY cl.id, i.ingredient_group_id, c.id;
 
 
 --
@@ -4976,6 +5279,13 @@ CREATE TRIGGER trg_hbt_readings_updated_at BEFORE UPDATE ON public.hbt_readings 
 --
 
 CREATE TRIGGER trg_ingredients_updated_at BEFORE UPDATE ON public.ingredients FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: lots trg_lots_pick_contract_line; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_lots_pick_contract_line BEFORE INSERT ON public.lots FOR EACH ROW EXECUTE FUNCTION public.lots_pick_contract_line();
 
 
 --
@@ -5575,6 +5885,38 @@ ALTER TABLE ONLY public.cellar_plan_parts
 
 
 --
+-- Name: contract_lines contract_lines_contract_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_lines
+    ADD CONSTRAINT contract_lines_contract_id_fkey FOREIGN KEY (contract_id) REFERENCES public.contracts(id) ON DELETE CASCADE;
+
+
+--
+-- Name: contract_lines contract_lines_ingredient_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_lines
+    ADD CONSTRAINT contract_lines_ingredient_id_fkey FOREIGN KEY (ingredient_id) REFERENCES public.ingredients(id);
+
+
+--
+-- Name: contracts contracts_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contracts
+    ADD CONSTRAINT contracts_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
+
+
+--
+-- Name: contracts contracts_supplier_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contracts
+    ADD CONSTRAINT contracts_supplier_fkey FOREIGN KEY (supplier) REFERENCES public.suppliers(name) ON UPDATE CASCADE;
+
+
+--
 -- Name: fermentation_log_entries fermentation_log_entries_batch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5887,11 +6229,43 @@ ALTER TABLE ONLY public.ingredients
 
 
 --
+-- Name: ingredients ingredients_supplier_2_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ingredients
+    ADD CONSTRAINT ingredients_supplier_2_fkey FOREIGN KEY (supplier_2) REFERENCES public.suppliers(name) ON UPDATE CASCADE;
+
+
+--
+-- Name: ingredients ingredients_supplier_3_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ingredients
+    ADD CONSTRAINT ingredients_supplier_3_fkey FOREIGN KEY (supplier_3) REFERENCES public.suppliers(name) ON UPDATE CASCADE;
+
+
+--
+-- Name: ingredients ingredients_supplier_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ingredients
+    ADD CONSTRAINT ingredients_supplier_fkey FOREIGN KEY (supplier) REFERENCES public.suppliers(name) ON UPDATE CASCADE;
+
+
+--
 -- Name: ingredients ingredients_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.ingredients
     ADD CONSTRAINT ingredients_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id);
+
+
+--
+-- Name: lots lots_contract_line_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lots
+    ADD CONSTRAINT lots_contract_line_id_fkey FOREIGN KEY (contract_line_id) REFERENCES public.contract_lines(id);
 
 
 --
@@ -5916,6 +6290,14 @@ ALTER TABLE ONLY public.lots
 
 ALTER TABLE ONLY public.lots
     ADD CONSTRAINT lots_received_by_fkey FOREIGN KEY (received_by) REFERENCES public.users(id);
+
+
+--
+-- Name: lots lots_supplier_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lots
+    ADD CONSTRAINT lots_supplier_fkey FOREIGN KEY (supplier) REFERENCES public.suppliers(name) ON UPDATE CASCADE;
 
 
 --
@@ -6907,6 +7289,74 @@ CREATE POLICY cellar_plan_parts_select ON public.cellar_plan_parts FOR SELECT TO
 --
 
 CREATE POLICY cellar_plan_parts_update ON public.cellar_plan_parts FOR UPDATE TO authenticated USING (( SELECT public.can_edit('settings'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('settings'::text) AS can_edit));
+
+
+--
+-- Name: contract_lines; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.contract_lines ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: contract_lines contract_lines_delete; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY contract_lines_delete ON public.contract_lines FOR DELETE TO authenticated USING (( SELECT public.can_delete('inventory'::text) AS can_delete));
+
+
+--
+-- Name: contract_lines contract_lines_insert; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY contract_lines_insert ON public.contract_lines FOR INSERT TO authenticated WITH CHECK (( SELECT public.can_edit('inventory'::text) AS can_edit));
+
+
+--
+-- Name: contract_lines contract_lines_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY contract_lines_select ON public.contract_lines FOR SELECT TO authenticated USING (( SELECT public.can_view('inventory'::text) AS can_view));
+
+
+--
+-- Name: contract_lines contract_lines_update; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY contract_lines_update ON public.contract_lines FOR UPDATE TO authenticated USING (( SELECT public.can_edit('inventory'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('inventory'::text) AS can_edit));
+
+
+--
+-- Name: contracts; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.contracts ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: contracts contracts_delete; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY contracts_delete ON public.contracts FOR DELETE TO authenticated USING (( SELECT public.can_delete('inventory'::text) AS can_delete));
+
+
+--
+-- Name: contracts contracts_insert; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY contracts_insert ON public.contracts FOR INSERT TO authenticated WITH CHECK (( SELECT public.can_edit('inventory'::text) AS can_edit));
+
+
+--
+-- Name: contracts contracts_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY contracts_select ON public.contracts FOR SELECT TO authenticated USING (( SELECT public.can_view('inventory'::text) AS can_view));
+
+
+--
+-- Name: contracts contracts_update; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY contracts_update ON public.contracts FOR UPDATE TO authenticated USING (( SELECT public.can_edit('inventory'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('inventory'::text) AS can_edit));
 
 
 --
@@ -8119,6 +8569,40 @@ CREATE POLICY stock_movements_update ON public.stock_movements FOR UPDATE USING 
 
 
 --
+-- Name: suppliers; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.suppliers ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: suppliers suppliers_delete; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY suppliers_delete ON public.suppliers FOR DELETE TO authenticated USING (( SELECT public.can_delete('settings'::text) AS can_delete));
+
+
+--
+-- Name: suppliers suppliers_insert; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY suppliers_insert ON public.suppliers FOR INSERT TO authenticated WITH CHECK (( SELECT public.can_edit('settings'::text) AS can_edit));
+
+
+--
+-- Name: suppliers suppliers_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY suppliers_select ON public.suppliers FOR SELECT TO authenticated USING (true);
+
+
+--
+-- Name: suppliers suppliers_update; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY suppliers_update ON public.suppliers FOR UPDATE TO authenticated USING (( SELECT public.can_edit('settings'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('settings'::text) AS can_edit));
+
+
+--
 -- Name: tanks; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -8304,6 +8788,13 @@ GRANT ALL ON FUNCTION public.can_view(p_module_key text) TO service_role;
 
 
 --
+-- Name: FUNCTION convert_quantity(q numeric, p_from text, p_to text); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION public.convert_quantity(q numeric, p_from text, p_to text) TO service_role;
+
+
+--
 -- Name: FUNCTION current_role_id(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -8340,6 +8831,21 @@ GRANT ALL ON FUNCTION public.log_batch_change() TO service_role;
 
 REVOKE ALL ON FUNCTION public.log_brew_planning_change() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.log_brew_planning_change() TO service_role;
+
+
+--
+-- Name: FUNCTION lots_pick_contract_line(); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION public.lots_pick_contract_line() TO service_role;
+
+
+--
+-- Name: FUNCTION pick_contract_line(p_supplier text, p_ingredient_id bigint, p_date date, p_unit text); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION public.pick_contract_line(p_supplier text, p_ingredient_id bigint, p_date date, p_unit text) TO service_role;
+GRANT ALL ON FUNCTION public.pick_contract_line(p_supplier text, p_ingredient_id bigint, p_date date, p_unit text) TO authenticated;
 
 
 --
@@ -8879,6 +9385,54 @@ GRANT ALL ON SEQUENCE public.cellar_plan_parts_id_seq TO service_role;
 
 
 --
+-- Name: TABLE contract_line_status; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.contract_line_status TO anon;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.contract_line_status TO authenticated;
+GRANT ALL ON TABLE public.contract_line_status TO service_role;
+GRANT SELECT ON TABLE public.contract_line_status TO claude_reader;
+
+
+--
+-- Name: TABLE contract_lines; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.contract_lines TO anon;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.contract_lines TO authenticated;
+GRANT ALL ON TABLE public.contract_lines TO service_role;
+GRANT SELECT ON TABLE public.contract_lines TO claude_reader;
+
+
+--
+-- Name: SEQUENCE contract_lines_id_seq; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,USAGE ON SEQUENCE public.contract_lines_id_seq TO anon;
+GRANT SELECT,USAGE ON SEQUENCE public.contract_lines_id_seq TO authenticated;
+GRANT ALL ON SEQUENCE public.contract_lines_id_seq TO service_role;
+
+
+--
+-- Name: TABLE contracts; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.contracts TO anon;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.contracts TO authenticated;
+GRANT ALL ON TABLE public.contracts TO service_role;
+GRANT SELECT ON TABLE public.contracts TO claude_reader;
+
+
+--
+-- Name: SEQUENCE contracts_id_seq; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,USAGE ON SEQUENCE public.contracts_id_seq TO anon;
+GRANT SELECT,USAGE ON SEQUENCE public.contracts_id_seq TO authenticated;
+GRANT ALL ON SEQUENCE public.contracts_id_seq TO service_role;
+
+
+--
 -- Name: TABLE document_types; Type: ACL; Schema: public; Owner: -
 --
 
@@ -9405,6 +9959,25 @@ GRANT SELECT ON TABLE public.stock_movements TO claude_reader;
 GRANT SELECT,USAGE ON SEQUENCE public.stock_movements_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.stock_movements_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.stock_movements_id_seq TO service_role;
+
+
+--
+-- Name: TABLE suppliers; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.suppliers TO anon;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.suppliers TO authenticated;
+GRANT ALL ON TABLE public.suppliers TO service_role;
+GRANT SELECT ON TABLE public.suppliers TO claude_reader;
+
+
+--
+-- Name: SEQUENCE suppliers_id_seq; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,USAGE ON SEQUENCE public.suppliers_id_seq TO anon;
+GRANT SELECT,USAGE ON SEQUENCE public.suppliers_id_seq TO authenticated;
+GRANT ALL ON SEQUENCE public.suppliers_id_seq TO service_role;
 
 
 --
