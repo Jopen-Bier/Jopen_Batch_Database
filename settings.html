@@ -87,6 +87,11 @@
     .eenheid-drag-handle:active { cursor: grabbing; }
     tr.eenheid-slepend { opacity: 0.4; }
     .geen-toegang { padding: 40px 0; color: #555; }
+    .sup-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 4px 0 8px; }
+    .sup-toolbar input[type="search"] { flex: 1; min-width: 180px; max-width: 300px; padding: 6px 10px; border: 1px solid #ccc; border-radius: 6px; }
+    .sup-toolbar label { font-size: 0.85em; color: #555; display: flex; gap: 6px; align-items: center; }
+    .sup-toolbar select { padding: 5px 8px; border: 1px solid #ccc; border-radius: 6px; }
+    tr.sup-saved td { transition: background 0.6s; background: #eaf3e6; }
   </style>
 </head>
 <body>
@@ -235,6 +240,29 @@
           <p id="breweries-message" class="jopen-form-melding"></p>
         </div>
 
+        <!-- Section: Suppliers -->
+        <div class="settings-sectie" id="sectie-suppliers" data-titel="Suppliers">
+          <h2>Suppliers</h2>
+          <p class="uitleg">The suppliers to choose from on the ingredient card (Supplier #1–#3) and on Book in material, and later on contracts. A change is saved as soon as you leave the field. A rename applies everywhere the supplier is used. A supplier that is used can only be made inactive: it is then no longer offered, but stays where it is used.</p>
+          <div class="sup-toolbar">
+            <input type="search" id="suppliers-search" placeholder="Search suppliers…" aria-label="Search suppliers" />
+            <label>Sort <select id="suppliers-sort" aria-label="Sort suppliers">
+              <option value="name">Name A–Z</option><option value="name-desc">Name Z–A</option>
+              <option value="used">Most used</option><option value="unused">Least used</option>
+            </select></label>
+          </div>
+          <div id="suppliers-list"><p class="jopen-subtitel">Loading…</p></div>
+          <table class="cat-tabel">
+            <tbody>
+              <tr class="cat-nieuw-rij">
+                <td><input type="text" id="supplier-new-name" placeholder="Name, e.g. 'Weyermann'…" /></td>
+                <td><button id="supplier-add-btn">Add</button></td>
+              </tr>
+            </tbody>
+          </table>
+          <p id="suppliers-message" class="jopen-form-melding"></p>
+        </div>
+
         <!-- Sectie: Ingredient declarations -->
         <div class="settings-sectie" id="sectie-declaraties" data-titel="Ingredient declarations">
           <h2>Ingredient declarations</h2>
@@ -281,6 +309,7 @@
       { id: 'action-tags', group: 'Cellar & fermentation', titel: 'Cellar action tags', laadFn: loadActionTagsSection },
       { id: 'eenheden', group: 'General', titel: 'Units', laadFn: laadEenhedenSectie },
       { id: 'breweries', group: 'General', titel: 'Breweries', laadFn: loadBreweriesSection },
+      { id: 'suppliers', group: 'General', titel: 'Suppliers', laadFn: loadSuppliersSection },
     ];
 
     let alleCategorieen = [];
@@ -1160,6 +1189,121 @@
       if (!name) return showBreweriesMessage('Enter a name for the new brewery.', 'fout');
       const ok = await breweryWrite(supabaseClient.from('breweries').insert({ name, sort_order: Math.max(0, ...breweries.map((b) => b.sort_order || 0)) + 1 }), 'Brewery added.');
       if (ok) document.getElementById('brewery-new-name').value = '';
+    });
+
+    // ----------------------------------------------------------------
+    // Section: Suppliers. Lots and ingredients reference suppliers(name)
+    // with ON UPDATE CASCADE, so a rename here applies everywhere. Changes
+    // save when a field is left (no Save button per row).
+    // ----------------------------------------------------------------
+    let suppliers = [];
+
+    function showSuppliersMessage(text, cls) {
+      const el = document.getElementById('suppliers-message');
+      el.textContent = text;
+      el.className = 'jopen-form-melding ' + (cls || '');
+    }
+
+    async function loadSuppliersSection() {
+      const container = document.getElementById('suppliers-list');
+      const [list, ingredients, lots] = await Promise.all([
+        supabaseClient.from('suppliers').select('id, name, is_active').order('name'),
+        fetchAllRows(supabaseClient.from('ingredients').select('id, supplier, supplier_2, supplier_3, version_status').order('id')),
+        fetchAllRows(supabaseClient.from('lots').select('id, supplier').order('id')),
+      ]);
+      const failed = [list, ingredients, lots].find((r) => r.error);
+      if (failed) { container.innerHTML = `<p class="jopen-form-melding fout">Could not load suppliers: ${escapeHtml(failed.error.message)}</p>`; return; }
+      // "Used" counts current ingredients; any row (also old versions) blocks a delete.
+      const count = () => new Map();
+      const current = count(), anyRow = count(), lotUse = count();
+      const add = (m, k) => { if (k) m.set(k, (m.get(k) || 0) + 1); };
+      ingredients.data.forEach((i) => [...new Set([i.supplier, i.supplier_2, i.supplier_3])].forEach((s) => {
+        add(anyRow, s);
+        if (i.version_status === 'current') add(current, s);
+      }));
+      lots.data.forEach((l) => add(lotUse, l.supplier));
+      suppliers = (list.data || []).map((s) => ({
+        ...s, ingredients: current.get(s.name) || 0, lots: lotUse.get(s.name) || 0,
+        inUse: (anyRow.get(s.name) || 0) + (lotUse.get(s.name) || 0) > 0,
+      }));
+      renderSuppliers();
+    }
+
+    function renderSuppliers() {
+      const container = document.getElementById('suppliers-list');
+      const q = document.getElementById('suppliers-search').value.trim().toLowerCase();
+      const sort = document.getElementById('suppliers-sort').value;
+      const byName = (a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' });
+      const uses = (s) => s.ingredients + s.lots;
+      const shown = suppliers.filter((s) => !q || s.name.toLowerCase().includes(q)).sort(
+        sort === 'name-desc' ? (a, b) => byName(b, a)
+          : sort === 'used' ? (a, b) => uses(b) - uses(a) || byName(a, b)
+            : sort === 'unused' ? (a, b) => uses(a) - uses(b) || byName(a, b)
+              : byName);
+      if (!suppliers.length) { container.innerHTML = '<p class="jopen-subtitel">No suppliers yet.</p>'; return; }
+      const rows = shown.map((s) => `
+        <tr data-id="${s.id}"${s.is_active ? '' : ' style="color:#999;"'}>
+          <td><input type="text" class="sup-name" value="${escapeHtml(s.name)}" aria-label="Name" /></td>
+          <td class="cat-check"><input type="checkbox" class="sup-active"${s.is_active ? ' checked' : ''} aria-label="Active" /></td>
+          <td style="font-size:0.85em; color:#555; white-space:nowrap;">${s.ingredients} ingredient${s.ingredients === 1 ? '' : 's'} · ${s.lots} book-in${s.lots === 1 ? '' : 's'}</td>
+          <td>${s.inUse ? '' : '<button class="rij-verwijder-btn sup-delete-btn">Delete</button>'}</td>
+        </tr>`).join('');
+      container.innerHTML = `
+        <table class="cat-tabel">
+          <thead><tr><th>Name</th><th class="cat-check">Active</th><th>Used</th><th></th></tr></thead>
+          <tbody>${rows || '<tr><td colspan="4" class="jopen-subtitel">No suppliers match.</td></tr>'}</tbody>
+        </table>
+        <p class="jopen-subtitel" style="font-size:0.85em;">${shown.length} of ${suppliers.length} suppliers</p>`;
+      container.querySelectorAll('tr[data-id]').forEach((tr) => {
+        tr.querySelector('.sup-name').addEventListener('change', () => saveSupplier(tr));
+        tr.querySelector('.sup-active').addEventListener('change', () => saveSupplier(tr));
+        tr.querySelector('.sup-delete-btn')?.addEventListener('click', () => deleteSupplier(tr));
+      });
+    }
+
+    async function saveSupplier(tr) {
+      const s = suppliers.find((x) => String(x.id) === tr.dataset.id);
+      const nameInput = tr.querySelector('.sup-name');
+      const name = nameInput.value.trim();
+      if (!name) { nameInput.value = s.name; return showSuppliersMessage('Name cannot be empty.', 'fout'); }
+      const changes = { name, is_active: tr.querySelector('.sup-active').checked };
+      if (name !== s.name && (s.ingredients + s.lots) &&
+        !confirm(`Rename "${s.name}" to "${name}"? This changes it on ${s.ingredients} ingredients and ${s.lots} book-ins.`)) {
+        nameInput.value = s.name;
+        return;
+      }
+      const { error } = await supabaseClient.from('suppliers').update(changes).eq('id', s.id);
+      if (error) {
+        nameInput.value = s.name;
+        return showSuppliersMessage(error.code === '23505' ? `"${name}" already exists.` : 'Save failed: ' + error.message, 'fout');
+      }
+      Object.assign(s, changes);
+      tr.style.color = s.is_active ? '' : '#999';
+      tr.classList.add('sup-saved');
+      setTimeout(() => tr.classList.remove('sup-saved'), 900);
+      showSuppliersMessage(`Saved "${name}".`, 'ok');
+    }
+
+    async function deleteSupplier(tr) {
+      const s = suppliers.find((x) => String(x.id) === tr.dataset.id);
+      if (!confirm(`Delete supplier "${s.name}"?`)) return;
+      const { error } = await supabaseClient.from('suppliers').delete().eq('id', s.id);
+      if (error) return showSuppliersMessage(error.code === '23503' ? 'Could not delete: it is in use. Make it inactive instead.' : 'Delete failed: ' + error.message, 'fout');
+      showSuppliersMessage('Deleted.', 'ok');
+      loadSuppliersSection();
+    }
+
+    document.getElementById('suppliers-search').addEventListener('input', renderSuppliers);
+    document.getElementById('suppliers-sort').addEventListener('change', renderSuppliers);
+    document.getElementById('supplier-add-btn').addEventListener('click', async () => {
+      const input = document.getElementById('supplier-new-name');
+      const name = input.value.trim();
+      if (!name) return showSuppliersMessage('Enter a name for the new supplier.', 'fout');
+      const { error } = await supabaseClient.from('suppliers').insert({ name });
+      if (error) return showSuppliersMessage(error.code === '23505' ? `"${name}" already exists.` : 'Save failed: ' + error.message, 'fout');
+      input.value = '';
+      showSuppliersMessage(`Added "${name}".`, 'ok');
+      loadSuppliersSection();
     });
 
     // ----------------------------------------------------------------

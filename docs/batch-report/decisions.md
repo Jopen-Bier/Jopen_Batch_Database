@@ -119,6 +119,7 @@ Agreed with Jaap. Date = when decided. Do not change without asking.
 | 03-11 | User-defined ingredient specifications: not now, later when really needed (Jaap). |
 | 04-11 | Packaging is its own database (Databases › Packaging, tabs SKUs and Materials), out of Settings, with its own permission module `packaging` (admin and Head brewer for now). Materials get a category and a reorder level to prepare packaging stock keeping. On the Filling report "Used" stays empty next to Expected: the operator fills in the real count, so losses stay visible. |
 | 10-11 | The Addition step chooser allows several steps at once (checkboxes + Select all): additions often go in together (Jaap). |
+| 10-11 | Suppliers become a fixed list (Settings › General › Suppliers), step 1 of Contracts: names cleaned up with Jaap (YCH/Yakima → Yakima Chief Hops, BarthHaas, SBI, …); the supplier text columns reference `suppliers(name)` on update cascade; supplier mandatory on Book in material, plus order date and order number. Contracts will count a book-in against the oldest open contract (for now). |
 
 ## Parked (do not build yet)
 - Closing the filling report (Completed / Signed) and the "Entered in Mdrank"
