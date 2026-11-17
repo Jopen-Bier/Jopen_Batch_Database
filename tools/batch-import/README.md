@@ -30,3 +30,5 @@ repo, run Python with `-I`, and pass paths as arguments.
   documents" in Jopen-Bier/batch-reports-2026.
 - `labeldiff.py <dump_a.tsv> <dump_b.tsv>`: per sheet, which text labels sit
   in the same cell in both workbooks and which moved.
+- `compare.py`, `gap.py`, `gap_sql.py`, `fix_sql.py`: the second round (17-11):
+  field-by-field comparison with the app and guarded SQL; see `import-2026.md`.

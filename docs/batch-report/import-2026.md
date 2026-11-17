@@ -329,3 +329,34 @@ production matches the local test (stages: closed 258, filled 35,
 fermentation 29, filling 15, lagering 7, brewing 2, raw 8 = batches without
 a workbook or not yet brewed). A later re-import is not needed: every file
 is rerun-safe (a batch with data, or an existing transfer, is skipped).
+
+## Second round: in-progress and new batches (17-11-2026)
+123 updated workbooks (batches in progress on 22-10 and 26354-26390) were
+compared with the app field by field instead of skipping batches with data:
+brewing and the cellar log had been entered in the app next to Excel,
+processing / HBT / filling only in Excel.
+
+- `compare.py <reader_out> <app.json> <out.json>`: per batch, tab, row and
+  field: add (workbook only), same, differs, app_only. Log rows match on the
+  moment, else on the day with the same Plato, else one-to-one on the day.
+- `gap.py <reader_out> <app.json> <gap.json>`: what the app is missing (rows
+  and empty fields); never overwrites.
+- `gap_sql.py <gap.json> <app.json> <out.sql> [--dry-run] [--strip] [batch...]`:
+  one DO block, per batch a guard on the row counts seen at the comparison
+  and an md5 of the data (computed against a local Postgres on port 5433),
+  so a changed batch or a copy error rolls everything back.
+- `fix_sql.py <out.sql> [--dry-run]`: Jaap's decisions on the differences
+  (`fix.json`); each field is only changed while the app still holds the
+  value seen at the comparison.
+
+Decisions (Jaap, 17-11): Claude runs the SQL itself for this import (dry run
+first, then the run, then a check on production). The workbook is right in
+most differences; app-written log text (Time 0, transfers, "registered
+afterwards") is kept; brew comments are not imported; template yeast values
+of batches not yet started and a yeast weight of 0 are not imported.
+
+Result: 64 batches filled (324 log rows, 5 brews, 29 processing sessions,
+40 HBT fills, 47 filling sessions, empty fields), 104 differences set to the
+workbook, 5 transfers (26357 was created as a name-only recipe and batch),
+185 documents uploaded. 30 batches moved on in stage (none closed by the
+import itself; 26276 and 26320 closed by their documents).
