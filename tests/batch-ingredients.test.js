@@ -14,7 +14,10 @@ assert.strictEqual(b.toNumber('abc'), null);
 assert.deepStrictEqual(b.amountBasis('malt', 'kg'), { per: 'brew', unit: 'kg' });
 assert.deepStrictEqual(b.amountBasis('malt', null), { per: 'brew', unit: 'kg' });
 assert.deepStrictEqual(b.amountBasis('boil_hop', 'g'), { per: 'brew', unit: 'g' });
-assert.deepStrictEqual(b.amountBasis('dry_hop', 'g'), { per: 'batch', unit: 'g' });
+assert.deepStrictEqual(b.amountBasis('dry_hop', 'g'), { per: 'brew', unit: 'g' });   // per brew, as in the Excel (19-11)
+assert.deepStrictEqual(b.amountBasis('dry_hop', null), { per: 'brew', unit: 'g' });
+// Excel check: Citra T45 dry hop 7500 g × 8 brews = 60 kg
+assert.deepStrictEqual(b.batchAmount('dry_hop', 'g', 7500, { brewCount: 8, brewVolumeHl: 44.5 }), { q: 60000, unit: 'g' });
 assert.deepStrictEqual(b.amountBasis('brewhouse_addition', 'g/hl'), { per: 'hl', unit: 'g' });
 assert.deepStrictEqual(b.amountBasis('cellar_addition', 'ml / hl'), { per: 'hl', unit: 'ml' });
 assert.deepStrictEqual(b.amountBasis('cellar_addition', 'mg/l'), { per: 'l', unit: 'mg' });
@@ -44,9 +47,9 @@ const bevasil = row({ id: 4, addition_type: 'cellar_addition', unit: 'ml/hl', re
 const protafloc = row({ id: 5, addition_type: 'brewhouse_addition', unit: 'g/hl', recipe_quantity: 2.75, quantity: 2.75, is_removed: true, ingredient_id: 15 });
 const same = row({ id: 6, addition_type: 'malt', unit: 'kg', recipe_quantity: 380, quantity: 380, ingredient_id: 16 });
 
-assert.deepStrictEqual(b.deviationDelta(cas90, ctx), { q: -2000, unit: 'g' });
-assert.strictEqual(b.formatAmount(b.deviationDelta(cas90, ctx), { signed: true }), '−2.0 kg');
-assert.strictEqual(b.formatAmount(b.deviationDelta(cas45, ctx), { signed: true }), '+1.0 kg');
+assert.deepStrictEqual(b.deviationDelta(cas90, ctx), { q: -4000, unit: 'g' });   // (8000 − 10000) × 2 brews
+assert.strictEqual(b.formatAmount(b.deviationDelta(cas90, ctx), { signed: true }), '−4.0 kg');
+assert.strictEqual(b.formatAmount(b.deviationDelta(cas45, ctx), { signed: true }), '+2.0 kg');
 assert.deepStrictEqual(b.deviationDelta(pale, ctx), { q: 20, unit: 'kg' });
 assert.strictEqual(b.formatAmount(b.deviationDelta(pale, ctx), { signed: true }), '+20 kg');
 assert.strictEqual(b.formatAmount(b.deviationDelta(bevasil, ctx), { signed: true }), '+400 ml');
@@ -99,14 +102,14 @@ assert.strictEqual(b.boilTimeMin('45'), 45);
 assert.strictEqual(b.boilTimeMin('0 min'), 0);
 assert.strictEqual(b.boilTimeMin('warm'), null);
 
-// Hop totals over the batch: boil per brew × brews, dry hop as is, removed rows left out
+// Hop totals over the batch: boil and dry hop per brew × brews, removed rows left out
 const totals = b.hopTotals([
   row({ addition_type: 'boil_hop', unit: 'g', quantity: 2500, ingredient_id: 21 }),
   row({ addition_type: 'dry_hop', unit: 'g', quantity: 7500, ingredient_id: 21 }),
   row({ addition_type: 'boil_hop', unit: 'g', quantity: 250, ingredient_id: 22 }),
   row({ addition_type: 'dry_hop', unit: 'g', quantity: 1000, ingredient_id: 23, is_removed: true }),
 ], ctx, { 21: 'Citra T45', 22: 'Flex hop', 23: 'Cascade' });
-assert.deepStrictEqual(totals, [{ name: 'Citra T45', boilG: 5000, dryG: 7500 }, { name: 'Flex hop', boilG: 500, dryG: 0 }]);
+assert.deepStrictEqual(totals, [{ name: 'Citra T45', boilG: 5000, dryG: 15000 }, { name: 'Flex hop', boilG: 500, dryG: 0 }]);
 
 // Formatting
 assert.strictEqual(b.formatAmount({ q: 2.75, unit: 'g' }), '2.75 g');

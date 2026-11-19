@@ -72,7 +72,9 @@ their own screen). Filters: search, status, year (default all years), WP/JK.
   read-only).
 - Ingredient cards from `batch_ingredients`: Malt & Grains, Hops and Herbs
   (grouped by timing, EBU per line + total vs spec), Hops total weights
-  (bar per hop: boil vs dry hop), Additions brewing, Yeasts, Additions cellar.
+  (bar per hop: boil vs dry hop; boil and dry hop amounts per brew × brews),
+  Additions brewing (amount / ratio, Per brew, Batch total; a plain amount is
+  already the batch total), Yeasts, Additions cellar.
   - Editable: amount, alpha, EBC; added rows also name (ingredient search),
     unit, timing. Buttons "+ Malt", "+ Boil hop", "+ Dry hop", "+ Addition",
     "+ Yeast", "+ Cellar addition". Delete = soft (`is_removed`).

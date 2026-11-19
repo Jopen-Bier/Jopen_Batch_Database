@@ -41,8 +41,9 @@ function sameNumber(a, b) {
 /**
  * How a recipe amount scales to the whole batch, from its unit and type.
  * Returns { per: 'hl'|'l'|'brew'|'batch', unit } where unit is the unit of
- * the batch total. Malt and boil hop amounts without a rate are per brew;
- * dry hop and other absolute amounts are batch totals (decision 09-10).
+ * the batch total. Malt, boil hop and dry hop amounts without a rate are per
+ * brew (dry hop per brew: Jaap, 19-11, as in the Excel); other absolute
+ * amounts are batch totals (decision 09-10).
  */
 function amountBasis(additionType, unit) {
   const u = String(unit || '').trim().toLowerCase();
@@ -51,10 +52,10 @@ function amountBasis(additionType, unit) {
   if (rate) return { per: rate[2], unit: rate[1] };
   if (!u) {
     if (additionType === 'malt') return { per: 'brew', unit: 'kg' };
-    if (additionType === 'boil_hop') return { per: 'brew', unit: 'g' };
+    if (additionType === 'boil_hop' || additionType === 'dry_hop') return { per: 'brew', unit: 'g' };
     return null;   // unknown unit: no batch amount
   }
-  if (additionType === 'malt' || additionType === 'boil_hop') return { per: 'brew', unit: u };
+  if (additionType === 'malt' || additionType === 'boil_hop' || additionType === 'dry_hop') return { per: 'brew', unit: u };
   return { per: 'batch', unit: u };
 }
 
@@ -186,7 +187,7 @@ function boilTimeMin(timing) {
 
 /**
  * Hop weights per hop over the whole batch: [{ name, boilG, dryG }], heaviest
- * first. Boil amounts are per brew, dry hop amounts are batch totals.
+ * first. Boil and dry hop amounts are per brew (× brews).
  */
 function hopTotals(rows, ctx, names = {}) {
   const totals = new Map();

@@ -56,7 +56,7 @@ ignoring case; no longer generated from the name (21-10).
   deviations.
 - Δ batch total per row, per unit (`batch-ingredients.js`, `amountBasis`):
   - malt: (quantity − recipe_quantity) × brew_count (kg/brew)
-  - boil hops: × brew_count (g/brew); dry hops: batch total (g)
+  - boil hops and dry hops: × brew_count (g/brew; dry hop per brew since 19-11, as in the Excel)
   - per hl (`g/hl`, `ml/hl`, `kg/hl`, `l/hl`, …): × total volume hl
     (brew volume × brew count)
   - per litre (`g/l`, `ml/l`, `mg/l`, `ppm` = mg/l): × total volume hl × 100
