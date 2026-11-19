@@ -1,8 +1,10 @@
 // supabase/functions/_shared/email-templates.ts
 //
 // HTML for the account e-mails sent from database@jopenbier.nl (English
-// only). Layout from supabase-invite-email-template.html: Outlook renders
-// mail with Word, so tables, inline styles and bgcolor only.
+// only). The logo (Storage bucket "Jopen art", red on transparent, 586x650)
+// sits on a white header: on red it disappears. Layout from
+// supabase-invite-email-template.html: Outlook renders mail with Word, so
+// tables, inline styles and bgcolor only.
 
 // Page that turns a token_hash link into a session and asks for a password.
 // Links point here, not at Supabase's /auth/v1/verify: mail scanners such as
@@ -32,7 +34,8 @@ function layout(title: string, bodyHtml: string, footer: string): string {
 <body style="margin:0; padding:0; background-color:#f4f4f2; font-family:Arial, Helvetica, sans-serif;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#f4f4f2" style="background-color:#f4f4f2; padding:24px 0;"><tr><td align="center">
 <table role="presentation" width="480" cellpadding="0" cellspacing="0" bgcolor="#ffffff" style="background-color:#ffffff; border:1px solid #e5e5e0;">
-<tr><td bgcolor="#E0001D" style="background-color:#E0001D; padding:20px 32px;" align="left"><img src="${LOGO}" alt="Jopen" width="48" height="48" style="display:block; background:#ffffff; padding:4px;"></td></tr>
+<tr><td bgcolor="#ffffff" style="background-color:#ffffff; padding:24px 32px 16px 32px;" align="left"><img src="${LOGO}" alt="Jopen" width="64" height="71" style="display:block; border:0;"></td></tr>
+<tr><td bgcolor="#E0001D" height="4" style="background-color:#E0001D; height:4px; font-size:0; line-height:0;">&nbsp;</td></tr>
 <tr><td style="padding:32px;">
 <h1 style="margin:0 0 16px 0; font-size:20px; color:#222222;">${escapeHtml(title)}</h1>
 ${bodyHtml}
