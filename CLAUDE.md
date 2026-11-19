@@ -20,6 +20,12 @@ Working on the digital batch report? Start at `docs/batch-report/README.md`.
 - No duplicate fields: one fact, one column, one table.
 - RLS on every table, via the permission helpers; DELETE consistent with EDIT
   per role.
+- `anon` (not logged in) has no rights in `public` (security phase 1,
+  19-11-2026). New policies are `to authenticated`. New tables get no anon
+  grant by default, but new functions are executable by PUBLIC by default:
+  every new function gets `revoke execute … from public, anon` plus an
+  explicit `grant execute … to authenticated` (and `claude_reader` if a view
+  it reads calls the function).
 - `supabase/migrations/` is auto-executed on production by the GitHub
   integration. A migration run by hand (SQL Editor) must be registered in
   `supabase_migrations.schema_migrations` **before** its file is pushed.
