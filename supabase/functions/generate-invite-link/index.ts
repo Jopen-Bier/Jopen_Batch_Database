@@ -10,9 +10,16 @@
 // Zelfde beveiligingspatroon als invite-user/delete-user: het JWT van de
 // aanroeper wordt gecheckt, en pas als die zelf 'admin' is, mag de actie
 // doorgaan. De service_role key blijft veilig binnen de function.
+//
+// With `send: true` (Users page since 2026-11) the invite is also e-mailed
+// from database@jopenbier.nl via Microsoft Graph (_shared/graph-mail.ts) and
+// logged in email_log. The link is always returned too, so the page can fall
+// back to "copy and send it yourself" when sending fails.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { sendLoggedMail } from "../_shared/graph-mail.ts";
+import { inviteEmail } from "../_shared/email-templates.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -32,6 +39,7 @@ serve(async (req) => {
     const email: string | undefined = body.email;
     const name: string | undefined = body.name ?? body.naam; // `naam`: pre-2026-10-16 page
     const resendUserId: string | undefined = body.user_id; // new link for an existing account
+    const send = body.send === true; // also e-mail the invite (otherwise: link only)
     // Initials as written on the floor (typed by hand; unique, ignoring case).
     const initials: string | null = typeof body.initials === "string" && body.initials.trim()
       ? body.initials.trim().toUpperCase().slice(0, 4) : null;
@@ -59,6 +67,21 @@ serve(async (req) => {
 
     const REDIRECT_TO = "https://jopen-bier.github.io/Jopen_Batch_Database/accept-invite.html";
 
+    // Sends the invite mail when asked; returns the extra response fields.
+    // A failed send is not an error for the request: the account exists and
+    // the page shows the link to send by hand.
+    const deliver = async (link: string, to: string, toName: string) => {
+      if (!send) return {};
+      const { data: me } = await adminClient.from("users").select("name").eq("id", callerData.user.id).maybeSingle();
+      const mail = inviteEmail(link, toName || "there", me?.name || "An administrator at Jopen Brouwerij");
+      try {
+        await sendLoggedMail(adminClient, { to: [{ email: to, name: toName || null }], ...mail }, { type: "invite", sentBy: callerData.user.id });
+        return { sent: true };
+      } catch (err) {
+        return { sent: false, send_error: (err as Error).message };
+      }
+    };
+
     // New invite link for an account that exists but has never logged in
     // (accounts made ahead, invite sent later: the first link has expired by
     // then). Same own-page link as below; see the note on prefetching there.
@@ -85,7 +108,9 @@ serve(async (req) => {
         return json({ error: `Could not generate invite link: ${againErr?.message ?? "unknown error"}` }, 500);
       }
       const link = `${REDIRECT_TO}?token_hash=${encodeURIComponent(again.properties.hashed_token)}&type=${type}`;
-      return json({ success: true, action_link: link, email: target.user.email }, 200);
+      const { data: targetRow } = await adminClient.from("users").select("name").eq("id", resendUserId).maybeSingle();
+      const extra = await deliver(link, target.user.email, targetRow?.name ?? "");
+      return json({ success: true, action_link: link, email: target.user.email, ...extra }, 200);
     }
 
     // Role: role_id (current page) or a role name (pre-2026-10-16 page).
@@ -144,7 +169,8 @@ serve(async (req) => {
     // accept-invite.html zelf wisselt 'm client-side in via verifyOtp().
     const eigenLink = `${REDIRECT_TO}?token_hash=${encodeURIComponent(linkData.properties.hashed_token)}&type=invite`;
 
-    return json({ success: true, action_link: eigenLink }, 200);
+    const extra = await deliver(eigenLink, email!, name!);
+    return json({ success: true, action_link: eigenLink, email, ...extra }, 200);
   } catch (e) {
     return json({ error: String(e) }, 500);
   }

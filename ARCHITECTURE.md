@@ -72,7 +72,7 @@ supabase/
   migrations/              every schema change, in order (see §5.4)
   schema.sql               full structure dump, refreshed nightly = the baseline
   rename-map.json          agreed Dutch → English names (transition source of truth)
-  functions/               Edge Functions (generate-invite-link, delete-user)
+  functions/               Edge Functions (generate-invite-link, delete-user, auth-email; _shared/ = Graph mail + e-mail templates, see §6b)
 docs/batch-report/         brief for the digital batch report (decisions, data model, rules, screens, phases, mockup)
 tests/                     Node tests for shared modules (run by the Guard workflow)
 tools/                     translation-layer scripts + ci_guard.py (see tools/README.md)
@@ -253,7 +253,7 @@ Agreed table and column names per table: `supabase/rename-map.json`.
 | `recipe-analytics.html` | analytics | batch_volume_balance (view), recipes; Losses via `recipe-losses.js` + `filling-report.js`; Brewhouse efficiency via `brewhouse-efficiency.js` + `batch-ingredients.js` from batch_brews, batches, batch_ingredients (+ ingredients.extract_pct); writes batch_brews.efficiency_accepted_* (Mark as good, batches edit right) |
 | `settings.html` | settings | units, ingredient_categories, document_types, ingredient_declarations, water_settings (+ _history), cellar_action_tags, cellar_plan_parts (`apply_cellar_plan_order()`), recipe_ingredients (count), breweries (+ recipes, count), suppliers (+ ingredients / lots, count; `lots.supplier` and `ingredients.supplier/_2/_3` reference `suppliers(name)` on update cascade) |
 | `packaging.html` | packaging | packaging_articles (SKUs) + packaging_article_materials (bill of materials), packaging_materials (category, reorder level for the packaging stock to come), filling_session_articles/_materials (count, to block deleting what is booked) |
-| `gebruikers.html` | admin only (`user_management`) | users (incl. `report_subscriptions`), roles, `admin_get_last_logins()` |
+| `gebruikers.html` | admin only (`user_management`) | users (incl. `report_subscriptions`), roles, `admin_get_last_logins()`, Edge Function `generate-invite-link` (sends the invitation) |
 | `rollen.html` | admin only (`role_management`) | roles, role_permissions, permission_modules |
 | `status.html` | admin only | counts on batches, recipes, ingredients, users |
 
@@ -349,6 +349,30 @@ rewriting every page at once, the boundary between the two is the query:
   calls go away. Search for `toDb(`, `fromDb` and `:` aliases to find what is
   left.
 - New code never uses the layer: English names end to end.
+
+## 6b. E-mail (database@jopenbier.nl)
+All mail from the app goes out from `database@jopenbier.nl` through
+Microsoft Graph (Entra ID app registration, application permission
+`Mail.Send`, client-credentials flow), never from the browser:
+
+| Mail | Sent by |
+|---|---|
+| Invitation (Users page, "Create account" / "Resend invitation") | `generate-invite-link` with `send: true` |
+| Password reset ("Forgot password" on the login page) | `auth-email` = Supabase Auth Send Email Hook |
+| Invitation from the Supabase Dashboard | `auth-email` |
+
+- Shared code in `supabase/functions/_shared/`: `graph-mail.ts` (token,
+  send, log) and `email-templates.ts` (English HTML templates).
+- Every attempt (sent or failed) is a row in `email_log`, written by the
+  functions only; readable with `user_management` view rights.
+- Links in account mail point to `accept-invite.html?token_hash=…`, never to
+  Supabase's `/auth/v1/verify` (mail scanners would use up the token).
+- Edge Function secrets (Dashboard > Edge Functions > Secrets, never in the
+  repo): `MS_TENANT_ID`, `MS_CLIENT_ID`, `MS_CLIENT_SECRET`, `MAIL_SENDER`,
+  `SEND_EMAIL_HOOK_SECRET`. The client secret expires (IT sets the date):
+  renew it before then or invitations and password resets stop.
+- `auth-email` is deployed with `verify_jwt = false`; it checks the hook
+  signature instead.
 
 ## 7. Language of code
 

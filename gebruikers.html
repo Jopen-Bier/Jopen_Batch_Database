@@ -135,7 +135,6 @@
 <hr style="border:none; border-top:1px solid #eeeeee; margin:20px 0;">
 <p style="font-size:13px; line-height:1.5; color:#777777;"><b>Not phishing:</b> this email was sent because __INVITER__ (an administrator at Jopen Brouwerij) added your email address to the Batch Database. If you weren't expecting this invitation, or you're unsure about the sender, please contact __INVITER__ before clicking the button.</p>
 <p style="font-size:13px; line-height:1.5; color:#777777;">We will never ask you to share your password by email.</p>
-<p style="font-size:13px; line-height:1.5; color:#777777;">One more heads-up: if you ever use "Forgot password" to reset your password, that email will look much plainer than this one (sent from noreply@mail.app.supabase.io, no logo). That's expected &mdash; it's the underlying system sending it directly, not us.</p>
 <p style="font-size:11px; color:#999999; border-top:1px solid #eeeeee; padding-top:10px;">Jopen Batch Database &middot; internal system of Jopen Brouwerij (Haarlem)</p>
 </div>`;
 
@@ -158,10 +157,6 @@
         `Not phishing: this email was sent because ${inviter} (an administrator at Jopen Brouwerij)`,
         'added your email address to the Batch Database. If you were not expecting this, contact',
         `${inviter} before clicking the link. We will never ask you to share your password by email.`,
-        '',
-        'One more heads-up: if you ever use "Forgot password" to reset your password, that email',
-        'will look much plainer than this one (sent from noreply@mail.app.supabase.io, no logo).',
-        "That's expected — it's the underlying system sending it directly, not us.",
       ].join('\n');
     }
 
@@ -178,11 +173,13 @@
         return;
       }
 
-      setMessage(msg, 'Generating link…');
+      if (!confirm(`Are you sure you want to send an invitation to ${name} (${email})?`)) return;
+
+      setMessage(msg, 'Creating account and sending invitation…');
       resultDiv.style.display = 'none';
 
       const { data, error } = await supabaseClient.functions.invoke('generate-invite-link', {
-        body: { email, name, role_id: roleId, initials: initials || null },
+        body: { email, name, role_id: roleId, initials: initials || null, send: true },
       });
 
       if (error || data?.error) {
@@ -191,14 +188,27 @@
           const body = await error.context.json();
           if (body?.error) detail = body.error;
         } catch (_) { /* no JSON body or no error.context: keep what we have */ }
-        setMessage(msg, 'Could not generate link: ' + detail, 'error');
+        setMessage(msg, 'Could not create the account: ' + detail, 'error');
         return;
       }
 
-      setMessage(msg, `Account created for ${email} — use the buttons below to send the invite yourself.`, 'ok');
-      showInviteLink(data.action_link, email, name);
+      document.getElementById('invite-form').reset();
+      reportInviteSent(data, name, email);
       loadUserList();
     });
+
+    // After generate-invite-link with send: true. Sent: done. Not sent (e.g.
+    // Microsoft refused it): the account exists, so show the link block to
+    // send the invitation by hand.
+    function reportInviteSent(data, name, email) {
+      const msg = document.getElementById('invite-message');
+      if (data.sent) {
+        setMessage(msg, `Invitation sent to ${name} (${email}).`, 'ok');
+        return;
+      }
+      setMessage(msg, `Account ready for ${name}, but the invitation could not be sent (${data.send_error || 'unknown error'}). Use the buttons below to send it yourself.`, 'error');
+      showInviteLink(data.action_link, email, name);
+    }
 
     // Fills the "Open Email" / "Copy Email content" block for an invite link.
     function showInviteLink(link, email, name) {
@@ -227,12 +237,13 @@
       const id = tr.dataset.id;
       const name = tr.children[0].textContent;
       const msg = document.getElementById('invite-message');
-      setMessage(msg, `Generating a new link for ${name}…`);
+      if (!confirm(`Are you sure you want to send a new invitation to ${name}?`)) return;
+      setMessage(msg, `Sending a new invitation to ${name}…`);
       document.getElementById('link-result').style.display = 'none';
       document.getElementById('invite-form').scrollIntoView({ behavior: 'smooth' });
 
       const { data, error } = await supabaseClient.functions.invoke('generate-invite-link', {
-        body: { user_id: id },
+        body: { user_id: id, send: true },
       });
       if (error || data?.error) {
         let detail = data?.error || error.message;
@@ -243,8 +254,7 @@
         setMessage(msg, 'Could not generate link: ' + detail, 'error');
         return;
       }
-      setMessage(msg, `New invite link for ${name} (${data.email}) — use the buttons below to send it.`, 'ok');
-      showInviteLink(data.action_link, data.email, name);
+      reportInviteSent(data, name, data.email);
     }
 
     function formatLastLogin(iso) {
@@ -310,7 +320,7 @@
               ? `<button class="user-save-btn">Save</button>
                  <span class="user-self">(you)</span>`
               : `<button class="user-save-btn">Save</button>
-                 ${lastLoginByUser[u.id] || loginsResult.error ? '' : '<button class="user-link-btn" title="The account has never logged in: make a fresh invite link">New invite link</button>'}
+                 ${lastLoginByUser[u.id] || loginsResult.error ? '' : '<button class="user-link-btn" title="The account has never logged in: e-mail a fresh invitation">Resend invitation</button>'}
                  <button class="user-delete-btn">Delete</button>`}
             <span class="user-row-status"></span>
           </td>
