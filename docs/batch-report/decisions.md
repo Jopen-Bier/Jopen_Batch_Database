@@ -30,7 +30,7 @@ Agreed with Jaap. Date = when decided. Do not change without asking.
 | 19-10 | Brewers get delete rights on batches (role matrix), consistent with edit (Jaap). |
 | 19-10 | **Lots per batch ingredient come from `stock_movements`** (consumption booked on the batch). No separate lot table. Corrections after deviations are stock movements with `is_correction` (existing accounting sign-off). |
 | 19-10 | HBT tables: `batch_hbts`, `hbt_readings`. `hbt`, `glt`, `lt`, `ckt` are kept as lowercase plant abbreviations. |
-| 09-10 | Dry hop and cellar amounts in the recipe are batch totals. |
+| 09-10 | Dry hop and cellar amounts in the recipe are batch totals. (Dry hop: replaced on 19-11, see below.) |
 | 09-10 | Volume tolerance ±0.5 hl. HBT end value = its last reading. |
 
 ## Fermentation / cellar
@@ -121,6 +121,7 @@ Agreed with Jaap. Date = when decided. Do not change without asking.
 | 10-11 | The Addition step chooser allows several steps at once (checkboxes + Select all): additions often go in together (Jaap). |
 | 10-11 | Suppliers become a fixed list (Settings › General › Suppliers), step 1 of Contracts: names cleaned up with Jaap (YCH/Yakima → Yakima Chief Hops, BarthHaas, SBI, …); the supplier text columns reference `suppliers(name)` on update cascade; supplier mandatory on Book in material, plus order date and order number. Contracts will count a book-in against the oldest open contract (for now). |
 | 10-11 | Contracts (Inventory › Contracts): contract per supplier with ingredient lines (amount, unit, price); a book-in counts automatically against the oldest started line of that supplier and ingredient with an open amount (order date, else received date), else the newest (going over is allowed). End date not checked yet; old book-ins stay unlinked. Stock overview shows a Contract button with the open amount. |
+| 19-11 | Dry hop amounts in the recipe are per brew, like boil hops: the batch total is amount × brews, as in the Excel batch report (Citra T45 7,500 g × 8 = 60 kg). Applies to the Batch column, Hops total weights, deviations and the picking list. Cellar additions stay batch totals. |
 
 ## Parked (do not build yet)
 - Closing the filling report (Completed / Signed) and the "Entered in Mdrank"

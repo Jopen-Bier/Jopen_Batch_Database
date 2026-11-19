@@ -33,9 +33,9 @@ cooling + dryhopping (same row).
 
 ## Deviations (Overview)
 Batch of 2 brews × 40 hl.
-- Dry hop Cascade T90 recipe 10,000 g, batch 8,000 g → Δ **−2.0 kg**,
-  order picking complete → "Return to same lot · CAS90-2025-088".
-- Dry hop Cascade T45 2,500 → 3,500 g → Δ **+1.0 kg** → "Extra issue · …".
+- Dry hop Cascade T90 recipe 10,000 g/brew, batch 8,000 g/brew → Δ (8,000 − 10,000) × 2
+  = **−4.0 kg**, order picking complete → "Return to same lot · CAS90-2025-088".
+- Dry hop Cascade T45 2,500 → 3,500 g/brew → Δ **+2.0 kg** → "Extra issue · …".
 - Malt Pale Ale 405 kg/brew → 415 → Δ (415 − 405) × 2 = **+20 kg**.
 - Bevasil 40 ml/hl → 45 ml/hl → Δ 5 × 80 = **+400 ml**.
 - Removed Protafloc 2.75 g/hl → Δ −2.75 × 80 = **−220 g**, change "Removed".

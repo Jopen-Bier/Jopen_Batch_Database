@@ -415,7 +415,7 @@
           <tr class="tot first"><td colspan="7">Calculated total EBU <span class="br-note" style="font-weight:400;">${spec === null ? '' : `· spec ${fmt(spec)}${tol !== null ? ' ±' + fmt(tol) : ''}`}</span></td>
             <td class="cv ${inSpec === null ? '' : inSpec ? 'ok' : 'bad'}">${rows.some((r) => r.addition_type === 'boil_hop') ? total.toFixed(1) : '—'}</td><td colspan="3"></td></tr>
         </tbody></table>`;
-      const note = `<span class="br-note">EBU from original extract ${og === null ? '—' : fmt(og, 1) + ' °P'} and boil volume ${boilVolume === null ? '—' : fmt(boilVolume, 1) + ' hl'} · boil amounts per brew, dry hop per batch</span>`;
+      const note = `<span class="br-note">EBU from original extract ${og === null ? '—' : fmt(og, 1) + ' °P'} and boil volume ${boilVolume === null ? '—' : fmt(boilVolume, 1) + ' hl'} · hop amounts per brew</span>`;
       return cardHtml('Hops and Herbs', table, [{ type: 'boil_hop', label: '+ Boil hop' }, { type: 'dry_hop', label: '+ Dry hop' }], note);
     }
 
@@ -449,8 +449,13 @@
     }
 
     // Additions Brewing / Yeasts / Additions Cellar: same columns, different amount column.
+    // Additions Brewing shows the amount per brew and the batch total (19-11).
     function additionCard(type, title, buttonLabel, amountHeader, perBrew) {
       const ctx = amountCtx();
+      // A plain amount (g, ml, …) is already the batch total: no per brew amount.
+      const isBatchTotal = (r) => { const basis = amountBasis(type, r.unit); return !!basis && basis.per === 'batch'; };
+      const batchCell = (r) => (yeastByRatio(r) ? '<span class="br-note">Calculated on brew day</span>'
+        : escapeHtml(formatAmount(batchAmount(type, r.unit, r.quantity, ctx))));
       // zinc sulphate, then extra additions per batch, last: as on Brewing
       const rows = type === 'brewhouse_addition' ? brewingAdditionOrder(visibleRows([type]), ingredientName) : visibleRows([type]);
       const body = rows.map((r) => {
@@ -460,16 +465,17 @@
           <td style="width:90px;">${numberInput(r, 'quantity', r.quantity, quantityDiffers(r), 'Amount')}</td>
           <td class="small" style="width:90px;">${r.is_added ? unitSelect(r) : escapeHtml(r.unit || '—')}</td>
           <td class="n" style="width:140px;">${yeastByRatio(r) ? '<span class="br-note">Calculated on brew day</span>'
-            : perBrew && isPerBatchAddition(r) ? `${escapeHtml(formatAmount({ q: num(r.quantity), unit: r.unit }))} <span class="br-note">batch total</span>`
-              : escapeHtml(formatAmount(amount))}${zincGramsNote(r)}</td>
+            : perBrew && isBatchTotal(r) ? '<span class="br-note">batch total →</span>'
+              : escapeHtml(formatAmount(amount))}${perBrew ? '' : zincGramsNote(r)}</td>
+          ${perBrew ? `<td class="n" style="width:120px;"><b>${batchCell(r)}</b>${zincGramsNote(r)}</td>` : ''}
           ${perBrew ? `<td class="small" style="width:90px;">${r.all_in_first_brew ? 'Yes' : 'No'}</td>` : ''}
           <td style="width:160px;">${r.is_added ? textInput(r, 'timing', r.timing, 'Timing', 'e.g. Boil') : escapeHtml(r.timing || '—')}</td>
           <td style="width:200px;">${lotCell(r)}</td>
           <td style="width:34px;">${deleteCell(r)}</td></tr>`;
       }).join('');
-      const cols = perBrew ? 8 : 7;
-      const table = `<table class="br-ing" style="min-width:${perBrew ? 960 : 820}px;">
-        <thead><tr><th>Ingredient</th><th class="r">Amount</th><th>Unit</th><th class="r">${escapeHtml(amountHeader)}</th>${perBrew ? '<th>All in brew 1?</th>' : ''}<th>Timing</th><th>Lot number</th><th></th></tr></thead>
+      const cols = perBrew ? 9 : 7;
+      const table = `<table class="br-ing" style="min-width:${perBrew ? 1080 : 820}px;">
+        <thead><tr><th>Ingredient</th><th class="r">Amount</th><th>Unit</th><th class="r">${escapeHtml(amountHeader)}</th>${perBrew ? '<th class="r">Batch</th><th>All in brew 1?</th>' : ''}<th>Timing</th><th>Lot number</th><th></th></tr></thead>
         <tbody>${body}${draftRow([type], cols)}${rows.length || page.draft ? '' : `<tr><td colspan="${cols}" class="small">None in the recipe.</td></tr>`}</tbody></table>`;
       return cardHtml(title, table, [{ type, label: buttonLabel }]);
     }
@@ -480,7 +486,7 @@
         : 'Read only · you have view rights on batch reports';
       document.getElementById('ov-ingredients').innerHTML = [
         maltCard(), hopsCard(), hopTotalsCard(),
-        additionCard('brewhouse_addition', 'Additions Brewing', '+ Addition', 'Weigh for this brew', true),
+        additionCard('brewhouse_addition', 'Additions Brewing', '+ Addition', 'Per brew', true),
         additionCard('yeast', 'Yeasts', '+ Yeast', 'Batch', false),
         additionCard('cellar_addition', 'Additions Cellar', '+ Cellar addition', 'Weigh for batch', false),
       ].join('');
