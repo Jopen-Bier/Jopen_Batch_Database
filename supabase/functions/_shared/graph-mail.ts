@@ -9,10 +9,12 @@
 // secrets (Supabase Dashboard > Edge Functions > Secrets), never in the repo:
 //   MS_TENANT_ID, MS_CLIENT_ID, MS_CLIENT_SECRET, MAIL_SENDER
 
-const TENANT_ID = Deno.env.get("MS_TENANT_ID");
-const CLIENT_ID = Deno.env.get("MS_CLIENT_ID");
-const CLIENT_SECRET = Deno.env.get("MS_CLIENT_SECRET");
-export const MAIL_SENDER = Deno.env.get("MAIL_SENDER") ?? "database@jopenbier.nl";
+// Trimmed: a space or newline pasted along with a secret breaks the sign-in.
+const secret = (name: string) => Deno.env.get(name)?.trim() || undefined;
+const TENANT_ID = secret("MS_TENANT_ID");
+const CLIENT_ID = secret("MS_CLIENT_ID");
+const CLIENT_SECRET = secret("MS_CLIENT_SECRET");
+export const MAIL_SENDER = secret("MAIL_SENDER") ?? "database@jopenbier.nl";
 
 export type Recipient = { email: string; name?: string | null };
 export type EmailType = "invite" | "password_reset" | "processing_report";
@@ -51,6 +53,13 @@ async function graphToken(): Promise<string> {
   const data = await res.json().catch(() => ({}));
   if (!res.ok || !data.access_token) {
     console.error("Microsoft token request failed", res.status, data?.error, data?.error_description);
+    // Shape of the configured values only (never the secret itself), to tell a
+    // Secret ID (a GUID, 36 characters) from a secret Value (about 40, with ~).
+    const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    console.error("Microsoft settings check", JSON.stringify({
+      secretLength: CLIENT_SECRET.length, secretLooksLikeSecretId: guid.test(CLIENT_SECRET),
+      secretHasTilde: CLIENT_SECRET.includes("~"), clientIdIsGuid: guid.test(CLIENT_ID), tenantIdIsGuid: guid.test(TENANT_ID),
+    }));
     throw new Error(`Could not sign in to Microsoft (${data?.error ?? res.status})`);
   }
   cachedToken = { value: data.access_token, expiresAt: Date.now() + Number(data.expires_in ?? 3600) * 1000 };
