@@ -259,6 +259,8 @@
       const time = (t) => (t ? String(t).slice(0, 5) : null);
       const n = (x, digits) => (x === null || x === undefined || x === '' ? null : Number(Number(x).toFixed(digits ?? 2)));
       const formatName = (code) => (PACKAGE_FORMATS.find((x) => x.code === code) || {}).label || code || null;
+      // Same out-of-spec checks as the page's red cells, so the e-mail flags the same values.
+      const co2Bad = (r) => { const st = r && co2Status(r.co2_gl, co2Spec(page.specs, r.co2_target)); return !!st && st !== 'OK'; };
       const lageringAt = page.ctx.stageRow && page.ctx.stageRow.lagering_started_at;
       const m = maturation(lageringAt, f.lagering_time);
       const ends = hbtsInOrder().map((h) => hbtEnd(readingsOf(h)));
@@ -275,20 +277,24 @@
           operatorStart: s.started_by ? page.initialsOf(s.started_by) : null, operatorEnd: s.ended_by ? page.initialsOf(s.ended_by) : null,
           tank: s.tank_id ? tankCode(s.tank_id) : null, outlet: { standpipe: 'Standpipe', bottom_valve: 'Bottom valve' }[s.outlet] || null,
           discharges: s.discharge_count, interval: s.discharge_interval_min,
-          centrifugeIn: { time: time(s.centrifuge_in_time), o2: s.centrifuge_in_o2_ppb, co2: s.centrifuge_in_co2_gl },
-          centrifugeOut: { time: time(s.centrifuge_out_time), o2: s.centrifuge_out_o2_ppb, co2: s.centrifuge_out_co2_gl },
+          centrifugeIn: { time: time(s.centrifuge_in_time), o2: s.centrifuge_in_o2_ppb, co2: s.centrifuge_in_co2_gl, o2Bad: o2High(s.centrifuge_in_o2_ppb) },
+          centrifugeOut: { time: time(s.centrifuge_out_time), o2: s.centrifuge_out_o2_ppb, co2: s.centrifuge_out_co2_gl, o2Bad: o2High(s.centrifuge_out_o2_ppb) },
           startFlow: s.start_flow_hl_h, startTurbidity: s.start_turbidity_ebc,
+          startTurbidityBad: turbidityHigh(s.start_turbidity_ebc, f.turbidity_after_separation),
         })),
         comments: page.comments.map((c) => ({ time: time(c.comment_time), text: c.comment, by: page.initialsOf(c.created_by) })),
         tasting: { result: b.tasting_result, comment: b.tasting_comment },
         hbts: hbtsInOrder().map((h, i) => {
           const end = ends[i] || {};
           return { name: hbtName(h), formats: formatsText(h.intended_formats || []),
-            readings: readingsOf(h).map((r) => ({ hl: r.level_hl, o2: r.o2_ppb, co2: r.co2_gl, target: formatName(r.co2_target), flow: r.flow_hl_h, turbidity: r.turbidity_ebc, comment: r.comment })),
-            end: { hl: end.level_hl, o2: end.o2_ppb, co2: end.co2_gl },
-            avgO2: h.avg_inline_o2_ppb, avgPu: h.avg_pu, avgTurbidity: h.avg_turbidity_ebc, avgFlow: h.avg_flow_hl_h };
+            readings: readingsOf(h).map((r) => ({ hl: r.level_hl, o2: r.o2_ppb, co2: r.co2_gl, target: formatName(r.co2_target), flow: r.flow_hl_h, turbidity: r.turbidity_ebc, comment: r.comment,
+              o2Bad: o2High(r.o2_ppb), co2Bad: co2Bad(r), turbidityBad: turbidityHigh(r.turbidity_ebc, f.turbidity_after_separation) })),
+            end: { hl: end.level_hl, o2: end.o2_ppb, co2: end.co2_gl, o2Bad: o2High(end.o2_ppb), co2Bad: co2Bad(end) },
+            avgO2: h.avg_inline_o2_ppb, avgPu: h.avg_pu, avgTurbidity: h.avg_turbidity_ebc, avgFlow: h.avg_flow_hl_h,
+            avgO2Bad: o2High(h.avg_inline_o2_ppb), avgPuBad: puOutOfSpec(h.avg_pu, f.pasteurization, toleranceValue(f.pasteurization_tol)),
+            avgTurbidityBad: turbidityHigh(h.avg_turbidity_ebc, f.turbidity_after_separation) };
         }),
-        totalEndHl: n(total, 1), cellarLossHl: loss.lossHl === null ? null : n(loss.lossHl, 1), gltEmpty: b.glt_empty,
+        totalEndHl: n(total, 1), cellarLossHl: loss.lossHl === null ? null : n(loss.lossHl, 1), cellarLossNegative: loss.negative, gltEmpty: b.glt_empty,
       };
     }
 

@@ -118,12 +118,15 @@ function hbtFilledOn(hbt, readings, sessions) {
  *   specs: { turbidity, pu, puTol, o2Max, co2Bottle, co2BottleTol, co2Can, co2CanTol, co2Keg, co2KegTol },
  *   lagering: { startDate, days },
  *   sessions: [{ number, date, start, end, duration, operatorStart, operatorEnd, tank,
- *     outlet, discharges, interval, centrifugeIn: { time, o2, co2 }, centrifugeOut,
- *     startFlow, startTurbidity }],
+ *     outlet, discharges, interval, centrifugeIn: { time, o2, co2, o2Bad }, centrifugeOut,
+ *     startFlow, startTurbidity, startTurbidityBad }],
  *   comments: [{ time, text, by }], tasting: { result, comment },
- *   hbts: [{ name, formats, readings: [{ hl, o2, co2, target, flow, turbidity, comment }],
- *     end: { hl, o2, co2 }, avgO2, avgPu, avgTurbidity, avgFlow }],
- *   totalEndHl, cellarLossHl, gltEmpty }.
+ *   hbts: [{ name, formats, readings: [{ hl, o2, co2, target, flow, turbidity, comment,
+ *     o2Bad, co2Bad, turbidityBad }], end: { hl, o2, co2, o2Bad, co2Bad },
+ *     avgO2, avgPu, avgTurbidity, avgFlow, avgO2Bad, avgPuBad, avgTurbidityBad }],
+ *   totalEndHl, cellarLossHl, cellarLossNegative, gltEmpty }.
+ * The *Bad flags are the page's out-of-spec checks (red cells); the e-mail
+ * shows the same values in red.
  * Returns { subject, text, html }: text for the mailto body, html (in the
  * look of the batch report pages) to paste into the message.
  */
@@ -163,22 +166,28 @@ function processingSummary(d) {
   // ---- html: the look of the batch report pages (batch-report.css colours).
   // Outlook renders mail with Word: only tables, fixed widths, bgcolor and
   // td styles survive, so the cards are tables, not styled divs.
-  const C = { ink: '#1c2b26', paper: '#f6f4ee', line: '#e2ddd0', muted: '#6b6355', hop: '#33473a', alert: '#a3492f' };
+  const C = { ink: '#1c2b26', paper: '#f6f4ee', line: '#e2ddd0', muted: '#6b6355', hop: '#33473a', alert: '#a3492f',
+    hopTint: '#e1ead9', zebra: '#faf9f5', alertTint: '#f8dcd3', alertText: '#8f2909' };
   const W = 700;                                    // card width in px
   const FONT = `font-family:Arial,Helvetica,sans-serif;font-size:13px;color:${C.ink};`;
   const cell = (x, style = '') => `<td style="${FONT}${style}">${x}</td>`;
   const table = (width, rows, extra = '') => `<table role="presentation" width="${width}" cellpadding="0" cellspacing="0" border="0" style="width:${width}px;border-collapse:collapse;${extra}">${rows}</table>`;
-  const card = (title, inner) => table(W, `<tr><td bgcolor="#ffffff" style="${FONT}background:#ffffff;border:1px solid ${C.line};padding:12px 14px;">
-      <p style="margin:0 0 8px;${FONT}font-size:11px;font-weight:bold;letter-spacing:1px;text-transform:uppercase;color:${C.muted};">${esc(title)}</p>${inner}</td></tr>`)
+  const card = (title, inner) => table(W, `<tr><td bgcolor="${C.hop}" style="${FONT}background:${C.hop};color:#ffffff;font-size:12px;font-weight:bold;letter-spacing:1px;text-transform:uppercase;padding:8px 14px;">${esc(title)}</td></tr>
+      <tr><td bgcolor="#ffffff" style="${FONT}background:#ffffff;border:1px solid ${C.line};border-top:0;padding:12px 14px;">${inner}</td></tr>`)
     + table(W, `<tr><td height="12" style="font-size:1px;line-height:12px;">&nbsp;</td></tr>`);
-  const kv = (pairs, width) => table(width, pairs.map(([k, x]) => `<tr>${cell(esc(k), `color:${C.muted};padding:3px 12px 3px 0;width:${Math.round(width * 0.55)}px;`)}${cell(esc(v(x)), 'font-weight:bold;padding:3px 0;')}</tr>`).join(''));
+  const badStyle = `background:${C.alertTint};color:${C.alertText};font-weight:bold;`;
+  const kv = (pairs, width) => table(width, pairs.map(([k, x, bad]) => `<tr>${cell(esc(k), `color:${C.muted};padding:3px 12px 3px 0;width:${Math.round(width * 0.55)}px;`)}${bad
+    ? `<td bgcolor="${C.alertTint}" style="${FONT}${badStyle}padding:3px 6px;">${esc(v(x))}</td>` : cell(esc(v(x)), 'font-weight:bold;padding:3px 0;')}</tr>`).join(''));
   const twoCols = (left, right) => table(W - 30, `<tr><td valign="top" width="${(W - 30) / 2}" style="width:${(W - 30) / 2}px;">${left}</td><td valign="top" width="${(W - 30) / 2}" style="width:${(W - 30) / 2}px;">${right}</td></tr>`);
-  const grid = (head, rows) => table(W - 30, `<tr>${head.map(([h, r]) => cell(esc(h), `font-size:11px;font-weight:bold;color:${C.muted};text-align:${r ? 'right' : 'left'};padding:4px 8px;border-bottom:1px solid ${C.line};`)).join('')}</tr>
-${rows.join('\n')}`, 'margin-top:6px;');
-  const td = (x, r) => cell(esc(v(x)), `text-align:${r ? 'right' : 'left'};padding:4px 8px;border-bottom:1px solid ${C.line};`);
+  const grid = (head, rows) => table(W - 30, `<tr>${head.map(([h, r]) => `<td bgcolor="${C.hopTint}" style="${FONT}background:${C.hopTint};font-size:11px;font-weight:bold;color:${C.hop};text-align:${r ? 'right' : 'left'};padding:5px 8px;border-bottom:2px solid ${C.hop};">${esc(h)}</td>`).join('')}</tr>
+${rows.map((cells, i) => `<tr>${cells.map((c) => c(i % 2 ? C.zebra : '#ffffff')).join('')}</tr>`).join('\n')}`, 'margin-top:6px;');
+  // A grid cell: value, right-aligned?, out of spec? Rows alternate white / zebra.
+  const td = (x, r, bad) => (bg) => `<td bgcolor="${bad ? C.alertTint : bg}" style="${FONT}background:${bad ? C.alertTint : bg};${bad ? badStyle : ''}text-align:${r ? 'right' : 'left'};padding:4px 8px;border-bottom:1px solid ${C.line};">${esc(v(x))}</td>`;
   const half = (W - 30) / 2;
   const co2 = (spec, t) => (spec === null || spec === undefined || spec === '' ? null : `${spec} g/l ${tol(t)}`.trim());
   const goColor = tasting.result === 'go' ? C.hop : tasting.result === 'no_go' ? C.alert : C.muted;
+  const pill = tasting.result ? `<span style="background:${goColor};color:#ffffff;font-weight:bold;padding:2px 10px;border-radius:10px;">&nbsp;${esc(result)}&nbsp;</span>`
+    : `<b style="color:${C.muted};">${esc(result)}</b>`;
   const body = [
     table(W, `<tr>${cell(`<span style="font-size:20px;font-weight:bold;">Processing · ${esc(d.batchNumber)} · ${esc(d.beerName || '')}</span><br>
       <span style="color:${C.muted};">Beer risk category: <b style="color:${C.ink};">${esc(v(d.risk))}</b></span>`, 'padding:0 0 12px;')}</tr>`),
@@ -190,19 +199,20 @@ ${rows.join('\n')}`, 'margin-top:6px;');
       kv([['Date', s.date], ['Start – end', `${v(s.start)} – ${v(s.end)}`], ['Duration', s.duration], ['Operators', `${v(s.operatorStart)} / ${v(s.operatorEnd)}`]], half),
       kv([['Processed from (G)LT', s.tank], ['Outlet', s.outlet], ['Discharges', s.discharges == null ? null : `${s.discharges} · every ${v(s.interval, 'min')}`]], half))
       + grid([['Measurement'], ['Time'], ['O2 (ppb)', 1], ['CO2 (g/l)', 1], ['Flow (hl/h)', 1], ['Turbidity (EBC)', 1]], [
-        `<tr>${td('Centrifuge in')}${td(s.centrifugeIn.time)}${td(s.centrifugeIn.o2, 1)}${td(s.centrifugeIn.co2, 1)}${td(null, 1)}${td(null, 1)}</tr>`,
-        `<tr>${td('Centrifuge out')}${td(s.centrifugeOut.time)}${td(s.centrifugeOut.o2, 1)}${td(s.centrifugeOut.co2, 1)}${td(s.startFlow, 1)}${td(s.startTurbidity, 1)}</tr>`]))),
-    card('Comments & tasting', (comments.length ? grid([['Time'], ['Comment'], ['By']], comments.map((c) => `<tr>${td(c.time)}${td(c.text)}${td(c.by)}</tr>`))
+        [td('Centrifuge in'), td(s.centrifugeIn.time), td(s.centrifugeIn.o2, 1, s.centrifugeIn.o2Bad), td(s.centrifugeIn.co2, 1), td(null, 1), td(null, 1)],
+        [td('Centrifuge out'), td(s.centrifugeOut.time), td(s.centrifugeOut.o2, 1, s.centrifugeOut.o2Bad), td(s.centrifugeOut.co2, 1), td(s.startFlow, 1), td(s.startTurbidity, 1, s.startTurbidityBad)]]))),
+    card('Comments & tasting', (comments.length ? grid([['Time'], ['Comment'], ['By']], comments.map((c) => [td(c.time), td(c.text), td(c.by)]))
       : `<p style="margin:0;${FONT}color:${C.muted};">No processing comments.</p>`)
-      + `<p style="margin:8px 0 0;${FONT}">Tasting: <b style="color:${goColor};">${esc(result)}</b>${tasting.comment ? ` · ${esc(tasting.comment)}` : ''}</p>`),
-    card('Bright beer tanks (HBT)', hbts.length ? hbts.map((h) => `<p style="margin:8px 0 2px;${FONT}font-weight:bold;">${esc(h.name)}${h.formats ? ` <span style="font-weight:normal;color:${C.muted};">· ${esc(h.formats)}</span>` : ''}</p>`
+      + `<p style="margin:10px 0 0;${FONT}">Tasting: ${pill}${tasting.comment ? ` · ${esc(tasting.comment)}` : ''}</p>`),
+    card('Bright beer tanks (HBT)', hbts.length ? hbts.map((h, i) => table(W - 30, `<tr><td bgcolor="${C.hopTint}" style="${FONT}background:${C.hopTint};color:${C.hop};font-weight:bold;padding:5px 8px;">${esc(h.name)}${h.formats ? ` <span style="font-weight:normal;">· ${esc(h.formats)}</span>` : ''}</td></tr>`, `margin-top:${i ? 14 : 0}px;`)
       + grid([['HL', 1], ['O2 (ppb)', 1], ['CO2 (g/l)', 1], ['Target'], ['Flow (hl/h)', 1], ['Turbidity (EBC)', 1], ['Comments']],
-        (h.readings || []).map((r) => `<tr>${td(r.hl, 1)}${td(r.o2, 1)}${td(r.co2, 1)}${td(r.target)}${td(r.flow, 1)}${td(r.turbidity, 1)}${td(r.comment)}</tr>`))).join('')
+        (h.readings || []).map((r) => [td(r.hl, 1), td(r.o2, 1, r.o2Bad), td(r.co2, 1, r.co2Bad), td(r.target), td(r.flow, 1), td(r.turbidity, 1, r.turbidityBad), td(r.comment)]))).join('')
       : `<p style="margin:0;${FONT}color:${C.muted};">No HBT readings yet.</p>`),
     card('Total measured volumes', (hbts.length ? grid([['HBT'], ['HL', 1], ['O2 (ppb)', 1], ['CO2 (g/l)', 1], ['Avg. in-line O2', 1], ['Avg. PU', 1], ['Avg. turbidity', 1], ['Avg. flow', 1]],
-        hbts.map((h) => `<tr>${td(h.name)}${td(h.end.hl, 1)}${td(h.end.o2, 1)}${td(h.end.co2, 1)}${td(h.avgO2, 1)}${td(h.avgPu, 1)}${td(h.avgTurbidity, 1)}${td(h.avgFlow, 1)}</tr>`)) : '')
+        hbts.map((h) => [td(h.name), td(h.end.hl, 1), td(h.end.o2, 1, h.end.o2Bad), td(h.end.co2, 1, h.end.co2Bad), td(h.avgO2, 1, h.avgO2Bad), td(h.avgPu, 1, h.avgPuBad), td(h.avgTurbidity, 1, h.avgTurbidityBad), td(h.avgFlow, 1)])) : '')
       + `<p style="margin:10px 0 0;font-size:1px;">&nbsp;</p>`
-      + kv([['Total end volume', d.totalEndHl == null ? null : `${d.totalEndHl} hl`], ['Cellar loss', d.cellarLossHl == null ? null : `${d.cellarLossHl} hl`], ['GLT empty?', yn(d.gltEmpty)]], half)),
+      + kv([['Total end volume', d.totalEndHl == null ? null : `${d.totalEndHl} hl`], ['Cellar loss', d.cellarLossHl == null ? null : `${d.cellarLossHl} hl`, d.cellarLossNegative], ['GLT empty?', yn(d.gltEmpty)]], half)
+      + (d.cellarLossNegative ? `<p style="margin:6px 0 0;${FONT}color:${C.alertText};">More out than in — check splits and HBT volumes.</p>` : '')),
   ].join('\n');
   const html = table(W + 28, `<tr><td bgcolor="${C.paper}" style="background:${C.paper};padding:14px;">${body}</td></tr>`);
   return { subject, text: t.join('\n'), html };

@@ -96,6 +96,14 @@ assert.strictEqual(p.hbtFilledOn({ id: 7 }, rd, sess), null);
   const empty = p.processingSummary({ batchNumber: '1', beerName: '', sessions: [], hbts: [], comments: [] });
   assert.strictEqual(empty.subject, 'Processing 1');
   assert.ok(empty.text.includes('TASTING: —') && empty.html.includes('No HBT readings yet.'));
+  // Colours: green card heads like the Processing page; nothing red without flags
+  assert.ok(sum.html.includes('bgcolor="#33473a"') && !sum.html.includes('#f8dcd3'));
+  // Out-of-spec flags (the page's red cells) turn exactly those values red
+  const flagged = p.processingSummary({ batchNumber: '2', sessions: [], comments: [], tasting: { result: 'no_go' },
+    hbts: [{ name: 'HBT1', readings: [{ hl: 10, o2: 64, co2: 4.9, o2Bad: true }], end: { hl: 10, o2: 64, co2: 4.9, o2Bad: true } }],
+    totalEndHl: 10, cellarLossHl: -1.2, cellarLossNegative: true });
+  assert.strictEqual((flagged.html.match(/bgcolor="#f8dcd3"/g) || []).length, 3);   // reading O2, end O2, cellar loss
+  assert.ok(flagged.html.includes('More out than in') && flagged.html.includes('background:#a3492f'));
 }
 
 console.log('processing: all tests passed');
