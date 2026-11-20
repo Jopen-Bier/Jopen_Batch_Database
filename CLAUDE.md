@@ -26,6 +26,13 @@ Working on the digital batch report? Start at `docs/batch-report/README.md`.
   every new function gets `revoke execute … from public, anon` plus an
   explicit `grant execute … to authenticated` (and `claude_reader` if a view
   it reads calls the function).
+- The company-Claude connector (`supabase/functions/claude-reader-mcp`) logs
+  in as `claude_reader_login` and queries as `claude_reader`, which reads all of
+  `public` except people data (`users`, `batch_audit_log`,
+  `brew_planning_history_detailed`; security phase 4). New tables get
+  `claude_reader` SELECT by default: revoke it for any new table or view with
+  people data. Tokens come from `claude_connector.issue_token()` and expire.
+  Deploy the function from the repo file with verify_jwt = false.
 - `supabase/migrations/` is auto-executed on production by the GitHub
   integration. A migration run by hand (SQL Editor) must be registered in
   `supabase_migrations.schema_migrations` **before** its file is pushed.

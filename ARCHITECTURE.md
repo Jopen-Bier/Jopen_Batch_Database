@@ -71,7 +71,7 @@ batchrapport_cel_mapping.csv  Excel cell ↔ database field mapping for the batc
 supabase/
   migrations/              every schema change, in order (see §5.4)
   rename-map.json          agreed Dutch → English names (transition source of truth)
-  functions/               Edge Functions (generate-invite-link, delete-user, auth-email; _shared/ = Graph mail + e-mail templates, see §6b)
+  functions/               Edge Functions (generate-invite-link, delete-user, auth-email, claude-reader-mcp = read-only connector for the company Claude; _shared/ = Graph mail + e-mail templates, see §6b)
 docs/batch-report/         brief for the digital batch report (decisions, data model, rules, screens, phases, mockup)
 tests/                     Node tests for shared modules (run by the Guard workflow)
 tools/                     translation-layer scripts + ci_guard.py (see tools/README.md)
