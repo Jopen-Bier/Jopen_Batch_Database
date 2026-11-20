@@ -49,6 +49,7 @@ env:
 jobs:
   database:
     runs-on: ubuntu-latest
+    environment: production   # secrets live in this environment; only main may use it (security phase 3)
     services:
       # Wegwerp-Postgres om elke dump meteen proef terug te zetten.
       proefdb:
@@ -174,6 +175,7 @@ jobs:
 
   storage:
     runs-on: ubuntu-latest
+    environment: production   # secrets live in this environment; only main may use it (security phase 3)
     steps:
       - name: Controleer configuratie
         id: config

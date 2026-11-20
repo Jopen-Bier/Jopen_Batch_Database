@@ -36,6 +36,7 @@ env:
 jobs:
   snapshot:
     runs-on: ubuntu-latest
+    environment: production   # secrets live in this environment; only main may use it (security phase 3)
     steps:
       - uses: actions/checkout@v5
 
