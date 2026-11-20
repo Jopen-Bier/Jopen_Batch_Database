@@ -43,6 +43,27 @@ CREATE TYPE public.brew_plan_group AS ENUM (
 
 
 --
+-- Name: issue_token(text, interval); Type: FUNCTION; Schema: claude_connector; Owner: -
+--
+
+CREATE FUNCTION claude_connector.issue_token(p_label text, p_valid_for interval DEFAULT '1 year'::interval) RETURNS text
+    LANGUAGE plpgsql
+    SET search_path TO ''
+    AS $$
+declare
+  v_token text := encode(extensions.gen_random_bytes(32), 'hex');
+begin
+  if coalesce(trim(p_label), '') = '' then
+    raise exception 'issue_token: a label is required';
+  end if;
+  insert into claude_connector.access_tokens (label, token_sha256, expires_at)
+  values (p_label, encode(extensions.digest(v_token, 'sha256'), 'hex'), now() + p_valid_for);
+  return v_token;  -- shown once; store it only in the connector URL
+end;
+$$;
+
+
+--
 -- Name: admin_get_last_logins(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1027,7 +1048,8 @@ CREATE TABLE claude_connector.access_tokens (
     label text NOT NULL,
     token_sha256 text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    revoked_at timestamp with time zone
+    revoked_at timestamp with time zone,
+    expires_at timestamp with time zone
 );
 
 
@@ -2354,6 +2376,39 @@ CREATE TABLE public.document_types (
     label text,
     sort_order integer DEFAULT 0 NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: email_log; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.email_log (
+    id bigint NOT NULL,
+    email_type text NOT NULL,
+    recipients text[] NOT NULL,
+    subject text NOT NULL,
+    status text NOT NULL,
+    error_message text,
+    sent_by uuid,
+    batch_id bigint,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT email_log_email_type_check CHECK ((email_type = ANY (ARRAY['invite'::text, 'password_reset'::text, 'processing_report'::text]))),
+    CONSTRAINT email_log_status_check CHECK ((status = ANY (ARRAY['sent'::text, 'failed'::text])))
+);
+
+
+--
+-- Name: email_log_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.email_log ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.email_log_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
 );
 
 
@@ -3929,6 +3984,14 @@ ALTER TABLE ONLY public.document_types
 
 
 --
+-- Name: email_log email_log_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.email_log
+    ADD CONSTRAINT email_log_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: fermentation_log_entries fermentation_log_entries_id_batch_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4707,6 +4770,27 @@ CREATE INDEX idx_contract_lines_ingredient ON public.contract_lines USING btree 
 --
 
 CREATE INDEX idx_contracts_supplier ON public.contracts USING btree (supplier);
+
+
+--
+-- Name: idx_email_log_batch_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_email_log_batch_id ON public.email_log USING btree (batch_id);
+
+
+--
+-- Name: idx_email_log_created_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_email_log_created_at ON public.email_log USING btree (created_at DESC);
+
+
+--
+-- Name: idx_email_log_sent_by; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_email_log_sent_by ON public.email_log USING btree (sent_by);
 
 
 --
@@ -5917,6 +6001,22 @@ ALTER TABLE ONLY public.contracts
 
 
 --
+-- Name: email_log email_log_batch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.email_log
+    ADD CONSTRAINT email_log_batch_id_fkey FOREIGN KEY (batch_id) REFERENCES public.batches(id) ON DELETE SET NULL;
+
+
+--
+-- Name: email_log email_log_sent_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.email_log
+    ADD CONSTRAINT email_log_sent_by_fkey FOREIGN KEY (sent_by) REFERENCES public.users(id) ON DELETE SET NULL;
+
+
+--
 -- Name: fermentation_log_entries fermentation_log_entries_batch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6723,10 +6823,24 @@ ALTER TABLE ONLY public.water_settings
 ALTER TABLE claude_connector.access_tokens ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: access_tokens access_tokens_reader_login_select; Type: POLICY; Schema: claude_connector; Owner: -
+--
+
+CREATE POLICY access_tokens_reader_login_select ON claude_connector.access_tokens FOR SELECT TO claude_reader_login USING (true);
+
+
+--
 -- Name: query_log; Type: ROW SECURITY; Schema: claude_connector; Owner: -
 --
 
 ALTER TABLE claude_connector.query_log ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: query_log query_log_reader_login_insert; Type: POLICY; Schema: claude_connector; Owner: -
+--
+
+CREATE POLICY query_log_reader_login_insert ON claude_connector.query_log FOR INSERT TO claude_reader_login WITH CHECK (true);
+
 
 --
 -- Name: batch_audit_log; Type: ROW SECURITY; Schema: public; Owner: -
@@ -7383,7 +7497,7 @@ CREATE POLICY document_types_insert ON public.document_types FOR INSERT WITH CHE
 -- Name: document_types document_types_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY document_types_select ON public.document_types FOR SELECT USING (true);
+CREATE POLICY document_types_select ON public.document_types FOR SELECT TO authenticated USING (true);
 
 
 --
@@ -7391,6 +7505,19 @@ CREATE POLICY document_types_select ON public.document_types FOR SELECT USING (t
 --
 
 CREATE POLICY document_types_update ON public.document_types FOR UPDATE USING (( SELECT public.can_edit('settings'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('settings'::text) AS can_edit));
+
+
+--
+-- Name: email_log; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.email_log ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: email_log email_log_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY email_log_select ON public.email_log FOR SELECT TO authenticated USING (( SELECT public.can_view('user_management'::text) AS can_view));
 
 
 --
@@ -7655,7 +7782,7 @@ CREATE POLICY ingredient_categories_insert ON public.ingredient_categories FOR I
 -- Name: ingredient_categories ingredient_categories_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY ingredient_categories_select ON public.ingredient_categories FOR SELECT USING (true);
+CREATE POLICY ingredient_categories_select ON public.ingredient_categories FOR SELECT TO authenticated USING (true);
 
 
 --
@@ -7689,7 +7816,7 @@ CREATE POLICY ingredient_declarations_insert ON public.ingredient_declarations F
 -- Name: ingredient_declarations ingredient_declarations_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY ingredient_declarations_select ON public.ingredient_declarations FOR SELECT USING (true);
+CREATE POLICY ingredient_declarations_select ON public.ingredient_declarations FOR SELECT TO authenticated USING (true);
 
 
 --
@@ -7933,7 +8060,7 @@ ALTER TABLE public.permission_modules ENABLE ROW LEVEL SECURITY;
 -- Name: permission_modules permission_modules_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY permission_modules_select ON public.permission_modules FOR SELECT USING (true);
+CREATE POLICY permission_modules_select ON public.permission_modules FOR SELECT TO authenticated USING (true);
 
 
 --
@@ -8490,7 +8617,7 @@ CREATE POLICY role_permissions_insert_admin ON public.role_permissions FOR INSER
 -- Name: role_permissions role_permissions_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY role_permissions_select ON public.role_permissions FOR SELECT USING (true);
+CREATE POLICY role_permissions_select ON public.role_permissions FOR SELECT TO authenticated USING (true);
 
 
 --
@@ -8524,7 +8651,7 @@ CREATE POLICY roles_insert_admin ON public.roles FOR INSERT WITH CHECK (( SELECT
 -- Name: roles roles_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY roles_select ON public.roles FOR SELECT USING (true);
+CREATE POLICY roles_select ON public.roles FOR SELECT TO authenticated USING (true);
 
 
 --
@@ -8660,7 +8787,7 @@ CREATE POLICY units_insert ON public.units FOR INSERT WITH CHECK (( SELECT publi
 -- Name: units units_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY units_select ON public.units FOR SELECT USING (true);
+CREATE POLICY units_select ON public.units FOR SELECT TO authenticated USING (true);
 
 
 --
@@ -8720,14 +8847,14 @@ ALTER TABLE public.water_settings_history ENABLE ROW LEVEL SECURITY;
 -- Name: water_settings_history water_settings_history_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY water_settings_history_select ON public.water_settings_history FOR SELECT USING (true);
+CREATE POLICY water_settings_history_select ON public.water_settings_history FOR SELECT TO authenticated USING (true);
 
 
 --
 -- Name: water_settings water_settings_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY water_settings_select ON public.water_settings FOR SELECT USING (true);
+CREATE POLICY water_settings_select ON public.water_settings FOR SELECT TO authenticated USING (true);
 
 
 --
@@ -8735,6 +8862,13 @@ CREATE POLICY water_settings_select ON public.water_settings FOR SELECT USING (t
 --
 
 CREATE POLICY water_settings_update ON public.water_settings FOR UPDATE USING (( SELECT public.can_edit('settings'::text) AS can_edit)) WITH CHECK (( SELECT public.can_edit('settings'::text) AS can_edit));
+
+
+--
+-- Name: SCHEMA claude_connector; Type: ACL; Schema: -; Owner: -
+--
+
+GRANT USAGE ON SCHEMA claude_connector TO claude_reader_login;
 
 
 --
@@ -8746,6 +8880,13 @@ GRANT USAGE ON SCHEMA public TO anon;
 GRANT USAGE ON SCHEMA public TO authenticated;
 GRANT USAGE ON SCHEMA public TO service_role;
 GRANT USAGE ON SCHEMA public TO claude_reader;
+
+
+--
+-- Name: FUNCTION issue_token(p_label text, p_valid_for interval); Type: ACL; Schema: claude_connector; Owner: -
+--
+
+REVOKE ALL ON FUNCTION claude_connector.issue_token(p_label text, p_valid_for interval) FROM PUBLIC;
 
 
 --
@@ -8770,35 +8911,46 @@ GRANT ALL ON FUNCTION public.apply_cellar_plan_order() TO authenticated;
 -- Name: FUNCTION can_delete(p_module_key text); Type: ACL; Schema: public; Owner: -
 --
 
+REVOKE ALL ON FUNCTION public.can_delete(p_module_key text) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.can_delete(p_module_key text) TO service_role;
+GRANT ALL ON FUNCTION public.can_delete(p_module_key text) TO authenticated;
 
 
 --
 -- Name: FUNCTION can_edit(p_module_key text); Type: ACL; Schema: public; Owner: -
 --
 
+REVOKE ALL ON FUNCTION public.can_edit(p_module_key text) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.can_edit(p_module_key text) TO service_role;
+GRANT ALL ON FUNCTION public.can_edit(p_module_key text) TO authenticated;
 
 
 --
 -- Name: FUNCTION can_view(p_module_key text); Type: ACL; Schema: public; Owner: -
 --
 
+REVOKE ALL ON FUNCTION public.can_view(p_module_key text) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.can_view(p_module_key text) TO service_role;
+GRANT ALL ON FUNCTION public.can_view(p_module_key text) TO authenticated;
 
 
 --
 -- Name: FUNCTION convert_quantity(q numeric, p_from text, p_to text); Type: ACL; Schema: public; Owner: -
 --
 
+REVOKE ALL ON FUNCTION public.convert_quantity(q numeric, p_from text, p_to text) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.convert_quantity(q numeric, p_from text, p_to text) TO service_role;
+GRANT ALL ON FUNCTION public.convert_quantity(q numeric, p_from text, p_to text) TO authenticated;
+GRANT ALL ON FUNCTION public.convert_quantity(q numeric, p_from text, p_to text) TO claude_reader;
 
 
 --
 -- Name: FUNCTION current_role_id(); Type: ACL; Schema: public; Owner: -
 --
 
+REVOKE ALL ON FUNCTION public.current_role_id() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.current_role_id() TO service_role;
+GRANT ALL ON FUNCTION public.current_role_id() TO authenticated;
 
 
 --
@@ -8814,7 +8966,9 @@ GRANT ALL ON FUNCTION public.generate_recipe_cellar_steps(p_recipe_id bigint, p_
 -- Name: FUNCTION is_admin(); Type: ACL; Schema: public; Owner: -
 --
 
+REVOKE ALL ON FUNCTION public.is_admin() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.is_admin() TO service_role;
+GRANT ALL ON FUNCTION public.is_admin() TO authenticated;
 
 
 --
@@ -8837,6 +8991,7 @@ GRANT ALL ON FUNCTION public.log_brew_planning_change() TO service_role;
 -- Name: FUNCTION lots_pick_contract_line(); Type: ACL; Schema: public; Owner: -
 --
 
+REVOKE ALL ON FUNCTION public.lots_pick_contract_line() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.lots_pick_contract_line() TO service_role;
 
 
@@ -8844,29 +8999,40 @@ GRANT ALL ON FUNCTION public.lots_pick_contract_line() TO service_role;
 -- Name: FUNCTION pick_contract_line(p_supplier text, p_ingredient_id bigint, p_date date, p_unit text); Type: ACL; Schema: public; Owner: -
 --
 
+REVOKE ALL ON FUNCTION public.pick_contract_line(p_supplier text, p_ingredient_id bigint, p_date date, p_unit text) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.pick_contract_line(p_supplier text, p_ingredient_id bigint, p_date date, p_unit text) TO service_role;
 GRANT ALL ON FUNCTION public.pick_contract_line(p_supplier text, p_ingredient_id bigint, p_date date, p_unit text) TO authenticated;
+GRANT ALL ON FUNCTION public.pick_contract_line(p_supplier text, p_ingredient_id bigint, p_date date, p_unit text) TO claude_reader;
 
 
 --
 -- Name: FUNCTION product_sheet_calculated_color(p_recipe_id bigint); Type: ACL; Schema: public; Owner: -
 --
 
+REVOKE ALL ON FUNCTION public.product_sheet_calculated_color(p_recipe_id bigint) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.product_sheet_calculated_color(p_recipe_id bigint) TO service_role;
+GRANT ALL ON FUNCTION public.product_sheet_calculated_color(p_recipe_id bigint) TO authenticated;
+GRANT ALL ON FUNCTION public.product_sheet_calculated_color(p_recipe_id bigint) TO claude_reader;
 
 
 --
 -- Name: FUNCTION product_sheet_relevant_hash(p_recipe_group_id uuid); Type: ACL; Schema: public; Owner: -
 --
 
+REVOKE ALL ON FUNCTION public.product_sheet_relevant_hash(p_recipe_group_id uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.product_sheet_relevant_hash(p_recipe_group_id uuid) TO service_role;
+GRANT ALL ON FUNCTION public.product_sheet_relevant_hash(p_recipe_group_id uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.product_sheet_relevant_hash(p_recipe_group_id uuid) TO claude_reader;
 
 
 --
 -- Name: FUNCTION product_sheet_relevant_recipe_id(p_recipe_group_id uuid); Type: ACL; Schema: public; Owner: -
 --
 
+REVOKE ALL ON FUNCTION public.product_sheet_relevant_recipe_id(p_recipe_group_id uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.product_sheet_relevant_recipe_id(p_recipe_group_id uuid) TO service_role;
+GRANT ALL ON FUNCTION public.product_sheet_relevant_recipe_id(p_recipe_group_id uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.product_sheet_relevant_recipe_id(p_recipe_group_id uuid) TO claude_reader;
 
 
 --
@@ -8909,6 +9075,7 @@ GRANT ALL ON FUNCTION public.set_last_login() TO authenticated;
 -- Name: FUNCTION set_updated_at(); Type: ACL; Schema: public; Owner: -
 --
 
+REVOKE ALL ON FUNCTION public.set_updated_at() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.set_updated_at() TO service_role;
 
 
@@ -8951,7 +9118,10 @@ GRANT ALL ON FUNCTION public.split_batch(p_batch_id bigint, p_transferred_at tim
 -- Name: FUNCTION tolerance_value(p_text text); Type: ACL; Schema: public; Owner: -
 --
 
+REVOKE ALL ON FUNCTION public.tolerance_value(p_text text) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.tolerance_value(p_text text) TO service_role;
+GRANT ALL ON FUNCTION public.tolerance_value(p_text text) TO authenticated;
+GRANT ALL ON FUNCTION public.tolerance_value(p_text text) TO claude_reader;
 
 
 --
@@ -8966,7 +9136,78 @@ GRANT ALL ON FUNCTION public.water_settings_log() TO service_role;
 -- Name: FUNCTION water_settings_stamp(); Type: ACL; Schema: public; Owner: -
 --
 
+REVOKE ALL ON FUNCTION public.water_settings_stamp() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.water_settings_stamp() TO service_role;
+
+
+--
+-- Name: COLUMN access_tokens.id; Type: ACL; Schema: claude_connector; Owner: -
+--
+
+GRANT SELECT(id) ON TABLE claude_connector.access_tokens TO claude_reader_login;
+
+
+--
+-- Name: COLUMN access_tokens.token_sha256; Type: ACL; Schema: claude_connector; Owner: -
+--
+
+GRANT SELECT(token_sha256) ON TABLE claude_connector.access_tokens TO claude_reader_login;
+
+
+--
+-- Name: COLUMN access_tokens.revoked_at; Type: ACL; Schema: claude_connector; Owner: -
+--
+
+GRANT SELECT(revoked_at) ON TABLE claude_connector.access_tokens TO claude_reader_login;
+
+
+--
+-- Name: COLUMN access_tokens.expires_at; Type: ACL; Schema: claude_connector; Owner: -
+--
+
+GRANT SELECT(expires_at) ON TABLE claude_connector.access_tokens TO claude_reader_login;
+
+
+--
+-- Name: COLUMN query_log.token_id; Type: ACL; Schema: claude_connector; Owner: -
+--
+
+GRANT INSERT(token_id) ON TABLE claude_connector.query_log TO claude_reader_login;
+
+
+--
+-- Name: COLUMN query_log.tool; Type: ACL; Schema: claude_connector; Owner: -
+--
+
+GRANT INSERT(tool) ON TABLE claude_connector.query_log TO claude_reader_login;
+
+
+--
+-- Name: COLUMN query_log.arguments; Type: ACL; Schema: claude_connector; Owner: -
+--
+
+GRANT INSERT(arguments) ON TABLE claude_connector.query_log TO claude_reader_login;
+
+
+--
+-- Name: COLUMN query_log.row_count; Type: ACL; Schema: claude_connector; Owner: -
+--
+
+GRANT INSERT(row_count) ON TABLE claude_connector.query_log TO claude_reader_login;
+
+
+--
+-- Name: COLUMN query_log.duration_ms; Type: ACL; Schema: claude_connector; Owner: -
+--
+
+GRANT INSERT(duration_ms) ON TABLE claude_connector.query_log TO claude_reader_login;
+
+
+--
+-- Name: COLUMN query_log.error; Type: ACL; Schema: claude_connector; Owner: -
+--
+
+GRANT INSERT(error) ON TABLE claude_connector.query_log TO claude_reader_login;
 
 
 --
@@ -8975,14 +9216,12 @@ GRANT ALL ON FUNCTION public.water_settings_stamp() TO service_role;
 
 GRANT SELECT ON TABLE public.batch_audit_log TO authenticated;
 GRANT ALL ON TABLE public.batch_audit_log TO service_role;
-GRANT SELECT ON TABLE public.batch_audit_log TO claude_reader;
 
 
 --
 -- Name: SEQUENCE batch_audit_log_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.batch_audit_log_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.batch_audit_log_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.batch_audit_log_id_seq TO service_role;
 
@@ -9000,7 +9239,6 @@ GRANT SELECT ON TABLE public.batch_brew_comments TO claude_reader;
 -- Name: SEQUENCE batch_brew_comments_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.batch_brew_comments_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.batch_brew_comments_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.batch_brew_comments_id_seq TO service_role;
 
@@ -9018,7 +9256,6 @@ GRANT SELECT ON TABLE public.batch_brews TO claude_reader;
 -- Name: SEQUENCE batch_brews_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.batch_brews_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.batch_brews_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.batch_brews_id_seq TO service_role;
 
@@ -9036,7 +9273,6 @@ GRANT SELECT ON TABLE public.batch_cellar_steps TO claude_reader;
 -- Name: SEQUENCE batch_cellar_steps_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.batch_cellar_steps_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.batch_cellar_steps_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.batch_cellar_steps_id_seq TO service_role;
 
@@ -9054,7 +9290,6 @@ GRANT SELECT ON TABLE public.batch_documents TO claude_reader;
 -- Name: SEQUENCE batch_documents_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.batch_documents_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.batch_documents_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.batch_documents_id_seq TO service_role;
 
@@ -9072,7 +9307,6 @@ GRANT SELECT ON TABLE public.batch_dosing_checks TO claude_reader;
 -- Name: SEQUENCE batch_dosing_checks_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.batch_dosing_checks_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.batch_dosing_checks_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.batch_dosing_checks_id_seq TO service_role;
 
@@ -9090,7 +9324,6 @@ GRANT SELECT ON TABLE public.batch_hbts TO claude_reader;
 -- Name: SEQUENCE batch_hbts_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.batch_hbts_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.batch_hbts_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.batch_hbts_id_seq TO service_role;
 
@@ -9108,7 +9341,6 @@ GRANT SELECT ON TABLE public.batch_ingredients TO claude_reader;
 -- Name: SEQUENCE batch_ingredients_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.batch_ingredients_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.batch_ingredients_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.batch_ingredients_id_seq TO service_role;
 
@@ -9126,7 +9358,6 @@ GRANT SELECT ON TABLE public.batch_transfers TO claude_reader;
 -- Name: TABLE batches; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.batches TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.batches TO authenticated;
 GRANT ALL ON TABLE public.batches TO service_role;
 GRANT SELECT ON TABLE public.batches TO claude_reader;
@@ -9208,7 +9439,6 @@ GRANT SELECT ON TABLE public.batch_tank_moves TO claude_reader;
 -- Name: SEQUENCE batch_tank_moves_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.batch_tank_moves_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.batch_tank_moves_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.batch_tank_moves_id_seq TO service_role;
 
@@ -9217,7 +9447,6 @@ GRANT ALL ON SEQUENCE public.batch_tank_moves_id_seq TO service_role;
 -- Name: SEQUENCE batch_transfers_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.batch_transfers_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.batch_transfers_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.batch_transfers_id_seq TO service_role;
 
@@ -9253,7 +9482,6 @@ GRANT SELECT ON TABLE public.packaging_articles TO claude_reader;
 -- Name: TABLE recipes; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipes TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipes TO authenticated;
 GRANT ALL ON TABLE public.recipes TO service_role;
 GRANT SELECT ON TABLE public.recipes TO claude_reader;
@@ -9263,7 +9491,6 @@ GRANT SELECT ON TABLE public.recipes TO claude_reader;
 -- Name: TABLE batch_volume_balance; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.batch_volume_balance TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.batch_volume_balance TO authenticated;
 GRANT ALL ON TABLE public.batch_volume_balance TO service_role;
 GRANT SELECT ON TABLE public.batch_volume_balance TO claude_reader;
@@ -9273,7 +9500,6 @@ GRANT SELECT ON TABLE public.batch_volume_balance TO claude_reader;
 -- Name: SEQUENCE batches_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.batches_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.batches_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.batches_id_seq TO service_role;
 
@@ -9282,7 +9508,6 @@ GRANT ALL ON SEQUENCE public.batches_id_seq TO service_role;
 -- Name: TABLE brew_capacity; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.brew_capacity TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.brew_capacity TO authenticated;
 GRANT ALL ON TABLE public.brew_capacity TO service_role;
 GRANT SELECT ON TABLE public.brew_capacity TO claude_reader;
@@ -9292,7 +9517,6 @@ GRANT SELECT ON TABLE public.brew_capacity TO claude_reader;
 -- Name: TABLE brew_planning; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.brew_planning TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.brew_planning TO authenticated;
 GRANT ALL ON TABLE public.brew_planning TO service_role;
 GRANT SELECT ON TABLE public.brew_planning TO claude_reader;
@@ -9302,7 +9526,6 @@ GRANT SELECT ON TABLE public.brew_planning TO claude_reader;
 -- Name: TABLE brew_planning_history; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.brew_planning_history TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.brew_planning_history TO authenticated;
 GRANT ALL ON TABLE public.brew_planning_history TO service_role;
 GRANT SELECT ON TABLE public.brew_planning_history TO claude_reader;
@@ -9312,27 +9535,22 @@ GRANT SELECT ON TABLE public.brew_planning_history TO claude_reader;
 -- Name: TABLE users; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.users TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.users TO authenticated;
 GRANT ALL ON TABLE public.users TO service_role;
-GRANT SELECT ON TABLE public.users TO claude_reader;
 
 
 --
 -- Name: TABLE brew_planning_history_detailed; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.brew_planning_history_detailed TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.brew_planning_history_detailed TO authenticated;
 GRANT ALL ON TABLE public.brew_planning_history_detailed TO service_role;
-GRANT SELECT ON TABLE public.brew_planning_history_detailed TO claude_reader;
 
 
 --
 -- Name: TABLE brew_planning_splits; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.brew_planning_splits TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.brew_planning_splits TO authenticated;
 GRANT ALL ON TABLE public.brew_planning_splits TO service_role;
 GRANT SELECT ON TABLE public.brew_planning_splits TO claude_reader;
@@ -9342,7 +9560,6 @@ GRANT SELECT ON TABLE public.brew_planning_splits TO claude_reader;
 -- Name: TABLE breweries; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.breweries TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.breweries TO authenticated;
 GRANT ALL ON TABLE public.breweries TO service_role;
 GRANT SELECT ON TABLE public.breweries TO claude_reader;
@@ -9352,7 +9569,6 @@ GRANT SELECT ON TABLE public.breweries TO claude_reader;
 -- Name: SEQUENCE breweries_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.breweries_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.breweries_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.breweries_id_seq TO service_role;
 
@@ -9361,7 +9577,6 @@ GRANT ALL ON SEQUENCE public.breweries_id_seq TO service_role;
 -- Name: SEQUENCE cellar_action_tags_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.cellar_action_tags_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.cellar_action_tags_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.cellar_action_tags_id_seq TO service_role;
 
@@ -9379,7 +9594,6 @@ GRANT SELECT ON TABLE public.cellar_plan_parts TO claude_reader;
 -- Name: SEQUENCE cellar_plan_parts_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.cellar_plan_parts_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.cellar_plan_parts_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.cellar_plan_parts_id_seq TO service_role;
 
@@ -9388,7 +9602,6 @@ GRANT ALL ON SEQUENCE public.cellar_plan_parts_id_seq TO service_role;
 -- Name: TABLE contract_line_status; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.contract_line_status TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.contract_line_status TO authenticated;
 GRANT ALL ON TABLE public.contract_line_status TO service_role;
 GRANT SELECT ON TABLE public.contract_line_status TO claude_reader;
@@ -9398,7 +9611,6 @@ GRANT SELECT ON TABLE public.contract_line_status TO claude_reader;
 -- Name: TABLE contract_lines; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.contract_lines TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.contract_lines TO authenticated;
 GRANT ALL ON TABLE public.contract_lines TO service_role;
 GRANT SELECT ON TABLE public.contract_lines TO claude_reader;
@@ -9408,7 +9620,6 @@ GRANT SELECT ON TABLE public.contract_lines TO claude_reader;
 -- Name: SEQUENCE contract_lines_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.contract_lines_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.contract_lines_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.contract_lines_id_seq TO service_role;
 
@@ -9417,7 +9628,6 @@ GRANT ALL ON SEQUENCE public.contract_lines_id_seq TO service_role;
 -- Name: TABLE contracts; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.contracts TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.contracts TO authenticated;
 GRANT ALL ON TABLE public.contracts TO service_role;
 GRANT SELECT ON TABLE public.contracts TO claude_reader;
@@ -9427,7 +9637,6 @@ GRANT SELECT ON TABLE public.contracts TO claude_reader;
 -- Name: SEQUENCE contracts_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.contracts_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.contracts_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.contracts_id_seq TO service_role;
 
@@ -9436,17 +9645,32 @@ GRANT ALL ON SEQUENCE public.contracts_id_seq TO service_role;
 -- Name: TABLE document_types; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.document_types TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.document_types TO authenticated;
 GRANT ALL ON TABLE public.document_types TO service_role;
 GRANT SELECT ON TABLE public.document_types TO claude_reader;
 
 
 --
+-- Name: TABLE email_log; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.email_log TO authenticated;
+GRANT ALL ON TABLE public.email_log TO service_role;
+GRANT SELECT ON TABLE public.email_log TO claude_reader;
+
+
+--
+-- Name: SEQUENCE email_log_id_seq; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,USAGE ON SEQUENCE public.email_log_id_seq TO authenticated;
+GRANT ALL ON SEQUENCE public.email_log_id_seq TO service_role;
+
+
+--
 -- Name: SEQUENCE fermentation_log_entries_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.fermentation_log_entries_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.fermentation_log_entries_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.fermentation_log_entries_id_seq TO service_role;
 
@@ -9455,7 +9679,6 @@ GRANT ALL ON SEQUENCE public.fermentation_log_entries_id_seq TO service_role;
 -- Name: SEQUENCE fermentation_log_entry_tags_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.fermentation_log_entry_tags_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.fermentation_log_entry_tags_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.fermentation_log_entry_tags_id_seq TO service_role;
 
@@ -9473,7 +9696,6 @@ GRANT SELECT ON TABLE public.filling_measurements TO claude_reader;
 -- Name: SEQUENCE filling_measurements_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.filling_measurements_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.filling_measurements_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.filling_measurements_id_seq TO service_role;
 
@@ -9482,7 +9704,6 @@ GRANT ALL ON SEQUENCE public.filling_measurements_id_seq TO service_role;
 -- Name: SEQUENCE filling_session_articles_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.filling_session_articles_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.filling_session_articles_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.filling_session_articles_id_seq TO service_role;
 
@@ -9500,7 +9721,6 @@ GRANT SELECT ON TABLE public.filling_session_materials TO claude_reader;
 -- Name: SEQUENCE filling_session_materials_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.filling_session_materials_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.filling_session_materials_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.filling_session_materials_id_seq TO service_role;
 
@@ -9509,7 +9729,6 @@ GRANT ALL ON SEQUENCE public.filling_session_materials_id_seq TO service_role;
 -- Name: SEQUENCE filling_sessions_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.filling_sessions_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.filling_sessions_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.filling_sessions_id_seq TO service_role;
 
@@ -9518,7 +9737,6 @@ GRANT ALL ON SEQUENCE public.filling_sessions_id_seq TO service_role;
 -- Name: SEQUENCE hbt_readings_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.hbt_readings_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.hbt_readings_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.hbt_readings_id_seq TO service_role;
 
@@ -9527,7 +9745,6 @@ GRANT ALL ON SEQUENCE public.hbt_readings_id_seq TO service_role;
 -- Name: TABLE ingredient_categories; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ingredient_categories TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ingredient_categories TO authenticated;
 GRANT ALL ON TABLE public.ingredient_categories TO service_role;
 GRANT SELECT ON TABLE public.ingredient_categories TO claude_reader;
@@ -9537,7 +9754,6 @@ GRANT SELECT ON TABLE public.ingredient_categories TO claude_reader;
 -- Name: SEQUENCE ingredient_categories_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.ingredient_categories_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.ingredient_categories_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.ingredient_categories_id_seq TO service_role;
 
@@ -9546,7 +9762,6 @@ GRANT ALL ON SEQUENCE public.ingredient_categories_id_seq TO service_role;
 -- Name: TABLE ingredient_declarations; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ingredient_declarations TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ingredient_declarations TO authenticated;
 GRANT ALL ON TABLE public.ingredient_declarations TO service_role;
 GRANT SELECT ON TABLE public.ingredient_declarations TO claude_reader;
@@ -9556,7 +9771,6 @@ GRANT SELECT ON TABLE public.ingredient_declarations TO claude_reader;
 -- Name: TABLE ingredient_documents; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ingredient_documents TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ingredient_documents TO authenticated;
 GRANT ALL ON TABLE public.ingredient_documents TO service_role;
 GRANT SELECT ON TABLE public.ingredient_documents TO claude_reader;
@@ -9566,7 +9780,6 @@ GRANT SELECT ON TABLE public.ingredient_documents TO claude_reader;
 -- Name: SEQUENCE ingredient_documents_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.ingredient_documents_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.ingredient_documents_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.ingredient_documents_id_seq TO service_role;
 
@@ -9575,7 +9788,6 @@ GRANT ALL ON SEQUENCE public.ingredient_documents_id_seq TO service_role;
 -- Name: TABLE ingredient_revisions; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ingredient_revisions TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ingredient_revisions TO authenticated;
 GRANT ALL ON TABLE public.ingredient_revisions TO service_role;
 GRANT SELECT ON TABLE public.ingredient_revisions TO claude_reader;
@@ -9585,7 +9797,6 @@ GRANT SELECT ON TABLE public.ingredient_revisions TO claude_reader;
 -- Name: SEQUENCE ingredient_revisions_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.ingredient_revisions_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.ingredient_revisions_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.ingredient_revisions_id_seq TO service_role;
 
@@ -9594,7 +9805,6 @@ GRANT ALL ON SEQUENCE public.ingredient_revisions_id_seq TO service_role;
 -- Name: TABLE recipe_ingredients; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_ingredients TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_ingredients TO authenticated;
 GRANT ALL ON TABLE public.recipe_ingredients TO service_role;
 GRANT SELECT ON TABLE public.recipe_ingredients TO claude_reader;
@@ -9604,7 +9814,6 @@ GRANT SELECT ON TABLE public.recipe_ingredients TO claude_reader;
 -- Name: TABLE ingredient_usage_counts; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ingredient_usage_counts TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ingredient_usage_counts TO authenticated;
 GRANT ALL ON TABLE public.ingredient_usage_counts TO service_role;
 GRANT SELECT ON TABLE public.ingredient_usage_counts TO claude_reader;
@@ -9614,7 +9823,6 @@ GRANT SELECT ON TABLE public.ingredient_usage_counts TO claude_reader;
 -- Name: TABLE ingredients; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ingredients TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ingredients TO authenticated;
 GRANT ALL ON TABLE public.ingredients TO service_role;
 GRANT SELECT ON TABLE public.ingredients TO claude_reader;
@@ -9624,7 +9832,6 @@ GRANT SELECT ON TABLE public.ingredients TO claude_reader;
 -- Name: SEQUENCE ingredients_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.ingredients_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.ingredients_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.ingredients_id_seq TO service_role;
 
@@ -9633,7 +9840,6 @@ GRANT ALL ON SEQUENCE public.ingredients_id_seq TO service_role;
 -- Name: TABLE lots; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.lots TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.lots TO authenticated;
 GRANT ALL ON TABLE public.lots TO service_role;
 GRANT SELECT ON TABLE public.lots TO claude_reader;
@@ -9643,7 +9849,6 @@ GRANT SELECT ON TABLE public.lots TO claude_reader;
 -- Name: SEQUENCE lots_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.lots_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.lots_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.lots_id_seq TO service_role;
 
@@ -9661,7 +9866,6 @@ GRANT SELECT ON TABLE public.packaging_article_materials TO claude_reader;
 -- Name: SEQUENCE packaging_article_materials_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.packaging_article_materials_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.packaging_article_materials_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.packaging_article_materials_id_seq TO service_role;
 
@@ -9670,7 +9874,6 @@ GRANT ALL ON SEQUENCE public.packaging_article_materials_id_seq TO service_role;
 -- Name: SEQUENCE packaging_articles_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.packaging_articles_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.packaging_articles_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.packaging_articles_id_seq TO service_role;
 
@@ -9688,7 +9891,6 @@ GRANT SELECT ON TABLE public.packaging_materials TO claude_reader;
 -- Name: SEQUENCE packaging_materials_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.packaging_materials_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.packaging_materials_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.packaging_materials_id_seq TO service_role;
 
@@ -9697,7 +9899,6 @@ GRANT ALL ON SEQUENCE public.packaging_materials_id_seq TO service_role;
 -- Name: TABLE permission_modules; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.permission_modules TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.permission_modules TO authenticated;
 GRANT ALL ON TABLE public.permission_modules TO service_role;
 GRANT SELECT ON TABLE public.permission_modules TO claude_reader;
@@ -9716,7 +9917,6 @@ GRANT SELECT ON TABLE public.processing_comments TO claude_reader;
 -- Name: SEQUENCE processing_comments_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.processing_comments_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.processing_comments_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.processing_comments_id_seq TO service_role;
 
@@ -9725,7 +9925,6 @@ GRANT ALL ON SEQUENCE public.processing_comments_id_seq TO service_role;
 -- Name: SEQUENCE processing_sessions_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.processing_sessions_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.processing_sessions_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.processing_sessions_id_seq TO service_role;
 
@@ -9734,7 +9933,6 @@ GRANT ALL ON SEQUENCE public.processing_sessions_id_seq TO service_role;
 -- Name: TABLE product_sheet_revisions; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.product_sheet_revisions TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.product_sheet_revisions TO authenticated;
 GRANT ALL ON TABLE public.product_sheet_revisions TO service_role;
 GRANT SELECT ON TABLE public.product_sheet_revisions TO claude_reader;
@@ -9744,7 +9942,6 @@ GRANT SELECT ON TABLE public.product_sheet_revisions TO claude_reader;
 -- Name: SEQUENCE product_sheet_revisions_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.product_sheet_revisions_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.product_sheet_revisions_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.product_sheet_revisions_id_seq TO service_role;
 
@@ -9753,7 +9950,6 @@ GRANT ALL ON SEQUENCE public.product_sheet_revisions_id_seq TO service_role;
 -- Name: TABLE product_sheets; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.product_sheets TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.product_sheets TO authenticated;
 GRANT ALL ON TABLE public.product_sheets TO service_role;
 GRANT SELECT ON TABLE public.product_sheets TO claude_reader;
@@ -9763,7 +9959,6 @@ GRANT SELECT ON TABLE public.product_sheets TO claude_reader;
 -- Name: TABLE product_sheet_status; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.product_sheet_status TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.product_sheet_status TO authenticated;
 GRANT ALL ON TABLE public.product_sheet_status TO service_role;
 GRANT SELECT ON TABLE public.product_sheet_status TO claude_reader;
@@ -9773,7 +9968,6 @@ GRANT SELECT ON TABLE public.product_sheet_status TO claude_reader;
 -- Name: SEQUENCE product_sheets_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.product_sheets_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.product_sheets_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.product_sheets_id_seq TO service_role;
 
@@ -9782,7 +9976,6 @@ GRANT ALL ON SEQUENCE public.product_sheets_id_seq TO service_role;
 -- Name: TABLE recipe_brewing_specs; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_brewing_specs TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_brewing_specs TO authenticated;
 GRANT ALL ON TABLE public.recipe_brewing_specs TO service_role;
 GRANT SELECT ON TABLE public.recipe_brewing_specs TO claude_reader;
@@ -9801,7 +9994,6 @@ GRANT SELECT ON TABLE public.recipe_cellar_steps TO claude_reader;
 -- Name: SEQUENCE recipe_cellar_steps_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.recipe_cellar_steps_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.recipe_cellar_steps_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.recipe_cellar_steps_id_seq TO service_role;
 
@@ -9810,7 +10002,6 @@ GRANT ALL ON SEQUENCE public.recipe_cellar_steps_id_seq TO service_role;
 -- Name: TABLE recipe_comments; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_comments TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_comments TO authenticated;
 GRANT ALL ON TABLE public.recipe_comments TO service_role;
 GRANT SELECT ON TABLE public.recipe_comments TO claude_reader;
@@ -9820,7 +10011,6 @@ GRANT SELECT ON TABLE public.recipe_comments TO claude_reader;
 -- Name: TABLE recipe_costs; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_costs TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_costs TO authenticated;
 GRANT ALL ON TABLE public.recipe_costs TO service_role;
 GRANT SELECT ON TABLE public.recipe_costs TO claude_reader;
@@ -9830,7 +10020,6 @@ GRANT SELECT ON TABLE public.recipe_costs TO claude_reader;
 -- Name: TABLE recipe_fermentation; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_fermentation TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_fermentation TO authenticated;
 GRANT ALL ON TABLE public.recipe_fermentation TO service_role;
 GRANT SELECT ON TABLE public.recipe_fermentation TO claude_reader;
@@ -9840,7 +10029,6 @@ GRANT SELECT ON TABLE public.recipe_fermentation TO claude_reader;
 -- Name: SEQUENCE recipe_ingredients_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.recipe_ingredients_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.recipe_ingredients_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.recipe_ingredients_id_seq TO service_role;
 
@@ -9849,7 +10037,6 @@ GRANT ALL ON SEQUENCE public.recipe_ingredients_id_seq TO service_role;
 -- Name: TABLE recipe_packaging; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_packaging TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_packaging TO authenticated;
 GRANT ALL ON TABLE public.recipe_packaging TO service_role;
 GRANT SELECT ON TABLE public.recipe_packaging TO claude_reader;
@@ -9859,7 +10046,6 @@ GRANT SELECT ON TABLE public.recipe_packaging TO claude_reader;
 -- Name: TABLE recipe_process_steps; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_process_steps TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_process_steps TO authenticated;
 GRANT ALL ON TABLE public.recipe_process_steps TO service_role;
 GRANT SELECT ON TABLE public.recipe_process_steps TO claude_reader;
@@ -9869,7 +10055,6 @@ GRANT SELECT ON TABLE public.recipe_process_steps TO claude_reader;
 -- Name: TABLE recipe_revisions; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_revisions TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_revisions TO authenticated;
 GRANT ALL ON TABLE public.recipe_revisions TO service_role;
 GRANT SELECT ON TABLE public.recipe_revisions TO claude_reader;
@@ -9879,7 +10064,6 @@ GRANT SELECT ON TABLE public.recipe_revisions TO claude_reader;
 -- Name: SEQUENCE recipe_revisions_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.recipe_revisions_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.recipe_revisions_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.recipe_revisions_id_seq TO service_role;
 
@@ -9888,7 +10072,6 @@ GRANT ALL ON SEQUENCE public.recipe_revisions_id_seq TO service_role;
 -- Name: TABLE recipe_specs; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_specs TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_specs TO authenticated;
 GRANT ALL ON TABLE public.recipe_specs TO service_role;
 GRANT SELECT ON TABLE public.recipe_specs TO claude_reader;
@@ -9898,7 +10081,6 @@ GRANT SELECT ON TABLE public.recipe_specs TO claude_reader;
 -- Name: TABLE recipe_water; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_water TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recipe_water TO authenticated;
 GRANT ALL ON TABLE public.recipe_water TO service_role;
 GRANT SELECT ON TABLE public.recipe_water TO claude_reader;
@@ -9908,7 +10090,6 @@ GRANT SELECT ON TABLE public.recipe_water TO claude_reader;
 -- Name: SEQUENCE recipes_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.recipes_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.recipes_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.recipes_id_seq TO service_role;
 
@@ -9917,7 +10098,6 @@ GRANT ALL ON SEQUENCE public.recipes_id_seq TO service_role;
 -- Name: TABLE role_permissions; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.role_permissions TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.role_permissions TO authenticated;
 GRANT ALL ON TABLE public.role_permissions TO service_role;
 GRANT SELECT ON TABLE public.role_permissions TO claude_reader;
@@ -9927,7 +10107,6 @@ GRANT SELECT ON TABLE public.role_permissions TO claude_reader;
 -- Name: TABLE roles; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.roles TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.roles TO authenticated;
 GRANT ALL ON TABLE public.roles TO service_role;
 GRANT SELECT ON TABLE public.roles TO claude_reader;
@@ -9937,7 +10116,6 @@ GRANT SELECT ON TABLE public.roles TO claude_reader;
 -- Name: SEQUENCE roles_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.roles_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.roles_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.roles_id_seq TO service_role;
 
@@ -9946,7 +10124,6 @@ GRANT ALL ON SEQUENCE public.roles_id_seq TO service_role;
 -- Name: TABLE stock_movements; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.stock_movements TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.stock_movements TO authenticated;
 GRANT ALL ON TABLE public.stock_movements TO service_role;
 GRANT SELECT ON TABLE public.stock_movements TO claude_reader;
@@ -9956,7 +10133,6 @@ GRANT SELECT ON TABLE public.stock_movements TO claude_reader;
 -- Name: SEQUENCE stock_movements_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.stock_movements_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.stock_movements_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.stock_movements_id_seq TO service_role;
 
@@ -9965,7 +10141,6 @@ GRANT ALL ON SEQUENCE public.stock_movements_id_seq TO service_role;
 -- Name: TABLE suppliers; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.suppliers TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.suppliers TO authenticated;
 GRANT ALL ON TABLE public.suppliers TO service_role;
 GRANT SELECT ON TABLE public.suppliers TO claude_reader;
@@ -9975,7 +10150,6 @@ GRANT SELECT ON TABLE public.suppliers TO claude_reader;
 -- Name: SEQUENCE suppliers_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.suppliers_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.suppliers_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.suppliers_id_seq TO service_role;
 
@@ -9984,7 +10158,6 @@ GRANT ALL ON SEQUENCE public.suppliers_id_seq TO service_role;
 -- Name: SEQUENCE tanks_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.tanks_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.tanks_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.tanks_id_seq TO service_role;
 
@@ -9993,7 +10166,6 @@ GRANT ALL ON SEQUENCE public.tanks_id_seq TO service_role;
 -- Name: TABLE units; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.units TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.units TO authenticated;
 GRANT ALL ON TABLE public.units TO service_role;
 GRANT SELECT ON TABLE public.units TO claude_reader;
@@ -10003,7 +10175,6 @@ GRANT SELECT ON TABLE public.units TO claude_reader;
 -- Name: TABLE water_settings; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.water_settings TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.water_settings TO authenticated;
 GRANT ALL ON TABLE public.water_settings TO service_role;
 GRANT SELECT ON TABLE public.water_settings TO claude_reader;
@@ -10013,7 +10184,6 @@ GRANT SELECT ON TABLE public.water_settings TO claude_reader;
 -- Name: TABLE water_settings_history; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.water_settings_history TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.water_settings_history TO authenticated;
 GRANT ALL ON TABLE public.water_settings_history TO service_role;
 GRANT SELECT ON TABLE public.water_settings_history TO claude_reader;
@@ -10023,7 +10193,6 @@ GRANT SELECT ON TABLE public.water_settings_history TO claude_reader;
 -- Name: SEQUENCE water_settings_history_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.water_settings_history_id_seq TO anon;
 GRANT SELECT,USAGE ON SEQUENCE public.water_settings_history_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.water_settings_history_id_seq TO service_role;
 
@@ -10032,7 +10201,6 @@ GRANT ALL ON SEQUENCE public.water_settings_history_id_seq TO service_role;
 -- Name: DEFAULT PRIVILEGES FOR SEQUENCES; Type: DEFAULT ACL; Schema: public; Owner: -
 --
 
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT SELECT,USAGE ON SEQUENCES TO anon;
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT SELECT,USAGE ON SEQUENCES TO authenticated;
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON SEQUENCES TO service_role;
 
@@ -10048,7 +10216,6 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON FUNCTIO
 -- Name: DEFAULT PRIVILEGES FOR TABLES; Type: DEFAULT ACL; Schema: public; Owner: -
 --
 
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT SELECT,INSERT,DELETE,UPDATE ON TABLES TO anon;
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT SELECT,INSERT,DELETE,UPDATE ON TABLES TO authenticated;
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON TABLES TO service_role;
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT SELECT ON TABLES TO claude_reader;
