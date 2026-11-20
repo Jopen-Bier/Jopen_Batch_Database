@@ -70,7 +70,6 @@ productsheet-generator/    Node test harness for product sheets
 batchrapport_cel_mapping.csv  Excel cell ↔ database field mapping for the batch report
 supabase/
   migrations/              every schema change, in order (see §5.4)
-  schema.sql               full structure dump, refreshed nightly = the baseline
   rename-map.json          agreed Dutch → English names (transition source of truth)
   functions/               Edge Functions (generate-invite-link, delete-user, auth-email; _shared/ = Graph mail + e-mail templates, see §6b)
 docs/batch-report/         brief for the digital batch report (decisions, data model, rules, screens, phases, mockup)
@@ -295,7 +294,7 @@ Agreed table and column names per table: `supabase/rename-map.json`.
   `supabase_migrations.schema_migrations` **before** pushing the file, so the
   integration skips it. Details: `supabase/migrations/README.md`.
 - Never put a baseline/full dump in `migrations/`. The baseline is
-  `supabase/schema.sql`.
+  `supabase/schema.sql` on branch `schema-snapshot`.
 - Bulk or risky data changes: dry run with `BEGIN … ROLLBACK` first; Jaap
   reviews proposed changes in a spreadsheet.
 - Always check the live schema (`information_schema`, `pg_policies`) before
@@ -311,7 +310,8 @@ Agreed table and column names per table: `supabase/rename-map.json`.
 | Nightly storage mirror | same workflow → private `Jopen_Storage_Backup` |
 | Weekly restore test | `.github/workflows/restore-test.yml` |
 | Guard on every push / PR | `.github/workflows/guard.yml` → `tools/ci_guard.py` (no copies of `jopen-utils.js` / `brew-calculations.js` functions; snake_case English names in new migrations, with `-- naming-ok: <name>` for a deliberate exception), `node --check`, `tests/*.test.js` |
-| Drift detection | `.github/workflows/schema-snapshot.yml` → `supabase/schema.sql`; a commit "Schema gewijzigd" without a matching migration = drift |
+| Drift detection | `.github/workflows/schema-snapshot.yml` → `supabase/schema.sql` on branch `schema-snapshot` (not on `main`, which is protected); a commit "Schema gewijzigd" there without a matching migration = drift |
+| Protected `main` | ruleset: no direct pushes, pull request + green Guard required (security phase 2) |
 | Restore manual | `.github/backup/RESTORE.md` |
 
 ---

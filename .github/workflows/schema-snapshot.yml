@@ -14,6 +14,12 @@ name: Schema snapshot
 #
 # Draait elke nacht na de backup, en handmatig via de Actions-tab.
 # Gebruikt het secret SUPABASE_DB_URL (hetzelfde als de backup).
+#
+# Since security phase 2 (20-11-2026) main is protected (pull request +
+# Guard required), so the snapshot is committed to its own branch
+# `schema-snapshot`, which holds only supabase/schema.sql. Read it with:
+#   git fetch origin schema-snapshot
+#   git show origin/schema-snapshot:supabase/schema.sql
 
 on:
   schedule:
@@ -21,9 +27,10 @@ on:
   workflow_dispatch: {}
 
 permissions:
-  contents: write          # om supabase/schema.sql te kunnen committen
+  contents: write          # to commit supabase/schema.sql to the schema-snapshot branch
 
 env:
+  SNAPSHOT_BRANCH: schema-snapshot
   PG_BIN: /usr/lib/postgresql/17/bin
 
 jobs:
@@ -52,17 +59,26 @@ jobs:
           # --no-owner: eigenaar verschilt per omgeving. Grants blijven er WEL
           # in, want die zijn nodig om de app te laten werken.
           "$PG_BIN/pg_dump" "$SUPABASE_DB_URL" "${SCHEMA_ARGS[@]}" \
-            --schema-only --no-owner -f ruw.sql
+            --schema-only --no-owner -f "$RUNNER_TEMP/ruw.sql"
           # Regels die per run veranderen zonder dat het schema verandert
           # (versie-commentaar en de willekeurige \restrict-sleutel van
           # nieuwere pg_dump-versies) eruit, zodat er alleen een commit komt
           # bij een echte wijziging.
-          mkdir -p supabase
-          grep -vE '^\\(un)?restrict |^-- Dumped (from|by) ' ruw.sql > supabase/schema.sql
-          wc -l supabase/schema.sql
+          grep -vE '^\\(un)?restrict |^-- Dumped (from|by) ' "$RUNNER_TEMP/ruw.sql" > "$RUNNER_TEMP/schema.sql"
+          wc -l "$RUNNER_TEMP/schema.sql"
 
       - name: Commit bij wijziging
         run: |
+          # Switch to the snapshot branch (created as an orphan branch with
+          # only supabase/schema.sql on the first run), never to main.
+          if git fetch -q --depth=1 origin "$SNAPSHOT_BRANCH"; then
+            git checkout -q -B "$SNAPSHOT_BRANCH" FETCH_HEAD
+          else
+            git checkout -q --orphan "$SNAPSHOT_BRANCH"
+            git rm -rqf .
+          fi
+          mkdir -p supabase
+          cp "$RUNNER_TEMP/schema.sql" supabase/schema.sql
           git add supabase/schema.sql
           if git diff --cached --quiet; then
             echo "Schema ongewijzigd."
@@ -71,5 +87,5 @@ jobs:
           git config user.name "jopen-schema-bot"
           git config user.email "schema-bot@users.noreply.github.com"
           git commit -q -m "Schema gewijzigd ($(date -u +%Y-%m-%d))"
-          git push -q
-          echo "::notice::Het databaseschema is gewijzigd en vastgelegd in supabase/schema.sql. Controleer of er een migratie bij hoort."
+          git push -q origin "HEAD:refs/heads/$SNAPSHOT_BRANCH"
+          echo "::notice::Het databaseschema is gewijzigd en vastgelegd in supabase/schema.sql op branch $SNAPSHOT_BRANCH. Controleer of er een migratie bij hoort."

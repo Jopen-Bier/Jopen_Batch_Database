@@ -32,7 +32,8 @@ Working on the digital batch report? Start at `docs/batch-report/README.md`.
 - No `CASCADE` on drops unless explicitly agreed — let unexpected
   dependencies fail loudly.
 - Never a full dump/baseline in `migrations/`; the baseline is
-  `supabase/schema.sql` (refreshed nightly).
+  `supabase/schema.sql` on branch `schema-snapshot` (refreshed nightly):
+  `git fetch origin schema-snapshot && git show origin/schema-snapshot:supabase/schema.sql`.
 - `execute_sql` returns only the first result set: one query per call.
   Large VALUES lists: split. Enum values from VALUES need explicit casts.
 
@@ -59,6 +60,12 @@ Working on the digital batch report? Start at `docs/batch-report/README.md`.
 - Excel batch report: patch XML via `xlsx-direct.js`; never load/save the
   template with ExcelJS. `batchrapport-vullen.js` has its own browser copy of
   the writer — change both.
+
+## Branches and pull requests
+- `main` is protected (security phase 2, 20-11-2026): never push to `main`.
+  Every change goes on its own branch with a pull request; Jaap merges after
+  the Guard check is green. A merge to `main` deploys (GitHub Pages and the
+  Supabase migrations), so the pull request is the review moment.
 
 ## Before every push
 - `node --check` on every changed `.js` file and on the extracted inline
