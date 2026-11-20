@@ -79,5 +79,7 @@ Working on the digital batch report? Start at `docs/batch-report/README.md`.
 
 ## Secrets
 - Session PATs are revoked by Jaap after each session. Automation secrets
-  (`BACKUP_REPO_PAT`, `SUPABASE_DB_URL`, …) live in GitHub Actions — never
-  in the repo, never revoked as part of a session.
+  (`BACKUP_REPO_PAT`, `SUPABASE_DB_URL`, …) live in the GitHub Actions
+  environment `production`, which only `main` may use (security phase 3) —
+  never in the repo, never as repository-level secrets, never revoked as part
+  of a session. A job that needs one declares `environment: production`.

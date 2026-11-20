@@ -312,6 +312,7 @@ Agreed table and column names per table: `supabase/rename-map.json`.
 | Guard on every push / PR | `.github/workflows/guard.yml` → `tools/ci_guard.py` (no copies of `jopen-utils.js` / `brew-calculations.js` functions; snake_case English names in new migrations, with `-- naming-ok: <name>` for a deliberate exception), `node --check`, `tests/*.test.js` |
 | Drift detection | `.github/workflows/schema-snapshot.yml` → `supabase/schema.sql` on branch `schema-snapshot` (not on `main`, which is protected); a commit "Schema gewijzigd" there without a matching migration = drift |
 | Protected `main` | ruleset: no direct pushes, pull request + green Guard required (security phase 2) |
+| Secrets only for `main` | Actions secrets in environment `production` (deployment branches: `main` only); backup, restore-test and snapshot jobs declare it (security phase 3) |
 | Restore manual | `.github/backup/RESTORE.md` |
 
 ---
