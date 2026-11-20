@@ -24,7 +24,7 @@ SQL Editor), zet dan direct een bestand met **exact dezelfde versie en naam**
 zijn de 50 ontbrekende migraties zo uit de database overgenomen, en is
 `20260918072509_…` hernoemd naar de geregistreerde versie `20260918072457_…`.
 
-## De volledige structuur: `supabase/schema.sql`
+## De volledige structuur: `supabase/schema.sql` (branch `schema-snapshot`)
 De migraties in deze map beginnen pas op 29 juli 2026; de kerntabellen
 (recepten, ingrediënten, gebruikers, …) zijn van daarvoor en staan hier niet
 in. De migratieketen is dus **niet** genoeg om de database vanaf nul op te
@@ -35,6 +35,10 @@ van al onze eigen schema's (tabellen, functies, triggers, views,
 RLS-policies, grants). De workflow *Schema snapshot* ververst hem elke nacht
 en bij handmatig starten. Dat is de baseline: opnieuw opbouwen = `schema.sql`
 draaien, daarna de data uit de backup.
+
+Since security phase 2 (20-11-2026) the file lives on its own branch
+`schema-snapshot`, not on `main` (which is protected):
+`git fetch origin schema-snapshot && git show origin/schema-snapshot:supabase/schema.sql`.
 
 Verschijnt er een commit "Schema gewijzigd" zonder bijbehorende migratie,
 dan is er iets buiten de migraties om veranderd (drift). Leg dat dan alsnog
