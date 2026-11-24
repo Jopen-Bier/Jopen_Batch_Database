@@ -25,6 +25,19 @@ begin
   create role service_role nologin;
 exception when duplicate_object then null;
 end $$;
+-- Claude Reader connector (security phase 4): policies in claude_connector
+-- name claude_reader_login, so the restore needs these roles to exist. In
+-- this throwaway container they never log in.
+do $$
+begin
+  create role claude_reader nologin;
+exception when duplicate_object then null;
+end $$;
+do $$
+begin
+  create role claude_reader_login nologin;
+exception when duplicate_object then null;
+end $$;
 
 create schema if not exists auth;
 create schema if not exists extensions;

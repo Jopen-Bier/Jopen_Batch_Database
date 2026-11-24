@@ -33,6 +33,9 @@ Working on the digital batch report? Start at `docs/batch-report/README.md`.
   `claude_reader` SELECT by default: revoke it for any new table or view with
   people data. Tokens come from `claude_connector.issue_token()` and expire.
   Deploy the function from the repo file with verify_jwt = false.
+- A new database role that a policy, view or function names must also be
+  created in `.github/backup/supabase_stub.sql`, or the nightly trial restore
+  fails on "role … does not exist" (happened with `claude_reader_login`).
 - `supabase/migrations/` is auto-executed on production by the GitHub
   integration. A migration run by hand (SQL Editor) must be registered in
   `supabase_migrations.schema_migrations` **before** its file is pushed.
