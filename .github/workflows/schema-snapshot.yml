@@ -26,19 +26,25 @@ on:
     - cron: '30 3 * * *'   # na de backup van 03:00 UTC
   workflow_dispatch: {}
 
+# Two jobs since security phase 7: the job that holds the database URL can
+# only read the repo; the job that may write to the repo never sees a secret.
 permissions:
-  contents: write          # to commit supabase/schema.sql to the schema-snapshot branch
+  contents: read
 
 env:
   SNAPSHOT_BRANCH: schema-snapshot
   PG_BIN: /usr/lib/postgresql/17/bin
 
 jobs:
-  snapshot:
+  dump:
     runs-on: ubuntu-latest
     environment: production   # secrets live in this environment; only main may use it (security phase 3)
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          sparse-checkout: .github/backup
 
       - name: Install postgresql-client 17
         run: |
@@ -67,6 +73,24 @@ jobs:
           # bij een echte wijziging.
           grep -vE '^\\(un)?restrict |^-- Dumped (from|by) ' "$RUNNER_TEMP/ruw.sql" > "$RUNNER_TEMP/schema.sql"
           wc -l "$RUNNER_TEMP/schema.sql"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: schema-sql
+          path: ${{ runner.temp }}/schema.sql
+          retention-days: 1
+
+  commit:
+    needs: dump
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write          # to commit supabase/schema.sql to the schema-snapshot branch
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: schema-sql
+          path: ${{ runner.temp }}
 
       - name: Commit bij wijziging
         run: |

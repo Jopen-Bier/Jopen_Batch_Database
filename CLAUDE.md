@@ -45,6 +45,8 @@ Working on the digital batch report? Start at `docs/batch-report/README.md`.
   batch or stock data gets the matching `after insert or update or delete`
   trigger. Both logs stay append-only: never add insert/update/delete
   policies or grants for app roles.
+- New SECURITY DEFINER functions: `set search_path = public, pg_temp` (or
+  `''` with schema-qualified names), never plain `public` (security phase 7).
 - A new database role that a policy, view or function names must also be
   created in `.github/backup/supabase_stub.sql`, or the nightly trial restore
   fails on "role … does not exist" (happened with `claude_reader_login`).
@@ -98,6 +100,13 @@ Working on the digital batch report? Start at `docs/batch-report/README.md`.
   `window.eval(script + testCode)` (separate evals do not share `let`/`const`).
 - Commit as `git -c user.name="Claude" -c user.email="claude@anthropic.com" commit`;
   rebase on `origin/main` if someone pushed in between.
+
+## GitHub Actions
+- Every `uses:` is pinned to a full commit SHA with the version as a comment
+  (`actions/checkout@<sha> # v5.1.0`); Guard fails otherwise. Dependabot
+  opens pull requests for new releases (security phase 7).
+- A job that holds a secret gets `contents: read`; a job that writes to the
+  repo gets no secrets (see `schema-snapshot.yml`).
 
 ## Secrets
 - Session PATs are revoked by Jaap after each session. Automation secrets

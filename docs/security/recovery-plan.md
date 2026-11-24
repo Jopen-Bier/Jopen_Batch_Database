@@ -57,7 +57,7 @@ and the `production` environment secrets; rotate the secrets in it.
 
 | What | Where it lives | How to set it again |
 |---|---|---|
-| Edge Functions | `supabase/functions/` in this repo | deploy from the repo (`claude-reader-mcp` with verify_jwt off, `delete-user` off, `generate-invite-link` on) |
+| Edge Functions | `supabase/functions/` in this repo | deploy from the repo (`claude-reader-mcp` with verify_jwt off; `delete-user` and `generate-invite-link` on) |
 | Edge Function secrets | Supabase → Edge Functions → Secrets | `READER_DB_URL` (new password for `claude_reader_login`), `MS_TENANT_ID`, `MS_CLIENT_ID`, `MS_CLIENT_SECRET`, `MAIL_SENDER` |
 | Auth settings | Supabase → Authentication | Site URL + Redirect URLs (incl. `accept-invite.html`), **MFA → TOTP on**, Send Email hook (`auth-email`) |
 | Two-factor authenticators | `auth.mfa_factors` (deliberately not backed up: holds the authenticator secrets) | everyone sets up their authenticator again; the app asks at the first login |

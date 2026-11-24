@@ -1,0 +1,11 @@
+# Keeps the GitHub Actions pinned to a commit (security phase 7) up to date:
+# once a week Dependabot opens a pull request when a pinned action has a new
+# release. Guard runs on it; merge it like any other pull request.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "Actions"

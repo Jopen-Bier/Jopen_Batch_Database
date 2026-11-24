@@ -9,6 +9,9 @@ Checks
    index and trigger created or renamed in a migration newer than
    NAMING_BASELINE must be snake_case and must not contain Dutch words
    (word list derived from the old names in supabase/rename-map.json).
+3. Pinned actions (security phase 7): every `uses:` in .github/workflows
+   names a full 40-character commit SHA, not a tag or branch that can be
+   moved to other code. Dependabot (.github/dependabot.yml) keeps them current.
 
 Exemption for a deliberate exception: put `-- naming-ok: <identifier>` in
 the migration file. Run from the repo root: python3 tools/ci_guard.py
@@ -230,9 +233,24 @@ def check_migrations():
                             check_identifier(path, sql, pos, col, 'column', tokens, old_names, exempt)
 
 
+PINNED = re.compile(r'^\s*-?\s*uses:\s*([^\s#]+)')
+
+
+def check_pinned_actions():
+    for path in sorted((ROOT / '.github' / 'workflows').glob('*.y*ml')):
+        for no, line in enumerate(path.read_text(encoding='utf-8').splitlines(), 1):
+            m = PINNED.match(line)
+            if not m or m.group(1).startswith('./'):
+                continue
+            ref = m.group(1).rpartition('@')[2]
+            if not re.fullmatch(r'[0-9a-f]{40}', ref):
+                report(path, no, f'Action not pinned to a commit SHA: {m.group(1)} (use owner/repo@<40-char sha> # vX.Y.Z)')
+
+
 if __name__ == '__main__':
     check_helper_copies()
     check_migrations()
+    check_pinned_actions()
     for f in findings:
         print(f)
     if findings:
