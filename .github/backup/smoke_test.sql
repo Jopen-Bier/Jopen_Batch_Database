@@ -5,7 +5,8 @@
 -- (--no-privileges). Never run against production.
 --
 -- Row counts (tel_rijen.sql) prove the data came back; this proves the app
--- would work on it: rights helpers, RLS, two-factor rule and views.
+-- would work on it: rights helpers, RLS, two-factor rule (when the backup
+-- has it) and views.
 -- Any failed check raises an error, so psql -v ON_ERROR_STOP=1 fails the step.
 
 grant usage on schema public to authenticated;
@@ -14,6 +15,7 @@ grant select on all tables in schema public to authenticated;
 do $smoke$
 declare
   v_admin uuid;
+  v_mfa boolean := to_regprocedure('public.mfa_satisfied()') is not null;
   v_n bigint;
   v_all bigint;
   v_rec record;
@@ -26,9 +28,11 @@ begin
     raise exception 'smoke test: % table(s) in public without row level security', v_n;
   end if;
 
-  -- 2. The rights helpers the policies depend on exist
+  -- 2. The rights helpers the policies depend on exist. mfa_satisfied()
+  --    only in backups made after security phase 5 (24-11-2026); an older
+  --    backup is checked for what it should contain, not for today's code.
   perform 'public.is_admin()'::regprocedure, 'public.can_view(text)'::regprocedure,
-          'public.current_role_id()'::regprocedure, 'public.mfa_satisfied()'::regprocedure;
+          'public.current_role_id()'::regprocedure;
 
   -- 3. Every view can be queried
   for v_rec in select c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
@@ -66,12 +70,13 @@ begin
   set local role authenticated;
   select count(*) into v_n from public.batches;
   reset role;
-  if v_n <> 0 and v_all > 0 then
+  if v_mfa and v_n <> 0 and v_all > 0 then
     raise exception 'smoke test: admin without two-factor code sees % batches (expected 0)', v_n;
   end if;
 
   perform set_config('request.jwt.claims', '', true);
   perform set_config('request.jwt.claim.sub', '', true);
-  raise notice 'smoke test passed: RLS on all tables, helpers present, views queryable, admin sees %/% batches with code and 0 without', v_all, v_all;
+  raise notice 'smoke test passed: RLS on all tables, helpers present, views queryable, admin sees %/% batches%',
+    v_all, v_all, case when v_mfa then ' with code and 0 without' else ' (backup from before two-factor authentication)' end;
 end
 $smoke$;
