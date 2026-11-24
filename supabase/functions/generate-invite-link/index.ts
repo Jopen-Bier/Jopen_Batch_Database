@@ -61,8 +61,12 @@ serve(async (req) => {
 
     // 2. Is de aanroeper admin?
     const adminClient = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
-    if (!(await isAdmin(adminClient, callerData.user.id))) {
-      return json({ error: "Only admins can invite new colleagues" }, 403);
+    // Asked of the database with the caller's own session, so the same rules
+    // apply as everywhere else: active admin AND two-factor code entered when
+    // required (is_admin() / mfa_satisfied(), security phase 5).
+    const { data: callerIsAdmin, error: adminErr } = await callerClient.rpc("is_admin");
+    if (adminErr || callerIsAdmin !== true) {
+      return json({ error: "Only admins can invite new colleagues (with their two-factor code entered)" }, 403);
     }
 
     const REDIRECT_TO = "https://jopen-bier.github.io/Jopen_Batch_Database/accept-invite.html";
@@ -176,16 +180,6 @@ serve(async (req) => {
   }
 });
 
-// True when the given auth user is an active user with the role 'admin'.
-// deno-lint-ignore no-explicit-any
-async function isAdmin(client: any, userId: string): Promise<boolean> {
-  const { data, error } = await client
-    .from("users")
-    .select("is_active, roles(name)")
-    .eq("id", userId)
-    .single();
-  return !error && data?.is_active === true && data?.roles?.name === "admin";
-}
 
 function json(body: unknown, status: number) {
   return new Response(JSON.stringify(body), {

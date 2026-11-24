@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jopen Brouwerij — Two-factor authentication</title>
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="stylesheet" href="jopen-shared.css" />
+  <style>
+    .mfa-qr { display: block; width: 200px; height: 200px; margin: 12px 0; background: #fff; border: 1px solid #eee; }
+    .mfa-secret { font-family: monospace; font-size: 0.95em; word-break: break-all; background: #f6f6f4; padding: 6px 8px; border-radius: 4px; }
+    .mfa-code { font-size: 1.3em; letter-spacing: 0.2em; width: 9em; }
+    .mfa-note { font-size: 0.85em; color: #555; }
+    .mfa-on { color: #2f7d3c; font-weight: 600; }
+  </style>
+</head>
+<body>
+
+  <div id="jopen-nav"></div>
+
+  <main class="jopen-pagina">
+    <div id="mfa-loading" class="jopen-subtitel">Loading…</div>
+
+    <!-- Enter the code (authenticator set up, this session not yet confirmed) -->
+    <form class="jopen-form" id="mfa-verify-form" style="display:none;">
+      <h1 style="font-size:1.3em; margin-top:0;">Enter your code</h1>
+      <p class="jopen-subtitel" style="margin-bottom:0;">Open your authenticator app and enter the 6-digit code for Jopen.</p>
+      <label for="mfa-verify-code">Code</label>
+      <input type="text" id="mfa-verify-code" class="mfa-code" required inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" />
+      <button type="submit">Confirm</button>
+      <p id="mfa-verify-msg" class="jopen-form-melding"></p>
+      <p class="mfa-note">Lost your phone? Ask an admin to reset your two-factor authentication.
+        <a href="#" class="mfa-logout">Log out</a></p>
+    </form>
+
+    <!-- Set up (no authenticator yet) -->
+    <form class="jopen-form" id="mfa-enroll-form" style="display:none;">
+      <h1 style="font-size:1.3em; margin-top:0;">Set up two-factor authentication</h1>
+      <p id="mfa-enroll-why" class="jopen-subtitel" style="margin-bottom:0;"></p>
+      <ol class="mfa-note" style="padding-left:18px;">
+        <li>Install an authenticator app on your phone (for example Microsoft Authenticator or Google Authenticator).</li>
+        <li>In the app, add an account and scan this QR code.</li>
+        <li>Enter the 6-digit code the app shows.</li>
+      </ol>
+      <img id="mfa-qr" class="mfa-qr" alt="QR code for your authenticator app" />
+      <p class="mfa-note">Can't scan? Enter this key in the app instead:<br><span id="mfa-secret" class="mfa-secret"></span></p>
+      <label for="mfa-enroll-code">Code from the app</label>
+      <input type="text" id="mfa-enroll-code" class="mfa-code" required inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" />
+      <button type="submit">Turn on</button>
+      <button type="button" id="mfa-enroll-skip" style="display:none; background:none; border:1px solid #ccc; color:#555; margin-left:8px;">Not now</button>
+      <p id="mfa-enroll-msg" class="jopen-form-melding"></p>
+      <p class="mfa-note"><a href="#" class="mfa-logout">Log out</a></p>
+    </form>
+
+    <!-- Status (authenticator set up and confirmed in this session) -->
+    <div class="jopen-form" id="mfa-status" style="display:none;">
+      <h1 style="font-size:1.3em; margin-top:0;">Two-factor authentication</h1>
+      <p><span class="mfa-on">On.</span> After logging in you are asked for a code from your authenticator app.</p>
+      <p id="mfa-status-required" class="mfa-note" style="display:none;">Your role requires two-factor authentication, so it cannot be turned off.</p>
+      <button type="button" id="mfa-remove-btn" style="display:none; background:none; border:1px solid #ccc; color:#555;">Turn off</button>
+      <p id="mfa-status-msg" class="jopen-form-melding"></p>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2"></script>
+  <script src="config.js"></script>
+  <script src="jopen-utils.js"></script>
+  <script src="nav.js"></script>
+  <script>
+    // Security phase 5. One page for: setting up an authenticator (TOTP),
+    // entering the code after logging in, and seeing or turning it off.
+    // nav.js sends users here (?redirect=<page>) when their session still
+    // needs this step; the database enforces the same rule (mfa_satisfied()).
+
+    function mfaRedirectTarget() {
+      const target = new URLSearchParams(window.location.search).get('redirect');
+      // Relative paths within this site only (no open redirect).
+      if (target && !target.startsWith('http') && !target.startsWith('//') && !target.startsWith('mfa.html')) return target;
+      return 'index.html';
+    }
+
+    function show(id) {
+      ['mfa-loading', 'mfa-verify-form', 'mfa-enroll-form', 'mfa-status']
+        .forEach(x => { document.getElementById(x).style.display = x === id ? 'block' : 'none'; });
+    }
+
+    function setMsg(id, text, kind) {
+      const el = document.getElementById(id);
+      el.textContent = text;
+      el.className = 'jopen-form-melding' + (kind ? ' ' + kind : '');
+    }
+
+    function codeError(error) {
+      return /invalid|expired|code/i.test(error.message || '')
+        ? 'That code is not right. Check that the time on your phone is correct and try the newest code.'
+        : 'Could not confirm the code: ' + error.message;
+    }
+
+    async function initMfaPage() {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (!session) return; // nav.js sends the visitor to login.html
+
+      const user = await getCurrentUser();
+      const required = !!(user && user.mfaRequired);
+      const [{ data: factors, error: factorsErr }, { data: aal }] = await Promise.all([
+        supabaseClient.auth.mfa.listFactors(),
+        supabaseClient.auth.mfa.getAuthenticatorAssuranceLevel(),
+      ]);
+      if (factorsErr) {
+        show('mfa-status');
+        setMsg('mfa-status-msg', 'Could not load your two-factor settings: ' + factorsErr.message, 'fout');
+        return;
+      }
+      const verified = (factors.totp || []).filter(f => f.status === 'verified');
+
+      if (verified.length && aal && aal.currentLevel !== 'aal2') {
+        showVerify(verified[0].id);
+      } else if (!verified.length) {
+        await showEnroll(factors, required);
+      } else {
+        showStatus(verified[0].id, required);
+      }
+    }
+
+    function showVerify(factorId) {
+      show('mfa-verify-form');
+      const input = document.getElementById('mfa-verify-code');
+      input.focus();
+      document.getElementById('mfa-verify-form').onsubmit = async (e) => {
+        e.preventDefault();
+        setMsg('mfa-verify-msg', 'Checking…');
+        const { error } = await supabaseClient.auth.mfa.challengeAndVerify({ factorId, code: input.value.trim() });
+        if (error) { setMsg('mfa-verify-msg', codeError(error), 'fout'); input.select(); return; }
+        jopenWisRechtenCache();
+        window.location.replace(mfaRedirectTarget());
+      };
+    }
+
+    async function showEnroll(factors, required) {
+      document.getElementById('mfa-enroll-why').textContent = required
+        ? 'Your role requires two-factor authentication. Set it up once to continue.'
+        : 'Optional for your role: it protects your account if your password ever leaks.';
+      document.getElementById('mfa-enroll-skip').style.display = required ? 'none' : 'inline-block';
+      document.getElementById('mfa-enroll-skip').onclick = () => window.location.replace(mfaRedirectTarget());
+
+      // Leftovers of an earlier, unfinished attempt would block a new one.
+      for (const f of (factors.all || []).filter(f => f.factor_type === 'totp' && f.status !== 'verified')) {
+        await supabaseClient.auth.mfa.unenroll({ factorId: f.id });
+      }
+      const { data, error } = await supabaseClient.auth.mfa.enroll({
+        factorType: 'totp',
+        friendlyName: 'Authenticator ' + new Date().toISOString().slice(0, 16).replace('T', ' '),
+      });
+      show('mfa-enroll-form');
+      if (error) {
+        setMsg('mfa-enroll-msg', 'Two-factor authentication could not be started: ' + error.message, 'fout');
+        return;
+      }
+      document.getElementById('mfa-qr').src = data.totp.qr_code;
+      document.getElementById('mfa-secret').textContent = data.totp.secret;
+
+      const input = document.getElementById('mfa-enroll-code');
+      document.getElementById('mfa-enroll-form').onsubmit = async (e) => {
+        e.preventDefault();
+        setMsg('mfa-enroll-msg', 'Checking…');
+        const { error: verifyErr } = await supabaseClient.auth.mfa.challengeAndVerify({ factorId: data.id, code: input.value.trim() });
+        if (verifyErr) { setMsg('mfa-enroll-msg', codeError(verifyErr), 'fout'); input.select(); return; }
+        jopenWisRechtenCache();
+        setMsg('mfa-enroll-msg', 'Two-factor authentication is on.', 'ok');
+        setTimeout(() => window.location.replace(mfaRedirectTarget()), 1000);
+      };
+    }
+
+    function showStatus(factorId, required) {
+      show('mfa-status');
+      document.getElementById('mfa-status-required').style.display = required ? 'block' : 'none';
+      const btn = document.getElementById('mfa-remove-btn');
+      btn.style.display = required ? 'none' : 'inline-block';
+      btn.onclick = async () => {
+        if (!confirm('Turn off two-factor authentication? Your account is then protected by your password only.')) return;
+        setMsg('mfa-status-msg', 'Turning off…');
+        const { error } = await supabaseClient.auth.mfa.unenroll({ factorId });
+        if (error) { setMsg('mfa-status-msg', 'Could not turn it off: ' + error.message, 'fout'); return; }
+        await supabaseClient.auth.refreshSession();
+        window.location.reload();
+      };
+    }
+
+    document.querySelectorAll('.mfa-logout').forEach(a => a.addEventListener('click', (e) => { e.preventDefault(); uitloggen(); }));
+    document.addEventListener('DOMContentLoaded', initMfaPage);
+  </script>
+</body>
+</html>

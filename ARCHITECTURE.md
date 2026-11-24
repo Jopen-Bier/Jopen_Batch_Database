@@ -230,7 +230,7 @@ Agreed table and column names per table: `supabase/rename-map.json`.
 | Page | Permission module | Main tables / views |
 |---|---|---|
 | `index.html` | — (tiles per module) | |
-| `login.html`, `accept-invite.html` | — | auth only |
+| `login.html`, `accept-invite.html`, `mfa.html` | — | auth only (`mfa.html`: two-factor set-up and code, see `docs/security/mfa.md`) |
 | `recept-invoer.html` | recipes | recipes, recipe_* (brewing_specs, fermentation, water, ingredients, costs, process_steps, specs, packaging, comments, revisions), ingredients, units, water_settings, breweries. Ingredient lines are saved with `save_recipe_ingredients()` (one transaction; existing lines keep their id); the cellar plan (`recipe_cellar_steps`, via `recipe-cellar-plan.js`) with `save_recipe_cellar_steps()`, which regenerates it; base beer lines (`addition_type = base_beer`, `recipe-base-beer.js`) go with the ingredient lines |
 | `receptoverzicht.html` | recipes | recipes, recipe_*, breweries, recipe_cellar_steps, cellar_action_tags, cellar_plan_parts, product_sheet_status (view), batches |
 | `ingredienten.html` | ingredients | ingredients, ingredient_categories, ingredient_documents, ingredient_revisions, ingredient_declarations, ingredient_usage_counts (view), document_types, recipe_ingredients, units, suppliers (dropdowns Supplier #1–#3) |

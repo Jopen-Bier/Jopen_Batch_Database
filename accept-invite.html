@@ -30,6 +30,11 @@
       <label for="wachtwoord-herhaal">Confirm password</label>
       <input type="password" id="wachtwoord-herhaal" required minlength="8" autocomplete="new-password" />
 
+      <div id="mfa-code-wrap" style="display:none;">
+        <label for="mfa-code">Code from your authenticator app</label>
+        <input type="text" id="mfa-code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" />
+      </div>
+
       <button type="submit">Set password</button>
       <p id="melding" class="jopen-form-melding"></p>
     </form>
@@ -112,9 +117,41 @@
         return;
       }
 
-      melding.textContent = 'Saving…';
+      melding.textContent = 'Checking…';
       melding.className = 'jopen-form-melding';
 
+      // Security phase 5: refuse passwords from known data breaches (only a
+      // hash prefix leaves the browser), and confirm the authenticator code
+      // first when this account has two-factor authentication.
+      if (await isPasswordPwned(wachtwoord)) {
+        melding.textContent = 'This password appears in a known data breach. Please choose a different one.';
+        melding.className = 'jopen-form-melding fout';
+        return;
+      }
+      const { data: aal } = await supabaseClient.auth.mfa.getAuthenticatorAssuranceLevel();
+      if (aal && aal.nextLevel === 'aal2' && aal.currentLevel !== 'aal2') {
+        const codeWrap = document.getElementById('mfa-code-wrap');
+        const code = document.getElementById('mfa-code').value.trim();
+        if (codeWrap.style.display === 'none' || !code) {
+          codeWrap.style.display = 'block';
+          document.getElementById('mfa-code').focus();
+          melding.textContent = 'Your account uses two-factor authentication: enter the code from your app, then press Set password again.';
+          melding.className = 'jopen-form-melding';
+          return;
+        }
+        const { data: factors } = await supabaseClient.auth.mfa.listFactors();
+        const factor = ((factors && factors.totp) || []).find(f => f.status === 'verified');
+        const { error: codeErr } = factor
+          ? await supabaseClient.auth.mfa.challengeAndVerify({ factorId: factor.id, code })
+          : { error: { message: 'no authenticator found' } };
+        if (codeErr) {
+          melding.textContent = 'That code is not right: ' + codeErr.message;
+          melding.className = 'jopen-form-melding fout';
+          return;
+        }
+      }
+
+      melding.textContent = 'Saving…';
       const { error } = await supabaseClient.auth.updateUser({ password: wachtwoord });
 
       if (error) {
