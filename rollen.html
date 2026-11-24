@@ -45,6 +45,8 @@
       <strong>Admin</strong> always has full access everywhere (locked, to prevent accidentally locking yourself out).
       <strong>User Management</strong> and <strong>Role Management</strong> are always admin-only for the same reason —
       those columns are locked for every other role.
+      <strong>Two-factor</strong>: users with that role must enter a code from an authenticator app after their password
+      (always on for Admin). Anyone can also turn it on for themselves via their name menu → Two-factor authentication.
     </p>
 
     <div id="no-access" class="no-access" style="display:none;">
@@ -76,7 +78,7 @@
       const container = document.getElementById('rl-matrix-container');
 
       const [{ data: roles, error: rolesErr }, { data: modules, error: modErr }, { data: permissions, error: permErr }] = await Promise.all([
-        supabaseClient.from('roles').select('id, name').order('id'),
+        supabaseClient.from('roles').select('id, name, mfa_required').order('id'),
         supabaseClient.from('permission_modules').select('module_key, name, sort_order').order('sort_order'),
         supabaseClient.from('role_permissions').select('role_id, module_key, can_view, can_edit, can_delete'),
       ]);
@@ -124,12 +126,21 @@
                <input type="text" class="rl-role-name-input" data-role-id="${role.id}" value="${escapeHtml(role.name)}" />
                <span class="rl-inline-msg"></span>
              </td>`;
-        return `<tr class="${isAdminRole ? 'rl-admin-row' : ''}">${nameCell}${cellsHtml}</tr>`;
+        // Two-factor authentication required for this role (security phase 5).
+        // Admin is always on: the database refuses to switch it off.
+        const mfaCell = `
+            <td>
+              <div class="rl-cell">
+                <label><input type="checkbox" class="rl-mfa" data-role-id="${role.id}" ${isAdminRole || role.mfa_required ? 'checked' : ''} ${isAdminRole ? 'disabled' : ''} /> Required</label>
+                <span class="rl-inline-msg"></span>
+              </div>
+            </td>`;
+        return `<tr class="${isAdminRole ? 'rl-admin-row' : ''}">${nameCell}${mfaCell}${cellsHtml}</tr>`;
       }).join('');
 
       container.innerHTML = `
         <table class="rl-matrix">
-          <thead><tr><th>Role</th>${headerHtml}</tr></thead>
+          <thead><tr><th>Role</th><th title="Users with this role must use an authenticator app (6-digit code) after their password">Two-factor</th>${headerHtml}</tr></thead>
           <tbody>${rowsHtml}</tbody>
         </table>`;
 
@@ -141,6 +152,10 @@
 
       container.querySelectorAll('.rl-role-name-input').forEach(input => {
         input.addEventListener('change', () => saveRoleName(input));
+      });
+
+      container.querySelectorAll('.rl-mfa:not(:disabled)').forEach(cb => {
+        cb.addEventListener('change', () => saveMfaRequired(cb));
       });
     }
 
@@ -167,6 +182,24 @@
         .eq('id', roleId);
 
       if (error) {
+        showInlineMessage(msg, 'Failed: ' + error.message, 'error');
+        return;
+      }
+      showInlineMessage(msg, 'Saved', 'ok');
+    }
+
+    async function saveMfaRequired(checkbox) {
+      const roleId = Number(checkbox.dataset.roleId);
+      const msg = checkbox.closest('.rl-cell').querySelector('.rl-inline-msg');
+      const required = checkbox.checked;
+      if (required && !confirm('Require two-factor authentication for this role?\n\nEveryone with this role must set up an authenticator app at their next page load before they can see any data.')) {
+        checkbox.checked = false;
+        return;
+      }
+      showInlineMessage(msg, 'Saving…');
+      const { error } = await supabaseClient.from('roles').update({ mfa_required: required }).eq('id', roleId);
+      if (error) {
+        checkbox.checked = !required;
         showInlineMessage(msg, 'Failed: ' + error.message, 'error');
         return;
       }

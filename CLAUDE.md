@@ -33,6 +33,12 @@ Working on the digital batch report? Start at `docs/batch-report/README.md`.
   `claude_reader` SELECT by default: revoke it for any new table or view with
   people data. Tokens come from `claude_connector.issue_token()` and expire.
   Deploy the function from the repo file with verify_jwt = false.
+- Two-factor authentication (security phase 5, `docs/security/mfa.md`):
+  `current_role_id()` and `is_admin()` include `mfa_satisfied()`; required
+  per role via `roles.mfa_required` (always on for admin). New permission
+  helpers must go through these two, and Edge Functions check admin rights
+  with `callerClient.rpc("is_admin")` (the caller's session), never with a
+  service-role lookup of the role.
 - A new database role that a policy, view or function names must also be
   created in `.github/backup/supabase_stub.sql`, or the nightly trial restore
   fails on "role … does not exist" (happened with `claude_reader_login`).

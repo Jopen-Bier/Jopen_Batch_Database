@@ -94,6 +94,31 @@ function codeFromLabel(label) {
     .replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 }
 
+/**
+ * True when the password appears in a known data breach (Have I Been Pwned,
+ * k-anonymity range API: only the first 5 characters of the SHA-1 hash leave
+ * the browser, never the password). Free stand-in for Supabase's leaked-
+ * password protection, which needs a paid plan (security phase 5).
+ * Returns false when the check cannot be done (offline, API down): the
+ * password is then judged on the other rules only.
+ */
+async function isPasswordPwned(password, fetchFn = (typeof fetch !== 'undefined' ? fetch : null)) {
+  try {
+    if (!password || !fetchFn) return false;
+    const bytes = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(password));
+    const hash = Array.from(new Uint8Array(bytes)).map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+    const res = await fetchFn(`https://api.pwnedpasswords.com/range/${hash.slice(0, 5)}`, { headers: { 'Add-Padding': 'true' } });
+    if (!res.ok) return false;
+    const suffix = hash.slice(5);
+    return (await res.text()).split('\n').some(line => {
+      const [rest, count] = line.trim().split(':');
+      return rest === suffix && Number(count) > 0;
+    });
+  } catch (e) {
+    return false;
+  }
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { escapeHtml, fetchAllRows, formatDate, toggleDropdownPanel, copyRichText, codeFromLabel };
+  module.exports = { escapeHtml, fetchAllRows, formatDate, toggleDropdownPanel, copyRichText, codeFromLabel, isPasswordPwned };
 }

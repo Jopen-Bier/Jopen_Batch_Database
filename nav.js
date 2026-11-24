@@ -132,6 +132,22 @@ async function magVerwijderenModule(moduleKey) { const r = await jopenHaalRechte
  * Supabase. Deze check voorkomt alleen dat de pagina's/navigatie zichtbaar
  * zijn zonder in te loggen.
  */
+// Two-factor authentication (security phase 5). The page where it is set up
+// or the code is entered; every other page sends a user there first when
+// jopenNeedsMfaStep() says so. The database enforces the same rule
+// (mfa_satisfied()), so this only spares the user a page without data.
+const JOPEN_MFA_PAGE = 'mfa.html';
+
+// True when this session still has to set up an authenticator or enter its
+// code: the user set one up (always needs the code), or the role requires one.
+async function jopenNeedsMfaStep(user) {
+  const { data, error } = await supabaseClient.auth.mfa.getAuthenticatorAssuranceLevel();
+  if (error || !data) return false;
+  if (data.currentLevel === 'aal2') return false;
+  if (data.nextLevel === 'aal2') return true;
+  return !!(user && user.mfaRequired);
+}
+
 async function vereisIngelogd() {
   const huidigePagina = window.location.pathname.split('/').pop();
   if (JOPEN_PUBLIEKE_PAGINAS.includes(huidigePagina)) return true;
@@ -140,6 +156,11 @@ async function vereisIngelogd() {
   if (!gebruiker) {
     const terugNaar = encodeURIComponent(huidigePagina + window.location.search);
     window.location.replace(`login.html?redirect=${terugNaar}`);
+    return false;
+  }
+  if (huidigePagina !== JOPEN_MFA_PAGE && await jopenNeedsMfaStep(gebruiker)) {
+    const terugNaar = encodeURIComponent(huidigePagina + window.location.search);
+    window.location.replace(`${JOPEN_MFA_PAGE}?redirect=${terugNaar}`);
     return false;
   }
   const overlay = document.getElementById('jopen-auth-overlay');
@@ -194,6 +215,7 @@ async function renderNav(huidigeGebruiker) {
          <div id="jopen-gebruiker-menu" class="jopen-nav-dropdown" style="display:none;">
            ${adminLinksHtml}
            ${adminLinksHtml ? '<div class="jopen-nav-dropdown-divider"></div>' : ''}
+           <a href="${JOPEN_MFA_PAGE}" class="jopen-nav-dropdown-item${huidigePagina === JOPEN_MFA_PAGE ? ' actief' : ''}">Two-factor authentication</a>
            <button id="jopen-uitloggen-btn" class="jopen-nav-dropdown-item">Log out</button>
          </div>
        </div>`

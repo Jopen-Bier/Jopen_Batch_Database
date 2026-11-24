@@ -21,7 +21,7 @@ const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_
 
 /**
  * The logged-in user with role information, or `null` when nobody is logged
- * in. Shape: { id, name, roleId, roleName, isActive, isAdmin }.
+ * in. Shape: { id, name, roleId, roleName, isActive, isAdmin, mfaRequired }.
  */
 // The menu and the page both ask for the user while a page loads: one request
 // per page load and user (the session comes from local storage).
@@ -36,17 +36,25 @@ async function getCurrentUser() {
 }
 
 async function loadCurrentUser(session) {
-  const { data, error } = await supabaseClient
+  let { data, error } = await supabaseClient
     .from('users')
-    .select('id, name, is_active, role_id, roles(name)')
+    .select('id, name, is_active, role_id, roles(name, mfa_required)')
     .eq('id', session.user.id)
     .single();
+  if (error && error.code === '42703') {
+    // roles.mfa_required not there yet (app deployed before the migration ran)
+    ({ data, error } = await supabaseClient
+      .from('users')
+      .select('id, name, is_active, role_id, roles(name)')
+      .eq('id', session.user.id)
+      .single());
+  }
 
   if (error) {
     console.error('Could not load the current user from the users table:', error);
     // Fall back on session data so the app does not get stuck when the row
     // is missing (e.g. right after an invite). No rights in that case.
-    return { id: session.user.id, name: session.user.email, roleId: null, roleName: null, isActive: true, isAdmin: false };
+    return { id: session.user.id, name: session.user.email, roleId: null, roleName: null, isActive: true, isAdmin: false, mfaRequired: false };
   }
   const roleName = data.roles ? data.roles.name : null;
   return {
@@ -56,6 +64,9 @@ async function loadCurrentUser(session) {
     roleName,
     isActive: data.is_active,
     isAdmin: roleName === 'admin' && data.is_active === true,
+    // Role requires two-factor authentication (User Roles page). The database
+    // enforces it; nav.js uses it to send the user to mfa.html first.
+    mfaRequired: !!(data.roles && data.roles.mfa_required) || roleName === 'admin',
   };
 }
 
