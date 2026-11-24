@@ -4,6 +4,9 @@ Supabase maakt op het **Free plan geen eigen backups**. Alles hieronder is
 dus het enige vangnet. Bewaar deze handleiding ergens waar je ook bij kunt
 als de app zelf onbereikbaar is.
 
+Doelen (hoeveel dataverlies, hoe snel terug), eerste stappen per incident en
+alles wat **niet** in de backup zit: `docs/security/recovery-plan.md`.
+
 ## Wat wordt er gebackupt
 
 | Wat | Waar | Hoe vaak | Bewaard |
@@ -27,7 +30,11 @@ weer bestaan.
   bewaard).
 - **Elke maandag** haalt de workflow *Restore test* de nieuwste backup op uit
   de backup-repo (zoals je dat in een noodsituatie ook zou doen), zet hem
-  terug en vergelijkt met het manifest.
+  terug en vergelijkt met het manifest. Sinds security phase 6 ook: een
+  app-rooktest op de teruggezette kopie (`smoke_test.sql`: rechten, RLS,
+  tweestapsverificatie, views) en een controle dat de Storage-spiegel compleet
+  en leesbaar is (`verify_storage_backup.py`). Een oudere datum (> 30 dagen)
+  haalt hij zelf uit de git-historie van de backup-repo.
 - Een mislukte geplande run levert een mail op aan degene die het laatst de
   `cron`-regel in de workflow heeft aangepast. Kijk anders af en toe in de
   **Actions**-tab.
@@ -68,13 +75,19 @@ tegen een project dat nog in gebruik is.
    tegen het nieuwe project en vergelijk met `manifests/jopen_backup_<datum>.json`
    (of: `python3 .github/backup/vergelijk_tellingen.py test --manifest … --hersteld …`).
 7. **Storage-bestanden terugzetten**: maak in het nieuwe project dezelfde
-   buckets aan (`ingredient-documents` privé, `Jopen art` publiek) en upload
+   buckets aan (`batch-documents` en `ingredient-documents` privé, `Jopen art`
+   publiek), zet hun limieten via het storage-deel van migratie
+   `20261124170000_audit_and_storage_limits.sql` en upload
    de inhoud van `Jopen_Storage_Backup/bestanden/<bucket>/` met behoud van de
    mapstructuur (paden moeten gelijk blijven, de database verwijst ernaar).
 8. **App omzetten**: nieuwe URL en anon key in `config.js`, Edge Functions
    opnieuw deployen, Auth → URL Configuration (Site URL + Redirect URLs
    inclusief `accept-invite.html`) opnieuw instellen, secrets van de
-   workflows bijwerken.
+   workflows bijwerken. Ook: Auth → MFA → TOTP aan, Edge Function-secrets
+   (`READER_DB_URL`, `MS_*`), nieuw wachtwoord voor `claude_reader_login` en
+   een nieuw connector-token. Volledige lijst: `docs/security/recovery-plan.md`,
+   *Not in the backup*. Iedereen stelt daarna zijn authenticator opnieuw in
+   (die zitten bewust niet in de backup).
    Eigen schema's naast `public` (`core`, `recipe`, …): de restore gebeurt met
    `--no-privileges`, dus zet daarna de rechten opnieuw
    (`grant usage on schema <x> to anon, authenticated, service_role` plus de
@@ -96,7 +109,9 @@ zitten in de auth-dump).
 
 ## Instellen (eenmalig)
 
-Secrets in deze repo (Settings → Secrets and variables → Actions):
+Secrets in de GitHub-environment `production` (Settings → Environments →
+production; sinds security phase 3 alleen bruikbaar vanaf `main`, niet meer als
+repository-secrets):
 
 | Secret | Inhoud |
 |---|---|

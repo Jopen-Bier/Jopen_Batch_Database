@@ -55,6 +55,16 @@ $f$ select current_setting('request.jwt.claim.email', true) $f$;
 create or replace function auth.jwt() returns jsonb language sql stable as
 $f$ select coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb $f$;
 
+-- Two-factor authenticators (security phase 5): mfa_satisfied() reads this.
+-- Not in the backup on purpose (it holds the authenticator secrets); after a
+-- real restore everyone sets up their authenticator again.
+create table if not exists auth.mfa_factors (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null,
+  factor_type text,
+  status text
+);
+
 -- Extensies die Supabase standaard aan heeft. De huidige dump heeft ze niet
 -- nodig (gen_random_uuid() zit in Postgres zelf), maar mocht een functie of
 -- default er later naar verwijzen, dan staan ze klaar. Ontbreekt een

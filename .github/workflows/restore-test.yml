@@ -14,6 +14,12 @@ name: Restore test
 # (oktober 2026) zijn met deze test te controleren.
 #
 # Hergebruikt de secrets BACKUP_REPO_PAT en BACKUP_REPO.
+#
+# Since security phase 6 also: an app smoke test on the restored copy
+# (smoke_test.sql), a check that the Storage mirror is complete and readable
+# (verify_storage_backup.py; uses STORAGE_BACKUP_REPO and, read-only,
+# SUPABASE_DB_URL for the live file list), and backups older than 30 days
+# are taken from the backup repo's git history when a date is given.
 
 on:
   schedule:
@@ -67,6 +73,14 @@ jobs:
           fi
           [ -n "$DATUM" ] || { echo "::error::Geen backup met manifest gevonden in manifests/."; exit 1; }
           for f in "dumps/jopen_backup_${DATUM}.dump" "dumps/jopen_auth_${DATUM}.dump" "manifests/jopen_backup_${DATUM}.json"; do
+            if [ ! -f "backup-repo/$f" ]; then
+              # Older than 30 days: removed from the folder, still in the git
+              # history. Fetch the history once and take the file from the
+              # commit just before it was removed (security phase 6).
+              [ -f backup-repo/.git/shallow ] && git -C backup-repo fetch -q --unshallow
+              DEL=$(git -C backup-repo log -1 --format=%H --diff-filter=D -- "$f")
+              [ -n "$DEL" ] && git -C backup-repo show "${DEL}^:$f" > "backup-repo/$f" || rm -f "backup-repo/$f"
+            fi
             test -f "backup-repo/$f" || { echo "::error::Ontbreekt: $f (backups van vóór oktober 2026 hebben geen auth-dump/manifest)"; exit 1; }
           done
           echo "DATUM=${DATUM}" >> "$GITHUB_ENV"
@@ -91,3 +105,22 @@ jobs:
           "$PG_BIN/psql" "$TEST_DB" -v ON_ERROR_STOP=1 -v eigen="$EIGEN" -tA -f .github/backup/tel_rijen.sql > hersteld.json
           python3 .github/backup/vergelijk_tellingen.py test \
             --manifest "backup-repo/manifests/jopen_backup_${DATUM}.json" --hersteld hersteld.json
+
+      - name: App smoke test on the restored copy
+        env:
+          TEST_DB: postgresql://postgres:test@localhost:5432/postgres
+        run: |
+          # Rights helpers, RLS on every table, two-factor rule, all views (security phase 6)
+          "$PG_BIN/psql" "$TEST_DB" -v ON_ERROR_STOP=1 -q -f .github/backup/smoke_test.sql
+
+      - name: Storage backup restorable
+        env:
+          BACKUP_REPO_PAT: ${{ secrets.BACKUP_REPO_PAT }}
+          STORAGE_BACKUP_REPO: ${{ secrets.STORAGE_BACKUP_REPO }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          # Every file in the mirror present, right size and a real PDF/image/
+          # Office file; every Storage object older than 36 h in the mirror.
+          git clone -q --depth 1 "https://x-access-token:${BACKUP_REPO_PAT}@github.com/${STORAGE_BACKUP_REPO}.git" storage-repo
+          "$PG_BIN/psql" "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -tA -f .github/backup/storage_lijst.sql > live.json
+          python3 .github/backup/verify_storage_backup.py --mirror storage-repo --live live.json

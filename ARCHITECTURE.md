@@ -314,6 +314,7 @@ Agreed table and column names per table: `supabase/rename-map.json`.
 | Protected `main` | ruleset: no direct pushes, pull request + green Guard required (security phase 2) |
 | Secrets only for `main` | Actions secrets in environment `production` (deployment branches: `main` only); backup, restore-test and snapshot jobs declare it (security phase 3) |
 | Restore manual | `.github/backup/RESTORE.md` |
+| Recovery plan | `docs/security/recovery-plan.md`: data-loss and recovery targets, first steps per incident, what is not in the backup, secret rotation, yearly drill |
 
 ---
 

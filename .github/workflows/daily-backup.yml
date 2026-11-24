@@ -135,6 +135,8 @@ jobs:
           python3 .github/backup/vergelijk_tellingen.py nacht \
             --voor werk/voor.json --na werk/na.json --hersteld werk/hersteld.json \
             --manifest "dump/jopen_backup_${STAMP}.json" --datum "${STAMP}"
+          # Would the app work on this copy? (rights, RLS, two-factor, views; security phase 6)
+          "$PG_BIN/psql" "$PROEF_DB" -v ON_ERROR_STOP=1 -q -f .github/backup/smoke_test.sql
 
       - name: Push naar private backup-repo
         if: always() && steps.dump.outcome == 'success'
