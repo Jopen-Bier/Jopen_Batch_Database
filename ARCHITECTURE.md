@@ -312,6 +312,8 @@ Agreed table and column names per table: `supabase/rename-map.json`.
 | Guard on every push / PR | `.github/workflows/guard.yml` → `tools/ci_guard.py` (no copies of `jopen-utils.js` / `brew-calculations.js` functions; snake_case English names in new migrations, with `-- naming-ok: <name>` for a deliberate exception), `node --check`, `tests/*.test.js` |
 | Drift detection | `.github/workflows/schema-snapshot.yml` → `supabase/schema.sql` on branch `schema-snapshot` (not on `main`, which is protected); a commit "Schema gewijzigd" there without a matching migration = drift |
 | Protected `main` | ruleset: no direct pushes, pull request + green Guard required (security phase 2) |
+| Audit trail | `batch_audit_log` (batch header and all batch child tables) and `inventory_audit_log` (lots, stock_movements): old/new row, who, when; append-only for app users (security phase 6) |
+| Upload limits | storage buckets accept only PDF / Office / JPEG / PNG (no SVG), max 25 MB (security phase 6) |
 | Secrets only for `main` | Actions secrets in environment `production` (deployment branches: `main` only); backup, restore-test and snapshot jobs declare it (security phase 3) |
 | Restore manual | `.github/backup/RESTORE.md` |
 | Recovery plan | `docs/security/recovery-plan.md`: data-loss and recovery targets, first steps per incident, what is not in the backup, secret rotation, yearly drill |

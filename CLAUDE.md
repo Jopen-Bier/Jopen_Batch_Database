@@ -39,6 +39,12 @@ Working on the digital batch report? Start at `docs/batch-report/README.md`.
   helpers must go through these two, and Edge Functions check admin rights
   with `callerClient.rpc("is_admin")` (the caller's session), never with a
   service-role lookup of the role.
+- Audit (security phase 6): batch tables log to `batch_audit_log` via
+  `log_batch_change()`, inventory tables (`lots`, `stock_movements`) to
+  `inventory_audit_log` via `log_inventory_change()`. A new table holding
+  batch or stock data gets the matching `after insert or update or delete`
+  trigger. Both logs stay append-only: never add insert/update/delete
+  policies or grants for app roles.
 - A new database role that a policy, view or function names must also be
   created in `.github/backup/supabase_stub.sql`, or the nightly trial restore
   fails on "role … does not exist" (happened with `claude_reader_login`).
