@@ -68,6 +68,27 @@
     .ct-empty { color: #666; padding: 30px 0; }
     .ct-muted { color: #777; font-size: 0.88em; }
 
+    /* View switch + Overview matrix (ingredient x supplier per start year) */
+    .ct-views { display: inline-flex; border: 1px solid #bbb; border-radius: 6px; overflow: hidden; }
+    .ct-views button { border: none; background: #fff; padding: 7px 14px; cursor: pointer; font-size: 0.92em; }
+    .ct-views button + button { border-left: 1px solid #bbb; }
+    .ct-views button[aria-pressed="true"] { background: var(--hop-dark); color: #fff; font-weight: 600; }
+    table.ct-matrix { border-collapse: separate; border-spacing: 0; background: #fff; font-size: 0.88em; min-width: 100%; }
+    table.ct-matrix th, table.ct-matrix td { padding: 6px 9px; border-bottom: 1px solid #eee; white-space: nowrap; }
+    table.ct-matrix thead th { position: sticky; top: 0; background: #fff; font-size: 0.78em; text-transform: uppercase; letter-spacing: 0.04em; color: #555; text-align: right; z-index: 1; }
+    table.ct-matrix thead tr.ct-m-years th { background: var(--hop-dark); color: #fff; text-align: center; border-left: 2px solid #fff; height: 26px; box-sizing: border-box; }
+    table.ct-matrix thead tr + tr th { top: 26px; } /* second header row stays below the year row */
+    table.ct-matrix th.ct-m-ing, table.ct-matrix td.ct-m-ing { text-align: left; position: sticky; left: 0; background: #fff; z-index: 2; }
+    table.ct-matrix thead th.ct-m-ing { z-index: 3; }
+    table.ct-matrix td.n { text-align: right; font-variant-numeric: tabular-nums; }
+    table.ct-matrix .ct-m-first { border-left: 2px solid var(--line); }
+    table.ct-matrix td .ct-m-of { display: block; color: #888; font-size: 0.85em; }
+    table.ct-matrix td.ct-m-total { background: var(--paper); }
+    table.ct-matrix tbody tr { cursor: pointer; }
+    table.ct-matrix tbody tr:hover td { background: #faf9f5; }
+    table.ct-matrix tfoot td { font-weight: 700; border-top: 2px solid #ccc; background: var(--paper); }
+    .ct-m-wrap { overflow: auto; max-height: 75vh; border: 1px solid #ddd; border-radius: 8px; }
+
     /* Add / edit contract dialog */
     .ct-overlay { position: fixed; inset: 0; background: rgba(28,43,38,.35); display: flex; align-items: flex-start; justify-content: center; z-index: 100; overflow-y: auto; padding: 40px 16px; }
     .ct-dialog { background: #fff; border-radius: 10px; padding: 20px 22px; width: 100%; max-width: 860px; box-shadow: 0 12px 40px rgba(0,0,0,.2); }
@@ -102,6 +123,10 @@
 
     <div id="ct-content" style="display:none;">
       <div class="ct-toolbar">
+        <div class="ct-views" role="group" aria-label="View">
+          <button type="button" data-view="suppliers" aria-pressed="true">By supplier</button>
+          <button type="button" data-view="overview" aria-pressed="false">Overview</button>
+        </div>
         <input type="search" id="ct-search" placeholder="Search supplier, ingredient or contract number…" aria-label="Search contracts" />
         <label><input type="checkbox" id="ct-show-ended" /> Show ended contracts</label>
         <span class="ct-spacer"></span>
@@ -123,6 +148,7 @@
       canEdit: false, canDelete: false,
       suppliers: [], ingredients: [], contracts: [], lines: [], lots: [],
       openSuppliers: new Set(), openLines: new Set(), highlightGroup: null,
+      view: 'suppliers', // 'suppliers' | 'overview'
     };
 
     const fmt = (v, digits = 2) => (v === null || v === undefined || v === '' ? '—'
@@ -184,6 +210,8 @@
     }
 
     function render() {
+      document.querySelectorAll('.ct-views button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === page.view)));
+      if (page.view === 'overview') return renderOverview();
       const q = document.getElementById('ct-search').value.trim().toLowerCase();
       const showEnded = document.getElementById('ct-show-ended').checked;
       const bySupplier = new Map();
@@ -260,6 +288,113 @@
           <tbody>${rows || '<tr><td colspan="7" class="ct-muted">No ingredients on this contract.</td></tr>'}</tbody>
         </table></div>
       </div>`;
+    }
+
+    // ----------------------------------------------------------------
+    // Overview: one row per ingredient, one column per supplier within the
+    // start year of its contracts (= crop year for the hop contracts), like
+    // the hop-contract spreadsheet. Amounts in kg / l where they convert.
+    // ----------------------------------------------------------------
+    const BASE_UNIT = { g: 'kg', kg: 'kg', ml: 'l', l: 'l', pcs: 'pcs' };
+    const toBase = (q, unit) => (unit === 'g' || unit === 'ml' ? q / 1000 : q);
+
+    // Sums per unit, shown as "1,200 kg" or "5 kg + 2 l".
+    function addAmount(sums, q, unit) {
+      const u = BASE_UNIT[unit] || unit;
+      sums[u] = (sums[u] || 0) + toBase(q, unit);
+    }
+    const amountText = (sums) => {
+      const parts = Object.entries(sums).map(([u, q]) => `${fmt(q, 1)} ${escapeHtml(u)}`);
+      return parts.length ? parts.join(' + ') : '—';
+    };
+
+    function overviewData() {
+      const q = document.getElementById('ct-search').value.trim().toLowerCase();
+      const showEnded = document.getElementById('ct-show-ended').checked;
+      const contracts = new Map(page.contracts.filter((c) => showEnded || contractState(c) !== 'ended').map((c) => [c.id, c]));
+      const groupName = (line) => {
+        const versions = page.ingredients.filter((i) => i.ingredient_group_id === line.ingredient_group_id);
+        const ing = versions.find((i) => i.version_status === 'current') || ingredientOf(line.ingredient_id);
+        return ing ? ing.name : `#${line.ingredient_id}`;
+      };
+      const columns = new Map(); // "year|supplier" -> { year, supplier }
+      const rows = new Map(); // ingredient_group_id -> { name, cells: Map(colKey -> sums), totals }
+      page.lines.forEach((l) => {
+        const c = contracts.get(l.contract_id);
+        if (!c || !lineMatches(l, c, q)) return;
+        const year = c.start_date.slice(0, 4);
+        const key = `${year}|${c.supplier}`;
+        if (!columns.has(key)) columns.set(key, { key, year, supplier: c.supplier });
+        if (!rows.has(l.ingredient_group_id)) {
+          rows.set(l.ingredient_group_id, { group: l.ingredient_group_id, firstIngredient: l.ingredient_id, name: groupName(l), cells: new Map(),
+            total: { contracted: {}, booked: {}, open: {}, value: 0 } });
+        }
+        const row = rows.get(l.ingredient_group_id);
+        if (!row.cells.has(key)) row.cells.set(key, { contracted: {}, open: {}, booked: {}, prices: [] });
+        const cell = row.cells.get(key);
+        addAmount(cell.contracted, l.quantity, l.unit); addAmount(cell.open, l.open, l.unit); addAmount(cell.booked, l.booked, l.unit);
+        if (l.price !== null) cell.prices.push(`€ ${fmt(l.price, 2)} / ${l.unit}`);
+        addAmount(row.total.contracted, l.quantity, l.unit); addAmount(row.total.booked, l.booked, l.unit); addAmount(row.total.open, l.open, l.unit);
+        row.total.value += l.price === null ? 0 : l.quantity * Number(l.price);
+      });
+      const cols = [...columns.values()].sort((a, b) => a.year.localeCompare(b.year) || a.supplier.localeCompare(b.supplier, 'en', { sensitivity: 'base' }));
+      const list = [...rows.values()].sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }));
+      return { cols, rows: list };
+    }
+
+    function renderOverview() {
+      const { cols, rows } = overviewData();
+      const list = document.getElementById('ct-list');
+      if (!rows.length) {
+        list.innerHTML = `<div class="ct-empty">${page.contracts.length ? 'No contracts match.' : 'No contracts yet.'}</div>`;
+        return;
+      }
+      const years = [...new Set(cols.map((c) => c.year))];
+      const colTotals = new Map(cols.map((c) => [c.key, { contracted: {}, open: {} }]));
+      const grand = { contracted: {}, booked: {}, open: {}, value: 0 };
+      rows.forEach((r) => {
+        r.cells.forEach((cell, key) => {
+          Object.entries(cell.contracted).forEach(([u, q]) => addAmount(colTotals.get(key).contracted, q, u));
+          Object.entries(cell.open).forEach(([u, q]) => addAmount(colTotals.get(key).open, q, u));
+        });
+        ['contracted', 'booked', 'open'].forEach((k) => Object.entries(r.total[k]).forEach(([u, q]) => addAmount(grand[k], q, u)));
+        grand.value += r.total.value;
+      });
+      const isFirst = (c, i) => i === 0 || cols[i - 1].year !== c.year;
+      const negative = (sums) => Object.values(sums).some((q) => q < 0);
+      const cellHtml = (cell) => cell ? `<b class="${negative(cell.open) ? 'ct-open-neg' : ''}">${amountText(cell.open)}</b><span class="ct-m-of">of ${amountText(cell.contracted)}</span>` : '';
+      list.innerHTML = `<div class="ct-m-wrap"><table class="ct-matrix">
+        <thead>
+          <tr class="ct-m-years"><th class="ct-m-ing" rowspan="2">Ingredient</th>${years.map((y) => `<th colspan="${cols.filter((c) => c.year === y).length}">${escapeHtml(y)}</th>`).join('')}<th colspan="4">Total</th></tr>
+          <tr>${cols.map((c, i) => `<th class="${isFirst(c, i) ? 'ct-m-first' : ''}">${escapeHtml(c.supplier)}</th>`).join('')}<th class="ct-m-first">Contracted</th><th>Booked in</th><th>Open</th><th>Value</th></tr>
+        </thead>
+        <tbody>${rows.map((r) => `<tr data-ingredient="${r.firstIngredient}" title="Show the contracts with ${escapeHtml(r.name)}">
+          <td class="ct-m-ing">${escapeHtml(r.name)}</td>
+          ${cols.map((c, i) => {
+            const cell = r.cells.get(c.key);
+            const tip = cell ? `Booked in ${amountText(cell.booked)}${cell.prices.length ? ' · ' + cell.prices.join(', ') : ''}` : '';
+            return `<td class="n${isFirst(c, i) ? ' ct-m-first' : ''}"${tip ? ` title="${escapeHtml(tip)}"` : ''}>${cellHtml(cell)}</td>`;
+          }).join('')}
+          <td class="n ct-m-total ct-m-first">${amountText(r.total.contracted)}</td>
+          <td class="n ct-m-total">${amountText(r.total.booked)}</td>
+          <td class="n ct-m-total"><b class="${negative(r.total.open) ? 'ct-open-neg' : ''}">${amountText(r.total.open)}</b></td>
+          <td class="n ct-m-total">${r.total.value ? '€ ' + fmt(r.total.value, 0) : '—'}</td>
+        </tr>`).join('')}</tbody>
+        <tfoot><tr><td class="ct-m-ing">Total (${rows.length})</td>
+          ${cols.map((c, i) => `<td class="n${isFirst(c, i) ? ' ct-m-first' : ''}">${cellHtml(colTotals.get(c.key))}</td>`).join('')}
+          <td class="n ct-m-first">${amountText(grand.contracted)}</td><td class="n">${amountText(grand.booked)}</td>
+          <td class="n">${amountText(grand.open)}</td><td class="n">${grand.value ? '€ ' + fmt(grand.value, 0) : '—'}</td></tr></tfoot>
+      </table></div>
+      <p class="ct-muted">Columns: supplier per start year of the contract (the crop year). Bold: still open; below it the contracted amount. Hover a cell for booked in and price; click a row for its contracts.</p>`;
+      list.querySelectorAll('tbody tr[data-ingredient]').forEach((tr) => tr.addEventListener('click', () => {
+        const ing = ingredientOf(Number(tr.dataset.ingredient));
+        if (!ing) return;
+        page.view = 'suppliers';
+        page.highlightGroup = ing.ingredient_group_id;
+        history.replaceState(null, '', `#ingredient-${ing.id}`);
+        render();
+        window.scrollTo({ top: 0 });
+      }));
     }
 
     function bookInRow(line) {
@@ -424,7 +559,8 @@
 
     // ----------------------------------------------------------------
     // Start. contracts.html#ingredient-<id> (from the Stock overview) shows
-    // only the contracts with that ingredient, its lines highlighted.
+    // only the contracts with that ingredient, its lines highlighted;
+    // contracts.html#overview opens the Overview.
     // ----------------------------------------------------------------
     async function initContractsPage() {
       const user = await getCurrentUser();
@@ -441,8 +577,15 @@
         add.style.display = '';
         add.addEventListener('click', () => openContractDialog(null));
       }
+      document.querySelectorAll('.ct-views button').forEach((b) => b.addEventListener('click', () => {
+        page.view = b.dataset.view;
+        if (page.view === 'overview') page.highlightGroup = null;
+        history.replaceState(null, '', page.view === 'overview' ? '#overview' : location.pathname);
+        render();
+      }));
       document.getElementById('ct-search').addEventListener('input', render);
       document.getElementById('ct-show-ended').addEventListener('change', render);
+      if (location.hash === '#overview') page.view = 'overview';
       await loadAll();
       const m = location.hash.match(/^#ingredient-(\d+)$/);
       if (m) {
