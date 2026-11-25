@@ -69,7 +69,7 @@ $$;
 
 CREATE FUNCTION public.admin_get_last_logins() RETURNS TABLE(id uuid, last_login_at timestamp with time zone)
     LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
+    SET search_path TO 'public', 'pg_temp'
     AS $$
 begin
   if not is_admin() then
@@ -122,7 +122,7 @@ $$;
 
 CREATE FUNCTION public.can_delete(p_module_key text) RETURNS boolean
     LANGUAGE sql STABLE SECURITY DEFINER
-    SET search_path TO 'public'
+    SET search_path TO 'public', 'pg_temp'
     AS $$
   select is_admin() or exists (
     select 1 from role_permissions rp
@@ -137,7 +137,7 @@ $$;
 
 CREATE FUNCTION public.can_edit(p_module_key text) RETURNS boolean
     LANGUAGE sql STABLE SECURITY DEFINER
-    SET search_path TO 'public'
+    SET search_path TO 'public', 'pg_temp'
     AS $$
   select is_admin() or exists (
     select 1 from role_permissions rp
@@ -152,7 +152,7 @@ $$;
 
 CREATE FUNCTION public.can_view(p_module_key text) RETURNS boolean
     LANGUAGE sql STABLE SECURITY DEFINER
-    SET search_path TO 'public'
+    SET search_path TO 'public', 'pg_temp'
     AS $$
   select is_admin() or exists (
     select 1 from role_permissions rp
@@ -185,9 +185,9 @@ $$;
 
 CREATE FUNCTION public.current_role_id() RETURNS integer
     LANGUAGE sql STABLE SECURITY DEFINER
-    SET search_path TO 'public'
+    SET search_path TO 'public', 'pg_temp'
     AS $$
-  select role_id from users where id = auth.uid() and is_active;
+  select role_id from users where id = auth.uid() and is_active and mfa_satisfied();
 $$;
 
 
@@ -442,12 +442,12 @@ $_$;
 
 CREATE FUNCTION public.is_admin() RETURNS boolean
     LANGUAGE sql STABLE SECURITY DEFINER
-    SET search_path TO 'public'
+    SET search_path TO 'public', 'pg_temp'
     AS $$
   select exists (
     select 1 from users u join roles r on r.id = u.role_id
     where u.id = auth.uid() and u.is_active and r.name = 'admin'
-  );
+  ) and mfa_satisfied();
 $$;
 
 
@@ -457,7 +457,7 @@ $$;
 
 CREATE FUNCTION public.log_batch_change() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
+    SET search_path TO 'public', 'pg_temp'
     AS $$
 declare
   v_old    jsonb := case when tg_op <> 'INSERT' then to_jsonb(old) end;
@@ -478,7 +478,11 @@ begin
   end if;
 
   insert into batch_audit_log (batch_id, table_name, row_id, action, old_data, new_data)
-  values ((v_row ->> 'batch_id')::bigint, tg_table_name, v_row_id, lower(tg_op), v_old, v_new);
+  values (
+    -- the batches row is its own batch (security phase 6)
+    coalesce((v_row ->> 'batch_id')::bigint,
+             case when tg_table_name = 'batches' then (v_row ->> 'id')::bigint end),
+    tg_table_name, v_row_id, lower(tg_op), v_old, v_new);
 
   return null;
 end;
@@ -491,7 +495,7 @@ $$;
 
 CREATE FUNCTION public.log_brew_planning_change() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
+    SET search_path TO 'public', 'pg_temp'
     AS $$
 begin
   if (TG_OP = 'INSERT') then
@@ -513,6 +517,28 @@ $$;
 
 
 --
+-- Name: log_inventory_change(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.log_inventory_change() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+declare
+  v_old jsonb := case when tg_op <> 'INSERT' then to_jsonb(old) end;
+  v_new jsonb := case when tg_op <> 'DELETE' then to_jsonb(new) end;
+begin
+  if tg_op = 'UPDATE' and v_old = v_new then
+    return null;
+  end if;
+  insert into inventory_audit_log (table_name, row_id, action, old_data, new_data)
+  values (tg_table_name, coalesce(v_new, v_old) ->> 'id', lower(tg_op), v_old, v_new);
+  return null;
+end;
+$$;
+
+
+--
 -- Name: lots_pick_contract_line(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -527,6 +553,29 @@ begin
   end if;
   return new;
 end;
+$$;
+
+
+--
+-- Name: mfa_satisfied(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.mfa_satisfied() RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select coalesce((select auth.jwt() ->> 'aal'), 'aal1') = 'aal2'
+      or (
+        not exists (
+          select 1 from auth.mfa_factors f
+          where f.user_id = (select auth.uid()) and f.status = 'verified'
+        )
+        and not coalesce((
+          select r.mfa_required
+          from public.users u join public.roles r on r.id = u.role_id
+          where u.id = (select auth.uid())
+        ), false)
+      );
 $$;
 
 
@@ -633,7 +682,7 @@ CREATE FUNCTION public.product_sheet_relevant_recipe_id(p_recipe_group_id uuid) 
 
 CREATE FUNCTION public.report_recipients(p_report text) RETURNS TABLE(name text, email text)
     LANGUAGE plpgsql STABLE SECURITY DEFINER
-    SET search_path TO 'public'
+    SET search_path TO 'public', 'pg_temp'
     AS $$
 begin
   if not can_view('batches') then
@@ -795,7 +844,7 @@ $$;
 
 CREATE FUNCTION public.set_last_login() RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
+    SET search_path TO 'public', 'pg_temp'
     AS $$
 begin
   update users set last_login_at = now() where id = auth.uid();
@@ -824,7 +873,7 @@ $$;
 
 CREATE FUNCTION public.snapshot_batch_cellar_steps(p_batch_id bigint) RETURNS integer
     LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
+    SET search_path TO 'public', 'pg_temp'
     AS $$
 declare
   v_count integer;
@@ -860,7 +909,7 @@ $$;
 
 CREATE FUNCTION public.snapshot_batch_ingredients(p_batch_id bigint) RETURNS integer
     LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
+    SET search_path TO 'public', 'pg_temp'
     AS $$
 declare
   v_count integer;
@@ -900,7 +949,7 @@ $$;
 
 CREATE FUNCTION public.snapshot_new_batch() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
+    SET search_path TO 'public', 'pg_temp'
     AS $$
 begin
   perform snapshot_batch_ingredients(new.id);
@@ -1009,7 +1058,7 @@ $$;
 
 CREATE FUNCTION public.water_settings_log() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
+    SET search_path TO 'public', 'pg_temp'
     AS $$
                                                                            begin
                                                                              insert into water_settings_history (valid_from, updated_by, data)
@@ -2807,6 +2856,44 @@ ALTER TABLE public.ingredients ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY 
 
 
 --
+-- Name: inventory_audit_log; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.inventory_audit_log (
+    id bigint NOT NULL,
+    table_name text NOT NULL,
+    row_id text NOT NULL,
+    action text NOT NULL,
+    old_data jsonb,
+    new_data jsonb,
+    changed_by uuid DEFAULT auth.uid(),
+    changed_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT inventory_audit_log_action_check CHECK ((action = ANY (ARRAY['insert'::text, 'update'::text, 'delete'::text])))
+);
+
+
+--
+-- Name: TABLE inventory_audit_log; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.inventory_audit_log IS 'Who changed what in lots and stock_movements (security phase 6). Written only by log_inventory_change(); append-only.';
+
+
+--
+-- Name: inventory_audit_log_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.inventory_audit_log ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.inventory_audit_log_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
 -- Name: lots; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -3509,7 +3596,9 @@ CREATE TABLE public.roles (
     id bigint NOT NULL,
     name text NOT NULL,
     is_system_role boolean DEFAULT false NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    mfa_required boolean DEFAULT false NOT NULL,
+    CONSTRAINT roles_admin_mfa_required CHECK (((name <> 'admin'::text) OR mfa_required))
 );
 
 
@@ -4149,6 +4238,14 @@ ALTER TABLE ONLY public.ingredient_revisions
 
 ALTER TABLE ONLY public.ingredients
     ADD CONSTRAINT ingredients_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: inventory_audit_log inventory_audit_log_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_audit_log
+    ADD CONSTRAINT inventory_audit_log_pkey PRIMARY KEY (id);
 
 
 --
@@ -4941,6 +5038,13 @@ CREATE INDEX idx_ingredients_group_id ON public.ingredients USING btree (ingredi
 
 
 --
+-- Name: idx_inventory_audit_log_row; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_inventory_audit_log_row ON public.inventory_audit_log USING btree (table_name, row_id);
+
+
+--
 -- Name: idx_lots_contract_line; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -5240,6 +5344,13 @@ CREATE TRIGGER trg_batch_transfers_updated_at BEFORE UPDATE ON public.batch_tran
 
 
 --
+-- Name: batches trg_batches_audit; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_batches_audit AFTER INSERT OR DELETE OR UPDATE ON public.batches FOR EACH ROW EXECUTE FUNCTION public.log_batch_change();
+
+
+--
 -- Name: batches trg_batches_snapshot_ingredients; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -5366,6 +5477,13 @@ CREATE TRIGGER trg_ingredients_updated_at BEFORE UPDATE ON public.ingredients FO
 
 
 --
+-- Name: lots trg_lots_audit; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_lots_audit AFTER INSERT OR DELETE OR UPDATE ON public.lots FOR EACH ROW EXECUTE FUNCTION public.log_inventory_change();
+
+
+--
 -- Name: lots trg_lots_pick_contract_line; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -5433,6 +5551,13 @@ CREATE TRIGGER trg_recipe_cellar_steps_updated_at BEFORE UPDATE ON public.recipe
 --
 
 CREATE TRIGGER trg_recipes_updated_at BEFORE UPDATE ON public.recipes FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: stock_movements trg_stock_movements_audit; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_stock_movements_audit AFTER INSERT OR DELETE OR UPDATE ON public.stock_movements FOR EACH ROW EXECUTE FUNCTION public.log_inventory_change();
 
 
 --
@@ -7915,6 +8040,19 @@ CREATE POLICY ingredients_update ON public.ingredients FOR UPDATE USING (( SELEC
 
 
 --
+-- Name: inventory_audit_log; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.inventory_audit_log ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: inventory_audit_log inventory_audit_log_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY inventory_audit_log_select ON public.inventory_audit_log FOR SELECT TO authenticated USING (( SELECT public.can_view('inventory'::text) AS can_view));
+
+
+--
 -- Name: lots; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -8988,11 +9126,28 @@ GRANT ALL ON FUNCTION public.log_brew_planning_change() TO service_role;
 
 
 --
+-- Name: FUNCTION log_inventory_change(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.log_inventory_change() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.log_inventory_change() TO service_role;
+
+
+--
 -- Name: FUNCTION lots_pick_contract_line(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.lots_pick_contract_line() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.lots_pick_contract_line() TO service_role;
+
+
+--
+-- Name: FUNCTION mfa_satisfied(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.mfa_satisfied() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.mfa_satisfied() TO service_role;
+GRANT ALL ON FUNCTION public.mfa_satisfied() TO authenticated;
 
 
 --
@@ -9834,6 +9989,22 @@ GRANT SELECT ON TABLE public.ingredients TO claude_reader;
 
 GRANT SELECT,USAGE ON SEQUENCE public.ingredients_id_seq TO authenticated;
 GRANT ALL ON SEQUENCE public.ingredients_id_seq TO service_role;
+
+
+--
+-- Name: TABLE inventory_audit_log; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.inventory_audit_log TO service_role;
+GRANT SELECT ON TABLE public.inventory_audit_log TO authenticated;
+
+
+--
+-- Name: SEQUENCE inventory_audit_log_id_seq; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,USAGE ON SEQUENCE public.inventory_audit_log_id_seq TO authenticated;
+GRANT ALL ON SEQUENCE public.inventory_audit_log_id_seq TO service_role;
 
 
 --
