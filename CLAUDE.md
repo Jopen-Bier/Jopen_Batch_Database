@@ -98,7 +98,7 @@ Working on the digital batch report? Start at `docs/batch-report/README.md`.
   workflow runs both on every push; a red Guard means fix before merging).
 - For behaviour changes: jsdom test, with data injection and the call in one
   `window.eval(script + testCode)` (separate evals do not share `let`/`const`).
-- Commit as `git -c user.name="Claude" -c user.email="claude@anthropic.com" commit`;
+- Commit as `git -c user.name="Claude" -c user.email="noreply@anthropic.com" commit`;
   rebase on `origin/main` if someone pushed in between.
 
 ## GitHub Actions
