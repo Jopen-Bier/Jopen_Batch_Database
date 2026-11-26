@@ -342,7 +342,10 @@
     function renderSessions() {
       const blocks = page.sessions.map((s) => {
         const hbt = hbtById(s.batch_hbt_id);
-        const formats = hbt && hbt.intended_formats.length ? hbt.intended_formats : PACKAGE_FORMATS.map((f) => f.code);
+        // Every format can be chosen: last-minute changes happen (wishlist). The
+        // formats planned on Processing are marked; one planned format is still
+        // filled in by default on a new session.
+        const planned = (hbt && hbt.intended_formats) || [];
         const field = (id, label, inner) => `<div class="br-field pr-field"><label class="br-label" for="${id}">${label}</label>${inner}</div>`;
         const checks = CHECKS.filter(([, , only]) => !only || s.package_format === only).map(([f, label, , by]) => {
           const unsigned = s[f] && by.every((b) => !s[b]);   // ticked before the signatures existed
@@ -359,7 +362,7 @@
             ${field(`fi-hbt-${s.id}`, 'HBT', `<select class="br-input" id="fi-hbt-${s.id}" data-session="${s.id}" data-field="batch_hbt_id"${dis()}><option value="">Choose HBT</option>
               ${page.hbts.map((h) => `<option value="${h.id}"${h.id === s.batch_hbt_id ? ' selected' : ''}>${escapeHtml(hbtName(h))} · ${fmt(hbtEndHl(h), 1)} hl</option>`).join('')}</select>`)}
             ${field(`fi-pkg-${s.id}`, 'Package', `<select class="br-input" id="fi-pkg-${s.id}" data-session="${s.id}" data-field="package_format"${dis()}><option value="">Choose</option>
-              ${[...new Set([...formats, s.package_format].filter(Boolean))].map((c) => `<option value="${c}"${c === s.package_format ? ' selected' : ''}>${formatLabel(c)}</option>`).join('')}</select>`)}
+              ${PACKAGE_FORMATS.map(({ code: c }) => `<option value="${c}"${c === s.package_format ? ' selected' : ''}>${formatLabel(c)}${planned.includes(c) ? ' (planned)' : ''}</option>`).join('')}</select>`)}
             ${field(`fi-vol-${s.id}`, 'Volume (hl)', `<input class="br-input" id="fi-vol-${s.id}" inputmode="decimal" data-session="${s.id}" data-field="volume_hl" value="${val(s.volume_hl)}"${dis()}>`)}
             ${field(`fi-start-${s.id}`, 'Start filling', `<input class="br-input" id="fi-start-${s.id}" type="time" data-session="${s.id}" data-field="start_time" value="${val((s.start_time || '').slice(0, 5))}"${dis()}>`)}
             ${field(`fi-end-${s.id}`, 'End filling', `<input class="br-input" id="fi-end-${s.id}" type="time" data-session="${s.id}" data-field="end_time" value="${val((s.end_time || '').slice(0, 5))}"${dis()}>`)}
