@@ -77,6 +77,7 @@ Agreed with Jaap. Date = when decided. Do not change without asking.
 | 15-10 | Consumption block removed from Filling. Net contents, OEE and contents check removed earlier. |
 | 15-10 | "Processing loss" is called **Cellar loss**. Volume balance shown as a pie chart. |
 | 13-10 | Every row and input can be deleted; delete asks for confirmation, then a toast with Undo. |
+| 26-11 | Filling: the package list always offers bottle / can / keg / tank, not only the formats planned on Processing (those are marked "planned"); last-minute changes happen (wishlist, Jaap). |
 
 ## Splits / transfers
 | Date | Decision |

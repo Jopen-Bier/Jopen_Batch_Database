@@ -218,7 +218,9 @@ window).
 - To fine-tune with the filling department (Jaap, 20-10, after the phase 6
   test): "a good basis". The fill tube detection checks are only needed for
   bottles, not for kegs and cans (not changed yet).
-- Built (phase 6): the package choice follows the HBT's intended formats;
+- Built (phase 6): the package choice offers every format (bottle, can,
+  keg, tank), the HBT's intended formats marked "(planned)" (wishlist,
+  26-11: last-minute changes happen);
   bottle / can sessions show the TPO … CO2 table, keg sessions CO2 / O2;
   "Burst bottles under control" only for bottle; delete a session with its
   measurements, Undo restores both.
